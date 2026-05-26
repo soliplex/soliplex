@@ -8,8 +8,8 @@ import pydantic_ai
 from haiku.skills import agent as hs_agent
 from haiku.skills import prompts as hs_prompts
 from pydantic_ai import agent as ai_agent
-from pydantic_ai import mcp as ai_mcp
 from pydantic_ai import tools as ai_tools
+from pydantic_ai import toolsets as ai_toolsets
 
 from soliplex import agui as agui_package
 from soliplex import mcp_client
@@ -76,9 +76,9 @@ def make_ai_tool(tool_config: config_tools.ToolConfig) -> ai_tools.Tool:
 
 def make_mcp_client_toolset(
     toolset_config: config_tools.MCP_ClientToolsetConfig,
-) -> ai_mcp.MCPServer:
-    toolset_klass = mcp_client.TOOLSET_CLASS_BY_KIND[toolset_config.kind]
-    return toolset_klass(**toolset_config.tool_kwargs)
+) -> ai_toolsets.AbstractToolset:
+    factory = mcp_client.TOOLSET_FACTORY_BY_KIND[toolset_config.kind]
+    return factory(**toolset_config.tool_kwargs)
 
 
 def get_default_agent_from_configs(
@@ -122,7 +122,7 @@ def get_default_agent_from_configs(
         instructions=instructions,
         capabilities=agent_config.capabilities,
         deps_type=AgentDependencies,
-        tool_retries=agent_config.retries,
+        retries=agent_config.retries,
     )
 
 

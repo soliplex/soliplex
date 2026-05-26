@@ -402,7 +402,7 @@ def test_installation_agent_provider_info(
     assert found == expected
 
 
-HR_CONFIG_SECTIONS = ["embeddings", "qa", "reranking", "research"]
+HR_CONFIG_SECTIONS = ["embeddings", "qa", "reranking"]
 TEST_MODEL_PROVIDER = "test-model-provider"
 TEST_MODEL_BASE_URL = "https://provider.example.com:11434"
 TEST_MODEL_NAME = "test-model-name"
@@ -423,7 +423,6 @@ def hr_config_w_providers(request):
         embeddings=None,
         qa=None,
         reranking=None,
-        research=None,
     )
     model = FauxHRModel()
     section = mock.Mock(spec_set=["model"], model=model)

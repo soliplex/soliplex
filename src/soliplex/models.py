@@ -8,12 +8,6 @@ import typing
 import pydantic
 from ag_ui import core as agui_core
 from haiku.rag.store.models import chunk as hr_chunk
-
-try:
-    SearchType = hr_chunk.SearchType
-except AttributeError:  # haiku-rag-slim <= 0.47
-    SearchType = typing.Literal["vector", "fts", "hybrid"]
-
 from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
@@ -591,7 +585,7 @@ class SearchHit(pydantic.BaseModel):
 
 class SearchResults(pydantic.BaseModel):
     query: str
-    search_type: SearchType
+    search_type: hr_chunk.SearchType
     hits: list[SearchHit]
 
 

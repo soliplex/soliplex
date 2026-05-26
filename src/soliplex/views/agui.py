@@ -915,6 +915,7 @@ async def post_room_agui_thread_id_run_id(
             agui_adapter=agui_adapter,
             run_stream_kwargs=dict(
                 deps=agent_deps,
+                conversation_id=thread_id,
                 on_complete=functools.partial(
                     capture_usage_after_stream,
                     sqla_engine=request.state.threads_engine,
