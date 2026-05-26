@@ -5,12 +5,43 @@ import enum
 import typing
 
 import fastapi
+import jsonpath
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 # Avoid circular import when only used for typing
 # from soliplex import models
 
 UserToken = dict[str, typing.Any]
+
+# Single shared environment so future metaconfig hooks can inject
+# additional filter functions in one place.
+the_jsonpath_environment = jsonpath.JSONPathEnvironment()
+
+
+class InvalidJSONPath(ValueError):
+    """Raised when a JSONPath query string fails to compile."""
+
+    def __init__(self, value: str):
+        self.value = value
+        super().__init__(f"Invalid JSONPath: {value!r}")
+
+
+def validate_json_path(value: str | None) -> str | None:
+    """Validate a JSONPath query string.
+
+    Returns ``value`` unchanged for ``None`` or a syntactically valid
+    RFC 9535 query.  Raises ``InvalidJSONPath`` for malformed queries
+    so that callers (pydantic field validators, SQLAlchemy
+    ``@validates`` hooks) can reject bad values at write time rather
+    than failing later inside ``check_token``.
+    """
+    if value is None:
+        return value
+    try:
+        the_jsonpath_environment.compile(value)
+    except jsonpath.JSONPathError as exc:
+        raise InvalidJSONPath(value) from exc
+    return value
 
 
 class AllowDeny(enum.Enum):

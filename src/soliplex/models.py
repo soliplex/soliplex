@@ -849,6 +849,11 @@ class ACLEntry(pydantic.BaseModel):
     email: str | None = None
     json_path: str | None = None
 
+    @pydantic.field_validator("json_path")
+    @classmethod
+    def _check_json_path(cls, value: str | None) -> str | None:
+        return authz_package.validate_json_path(value)
+
 
 class RoomPolicy(pydantic.BaseModel):
     room_id: str

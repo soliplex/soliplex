@@ -12,6 +12,7 @@ from haiku.rag.skills import rag as hr_skills_rag
 from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
+from soliplex import authz as authz_package
 from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
@@ -1502,3 +1503,13 @@ def test_ragsource_from_source_tag(source_tag, expected):
     found = models.RAGSource.from_source_tag(source_tag)
 
     assert found == expected
+
+
+def test_aclentry_rejects_invalid_jsonpath():
+    with pytest.raises(pydantic.ValidationError) as exc_info:
+        models.ACLEntry(json_path="not a path")
+
+    causes = [
+        err.get("ctx", {}).get("error") for err in exc_info.value.errors()
+    ]
+    assert any(isinstance(c, authz_package.InvalidJSONPath) for c in causes)

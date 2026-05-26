@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime
 import typing
 
-import jsonpath
 import sqlalchemy
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy import schema as sqla_schema
@@ -21,11 +20,6 @@ ForeignKey = sqlalchemy.ForeignKey
 Mapped = sqla_orm.Mapped
 mapped_column = sqla_orm.mapped_column
 relationship = sqla_orm.relationship
-
-
-# Define this environment as a global to permit injecting
-# filter functions from metaconfig.
-the_jsonpath_environment = jsonpath.JSONPathEnvironment()
 
 
 def _timestamp() -> datetime.datetime:
@@ -174,6 +168,10 @@ class ACLEntry(Base):
     email: Mapped[str | None] = mapped_column(default=None)
     json_path: Mapped[str | None] = mapped_column(default=None)
 
+    @sqla_orm.validates("json_path")
+    def _check_json_path(self, _key, value):
+        return authz_package.validate_json_path(value)
+
     @classmethod
     def from_model(cls, model: models.ACLEntry):
         return cls(
@@ -216,7 +214,9 @@ class ACLEntry(Base):
         token = user_token or {}
 
         if self.json_path is not None:
-            jp_match = the_jsonpath_environment.match(self.json_path, token)
+            jp_match = authz_package.the_jsonpath_environment.match(
+                self.json_path, token
+            )
             if jp_match is not None:
                 return self.allow_deny
 

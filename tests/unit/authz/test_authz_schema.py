@@ -193,6 +193,15 @@ def the_room_policy():
     )
 
 
+def test_aclentry_rejects_invalid_jsonpath(the_room_policy):
+    with pytest.raises(authz_package.InvalidJSONPath):
+        authz_schema.ACLEntry(
+            room_policy=the_room_policy,
+            allow_deny=authz_package.AllowDeny.ALLOW,
+            json_path="not a path",
+        )
+
+
 @pytest.mark.parametrize(
     "model_kwargs",
     [
