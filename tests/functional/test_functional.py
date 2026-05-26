@@ -47,6 +47,7 @@ def test_room_authz_endpoints(client_no_llm):
                 "authenticated": False,
                 "preferred_username": None,
                 "email": EMAIL,
+                "json_path": None,
             },
         ],
     }

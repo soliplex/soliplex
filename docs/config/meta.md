@@ -155,3 +155,41 @@ meta:
   - config_klass: "soliplex.config.RandomCharsSecretSource"
     registered_func: "soliplex.secrets.get_random_chars_secret"
 ```
+
+## Registering JSONPath Filter Functions
+
+Room authorization ACL entries can match a user's token using an
+[RFC 9535](https://www.rfc-editor.org/rfc/rfc9535) JSONPath query (the
+`json_path` predicate). Queries are evaluated against a single, shared
+JSONPath environment (`soliplex.authz.the_jsonpath_environment`).
+
+The `meta.jsonpath_functions` section registers named filter functions
+into that environment, making them callable as `name(...)` inside a
+filter expression. This lets a deployment express authorization rules
+that the RFC 9535 built-ins cannot.
+
+The section contains a list of mappings, each of which include:
+
+- `name`, the identifier by which the function is invoked inside a
+  JSONPath filter expression.
+
+- `func`, a Python "dotted name" which can be used to import a callable
+  implementing the function. The callable must conform to
+  [python-jsonpath](https://jg-rp.github.io/python-jsonpath/)'s
+  filter-function protocol (a callable, optionally carrying `arg_types`
+  and `return_type` for RFC 9535 well-typedness checks).
+
+A `name` that collides with one of the RFC 9535 built-ins (e.g. `match`,
+`search`, `length`, `count`, `value`) is rejected.
+
+Example:
+
+```yaml
+meta:
+  jsonpath_functions:
+  - name: "is_admin"
+    func: "my_package.jsonpath.is_admin"
+```
+
+Given the registration above, a room ACL entry could allow access with a
+predicate such as `$[?is_admin($.roles)]`.

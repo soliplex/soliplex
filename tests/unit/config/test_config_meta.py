@@ -8,6 +8,7 @@ import _test_features as agui_features
 import pytest
 import yaml
 
+from soliplex import authz as authz_package
 from soliplex import secrets
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
@@ -27,6 +28,10 @@ class FauxCapability:
     dotted_name = "foo.bar"
 
 
+def faux_jsonpath_func(value):  # pragma: NO COVER (registered, not called)
+    return value
+
+
 BOGUS_ICMETA_YAML = """\
 meta:
     tool_configs:
@@ -40,6 +45,7 @@ BARE_ICMETA_KW = {
     "agent_capability_types": [],
     "agent_configs": [],
     "secret_sources": [],
+    "jsonpath_functions": [],
 }
 BARE_ICMETA_YAML = """\
 meta:
@@ -153,6 +159,23 @@ meta:
 """
 
 
+JSONPATH_FUNCTION_NAME = "faux_filter"
+W_JSONPATH_FUNCTIONS_ICMETA_KW = BARE_ICMETA_KW | {
+    "jsonpath_functions": [
+        config_meta.JSONPathFunctionConfigMeta(
+            name=JSONPATH_FUNCTION_NAME,
+            func=faux_jsonpath_func,
+        ),
+    ],
+}
+W_JSONPATH_FUNCTIONS_ICMETA_YAML = f"""\
+meta:
+  jsonpath_functions:
+      - name: "{JSONPATH_FUNCTION_NAME}"
+        func: "test_config_meta.faux_jsonpath_func"
+"""
+
+
 FULL_ICMETA_KW = {
     "agui_features": [
         config_meta.AGUI_FeatureConfigMeta(
@@ -194,6 +217,12 @@ FULL_ICMETA_KW = {
             registered_func=SECRET_SOURCE_FUNC,
         ),
     ],
+    "jsonpath_functions": [
+        config_meta.JSONPathFunctionConfigMeta(
+            name=JSONPATH_FUNCTION_NAME,
+            func=faux_jsonpath_func,
+        ),
+    ],
 }
 FULL_ICMETA_YAML = f"""\
 meta:
@@ -218,7 +247,24 @@ meta:
   secret_sources:
     - "config_klass": "soliplex.config.secrets.EnvVarSecretSource"
       "registered_func": "soliplex.config.test_secret_func"
+  jsonpath_functions:
+      - name: "{JSONPATH_FUNCTION_NAME}"
+        func: "test_config_meta.faux_jsonpath_func"
 """
+
+
+def test_jsonpathfunctionconfigmeta_from_yaml():
+    with mock.patch.dict("sys.modules", dummy=mock.Mock()):
+        import dummy
+
+        dummy.the_func = func = mock.Mock()
+
+        meta = config_meta.JSONPathFunctionConfigMeta.from_yaml(
+            {"name": "is_admin", "func": "dummy.the_func"}
+        )
+
+    assert meta.name == "is_admin"
+    assert meta.func is func
 
 
 @mock.patch("importlib.import_module")
@@ -289,6 +335,10 @@ def test_configmeta_from_yaml_w_dict_w_names(w_wrapper):
             W_SECRET_SOURCE_ICMETA_YAML,
             W_SECRET_SOURCE_ICMETA_KW,
         ),
+        (
+            W_JSONPATH_FUNCTIONS_ICMETA_YAML,
+            W_JSONPATH_FUNCTIONS_ICMETA_KW,
+        ),
         (FULL_ICMETA_YAML, FULL_ICMETA_KW),
     ],
 )
@@ -304,6 +354,7 @@ def test_installationconfigmeta_from_yaml(
     patched_tool_configs,
     patched_mcp_toolset_configs,
     patched_mcp_tool_wrappers,
+    patched_jsonpath_functions,
     config_yaml,
     expected_kw,
 ):
@@ -410,7 +461,17 @@ def test_installationconfigmeta_from_yaml(
                 config_secrets.EnvVarSecretSource.kind: SECRET_SOURCE_FUNC
             }
 
+        if config_dict_meta and "jsonpath_functions" in config_dict_meta:
+            assert authz_package.registered_jsonpath_functions() == {
+                JSONPATH_FUNCTION_NAME: faux_jsonpath_func
+            }
+            assert (
+                patched_jsonpath_functions[JSONPATH_FUNCTION_NAME]
+                is faux_jsonpath_func
+            )
 
+
+@pytest.mark.parametrize("w_jsonpath", [False, True])
 @pytest.mark.parametrize("w_secret_reg", [False, True])
 @pytest.mark.parametrize("w_agent", [False, True])
 @pytest.mark.parametrize("w_capability", [False, True])
@@ -428,12 +489,14 @@ def test_installationconfigmeta_as_yaml(
     patched_tool_configs,
     patched_mcp_tool_wrappers,
     patched_mcp_toolset_configs,
+    patched_jsonpath_functions,
     w_tools,
     w_mcp_toolsets,
     w_skills,
     w_capability,
     w_agent,
     w_secret_reg,
+    w_jsonpath,
 ):
     patched_soliplex_config["test_secret_func"] = SECRET_SOURCE_FUNC
 
@@ -493,6 +556,17 @@ def test_installationconfigmeta_as_yaml(
             }
         )
 
+    if w_jsonpath:
+        authz_package.register_jsonpath_function(
+            JSONPATH_FUNCTION_NAME, faux_jsonpath_func
+        )
+        expected["jsonpath_functions"].append(
+            {
+                "name": JSONPATH_FUNCTION_NAME,
+                "func": "test_config_meta.faux_jsonpath_func",
+            }
+        )
+
     icmeta = config_meta.InstallationConfigMeta()
 
     found = icmeta.as_yaml
@@ -533,4 +607,19 @@ def test_installationconfigmeta_postinit_registers_mcp_tool_wrappers(
 
     assert (
         patched_mcp_tool_wrappers[_DummyToolConfig.tool_name] is _DummyWrapper
+    )
+
+
+def test_installationconfigmeta_postinit_registers_jsonpath_functions(
+    patched_jsonpath_functions,
+):
+    jf_meta = config_meta.JSONPathFunctionConfigMeta(
+        name=JSONPATH_FUNCTION_NAME,
+        func=faux_jsonpath_func,
+    )
+    config_meta.InstallationConfigMeta(jsonpath_functions=[jf_meta])
+
+    env = authz_package.the_jsonpath_environment
+    assert (
+        env.function_extensions[JSONPATH_FUNCTION_NAME] is faux_jsonpath_func
     )

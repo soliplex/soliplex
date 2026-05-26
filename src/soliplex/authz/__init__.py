@@ -2,15 +2,141 @@ from __future__ import annotations
 
 import abc
 import enum
+import json
+import re
 import typing
 
 import fastapi
+import jsonpath
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 # Avoid circular import when only used for typing
 # from soliplex import models
 
 UserToken = dict[str, typing.Any]
+
+# Single shared environment so metaconfig hooks can inject additional
+# filter functions in one place.
+the_jsonpath_environment = jsonpath.JSONPathEnvironment()
+
+# Names of the RFC 9535 built-in filter functions, captured before any
+# metaconfig registration. Anything added to the environment beyond these
+# was supplied by config, so the metaconfig can round-trip just those.
+BUILTIN_JSONPATH_FUNCTION_NAMES = frozenset(
+    the_jsonpath_environment.function_extensions
+)
+
+
+class ReservedJSONPathFunctionName(ValueError):
+    """Raised when a registration would replace an RFC 9535 built-in."""
+
+    def __init__(self, name: str):
+        self.name = name
+        super().__init__(
+            f"Cannot override built-in JSONPath function: {name!r}."
+        )
+
+
+def register_jsonpath_function(name: str, func: typing.Any) -> None:
+    """Register a named filter function into the shared environment.
+
+    'func' must conform to python-jsonpath's filter-function protocol
+    (a callable, optionally carrying 'arg_types' / 'return_type' for
+    RFC 9535 well-typedness checks). It becomes usable inside JSONPath
+    filter expressions as 'name(...)'.
+
+    Raises 'ReservedJSONPathFunctionName' if 'name' collides with one of
+    the RFC 9535 built-ins.
+    """
+    if name in BUILTIN_JSONPATH_FUNCTION_NAMES:
+        raise ReservedJSONPathFunctionName(name)
+    the_jsonpath_environment.function_extensions[name] = func
+
+
+def registered_jsonpath_functions() -> dict[str, typing.Any]:
+    """Filter functions added via 'register_jsonpath_function'.
+
+    Excludes the RFC 9535 built-ins, leaving only the config-supplied
+    functions (e.g. for metaconfig round-tripping).
+    """
+    return {
+        name: func
+        for name, func in the_jsonpath_environment.function_extensions.items()
+        if name not in BUILTIN_JSONPATH_FUNCTION_NAMES
+    }
+
+
+class InvalidJSONPath(ValueError):
+    """Raised when a JSONPath query string fails to compile."""
+
+    def __init__(self, value: str):
+        self.value = value
+        super().__init__(f"Invalid JSONPath: {value!r}")
+
+
+class ExactlyOneDiscriminator(ValueError):
+    """Raised when an ACL entry does not set exactly one discriminator."""
+
+    def __init__(self, discriminators: typing.Iterable[str]):
+        self.discriminators = tuple(discriminators)
+        got = ", ".join(self.discriminators) or "(none)"
+        super().__init__(
+            f"ACLEntry requires exactly one discriminator; got: {got}."
+        )
+
+
+def validate_json_path(value: str | None) -> str | None:
+    """Validate a JSONPath query string.
+
+    Returns ``value`` unchanged for ``None`` or a syntactically valid
+    RFC 9535 query.  Raises ``InvalidJSONPath`` for malformed queries
+    so that callers (pydantic field validators, SQLAlchemy
+    ``@validates`` hooks) can reject bad values at write time rather
+    than failing later inside ``check_token``.
+    """
+    if value is None:
+        return value
+    try:
+        the_jsonpath_environment.compile(value)
+    except jsonpath.JSONPathError as exc:
+        raise InvalidJSONPath(value) from exc
+    return value
+
+
+def token_field_json_path(field: str, value: str) -> str:
+    """Build a JSONPath query matching ``token[field] == value``.
+
+    Used to translate the legacy ``preferred_username`` and ``email``
+    ACL discriminators into RFC 9535 queries stored in
+    ``ACLEntry.json_path`` (those columns are being removed).  The
+    caller is responsible for passing a safe ``field`` identifier --
+    the value is JSON-encoded so embedded quotes round-trip safely.
+    """
+    return f"$[?$.{field} == {json.dumps(value)}]"
+
+
+_TOKEN_FIELD_JSON_PATH_RE = re.compile(
+    r"^\$\[\?\$\.(?P<field>[A-Za-z_][A-Za-z0-9_]*) == (?P<value>.+)\]$"
+)
+
+
+def parse_token_field_json_path(value: str) -> tuple[str, str] | None:
+    """Inverse of ``token_field_json_path``.
+
+    Returns ``(field, string_value)`` when ``value`` has the exact shape
+    produced by ``token_field_json_path``, otherwise ``None`` (e.g. for
+    a general-purpose JSONPath query that was authored directly).
+    """
+    match = _TOKEN_FIELD_JSON_PATH_RE.match(value)
+    if match is None:
+        return None
+    try:
+        decoded = json.loads(match.group("value"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(decoded, str):
+        return None
+    return match.group("field"), decoded
 
 
 class AllowDeny(enum.Enum):

@@ -2864,6 +2864,15 @@ wheels = [
 ]
 
 [[package]]
+name = "python-jsonpath"
+version = "2.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8e/e5/07f99c0fb448eeb2c9db5e817f8a9c43e3f4a7b59934adbe421a39677025/python_jsonpath-2.0.2.tar.gz", hash = "sha256:41abb6660b3ee54d5ae77e4b0e901049fb1662ad90de241f038df47edc75ee60", size = 49672, upload-time = "2026-01-06T08:21:01.194Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/2c/c1282c47a8bb641c3068f47780c5f1f5c97cdc39cda3ec507c64c029764e/python_jsonpath-2.0.2-py3-none-any.whl", hash = "sha256:3f8ab612f815ce10c03bf0deaede87235f3381b109a60b4a22744069953627e3", size = 64071, upload-time = "2026-01-06T08:20:59.751Z" },
+]
+
+[[package]]
 name = "python-keycloak"
 version = "7.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3308,6 +3317,7 @@ dependencies = [
     { name = "pydantic-ai-slim", extra = ["google"] },
     { name = "pyjwt" },
     { name = "pymdown-extensions" },
+    { name = "python-jsonpath" },
     { name = "python-keycloak" },
     { name = "sqlmodel" },
     { name = "starlette" },
@@ -3362,6 +3372,7 @@ requires-dist = [
     { name = "pydantic-ai-slim", extras = ["google"], specifier = ">=1.100,<2.0" },
     { name = "pyjwt" },
     { name = "pymdown-extensions", specifier = "!=10.21.2" },
+    { name = "python-jsonpath" },
     { name = "python-keycloak" },
     { name = "sqlmodel" },
     { name = "starlette", specifier = "!=1.0.1" },

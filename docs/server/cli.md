@@ -1436,6 +1436,131 @@ soliplex-cli room-authz show --allow-stale \
   example/installation.yaml old-room-id
 ```
 
+### `room-authz as-yaml`
+
+Dump a room's `RoomPolicy` and ACL entries as YAML. This is the YAML
+counterpart of [`show`](#room-authz-show) (which emits JSON), and the
+inverse of [`from-yaml`](#room-authz-from-yaml).
+
+```bash
+soliplex-cli room-authz as-yaml [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
+```
+
+#### Options
+
+- `--output`, `-o PATH` — write the YAML to this file path. If
+  omitted, the YAML is written to standard output with no console or
+  rule decoration, so it is safe to pipe or redirect.
+- `--allow-stale` — skip the configured-room check, so a policy left
+  behind by a removed or renamed room can still be dumped (same
+  semantics as [`show`](#room-authz-show)).
+
+#### Behavior Notes
+
+- **Public-model shape.** The YAML mirrors the public `ACLEntry`
+  model, so an entry stored as a `preferred_username` or `email`
+  query is surfaced back under `preferred_username` / `email` (with
+  `json_path: null`), and a general-purpose query is surfaced under
+  `json_path`. The document re-loads cleanly via
+  [`from-yaml`](#room-authz-from-yaml).
+- **No policy dumps as `null`.** A room with no `RoomPolicy` row dumps
+  as a `null` document.
+
+#### Exit Status
+
+- `0` on success.
+- `1` when the `ROOM_ID` is not configured and `--allow-stale` was not
+  passed, or when the RAM-DB guard fires.
+
+#### Examples
+
+Dump the `chat` policy to standard output:
+
+```bash
+soliplex-cli room-authz as-yaml example/installation.yaml chat
+```
+
+Save a policy to a file (e.g. to back it up or edit it):
+
+```bash
+soliplex-cli room-authz as-yaml \
+  --output chat-policy.yaml \
+  example/installation.yaml chat
+```
+
+### `room-authz from-yaml`
+
+Load a room's `RoomPolicy` and ACL entries from YAML, replacing any
+existing policy for the target room. The YAML uses the same shape
+produced by [`as-yaml`](#room-authz-as-yaml), so the two commands
+round-trip.
+
+```bash
+soliplex-cli room-authz from-yaml [OPTIONS] INSTALLATION_CONFIG_PATH [ROOM_ID]
+```
+
+#### Arguments
+
+- `ROOM_ID` (optional) — the target room. If omitted, the `room_id`
+  recorded in the input YAML is used.
+
+#### Options
+
+- `--input`, `-i PATH` — read the YAML from this file path. If
+  omitted, the YAML is read from standard input.
+
+#### Behavior Notes
+
+- **Target room resolution.** When `ROOM_ID` is given it is
+  authoritative — the policy is written for `ROOM_ID` regardless of
+  the `room_id` recorded in the YAML (useful for copying one room's
+  policy onto another). When `ROOM_ID` is omitted, the YAML's own
+  `room_id` is used.
+- **Whole-policy replace.** Any existing policy for the target room
+  (and all its ACL entries) is replaced by the imported one.
+- **`null` removes the policy.** Importing a `null` document deletes
+  the target room's `RoomPolicy` entirely, returning it to the default
+  public state.
+- **Configured-room check.** Unlike [`as-yaml`](#room-authz-as-yaml),
+  `from-yaml` always requires the target room to be configured in the
+  installation's YAML; there is no `--allow-stale` escape hatch.
+
+#### Exit Status
+
+- `0` on success.
+- `1` when no target room can be resolved (a `null` import with no
+  `ROOM_ID`), when the target room is not configured, or when the
+  RAM-DB guard fires.
+
+#### Examples
+
+Round-trip a policy through a file (export, then re-import):
+
+```bash
+soliplex-cli room-authz as-yaml \
+  --output chat-policy.yaml \
+  example/installation.yaml chat
+soliplex-cli room-authz from-yaml \
+  --input chat-policy.yaml \
+  example/installation.yaml chat
+```
+
+Copy the `chat` policy onto the `search` room (the explicit `ROOM_ID`
+overrides the `room_id` in the piped YAML):
+
+```bash
+soliplex-cli room-authz as-yaml example/installation.yaml chat \
+  | soliplex-cli room-authz from-yaml example/installation.yaml search
+```
+
+Apply a policy to whichever room its YAML names (omit `ROOM_ID`):
+
+```bash
+soliplex-cli room-authz from-yaml \
+  --input chat-policy.yaml \
+  example/installation.yaml
+```
+
 ### `room-authz make-private`
 
 Ensure a room is private by inserting an empty `RoomPolicy` row
@@ -1589,7 +1714,7 @@ soliplex-cli room-authz clear-acl example/installation.yaml chat
 Add an `ACLEntry` to a room's `RoomPolicy`. The entry's allow/deny
 flag is selected with `--allow` or `--deny`; the entry's
 discriminator (what it matches against the caller's token) is
-selected with one of `--everyone`, `--authenticated`,
+selected with one of `--everyone`, `--authenticated`, `--json-path`,
 `--preferred-username`, or `--email`.
 
 The room must already have a `RoomPolicy` row — run
@@ -1616,10 +1741,18 @@ Exactly one of (the discriminator — what the entry matches on):
   policy's `default_allow_deny`.
 - `--authenticated` — matches any caller with a valid OIDC token,
   regardless of identity.
-- `--preferred-username TEXT` — matches a caller whose OIDC
-  `preferred_username` claim equals `TEXT`.
-- `--email TEXT` — matches a caller whose OIDC `email` claim equals
-  `TEXT`.
+- `--json-path TEXT` — matches when the [RFC 9535][rfc9535] JSONPath
+  query `TEXT` selects at least one node from the caller's token.
+  This is the underlying claim discriminator; the two options below
+  are convenience aliases for the common equality case.
+- `--preferred-username TEXT` — convenience alias matching a caller
+  whose OIDC `preferred_username` claim equals `TEXT`. Stored as the
+  equivalent `--json-path` query `$[?$.preferred_username == "TEXT"]`.
+- `--email TEXT` — convenience alias matching a caller whose OIDC
+  `email` claim equals `TEXT`. Stored as the equivalent `--json-path`
+  query `$[?$.email == "TEXT"]`.
+
+[rfc9535]: https://www.rfc-editor.org/rfc/rfc9535
 
 #### Behavior Notes
 
@@ -1705,7 +1838,8 @@ Delete a single `ACLEntry` from a room's `RoomPolicy`. The entry is
 identified by the same parameter shape as
 [`add-acl-entry`](#room-authz-add-acl-entry): the combination of
 `--allow`/`--deny` and one discriminator option (`--everyone`,
-`--authenticated`, `--preferred-username`, or `--email`).
+`--authenticated`, `--json-path`, `--preferred-username`, or
+`--email`).
 
 The room must already have a `RoomPolicy` row with at least one ACL
 entry matching the supplied parameters. If no match is found, the
@@ -1727,10 +1861,14 @@ Exactly one of (the discriminator):
 
 - `--everyone` — match an `everyone` entry.
 - `--authenticated` — match an `authenticated` entry.
-- `--preferred-username TEXT` — match a `preferred_username` entry
-  whose claim value equals `TEXT`.
-- `--email TEXT` — match an `email` entry whose claim value equals
-  `TEXT`.
+- `--json-path TEXT` — match an entry whose JSONPath query equals
+  `TEXT`. This is the underlying claim discriminator; the two options
+  below are convenience aliases for the common equality case.
+- `--preferred-username TEXT` — convenience alias matching the entry
+  stored as the equivalent `--json-path` query
+  `$[?$.preferred_username == "TEXT"]`.
+- `--email TEXT` — convenience alias matching the entry stored as the
+  equivalent `--json-path` query `$[?$.email == "TEXT"]`.
 
 #### Behavior Notes
 

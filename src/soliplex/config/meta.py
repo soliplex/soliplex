@@ -4,6 +4,8 @@ import dataclasses
 import pathlib
 import typing
 
+from soliplex import authz as authz_package
+
 from . import _utils
 from . import agents as config_agents
 from . import agui as config_agui
@@ -41,6 +43,30 @@ class AGUI_FeatureConfigMeta:
     def from_yaml(cls, yaml_config: dict):
         model_klass = yaml_config["model_klass"]
         yaml_config["model_klass"] = _utils._from_dotted_name(model_klass)
+        return cls(**yaml_config)
+
+
+@dataclasses.dataclass(kw_only=True)
+class JSONPathFunctionConfigMeta:
+    """Registered JSONPath filter function
+
+    'name'
+        the name by which the function is invoked inside a JSONPath
+        filter expression.
+
+    'func'
+        dotted name of a callable implementing the filter function. It
+        is registered into 'authz.the_jsonpath_environment' and must
+        conform to python-jsonpath's filter-function protocol.
+    """
+
+    name: str
+    func: typing.Any
+
+    @classmethod
+    def from_yaml(cls, yaml_config: dict):
+        func = yaml_config["func"]
+        yaml_config["func"] = _utils._from_dotted_name(func)
         return cls(**yaml_config)
 
 
@@ -136,6 +162,11 @@ class InstallationConfigMeta:
         source classes) or `ConfigMeta' mappings, defining the
         tyeps of secret sources which can be configured.
 
+    'jsonpath_functions'
+        a list consisting of `JSONPathFunctionConfigMeta' mappings,
+        defining named filter functions registered into the shared
+        'authz.the_jsonpath_environment' for use in room ACL queries.
+
     After loading, adds the configured classes to the registry mappings
     'TOOL_CONFIG_CLASSES_BY_TOOL_NAME' and
     'MCP_TOOLSET_CONFIG_CLASSES_BY_KIND'.
@@ -149,6 +180,7 @@ class InstallationConfigMeta:
     agent_capability_types: list[str | ConfigMeta] = ()
     agent_configs: list[str | ConfigMeta] = ()
     secret_sources: list[str | ConfigMeta] = ()
+    jsonpath_functions: list[JSONPathFunctionConfigMeta] = ()
 
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
@@ -202,6 +234,11 @@ class InstallationConfigMeta:
             config_dict["secret_sources"] = [
                 ConfigMeta.from_yaml(ss_yaml)
                 for ss_yaml in config_dict.get("secret_sources", ())
+            ]
+
+            config_dict["jsonpath_functions"] = [
+                JSONPathFunctionConfigMeta.from_yaml(jf_yaml)
+                for jf_yaml in config_dict.get("jsonpath_functions", ())
             ]
 
             return cls(**config_dict)
@@ -269,6 +306,12 @@ class InstallationConfigMeta:
             config_klass = ss_meta.config_klass
             registered_func = ss_meta.registered_func
             ss_registry[config_klass.kind] = registered_func
+
+        self.jsonpath_functions = list(self.jsonpath_functions)
+        for jf_meta in self.jsonpath_functions:
+            authz_package.register_jsonpath_function(
+                jf_meta.name, jf_meta.func
+            )
 
     @property
     def as_yaml(self) -> dict:
@@ -338,6 +381,14 @@ class InstallationConfigMeta:
             for kind, r_func in secret_getter_registry.items()
         ]
 
+        jsonpath_function_registry = (
+            authz_package.registered_jsonpath_functions()
+        )
+        jsonpath_function_entries = [
+            {"name": name, "func": _utils._dotted_name(func)}
+            for name, func in jsonpath_function_registry.items()
+        ]
+
         return {
             "agui_features": agui_feature_entries,
             "tool_configs": tool_config_entries,
@@ -347,4 +398,5 @@ class InstallationConfigMeta:
             "agent_capability_types": capability_type_entries,
             "agent_configs": agent_config_entries,
             "secret_sources": secret_source_entries,
+            "jsonpath_functions": jsonpath_function_entries,
         }
