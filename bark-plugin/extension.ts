@@ -1,10 +1,32 @@
 import { Type } from "@sinclair/typebox";
 
+const BRIDGE_URL = process.env.BARK_BRIDGE_URL;
+const BRIDGE_TOKEN = process.env.BARK_BRIDGE_TOKEN;
+
+async function bridgeRequest(action: string, params: Record<string, string> = {}): Promise<string> {
+  const resp = await fetch(`${BRIDGE_URL}/api/browser-delegate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, token: BRIDGE_TOKEN, ...params }),
+  });
+  if (!resp.ok) {
+    return `Error: bridge returned ${resp.status}`;
+  }
+  const data = await resp.json();
+  if (data.error) {
+    return `Error: ${data.error}`;
+  }
+  return data.result ?? JSON.stringify(data);
+}
+
 export default function (pi: any) {
+  if (!BRIDGE_URL || !BRIDGE_TOKEN) return;
+
   pi.registerTool({
     name: "soliplex_list_rooms",
     description:
-      "List available Soliplex knowledge base rooms. Returns room IDs, names, and descriptions.",
+      "List available Soliplex knowledge base rooms. Returns room IDs, names, and descriptions. " +
+      "Only use this tool when the user explicitly mentions 'soliplex' or asks about Soliplex knowledge bases.",
     promptSnippet: "soliplex_list_rooms: List Soliplex knowledge base rooms",
     parameters: Type.Object({}),
     async execute(
@@ -12,10 +34,9 @@ export default function (pi: any) {
       _params: {},
       _signal: AbortSignal | undefined,
       _onUpdate: any,
-      ctx: any
+      _ctx: any,
     ) {
-      const request = JSON.stringify({ action: "soliplex_list_rooms" });
-      const response = await ctx.ui.input("HOST_TOOL_REQUEST", request);
+      const response = await bridgeRequest("soliplex_list_rooms");
       return {
         content: [{ type: "text", text: response || "No rooms available." }],
         details: {},
@@ -27,7 +48,8 @@ export default function (pi: any) {
     name: "soliplex_query",
     description:
       "Query a Soliplex knowledge base room with a natural language question. " +
-      "The room contains indexed documents searched using RAG (Retrieval-Augmented Generation).",
+      "The room contains indexed documents searched using RAG (Retrieval-Augmented Generation). " +
+      "Only use this tool when the user explicitly mentions 'soliplex' or asks about Soliplex knowledge bases.",
     promptSnippet:
       "soliplex_query(room_id, question): Query a Soliplex knowledge base room",
     promptGuidelines: [
@@ -49,15 +71,13 @@ export default function (pi: any) {
       params: { room_id?: string; question: string },
       _signal: AbortSignal | undefined,
       _onUpdate: any,
-      ctx: any
+      _ctx: any,
     ) {
       const roomId = params.room_id || "search";
-      const request = JSON.stringify({
-        action: "soliplex_query",
+      const response = await bridgeRequest("soliplex_query", {
         room_id: roomId,
         question: params.question,
       });
-      const response = await ctx.ui.input("HOST_TOOL_REQUEST", request);
       return {
         content: [
           {
