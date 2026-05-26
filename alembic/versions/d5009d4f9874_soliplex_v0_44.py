@@ -9,13 +9,14 @@ Create Date: 2026-02-24 18:23:44.304011
 import typing
 
 import sqlalchemy as sa
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "d5009d4f9874"
-down_revision: typing.Union[str, typing.Sequence[str], None] = None
-branch_labels: typing.Union[str, typing.Sequence[str], None] = None
-depends_on: typing.Union[str, typing.Sequence[str], None] = None
+down_revision: str | typing.Sequence[str] | None = None
+branch_labels: str | typing.Sequence[str] | None = None
+depends_on: str | typing.Sequence[str] | None = None
 
 
 def upgrade(engine_name: str) -> None:

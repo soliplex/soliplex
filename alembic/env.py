@@ -9,9 +9,9 @@ import pathlib
 import sys
 
 from alembic import context as alembic_context
-from soliplex.cli import cli_util
 from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
+from soliplex.cli import cli_util
 
 USE_TWOPHASE = False
 
