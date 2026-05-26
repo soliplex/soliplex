@@ -22,6 +22,7 @@ ACL_ENTRY_DEFAULTS = {
     "authenticated": False,
     "preferred_username": None,
     "email": None,
+    "json_path": None,
     "allow_deny": authz_package.AllowDeny.DENY,
 }
 
@@ -82,6 +83,14 @@ def test_roompolicy_ctor(the_session):
                 {
                     "allow_deny": authz_package.AllowDeny.DENY,
                     "everyone": True,
+                },
+            ],
+        },
+        {
+            "acl_entries_kwargs": [
+                {
+                    "allow_deny": authz_package.AllowDeny.ALLOW,
+                    "json_path": "$[?match($.foo, 'b.*z')]",
                 },
             ],
         },
@@ -197,6 +206,10 @@ def the_room_policy():
         },
         {
             "email": "phreddy@example.com",
+            "allow_deny": authz_package.AllowDeny.ALLOW,
+        },
+        {
+            "json_path": "$[?match($.foo, 'b.*z')]",
             "allow_deny": authz_package.AllowDeny.ALLOW,
         },
     ],

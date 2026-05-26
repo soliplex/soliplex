@@ -847,6 +847,7 @@ class ACLEntry(pydantic.BaseModel):
     authenticated: bool = False
     preferred_username: str | None = None
     email: str | None = None
+    json_path: str | None = None
 
 
 class RoomPolicy(pydantic.BaseModel):

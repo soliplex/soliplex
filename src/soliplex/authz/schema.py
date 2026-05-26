@@ -182,6 +182,7 @@ class ACLEntry(Base):
             authenticated=model.authenticated,
             preferred_username=model.preferred_username,
             email=model.email,
+            json_path=model.json_path,
         )
 
     @property
@@ -192,6 +193,7 @@ class ACLEntry(Base):
             authenticated=self.authenticated,
             preferred_username=self.preferred_username,
             email=self.email,
+            json_path=self.json_path,
         )
 
     def check_token(
