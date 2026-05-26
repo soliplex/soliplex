@@ -15,9 +15,55 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 
 UserToken = dict[str, typing.Any]
 
-# Single shared environment so future metaconfig hooks can inject
-# additional filter functions in one place.
+# Single shared environment so metaconfig hooks can inject additional
+# filter functions in one place.
 the_jsonpath_environment = jsonpath.JSONPathEnvironment()
+
+# Names of the RFC 9535 built-in filter functions, captured before any
+# metaconfig registration. Anything added to the environment beyond these
+# was supplied by config, so the metaconfig can round-trip just those.
+BUILTIN_JSONPATH_FUNCTION_NAMES = frozenset(
+    the_jsonpath_environment.function_extensions
+)
+
+
+class ReservedJSONPathFunctionName(ValueError):
+    """Raised when a registration would replace an RFC 9535 built-in."""
+
+    def __init__(self, name: str):
+        self.name = name
+        super().__init__(
+            f"Cannot override built-in JSONPath function: {name!r}."
+        )
+
+
+def register_jsonpath_function(name: str, func: typing.Any) -> None:
+    """Register a named filter function into the shared environment.
+
+    'func' must conform to python-jsonpath's filter-function protocol
+    (a callable, optionally carrying 'arg_types' / 'return_type' for
+    RFC 9535 well-typedness checks). It becomes usable inside JSONPath
+    filter expressions as 'name(...)'.
+
+    Raises 'ReservedJSONPathFunctionName' if 'name' collides with one of
+    the RFC 9535 built-ins.
+    """
+    if name in BUILTIN_JSONPATH_FUNCTION_NAMES:
+        raise ReservedJSONPathFunctionName(name)
+    the_jsonpath_environment.function_extensions[name] = func
+
+
+def registered_jsonpath_functions() -> dict[str, typing.Any]:
+    """Filter functions added via 'register_jsonpath_function'.
+
+    Excludes the RFC 9535 built-ins, leaving only the config-supplied
+    functions (e.g. for metaconfig round-tripping).
+    """
+    return {
+        name: func
+        for name, func in the_jsonpath_environment.function_extensions.items()
+        if name not in BUILTIN_JSONPATH_FUNCTION_NAMES
+    }
 
 
 class InvalidJSONPath(ValueError):

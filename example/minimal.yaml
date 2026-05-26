@@ -116,6 +116,22 @@ meta:
   #   registered_func: "soliplex.secrets.get_random_chars_secret"
   #------------------------------------------------------------------------
 
+  #------------------------------------------------------------------------
+  # Register named JSONPath filter functions into the shared environment
+  # used by room ACL 'json_path' predicates.
+  #
+  # Each function becomes callable as 'name(...)' inside an RFC 9535
+  # filter expression. The callable must conform to python-jsonpath's
+  # filter-function protocol. Names that collide with a built-in (e.g.
+  # 'match', 'search', 'length', 'count', 'value') are rejected.
+  #
+  # Example (using a hypothetical package):
+  #
+  # jsonpath_functions:
+  # - name: "is_admin"
+  #   func: "my_package.jsonpath.is_admin"
+  #------------------------------------------------------------------------
+
 #==========================================================================
 # FastAPI routers
 #==========================================================================

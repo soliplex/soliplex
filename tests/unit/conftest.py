@@ -5,6 +5,7 @@ from unittest import mock
 import _test_features as agui_features
 import pytest
 
+from soliplex import authz as authz_package
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
@@ -127,3 +128,10 @@ def patched_secret_getters():
         result = patched["SECRET_GETTERS_BY_KIND"] = {}
 
         yield result
+
+
+@pytest.fixture
+def patched_jsonpath_functions():
+    env = authz_package.the_jsonpath_environment
+    with mock.patch.dict(env.function_extensions) as registry:
+        yield registry

@@ -6,6 +6,42 @@ import pytest
 from soliplex import authz as authz_package
 
 
+def test_reservedjsonpathfunctionname_is_valueerror():
+    assert issubclass(authz_package.ReservedJSONPathFunctionName, ValueError)
+
+
+def test_register_jsonpath_function(patched_jsonpath_functions):
+    def is_admin(value):
+        return value
+
+    authz_package.register_jsonpath_function("is_admin", is_admin)
+
+    env = authz_package.the_jsonpath_environment
+    registered = env.function_extensions["is_admin"]
+    assert registered is is_admin
+    assert registered("ok") == "ok"
+    assert authz_package.registered_jsonpath_functions() == {
+        "is_admin": is_admin
+    }
+
+
+def test_register_jsonpath_function_rejects_builtin(
+    patched_jsonpath_functions,
+):
+    builtin = next(iter(authz_package.BUILTIN_JSONPATH_FUNCTION_NAMES))
+
+    with pytest.raises(authz_package.ReservedJSONPathFunctionName) as exc_info:
+        authz_package.register_jsonpath_function(builtin, lambda v: v)
+
+    assert exc_info.value.name == builtin
+
+
+def test_registered_jsonpath_functions_excludes_builtins(
+    patched_jsonpath_functions,
+):
+    assert authz_package.registered_jsonpath_functions() == {}
+
+
 def test_invalidjsonpath_is_valueerror():
     assert issubclass(authz_package.InvalidJSONPath, ValueError)
 
