@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import enum
+import json
 import typing
 
 import fastapi
@@ -42,6 +43,18 @@ def validate_json_path(value: str | None) -> str | None:
     except jsonpath.JSONPathError as exc:
         raise InvalidJSONPath(value) from exc
     return value
+
+
+def token_field_json_path(field: str, value: str) -> str:
+    """Build a JSONPath query matching ``token[field] == value``.
+
+    Used to translate the legacy ``preferred_username`` and ``email``
+    ACL discriminators into RFC 9535 queries stored in
+    ``ACLEntry.json_path`` (those columns are being removed).  The
+    caller is responsible for passing a safe ``field`` identifier --
+    the value is JSON-encoded so embedded quotes round-trip safely.
+    """
+    return f"$[?$.{field} == {json.dumps(value)}]"
 
 
 class AllowDeny(enum.Enum):

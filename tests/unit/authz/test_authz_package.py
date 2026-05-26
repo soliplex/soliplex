@@ -42,6 +42,39 @@ def test_validate_json_path_rejects_invalid(value):
     assert exc_info.value.__cause__ is not None
 
 
+@pytest.mark.parametrize(
+    "field, value, match_token, miss_token",
+    [
+        (
+            "preferred_username",
+            "alice",
+            {"preferred_username": "alice"},
+            {"preferred_username": "bob"},
+        ),
+        (
+            "email",
+            "alice@example.com",
+            {"email": "alice@example.com"},
+            {},
+        ),
+        (
+            "preferred_username",
+            'has"quote',
+            {"preferred_username": 'has"quote'},
+            {"preferred_username": "plain"},
+        ),
+    ],
+)
+def test_token_field_json_path(field, value, match_token, miss_token):
+    expr = authz_package.token_field_json_path(field, value)
+
+    assert authz_package.validate_json_path(expr) == expr
+
+    env = authz_package.the_jsonpath_environment
+    assert env.match(expr, match_token) is not None
+    assert env.match(expr, miss_token) is None
+
+
 @pytest.mark.anyio
 @mock.patch("soliplex.authz.persistence.AuthorizationPolicy")
 @mock.patch("sqlalchemy.ext.asyncio.AsyncSession")

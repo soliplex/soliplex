@@ -1589,7 +1589,7 @@ soliplex-cli room-authz clear-acl example/installation.yaml chat
 Add an `ACLEntry` to a room's `RoomPolicy`. The entry's allow/deny
 flag is selected with `--allow` or `--deny`; the entry's
 discriminator (what it matches against the caller's token) is
-selected with one of `--everyone`, `--authenticated`,
+selected with one of `--everyone`, `--authenticated`, `--json-path`,
 `--preferred-username`, or `--email`.
 
 The room must already have a `RoomPolicy` row — run
@@ -1616,10 +1616,18 @@ Exactly one of (the discriminator — what the entry matches on):
   policy's `default_allow_deny`.
 - `--authenticated` — matches any caller with a valid OIDC token,
   regardless of identity.
-- `--preferred-username TEXT` — matches a caller whose OIDC
-  `preferred_username` claim equals `TEXT`.
-- `--email TEXT` — matches a caller whose OIDC `email` claim equals
-  `TEXT`.
+- `--json-path TEXT` — matches when the [RFC 9535][rfc9535] JSONPath
+  query `TEXT` selects at least one node from the caller's token.
+  This is the underlying claim discriminator; the two options below
+  are convenience aliases for the common equality case.
+- `--preferred-username TEXT` — convenience alias matching a caller
+  whose OIDC `preferred_username` claim equals `TEXT`. Stored as the
+  equivalent `--json-path` query `$[?$.preferred_username == "TEXT"]`.
+- `--email TEXT` — convenience alias matching a caller whose OIDC
+  `email` claim equals `TEXT`. Stored as the equivalent `--json-path`
+  query `$[?$.email == "TEXT"]`.
+
+[rfc9535]: https://www.rfc-editor.org/rfc/rfc9535
 
 #### Behavior Notes
 
@@ -1705,7 +1713,8 @@ Delete a single `ACLEntry` from a room's `RoomPolicy`. The entry is
 identified by the same parameter shape as
 [`add-acl-entry`](#room-authz-add-acl-entry): the combination of
 `--allow`/`--deny` and one discriminator option (`--everyone`,
-`--authenticated`, `--preferred-username`, or `--email`).
+`--authenticated`, `--json-path`, `--preferred-username`, or
+`--email`).
 
 The room must already have a `RoomPolicy` row with at least one ACL
 entry matching the supplied parameters. If no match is found, the
@@ -1727,10 +1736,14 @@ Exactly one of (the discriminator):
 
 - `--everyone` — match an `everyone` entry.
 - `--authenticated` — match an `authenticated` entry.
-- `--preferred-username TEXT` — match a `preferred_username` entry
-  whose claim value equals `TEXT`.
-- `--email TEXT` — match an `email` entry whose claim value equals
-  `TEXT`.
+- `--json-path TEXT` — match an entry whose JSONPath query equals
+  `TEXT`. This is the underlying claim discriminator; the two options
+  below are convenience aliases for the common equality case.
+- `--preferred-username TEXT` — convenience alias matching the entry
+  stored as the equivalent `--json-path` query
+  `$[?$.preferred_username == "TEXT"]`.
+- `--email TEXT` — convenience alias matching the entry stored as the
+  equivalent `--json-path` query `$[?$.email == "TEXT"]`.
 
 #### Behavior Notes
 

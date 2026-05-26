@@ -476,6 +476,13 @@ def add_acl_entry(
         )
         raise typer.Exit(1)
 
+    if preferred_username is not None:
+        json_path = authz_package.token_field_json_path(
+            "preferred_username", preferred_username
+        )
+    elif email is not None:
+        json_path = authz_package.token_field_json_path("email", email)
+
     if json_path is not None:
         try:
             authz_package.validate_json_path(json_path)
@@ -519,13 +526,6 @@ def add_acl_entry(
                 session.delete(entry)
             elif json_path is not None and entry.json_path == json_path:
                 session.delete(entry)
-            elif (
-                preferred_username is not None
-                and entry.preferred_username == preferred_username
-            ):
-                session.delete(entry)
-            elif email is not None and entry.email == email:
-                session.delete(entry)
         session.commit()
 
         new_acl = authz_schema.ACLEntry(
@@ -534,8 +534,6 @@ def add_acl_entry(
             everyone=everyone,
             authenticated=authenticated,
             json_path=json_path,
-            preferred_username=preferred_username,
-            email=email,
         )
         session.add(new_acl)
         session.commit()
@@ -635,6 +633,13 @@ def delete_acl_entry(
         )
         raise typer.Exit(1)
 
+    if preferred_username is not None:
+        json_path = authz_package.token_field_json_path(
+            "preferred_username", preferred_username
+        )
+    elif email is not None:
+        json_path = authz_package.token_field_json_path("email", email)
+
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
@@ -670,13 +675,6 @@ def delete_acl_entry(
             elif authenticated and entry.authenticated:
                 matches.append(entry)
             elif json_path is not None and entry.json_path == json_path:
-                matches.append(entry)
-            elif (
-                preferred_username is not None
-                and entry.preferred_username == preferred_username
-            ):
-                matches.append(entry)
-            elif email is not None and entry.email == email:
                 matches.append(entry)
 
         if not matches:
