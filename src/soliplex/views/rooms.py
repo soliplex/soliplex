@@ -3,7 +3,8 @@ import io
 
 import fastapi
 from fastapi import responses
-from haiku.rag import client as rag_client
+from haiku.rag import client as hr_client
+from haiku.rag.store.models import chunk as hr_chunk
 
 from soliplex import authn
 from soliplex import authz as authz_package
@@ -196,7 +197,7 @@ async def get_room_documents(
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
 
-        async with rag_client.HaikuRAG(**hr_client_kw) as rag:
+        async with hr_client.HaikuRAG(**hr_client_kw) as rag:
             results = await rag.list_documents()
 
         for document in results:
@@ -252,7 +253,7 @@ async def get_chunk_visualization(
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
 
-        async with rag_client.HaikuRAG(**hr_client_kw) as rag:
+        async with hr_client.HaikuRAG(**hr_client_kw) as rag:
             chunk = await rag.chunk_repository.get_by_id(chunk_id)
 
             if chunk:
@@ -295,7 +296,7 @@ async def get_chunk_visualization(
 async def get_search(
     query: str,
     room_id: str,
-    search_type: models.SearchType = "hybrid",
+    search_type: hr_chunk.SearchType = "hybrid",
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
@@ -328,7 +329,7 @@ async def get_search(
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
 
-        async with rag_client.HaikuRAG(**hr_client_kw) as rag:
+        async with hr_client.HaikuRAG(**hr_client_kw) as rag:
             hits = await rag.search(
                 query=query,
                 search_type=search_type,

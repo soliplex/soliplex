@@ -23,8 +23,6 @@ from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
-SearchType = hr_chunk.SearchType
-
 KW_ONLY = pydantic.Field(kw_only=True)
 KW_ONLY_NONE = pydantic.Field(kw_only=True, default=None)
 
@@ -587,7 +585,7 @@ class SearchHit(pydantic.BaseModel):
 
 class SearchResults(pydantic.BaseModel):
     query: str
-    search_type: SearchType
+    search_type: hr_chunk.SearchType
     hits: list[SearchHit]
 
 
