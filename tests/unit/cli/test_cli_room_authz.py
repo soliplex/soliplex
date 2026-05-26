@@ -119,6 +119,7 @@ def test__check_room_id(
             {
                 "everyone": True,
                 "authenticated": False,
+                "json_path": None,
                 "preferred_username": None,
                 "email": None,
             },
@@ -129,6 +130,7 @@ def test__check_room_id(
             {
                 "everyone": True,
                 "authenticated": True,
+                "json_path": "$.foo",
                 "preferred_username": "alice",
                 "email": "alice@example.com",
             },
@@ -139,16 +141,29 @@ def test__check_room_id(
             {
                 "everyone": False,
                 "authenticated": True,
+                "json_path": None,
                 "preferred_username": None,
                 "email": None,
             },
             "authenticated",
         ),
-        # 'preferred_username' is the third priority.
+        # 'json_path' is the third priority (matches check_token order).
         (
             {
                 "everyone": False,
                 "authenticated": False,
+                "json_path": "$.foo",
+                "preferred_username": "alice",
+                "email": "alice@example.com",
+            },
+            "json_path=$.foo",
+        ),
+        # 'preferred_username' is the fourth priority.
+        (
+            {
+                "everyone": False,
+                "authenticated": False,
+                "json_path": None,
                 "preferred_username": "alice",
                 "email": None,
             },
@@ -159,6 +174,7 @@ def test__check_room_id(
             {
                 "everyone": False,
                 "authenticated": False,
+                "json_path": None,
                 "preferred_username": None,
                 "email": "alice@example.com",
             },
@@ -169,6 +185,7 @@ def test__check_room_id(
             {
                 "everyone": False,
                 "authenticated": False,
+                "json_path": None,
                 "preferred_username": None,
                 "email": None,
             },

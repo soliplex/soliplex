@@ -76,6 +76,8 @@ def _describe_discriminator(entry):
         return "everyone"
     if entry.authenticated:
         return "authenticated"
+    if entry.json_path is not None:
+        return f"json_path={entry.json_path}"
     if entry.preferred_username is not None:
         return f"preferred_username={entry.preferred_username}"
     if entry.email is not None:
@@ -402,6 +404,14 @@ def add_acl_entry(
         "--authenticated",
         help="Match any authenticated user.",
     ),
+    json_path: str | None = typer.Option(
+        None,
+        "--json-path",
+        help=(
+            "Match the user token via an RFC 9535 JSONPath query. The "
+            "entry matches when the query returns at least one node."
+        ),
+    ),
     preferred_username: str | None = typer.Option(
         None,
         "--preferred-username",
@@ -418,7 +428,8 @@ def add_acl_entry(
     Exactly one of '--allow' or '--deny' must be supplied.
 
     Exactly one discriminator option ('--everyone', '--authenticated',
-    '--preferred-username', or '--email') must be supplied.
+    '--json-path', '--preferred-username', or '--email') must be
+    supplied.
 
     The room must already have a RoomPolicy row -- run 'make-private'
     or 'make-public' first to establish the policy's
@@ -450,6 +461,7 @@ def add_acl_entry(
         for name, present in (
             ("--everyone", everyone),
             ("--authenticated", authenticated),
+            ("--json-path", json_path is not None),
             ("--preferred-username", preferred_username is not None),
             ("--email", email is not None),
         )
@@ -459,10 +471,18 @@ def add_acl_entry(
         the_console.rule("Exactly one discriminator required")
         the_console.print(
             "Pass exactly one of '--everyone', '--authenticated', "
-            "'--preferred-username', or '--email'. "
+            "'--json-path', '--preferred-username', or '--email'. "
             f"Got: {selected or ['(none)']}.",
         )
         raise typer.Exit(1)
+
+    if json_path is not None:
+        try:
+            authz_package.validate_json_path(json_path)
+        except authz_package.InvalidJSONPath as exc:
+            the_console.rule("Invalid JSONPath")
+            the_console.print(str(exc))
+            raise typer.Exit(1) from exc
 
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
@@ -497,6 +517,8 @@ def add_acl_entry(
                 session.delete(entry)
             elif authenticated and entry.authenticated:
                 session.delete(entry)
+            elif json_path is not None and entry.json_path == json_path:
+                session.delete(entry)
             elif (
                 preferred_username is not None
                 and entry.preferred_username == preferred_username
@@ -511,6 +533,7 @@ def add_acl_entry(
             allow_deny=allow_deny,
             everyone=everyone,
             authenticated=authenticated,
+            json_path=json_path,
             preferred_username=preferred_username,
             email=email,
         )
@@ -545,6 +568,11 @@ def delete_acl_entry(
         "--authenticated",
         help="Match an 'authenticated' entry.",
     ),
+    json_path: str | None = typer.Option(
+        None,
+        "--json-path",
+        help="Match a 'json_path' entry by query string.",
+    ),
     preferred_username: str | None = typer.Option(
         None,
         "--preferred-username",
@@ -560,8 +588,9 @@ def delete_acl_entry(
 
     The entry to delete is identified by the combination of
     '--allow'/'--deny' and exactly one discriminator option
-    ('--everyone', '--authenticated', '--preferred-username',
-    '--email') -- the same parameter shape as 'add-acl-entry'.
+    ('--everyone', '--authenticated', '--json-path',
+    '--preferred-username', '--email') -- the same parameter shape
+    as 'add-acl-entry'.
 
     The room must already have a RoomPolicy row with at least one
     matching ACL entry. If no matching entry exists, the command
@@ -591,6 +620,7 @@ def delete_acl_entry(
         for name, present in (
             ("--everyone", everyone),
             ("--authenticated", authenticated),
+            ("--json-path", json_path is not None),
             ("--preferred-username", preferred_username is not None),
             ("--email", email is not None),
         )
@@ -600,7 +630,7 @@ def delete_acl_entry(
         the_console.rule("Exactly one discriminator required")
         the_console.print(
             "Pass exactly one of '--everyone', '--authenticated', "
-            "'--preferred-username', or '--email'. "
+            "'--json-path', '--preferred-username', or '--email'. "
             f"Got: {selected or ['(none)']}.",
         )
         raise typer.Exit(1)
@@ -638,6 +668,8 @@ def delete_acl_entry(
             if everyone and entry.everyone:
                 matches.append(entry)
             elif authenticated and entry.authenticated:
+                matches.append(entry)
+            elif json_path is not None and entry.json_path == json_path:
                 matches.append(entry)
             elif (
                 preferred_username is not None
