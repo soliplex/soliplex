@@ -205,8 +205,6 @@ def test_aclentry_rejects_invalid_jsonpath(the_room_policy):
 @pytest.mark.parametrize(
     "model_kwargs",
     [
-        {},
-        {"allow_deny": authz_package.AllowDeny.ALLOW},
         {"everyone": True, "allow_deny": authz_package.AllowDeny.DENY},
         {"authenticated": True, "allow_deny": authz_package.AllowDeny.ALLOW},
         {
@@ -233,6 +231,28 @@ def test_aclentry_from_model(the_session, the_room_policy, model_kwargs):
     the_session.commit()
 
     assert found.as_model == model
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},  # zero discriminators
+        {"everyone": True, "json_path": "$.foo"},  # two discriminators
+    ],
+)
+def test_aclentry_flush_requires_exactly_one_discriminator(
+    the_session, the_room_policy, kwargs
+):
+    entry = authz_schema.ACLEntry(
+        room_policy=the_room_policy,
+        allow_deny=authz_package.AllowDeny.ALLOW,
+        **kwargs,
+    )
+    the_session.add(the_room_policy)
+    the_session.add(entry)
+
+    with pytest.raises(authz_package.ExactlyOneDiscriminator):
+        the_session.commit()
 
 
 @pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
@@ -368,11 +388,10 @@ def test_aclentry_check_token_w_preferred_username(
     token,
     matched,
 ):
-    entry = authz_schema.ACLEntry(
-        room_policy=the_room_policy,
-        allow_deny=allow_deny,
-        preferred_username="hit",
+    entry = authz_schema.ACLEntry.from_model(
+        models.ACLEntry(allow_deny=allow_deny, preferred_username="hit")
     )
+    entry.room_policy = the_room_policy
 
     found = entry.check_token(token)
 
@@ -404,11 +423,10 @@ def test_aclentry_check_token_w_email(
     token,
     matched,
 ):
-    entry = authz_schema.ACLEntry(
-        room_policy=the_room_policy,
-        allow_deny=allow_deny,
-        email="hit@example.com",
+    entry = authz_schema.ACLEntry.from_model(
+        models.ACLEntry(allow_deny=allow_deny, email="hit@example.com")
     )
+    entry.room_policy = the_room_policy
 
     found = entry.check_token(token)
 

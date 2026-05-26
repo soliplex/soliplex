@@ -164,8 +164,6 @@ class ACLEntry(Base):
     # Discriminators
     everyone: Mapped[bool] = mapped_column(default=False)
     authenticated: Mapped[bool] = mapped_column(default=False)
-    preferred_username: Mapped[str | None] = mapped_column(default=None)
-    email: Mapped[str | None] = mapped_column(default=None)
     json_path: Mapped[str | None] = mapped_column(default=None)
 
     @sqla_orm.validates("json_path")
@@ -174,24 +172,48 @@ class ACLEntry(Base):
 
     @classmethod
     def from_model(cls, model: models.ACLEntry):
+        # 'preferred_username' and 'email' are expressed in the public
+        # model but stored as equivalent JSONPath queries (highest
+        # priority first, matching the legacy check_token order). The
+        # public model's validator guarantees exactly one discriminator,
+        # so no shadowing is possible here.
+        if model.preferred_username is not None:
+            json_path = authz_package.token_field_json_path(
+                "preferred_username", model.preferred_username
+            )
+        elif model.email is not None:
+            json_path = authz_package.token_field_json_path(
+                "email", model.email
+            )
+        else:
+            json_path = model.json_path
         return cls(
             allow_deny=model.allow_deny,
             everyone=model.everyone,
             authenticated=model.authenticated,
-            preferred_username=model.preferred_username,
-            email=model.email,
-            json_path=model.json_path,
+            json_path=json_path,
         )
 
     @property
     def as_model(self) -> models.ACLEntry:
+        # Surface a stored 'preferred_username' / 'email' query back as
+        # the matching public model field; leave general-purpose
+        # queries as 'json_path'.
+        kwargs: dict[str, str] = {}
+        if self.json_path is not None:
+            parsed = authz_package.parse_token_field_json_path(self.json_path)
+            if parsed is not None and parsed[0] in (
+                "preferred_username",
+                "email",
+            ):
+                kwargs[parsed[0]] = parsed[1]
+            else:
+                kwargs["json_path"] = self.json_path
         return models.ACLEntry(
             allow_deny=self.allow_deny,
             everyone=self.everyone,
             authenticated=self.authenticated,
-            preferred_username=self.preferred_username,
-            email=self.email,
-            json_path=self.json_path,
+            **kwargs,
         )
 
     def check_token(
@@ -220,15 +242,26 @@ class ACLEntry(Base):
             if jp_match is not None:
                 return self.allow_deny
 
-        if self.preferred_username is not None:
-            if token.get("preferred_username") == self.preferred_username:
-                return self.allow_deny
-
-        if self.email is not None:
-            if token.get("email") == self.email:
-                return self.allow_deny
-
         return None
+
+    def _check_exactly_one_discriminator(self) -> None:
+        active = [
+            name
+            for name, is_set in (
+                ("everyone", self.everyone),
+                ("authenticated", self.authenticated),
+                ("json_path", self.json_path is not None),
+            )
+            if is_set
+        ]
+        if len(active) != 1:
+            raise authz_package.ExactlyOneDiscriminator(active)
+
+
+@sqlalchemy.event.listens_for(ACLEntry, "before_insert")
+@sqlalchemy.event.listens_for(ACLEntry, "before_update")
+def _acl_entry_check_discriminator(_mapper, _connection, target) -> None:
+    target._check_exactly_one_discriminator()
 
 
 def get_engine(

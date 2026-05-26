@@ -77,11 +77,11 @@ def _describe_discriminator(entry):
     if entry.authenticated:
         return "authenticated"
     if entry.json_path is not None:
+        parsed = authz_package.parse_token_field_json_path(entry.json_path)
+        if parsed is not None:
+            field, value = parsed
+            return f"{field}={value}"
         return f"json_path={entry.json_path}"
-    if entry.preferred_username is not None:
-        return f"preferred_username={entry.preferred_username}"
-    if entry.email is not None:
-        return f"email={entry.email}"
     return "(invalid: no discriminator set)"
 
 
@@ -723,10 +723,12 @@ def add_room_user(
             session.add(policy)
             session.commit()
 
+        json_path = authz_package.token_field_json_path("email", user_email)
+
         existing_acls = [
             acl_entry
             for acl_entry in policy.acl_entries
-            if acl_entry.email == user_email
+            if acl_entry.json_path == json_path
         ]
         for to_remove in existing_acls:
             session.delete(to_remove)
@@ -735,7 +737,7 @@ def add_room_user(
         new_acl = authz_schema.ACLEntry(
             room_policy=policy,
             allow_deny=authz_package.AllowDeny.ALLOW,
-            email=user_email,
+            json_path=json_path,
         )
         session.add(new_acl)
         session.commit()

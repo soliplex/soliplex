@@ -1513,3 +1513,44 @@ def test_aclentry_rejects_invalid_jsonpath():
         err.get("ctx", {}).get("error") for err in exc_info.value.errors()
     ]
     assert any(isinstance(c, authz_package.InvalidJSONPath) for c in causes)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},  # no discriminator
+        {"everyone": True, "json_path": "$.foo"},  # two
+        {"preferred_username": "phreddy", "email": "phreddy@example.com"},
+        {
+            "everyone": True,
+            "authenticated": True,
+            "preferred_username": "phreddy",
+        },
+    ],
+)
+def test_aclentry_requires_exactly_one_discriminator(kwargs):
+    with pytest.raises(pydantic.ValidationError) as exc_info:
+        models.ACLEntry(**kwargs)
+
+    causes = [
+        err.get("ctx", {}).get("error") for err in exc_info.value.errors()
+    ]
+    assert any(
+        isinstance(c, authz_package.ExactlyOneDiscriminator) for c in causes
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"everyone": True},
+        {"authenticated": True},
+        {"preferred_username": "phreddy"},
+        {"email": "phreddy@example.com"},
+        {"json_path": "$.foo"},
+    ],
+)
+def test_aclentry_accepts_single_discriminator(kwargs):
+    entry = models.ACLEntry(**kwargs)
+
+    assert entry == models.ACLEntry(**kwargs)

@@ -854,6 +854,23 @@ class ACLEntry(pydantic.BaseModel):
     def _check_json_path(cls, value: str | None) -> str | None:
         return authz_package.validate_json_path(value)
 
+    @pydantic.model_validator(mode="after")
+    def _check_exactly_one_discriminator(self) -> ACLEntry:
+        active = [
+            name
+            for name, is_set in (
+                ("everyone", self.everyone),
+                ("authenticated", self.authenticated),
+                ("preferred_username", self.preferred_username is not None),
+                ("email", self.email is not None),
+                ("json_path", self.json_path is not None),
+            )
+            if is_set
+        ]
+        if len(active) != 1:
+            raise authz_package.ExactlyOneDiscriminator(active)
+        return self
+
 
 class RoomPolicy(pydantic.BaseModel):
     room_id: str

@@ -75,6 +75,36 @@ def test_token_field_json_path(field, value, match_token, miss_token):
     assert env.match(expr, miss_token) is None
 
 
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("preferred_username", "alice"),
+        ("email", "alice@example.com"),
+        ("preferred_username", 'has"quote'),
+        ("email", "a]b@example.com"),
+    ],
+)
+def test_parse_token_field_json_path_roundtrip(field, value):
+    expr = authz_package.token_field_json_path(field, value)
+
+    assert authz_package.parse_token_field_json_path(expr) == (field, value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "$",
+        "$.foo",
+        "$[?match($.foo, 'b.*z')]",
+        # Matches the shape, but the operand is not a JSON string:
+        "$[?$.age == 42]",  # decodes to a non-str
+        "$[?$.foo == bar]",  # not valid JSON at all
+    ],
+)
+def test_parse_token_field_json_path_non_field_query(value):
+    assert authz_package.parse_token_field_json_path(value) is None
+
+
 @pytest.mark.anyio
 @mock.patch("soliplex.authz.persistence.AuthorizationPolicy")
 @mock.patch("sqlalchemy.ext.asyncio.AsyncSession")

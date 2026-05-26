@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import enum
 import json
+import re
 import typing
 
 import fastapi
@@ -25,6 +26,17 @@ class InvalidJSONPath(ValueError):
     def __init__(self, value: str):
         self.value = value
         super().__init__(f"Invalid JSONPath: {value!r}")
+
+
+class ExactlyOneDiscriminator(ValueError):
+    """Raised when an ACL entry does not set exactly one discriminator."""
+
+    def __init__(self, discriminators: typing.Iterable[str]):
+        self.discriminators = tuple(discriminators)
+        got = ", ".join(self.discriminators) or "(none)"
+        super().__init__(
+            f"ACLEntry requires exactly one discriminator; got: {got}."
+        )
 
 
 def validate_json_path(value: str | None) -> str | None:
@@ -55,6 +67,30 @@ def token_field_json_path(field: str, value: str) -> str:
     the value is JSON-encoded so embedded quotes round-trip safely.
     """
     return f"$[?$.{field} == {json.dumps(value)}]"
+
+
+_TOKEN_FIELD_JSON_PATH_RE = re.compile(
+    r"^\$\[\?\$\.(?P<field>[A-Za-z_][A-Za-z0-9_]*) == (?P<value>.+)\]$"
+)
+
+
+def parse_token_field_json_path(value: str) -> tuple[str, str] | None:
+    """Inverse of ``token_field_json_path``.
+
+    Returns ``(field, string_value)`` when ``value`` has the exact shape
+    produced by ``token_field_json_path``, otherwise ``None`` (e.g. for
+    a general-purpose JSONPath query that was authored directly).
+    """
+    match = _TOKEN_FIELD_JSON_PATH_RE.match(value)
+    if match is None:
+        return None
+    try:
+        decoded = json.loads(match.group("value"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(decoded, str):
+        return None
+    return match.group("field"), decoded
 
 
 class AllowDeny(enum.Enum):

@@ -120,8 +120,6 @@ def test__check_room_id(
                 "everyone": True,
                 "authenticated": False,
                 "json_path": None,
-                "preferred_username": None,
-                "email": None,
             },
             "everyone",
         ),
@@ -131,8 +129,6 @@ def test__check_room_id(
                 "everyone": True,
                 "authenticated": True,
                 "json_path": "$.foo",
-                "preferred_username": "alice",
-                "email": "alice@example.com",
             },
             "everyone",
         ),
@@ -142,41 +138,33 @@ def test__check_room_id(
                 "everyone": False,
                 "authenticated": True,
                 "json_path": None,
-                "preferred_username": None,
-                "email": None,
             },
             "authenticated",
         ),
-        # 'json_path' is the third priority (matches check_token order).
+        # A general-purpose query is shown verbatim.
         (
             {
                 "everyone": False,
                 "authenticated": False,
-                "json_path": "$.foo",
-                "preferred_username": "alice",
-                "email": "alice@example.com",
+                "json_path": "$[?match($.foo, 'b.*z')]",
             },
-            "json_path=$.foo",
+            "json_path=$[?match($.foo, 'b.*z')]",
         ),
-        # 'preferred_username' is the fourth priority.
+        # A converted 'preferred_username' query is humanized back.
         (
             {
                 "everyone": False,
                 "authenticated": False,
-                "json_path": None,
-                "preferred_username": "alice",
-                "email": None,
+                "json_path": '$[?$.preferred_username == "alice"]',
             },
             "preferred_username=alice",
         ),
-        # 'email' is the fallback when only it is set.
+        # A converted 'email' query is humanized back.
         (
             {
                 "everyone": False,
                 "authenticated": False,
-                "json_path": None,
-                "preferred_username": None,
-                "email": "alice@example.com",
+                "json_path": '$[?$.email == "alice@example.com"]',
             },
             "email=alice@example.com",
         ),
@@ -186,8 +174,6 @@ def test__check_room_id(
                 "everyone": False,
                 "authenticated": False,
                 "json_path": None,
-                "preferred_username": None,
-                "email": None,
             },
             "(invalid: no discriminator set)",
         ),
