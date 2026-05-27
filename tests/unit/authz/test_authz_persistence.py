@@ -9,6 +9,7 @@ from soliplex.authz import persistence as authz_persistence
 from soliplex.authz import schema as authz_schema
 
 EMAIL = "phreddy@example.com"
+JSON_PATH = authz_package.token_field_json_path("email", EMAIL)
 USER_TOKEN = {
     "email": EMAIL,
 }
@@ -46,8 +47,8 @@ async def test_authorizationpolicy_crud_admin_user(the_async_session):
     assert found == []
 
     await ap.add_admin_user(email=EMAIL)
-    user = await authz_persistence._find_admin_user(
-        email=EMAIL,
+    user = await authz_persistence._find_admin_user_by_json_path(
+        json_path=JSON_PATH,
         session=the_async_session,
     )
     assert user is not None
@@ -60,8 +61,8 @@ async def test_authorizationpolicy_crud_admin_user(the_async_session):
     with pytest.raises(authz_persistence.AdminUserExists):
         await ap.add_admin_user(email=EMAIL)
 
-    no_dupe = await authz_persistence._find_admin_user(
-        email=EMAIL,
+    no_dupe = await authz_persistence._find_admin_user_by_json_path(
+        json_path=JSON_PATH,
         session=the_async_session,
     )
     assert no_dupe is user
@@ -72,8 +73,8 @@ async def test_authorizationpolicy_crud_admin_user(the_async_session):
     await the_async_session.commit()
 
     await ap.remove_admin_user(email=EMAIL)
-    gone = await authz_persistence._find_admin_user(
-        email=EMAIL,
+    gone = await authz_persistence._find_admin_user_by_json_path(
+        json_path=JSON_PATH,
         session=the_async_session,
     )
     assert gone is None
@@ -100,6 +101,29 @@ async def test_authorizationpolicy_check_admin_access(the_async_session):
     await ap.remove_admin_user(email=EMAIL)
 
     assert not await ap.check_admin_access(USER_TOKEN)
+
+
+@pytest.mark.asyncio
+async def test_authorizationpolicy_check_admin_access_json_path(
+    the_async_session,
+):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    # An admin keyed by a non-email JSONPath query (e.g. a role claim),
+    # as produced by 'admin-users add --json-path'.
+    the_async_session.add(
+        authz_schema.AdminUser(json_path='$[?$.role == "admin"]'),
+    )
+    await the_async_session.commit()
+
+    assert await ap.check_admin_access({"role": "admin"})
+    assert not await ap.check_admin_access({"role": "user"})
+    # A role-keyed admin is not matched by an unrelated email token.
+    assert not await ap.check_admin_access(USER_TOKEN)
+
+    # A non-email admin surfaces as its raw JSONPath query, not an email.
+    listed = await ap.list_admin_users()
+    assert listed == ['$[?$.role == "admin"]']
 
 
 @pytest.mark.asyncio

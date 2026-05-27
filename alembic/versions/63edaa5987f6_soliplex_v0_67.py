@@ -45,6 +45,15 @@ def _acl_entries_table() -> sa.Table:
     )
 
 
+def _admin_users_table() -> sa.Table:
+    return sa.table(
+        "admin_users",
+        sa.column("id_", sa.Integer),
+        sa.column("email", sa.String),
+        sa.column("json_path", sa.String),
+    )
+
+
 def upgrade(engine_name: str) -> None:
     """Upgrade schema."""
     globals()[f"upgrade_{engine_name}"]()
@@ -80,9 +89,13 @@ def upgrade_authz() -> None:
     op.drop_column("room_acl_entries", "preferred_username")
     op.drop_column("room_acl_entries", "email")
 
+    _upgrade_admin_users()
+
 
 def downgrade_authz() -> None:
     """Downgrade authz schema."""
+    _downgrade_admin_users()
+
     op.add_column(
         "room_acl_entries",
         sa.Column("preferred_username", sa.String(), nullable=True),
@@ -225,3 +238,167 @@ def _restore_legacy_discriminators_offline() -> None:
             f"AND substr(json_path, 1, {plen}) = '{prefix}' "
             f"AND substr(json_path, -1, 1) = ']'"
         )
+
+
+def _upgrade_admin_users() -> None:
+    """Replace the unique 'email' admin key with a 'json_path' query.
+
+    Email-keyed admins become '$[?$.email == "..."]', matching how
+    'room_acl_entries' stores its converted email discriminator and how
+    'check_admin_access' now matches the user token.
+
+    SQLite cannot 'DROP' a column that carries a UNIQUE constraint, so
+    the table is rebuilt -- the same move-and-copy alembic batch mode
+    performs, written explicitly here so it also runs under '--sql'
+    offline mode. The rebuilt table mirrors 'create_all' for a fresh DB.
+    """
+    op.add_column(
+        "admin_users", sa.Column("json_path", sa.String(), nullable=True)
+    )
+    _convert_admin_emails()
+    op.execute(
+        "CREATE TABLE _new_admin_users ("
+        "id_ INTEGER NOT NULL, "
+        "json_path VARCHAR NOT NULL, "
+        "created TIMESTAMP NOT NULL, "
+        "CONSTRAINT pk_admin_users PRIMARY KEY (id_), "
+        "CONSTRAINT uq_admin_users_json_path UNIQUE (json_path))"
+    )
+    op.execute(
+        "INSERT INTO _new_admin_users (id_, json_path, created) "
+        "SELECT id_, json_path, created FROM admin_users"
+    )
+    op.execute("DROP TABLE admin_users")
+    op.execute("ALTER TABLE _new_admin_users RENAME TO admin_users")
+
+
+def _downgrade_admin_users() -> None:
+    """Reverse _upgrade_admin_users, restoring the unique 'email' key.
+
+    Only email-shaped json_paths can be represented by the legacy
+    column; admins created with a non-email '--json-path' query have no
+    email and are dropped (as the 'room_acl_entries' downgrade drops
+    genuine json_path entries).
+    """
+    op.add_column(
+        "admin_users", sa.Column("email", sa.String(), nullable=True)
+    )
+    _restore_admin_emails()
+    op.execute("DELETE FROM admin_users WHERE email IS NULL")
+    op.execute(
+        "CREATE TABLE _new_admin_users ("
+        "id_ INTEGER NOT NULL, "
+        "email VARCHAR NOT NULL, "
+        "created TIMESTAMP NOT NULL, "
+        "CONSTRAINT pk_admin_users PRIMARY KEY (id_), "
+        "CONSTRAINT uq_admin_users_email UNIQUE (email))"
+    )
+    op.execute(
+        "INSERT INTO _new_admin_users (id_, email, created) "
+        "SELECT id_, email, created FROM admin_users"
+    )
+    op.execute("DROP TABLE admin_users")
+    op.execute("ALTER TABLE _new_admin_users RENAME TO admin_users")
+
+
+def _convert_admin_emails() -> None:
+    """Translate the legacy 'email' admin key to a 'json_path' query.
+
+    Offline ('--sql') mode has no connection to read rows from, so it
+    gets a set-based rewrite; online mode keeps the row-by-row form.
+    """
+    if context.is_offline_mode():
+        _convert_admin_emails_offline()
+    else:
+        _convert_admin_emails_online()
+
+
+def _convert_admin_emails_online() -> None:
+    """Row-by-row conversion against a live connection."""
+    admin = _admin_users_table()
+    bind = op.get_bind()
+    rows = bind.execute(
+        sa.select(admin.c.id_, admin.c.email).where(
+            admin.c.json_path.is_(None),
+            admin.c.email.is_not(None),
+        )
+    ).all()
+    for row in rows:
+        bind.execute(
+            sa.update(admin)
+            .where(admin.c.id_ == row.id_)
+            .values(json_path=_token_field_json_path("email", row.email))
+        )
+
+
+def _convert_admin_emails_offline() -> None:
+    """Set-based conversion emitted as SQL for '--sql' mode.
+
+    SQLite's 'json_quote' mirrors 'json.dumps' for ASCII emails (see
+    the room_acl_entries note), so the rendered query matches the online
+    branch and the JSONPath evaluator.
+    """
+    # Mirrors _token_field_json_path; the prefix has no single quote.
+    prefix = "$[?$.email == "
+    op.execute(
+        f"UPDATE admin_users "
+        f"SET json_path = '{prefix}' || json_quote(email) || ']' "
+        f"WHERE json_path IS NULL AND email IS NOT NULL"
+    )
+
+
+def _restore_admin_emails() -> None:
+    """Reverse _convert_admin_emails before dropping json_path.
+
+    Only json_path values matching the converted-email shape are
+    restored. Genuine '--json-path' entries cannot be represented by the
+    legacy column and are dropped by '_downgrade_admin_users'.
+
+    Offline ('--sql') mode has no connection to read rows from, so it
+    gets a set-based rewrite; online mode keeps the row-by-row form.
+    """
+    if context.is_offline_mode():
+        _restore_admin_emails_offline()
+    else:
+        _restore_admin_emails_online()
+
+
+def _restore_admin_emails_online() -> None:
+    """Row-by-row restore against a live connection."""
+    admin = _admin_users_table()
+    bind = op.get_bind()
+    pattern = _LEGACY_FIELD_RES["email"]
+    rows = bind.execute(
+        sa.select(admin.c.id_, admin.c.json_path).where(
+            admin.c.json_path.is_not(None)
+        )
+    ).all()
+    for row in rows:
+        match = pattern.match(row.json_path)
+        if match is not None:
+            bind.execute(
+                sa.update(admin)
+                .where(admin.c.id_ == row.id_)
+                .values(email=json.loads(match.group("value")))
+            )
+
+
+def _restore_admin_emails_offline() -> None:
+    """Set-based restore emitted as SQL for '--sql' mode.
+
+    Mirrors '_LEGACY_FIELD_RES["email"]': a json_path carrying the frozen
+    converted-email shape is decoded back into the 'email' column via
+    SQLite's 'json_extract(..., '$')', which inverts 'json_quote'.
+    """
+    # Mirrors _token_field_json_path; the prefix has no single quote.
+    prefix = "$[?$.email == "
+    plen = len(prefix)
+    op.execute(
+        f"UPDATE admin_users "
+        f"SET email = json_extract("
+        f"substr(json_path, {plen + 1}, length(json_path) - {plen + 1})"
+        f", '$') "
+        f"WHERE json_path IS NOT NULL "
+        f"AND substr(json_path, 1, {plen}) = '{prefix}' "
+        f"AND substr(json_path, -1, 1) = ']'"
+    )

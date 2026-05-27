@@ -149,7 +149,11 @@ class AuthorizationPolicy(abc.ABC):
 
     @abc.abstractmethod
     async def list_admin_users(self) -> list[str]:
-        """List user emails in the admin users table."""
+        """List admin users in the admin users table.
+
+        Email-keyed admins surface as their email; admins keyed by a
+        non-email JSONPath query surface as the raw query string.
+        """
 
     @abc.abstractmethod
     async def add_admin_user(self, email: str):
@@ -161,7 +165,11 @@ class AuthorizationPolicy(abc.ABC):
 
     @abc.abstractmethod
     async def check_admin_access(self, user_token: UserToken) -> bool:
-        """Is the user represented by 'user_token' an admin user?"""
+        """Is the user represented by 'user_token' an admin user?
+
+        Matches 'user_token' against each admin entry's JSONPath query;
+        the user is an admin when any query matches.
+        """
 
     @abc.abstractmethod
     async def check_room_access(

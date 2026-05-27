@@ -52,19 +52,38 @@ class Base(AsyncAttrs, DeclarativeBase):
 class AdminUser(Base):
     """Info for users configured as admins.
 
-    'email': email address
+    'json_path': an RFC 9535 JSONPath query matched against the user
+        token; the user is an admin when the query matches at least one
+        node. Email-keyed admins are stored as '$[?$.email == "..."]'
+        (see 'authz.token_field_json_path'), mirroring how 'ACLEntry'
+        stores its 'email' / 'preferred_username' discriminators.
     """
 
     __tablename__ = "admin_users"
 
     id_: Mapped[int] = mapped_column(primary_key=True)
 
-    email: Mapped[str] = mapped_column(unique=True)
+    json_path: Mapped[str] = mapped_column(unique=True)
 
     created: Mapped[datetime.datetime] = mapped_column(
         sqla_sqltypes.TIMESTAMP(timezone=True),
         default=_timestamp,
     )
+
+    @sqla_orm.validates("json_path")
+    def _check_json_path(self, _key, value):
+        return authz_package.validate_json_path(value)
+
+    def check_token(
+        self,
+        user_token: authz_package.UserToken | None,
+    ) -> bool:
+        """Does 'user_token' match our JSONPath query?"""
+        token = user_token or {}
+        match = authz_package.the_jsonpath_environment.match(
+            self.json_path, token
+        )
+        return match is not None
 
 
 class RoomPolicy(Base):

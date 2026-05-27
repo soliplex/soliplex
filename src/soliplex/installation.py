@@ -494,8 +494,9 @@ def apply_logfire_configuration(
 
 
 def add_user_as_admin(connection, *, email):
+    json_path = authz_package.token_field_json_path("email", email)
     insert_stmt = sqla_sql.insert(authz_schema.AdminUser).values(
-        email=email,
+        json_path=json_path,
     )
     connection.execute(insert_stmt)
 
@@ -516,7 +517,6 @@ async def lifespan(
     installation_path: pathlib.Path,
     no_auth_mode: bool = False,
     log_config_file: str = None,
-    add_admin_user: str = None,
 ):
     i_config = config_installation.load_installation(installation_path)
 
@@ -566,12 +566,7 @@ async def lifespan(
         await ra_connection.run_sync(
             authz_schema.Base.metadata.create_all,
         )
-        if add_admin_user:
-            await ra_connection.run_sync(
-                add_user_as_admin,
-                email=add_admin_user,
-            )
-        elif no_auth_mode:
+        if no_auth_mode:
             await ra_connection.run_sync(
                 add_no_auth_user_as_admin,
             )

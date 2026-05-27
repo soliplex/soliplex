@@ -5,6 +5,7 @@ from unittest import mock
 import pytest
 import typer
 
+from soliplex import authz as authz_package
 from soliplex.cli import admin_users as cli_admin_users
 
 
@@ -62,29 +63,122 @@ def test__admin_users_callback(
 )
 @mock.patch("soliplex.cli.admin_users.the_console")
 def test__check_existing_admin(the_console, w_exists):
-    email = "alice@example.com"
+    json_path = authz_package.token_field_json_path(
+        "email", "alice@example.com"
+    )
     existing = mock.Mock() if w_exists else None
 
     session = mock.Mock()
     session.query.return_value.where.return_value.first.return_value = existing
 
     if not w_exists:
-        cli_admin_users._check_existing_admin(session, email)
+        cli_admin_users._check_existing_admin(session, json_path)
 
         the_console.rule.assert_not_called()
         the_console.print.assert_not_called()
         return
 
     with pytest.raises(typer.Exit) as excinfo:
-        cli_admin_users._check_existing_admin(session, email)
+        cli_admin_users._check_existing_admin(session, json_path)
 
     (return_code,) = excinfo.value.args
     assert return_code == 1
 
     the_console.rule.assert_called_once_with(
-        f"{email} is already an admin",
+        "email=alice@example.com is already an admin",
     )
     the_console.print.assert_called_once_with("Nothing to do.")
+
+
+@pytest.mark.parametrize(
+    "w_email, w_pref, w_jp, exp",
+    [
+        (
+            "alice@example.com",
+            None,
+            None,
+            authz_package.token_field_json_path("email", "alice@example.com"),
+        ),
+        (
+            None,
+            "bob",
+            None,
+            authz_package.token_field_json_path("preferred_username", "bob"),
+        ),
+        (None, None, '$[?$.role == "admin"]', '$[?$.role == "admin"]'),
+    ],
+)
+@mock.patch("soliplex.cli.admin_users.the_console")
+def test__resolve_admin_json_path(the_console, w_email, w_pref, w_jp, exp):
+    found = cli_admin_users._resolve_admin_json_path(w_email, w_pref, w_jp)
+
+    assert found == exp
+    the_console.rule.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_email, w_pref, w_jp",
+    [
+        # Nothing selected.
+        (None, None, None),
+        # More than one selected.
+        ("alice@example.com", None, '$[?$.role == "admin"]'),
+        ("alice@example.com", "bob", None),
+        ("alice@example.com", "bob", '$[?$.role == "admin"]'),
+    ],
+)
+@mock.patch("soliplex.cli.admin_users.the_console")
+def test__resolve_admin_json_path_not_exactly_one(
+    the_console, w_email, w_pref, w_jp
+):
+    with pytest.raises(typer.Exit) as excinfo:
+        cli_admin_users._resolve_admin_json_path(w_email, w_pref, w_jp)
+
+    (return_code,) = excinfo.value.args
+    assert return_code == 1
+    the_console.rule.assert_called_once_with(
+        "Exactly one discriminator required",
+    )
+
+
+@mock.patch("soliplex.cli.admin_users.the_console")
+def test__resolve_admin_json_path_invalid(the_console):
+    with pytest.raises(typer.Exit) as excinfo:
+        cli_admin_users._resolve_admin_json_path(None, None, "$[?(bogus")
+
+    (return_code,) = excinfo.value.args
+    assert return_code == 1
+    the_console.rule.assert_called_once_with("Invalid JSONPath")
+
+
+@pytest.mark.parametrize(
+    "w_json_path, exp_describe, exp_display",
+    [
+        # Email-shaped query: email descriptor, email display.
+        (
+            authz_package.token_field_json_path("email", "alice@example.com"),
+            "email=alice@example.com",
+            "alice@example.com",
+        ),
+        # preferred_username-shaped: field descriptor, raw query display.
+        (
+            authz_package.token_field_json_path("preferred_username", "bob"),
+            "preferred_username=bob",
+            authz_package.token_field_json_path("preferred_username", "bob"),
+        ),
+        # Other token-field query: field descriptor, raw query display.
+        (
+            '$[?$.role == "admin"]',
+            "role=admin",
+            '$[?$.role == "admin"]',
+        ),
+        # Non-token-field query: raw query for both.
+        ("$.weird[*]", "json_path=$.weird[*]", "$.weird[*]"),
+    ],
+)
+def test__describe_and_display_admin(w_json_path, exp_describe, exp_display):
+    assert cli_admin_users._describe_admin(w_json_path) == exp_describe
+    assert cli_admin_users._admin_display(w_json_path) == exp_display
 
 
 @pytest.mark.parametrize(
