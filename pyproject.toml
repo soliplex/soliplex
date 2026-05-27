@@ -36,7 +36,7 @@ dependencies = [
     "pymdown-extensions != 10.21.2",  # CVE-2026-46338
     "python-keycloak",
     "sqlmodel",
-    "starlette != 1.0.1",  # PYSEC-2026-161
+    "starlette >= 1.0.1",  # PYSEC-2026-161
     "trio",
     "uvicorn[standard]",
     "certifi >= 2025.11.12",
