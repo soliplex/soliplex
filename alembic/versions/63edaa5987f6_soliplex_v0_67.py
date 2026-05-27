@@ -54,6 +54,38 @@ def _admin_users_table() -> sa.Table:
     )
 
 
+def _dialect() -> str:
+    """Backend dialect name, available in both online and offline mode."""
+    return op.get_context().dialect.name
+
+
+def _json_encode_sql(col: str) -> str:
+    """SQL expression that JSON-encodes a text column to a quoted string.
+
+    Mirrors 'json.dumps' for a string value ('alice' -> '"alice"'), so a
+    set-based '--sql' rewrite produces the same json_path the online,
+    Python row-by-row branch builds via '_token_field_json_path'. SQLite
+    uses 'json_quote'; PostgreSQL uses 'to_jsonb(...)::text'. Non-ASCII
+    renders as literal UTF-8 rather than '\\uXXXX' on both, which the
+    JSONPath evaluator treats identically.
+    """
+    if _dialect() == "sqlite":
+        return f"json_quote({col})"
+    return f"to_jsonb({col})::text"
+
+
+def _json_decode_sql(expr: str) -> str:
+    """SQL expression that decodes a JSON-encoded string back to text.
+
+    Inverse of '_json_encode_sql' ('"alice"' -> 'alice'). SQLite uses
+    'json_extract(..., '$')'; PostgreSQL casts to 'jsonb' and extracts
+    the root scalar with '#>> '{}''.
+    """
+    if _dialect() == "sqlite":
+        return f"json_extract({expr}, '$')"
+    return f"({expr})::jsonb #>> '{{}}'"
+
+
 def upgrade(engine_name: str) -> None:
     """Upgrade schema."""
     globals()[f"upgrade_{engine_name}"]()
@@ -160,19 +192,18 @@ def _convert_legacy_discriminators_online() -> None:
 def _convert_legacy_discriminators_offline() -> None:
     """Set-based conversion emitted as SQL for '--sql' mode.
 
-    SQLite's 'json_quote' mirrors 'json.dumps' for ASCII discriminators
-    (non-ASCII renders as literal UTF-8 rather than '\\uXXXX', which the
-    JSONPath evaluator treats identically). The preferred_username pass
-    runs first and sets json_path, so the email pass -- still gated on
-    'json_path IS NULL' -- skips those rows, matching the online branch
-    that prefers preferred_username.
+    Uses '_json_encode_sql' so the rendered json_path matches the
+    online, Python row-by-row branch on both SQLite and PostgreSQL. The
+    preferred_username pass runs first and sets json_path, so the email
+    pass -- still gated on 'json_path IS NULL' -- skips those rows,
+    matching the online branch that prefers preferred_username.
     """
     for field in ("preferred_username", "email"):
         # Mirrors _token_field_json_path; the prefix has no single quote.
         prefix = f"$[?$.{field} == "
         op.execute(
             f"UPDATE room_acl_entries "
-            f"SET json_path = '{prefix}' || json_quote({field}) || ']', "
+            f"SET json_path = '{prefix}' || {_json_encode_sql(field)} || ']', "
             f"preferred_username = NULL, email = NULL "
             f"WHERE json_path IS NULL AND {field} IS NOT NULL"
         )
@@ -220,23 +251,27 @@ def _restore_legacy_discriminators_offline() -> None:
 
     Mirrors _LEGACY_FIELD_RES: a json_path carrying the frozen
     converted-discriminator shape ('<prefix>' ... ']') is decoded back
-    into its legacy column. SQLite's 'json_extract(..., '$')' inverts
-    'json_quote'/'json.dumps'. The two prefixes are mutually exclusive,
-    so the passes are order-independent; genuine '--json-path' entries
-    fail the prefix test and are left for the column drop to discard.
+    into its legacy column via '_json_decode_sql' (the inverse of
+    '_json_encode_sql' on both SQLite and PostgreSQL). The 'ends with
+    "]"' test uses 'LIKE ''%]''' rather than a negative-index 'substr'
+    (whose semantics differ between SQLite and PostgreSQL). The two
+    prefixes are mutually exclusive, so the passes are order-
+    independent; genuine '--json-path' entries fail the prefix test and
+    are left for the column drop to discard.
     """
     for field in ("preferred_username", "email"):
         # Mirrors _token_field_json_path; the prefix has no single quote.
         prefix = f"$[?$.{field} == "
         plen = len(prefix)
+        encoded = (
+            f"substr(json_path, {plen + 1}, length(json_path) - {plen + 1})"
+        )
         op.execute(
             f"UPDATE room_acl_entries "
-            f"SET {field} = json_extract("
-            f"substr(json_path, {plen + 1}, length(json_path) - {plen + 1})"
-            f", '$') "
+            f"SET {field} = {_json_decode_sql(encoded)} "
             f"WHERE json_path IS NOT NULL "
             f"AND substr(json_path, 1, {plen}) = '{prefix}' "
-            f"AND substr(json_path, -1, 1) = ']'"
+            f"AND json_path LIKE '%]'"
         )
 
 
@@ -248,28 +283,39 @@ def _upgrade_admin_users() -> None:
     'check_admin_access' now matches the user token.
 
     SQLite cannot 'DROP' a column that carries a UNIQUE constraint, so
-    the table is rebuilt -- the same move-and-copy alembic batch mode
-    performs, written explicitly here so it also runs under '--sql'
-    offline mode. The rebuilt table mirrors 'create_all' for a fresh DB.
+    on SQLite the table is rebuilt (the move-and-copy alembic batch mode
+    would perform, written explicitly here so it also runs under '--sql'
+    offline mode); the rebuilt table mirrors 'create_all' for a fresh
+    DB. PostgreSQL drops the column natively, which is both simpler and
+    safer -- a rebuild would discard 'id_'s identity sequence.
     """
     op.add_column(
         "admin_users", sa.Column("json_path", sa.String(), nullable=True)
     )
     _convert_admin_emails()
-    op.execute(
-        "CREATE TABLE _new_admin_users ("
-        "id_ INTEGER NOT NULL, "
-        "json_path VARCHAR NOT NULL, "
-        "created TIMESTAMP NOT NULL, "
-        "CONSTRAINT pk_admin_users PRIMARY KEY (id_), "
-        "CONSTRAINT uq_admin_users_json_path UNIQUE (json_path))"
-    )
-    op.execute(
-        "INSERT INTO _new_admin_users (id_, json_path, created) "
-        "SELECT id_, json_path, created FROM admin_users"
-    )
-    op.execute("DROP TABLE admin_users")
-    op.execute("ALTER TABLE _new_admin_users RENAME TO admin_users")
+
+    if _dialect() == "sqlite":
+        op.execute(
+            "CREATE TABLE _new_admin_users ("
+            "id_ INTEGER NOT NULL, "
+            "json_path VARCHAR NOT NULL, "
+            "created TIMESTAMP NOT NULL, "
+            "CONSTRAINT pk_admin_users PRIMARY KEY (id_), "
+            "CONSTRAINT uq_admin_users_json_path UNIQUE (json_path))"
+        )
+        op.execute(
+            "INSERT INTO _new_admin_users (id_, json_path, created) "
+            "SELECT id_, json_path, created FROM admin_users"
+        )
+        op.execute("DROP TABLE admin_users")
+        op.execute("ALTER TABLE _new_admin_users RENAME TO admin_users")
+    else:
+        # Dropping 'email' discards 'uq_admin_users_email' with it.
+        op.alter_column("admin_users", "json_path", nullable=False)
+        op.drop_column("admin_users", "email")
+        op.create_unique_constraint(
+            "uq_admin_users_json_path", "admin_users", ["json_path"]
+        )
 
 
 def _downgrade_admin_users() -> None:
@@ -278,27 +324,36 @@ def _downgrade_admin_users() -> None:
     Only email-shaped json_paths can be represented by the legacy
     column; admins created with a non-email '--json-path' query have no
     email and are dropped (as the 'room_acl_entries' downgrade drops
-    genuine json_path entries).
+    genuine json_path entries). SQLite rebuilds the table; PostgreSQL
+    drops 'json_path' natively (see '_upgrade_admin_users').
     """
     op.add_column(
         "admin_users", sa.Column("email", sa.String(), nullable=True)
     )
     _restore_admin_emails()
     op.execute("DELETE FROM admin_users WHERE email IS NULL")
-    op.execute(
-        "CREATE TABLE _new_admin_users ("
-        "id_ INTEGER NOT NULL, "
-        "email VARCHAR NOT NULL, "
-        "created TIMESTAMP NOT NULL, "
-        "CONSTRAINT pk_admin_users PRIMARY KEY (id_), "
-        "CONSTRAINT uq_admin_users_email UNIQUE (email))"
-    )
-    op.execute(
-        "INSERT INTO _new_admin_users (id_, email, created) "
-        "SELECT id_, email, created FROM admin_users"
-    )
-    op.execute("DROP TABLE admin_users")
-    op.execute("ALTER TABLE _new_admin_users RENAME TO admin_users")
+
+    if _dialect() == "sqlite":
+        op.execute(
+            "CREATE TABLE _new_admin_users ("
+            "id_ INTEGER NOT NULL, "
+            "email VARCHAR NOT NULL, "
+            "created TIMESTAMP NOT NULL, "
+            "CONSTRAINT pk_admin_users PRIMARY KEY (id_), "
+            "CONSTRAINT uq_admin_users_email UNIQUE (email))"
+        )
+        op.execute(
+            "INSERT INTO _new_admin_users (id_, email, created) "
+            "SELECT id_, email, created FROM admin_users"
+        )
+        op.execute("DROP TABLE admin_users")
+        op.execute("ALTER TABLE _new_admin_users RENAME TO admin_users")
+    else:
+        op.alter_column("admin_users", "email", nullable=False)
+        op.drop_column("admin_users", "json_path")
+        op.create_unique_constraint(
+            "uq_admin_users_email", "admin_users", ["email"]
+        )
 
 
 def _convert_admin_emails() -> None:
@@ -334,15 +389,14 @@ def _convert_admin_emails_online() -> None:
 def _convert_admin_emails_offline() -> None:
     """Set-based conversion emitted as SQL for '--sql' mode.
 
-    SQLite's 'json_quote' mirrors 'json.dumps' for ASCII emails (see
-    the room_acl_entries note), so the rendered query matches the online
-    branch and the JSONPath evaluator.
+    Uses '_json_encode_sql' so the rendered query matches the online
+    branch and the JSONPath evaluator on both SQLite and PostgreSQL.
     """
     # Mirrors _token_field_json_path; the prefix has no single quote.
     prefix = "$[?$.email == "
     op.execute(
         f"UPDATE admin_users "
-        f"SET json_path = '{prefix}' || json_quote(email) || ']' "
+        f"SET json_path = '{prefix}' || {_json_encode_sql('email')} || ']' "
         f"WHERE json_path IS NULL AND email IS NOT NULL"
     )
 
@@ -388,17 +442,19 @@ def _restore_admin_emails_offline() -> None:
 
     Mirrors '_LEGACY_FIELD_RES["email"]': a json_path carrying the frozen
     converted-email shape is decoded back into the 'email' column via
-    SQLite's 'json_extract(..., '$')', which inverts 'json_quote'.
+    '_json_decode_sql' (the inverse of '_json_encode_sql' on both SQLite
+    and PostgreSQL). The 'ends with "]"' test uses 'LIKE ''%]''' rather
+    than a negative-index 'substr', whose semantics differ across
+    backends.
     """
     # Mirrors _token_field_json_path; the prefix has no single quote.
     prefix = "$[?$.email == "
     plen = len(prefix)
+    encoded = f"substr(json_path, {plen + 1}, length(json_path) - {plen + 1})"
     op.execute(
         f"UPDATE admin_users "
-        f"SET email = json_extract("
-        f"substr(json_path, {plen + 1}, length(json_path) - {plen + 1})"
-        f", '$') "
+        f"SET email = {_json_decode_sql(encoded)} "
         f"WHERE json_path IS NOT NULL "
         f"AND substr(json_path, 1, {plen}) = '{prefix}' "
-        f"AND substr(json_path, -1, 1) = ']'"
+        f"AND json_path LIKE '%]'"
     )
