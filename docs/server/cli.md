@@ -1174,16 +1174,34 @@ All three commands share the following conventions:
   installation configuration. May be a YAML file or a directory
   containing an `installation.yaml`. If omitted, falls back to the
   `SOLIPLEX_INSTALLATION_PATH` environment variable.
-- On completion, the current admin-user list is printed as a single
-  JSON object on stdout:
+- On completion, the current admin-user list is dumped as a single
+  JSON object on stdout (emitted via plain `print(...)`, not Rich, so
+  the output pipes cleanly into `jq` or other tooling):
 
   ```json
   {"admin_users": ["alice@example.com", "bob@example.com"]}
   ```
 
-  Emitted via plain `print(...)` (not Rich), so the output pipes
-  cleanly into `jq` or other tooling.
-- Exit status is `0` on success, or `1` when the RAM-DB guard fires.
+- The `-v` / `--verbose` and `-q` / `--quiet` flags at the **group**
+  level (`soliplex-cli admin-users -v <subcommand> …`) toggle between
+  the default JSON dump and a human-focused, Rich-rendered summary.
+  Resolution: `--quiet` always forces JSON; `--verbose` (without
+  `--quiet`) forces the human summary; with neither, the
+  per-deployment default applies (currently JSON, set via
+  `_DEFAULT_VERBOSE` in `cli/admin_users.py`). `--quiet` is intended
+  as the override for scripts in a deployment that has flipped the
+  default to verbose. Example verbose output:
+
+  ```text
+  ─── Admin users ───
+  Admin users (2):
+    1. alice@example.com
+    2. bob@example.com
+  ```
+
+- Exit status is `0` on success, or `1` when the RAM-DB guard fires
+  (or, for [`admin-users add`](#admin-users-add), when the email is
+  already an admin).
 
 ### `admin-users list`
 
@@ -1229,11 +1247,14 @@ soliplex-cli admin-users add [OPTIONS] INSTALLATION_CONFIG_PATH EMAIL
 
 #### Behavior Notes
 
-- **No deduplication.** The command inserts a row unconditionally; if
-  the same email is added twice, two rows are created (whether that
-  is rejected or quietly tolerated depends on the schema of the
-  authorization table you have configured). Use `admin-users list`
-  first if you need to check for an existing entry.
+- **Rejects duplicates.** Before inserting, the command checks whether
+  the email is already an admin. If it is, the command prints a note
+  and exits with status `1` without touching the table — the
+  `AdminUser.email` column is unique, so a blind second insert would
+  otherwise fail with a backend-specific `IntegrityError`. Re-adding
+  an already-present admin is thus a safe, non-destructive no-op,
+  signalled by the non-zero exit code; run `admin-users list` to see
+  the current set.
 - **Compare with `serve --add-admin-user`.** The `serve` subcommand's
   `--add-admin-user` option bootstraps a single admin during startup
   and is incompatible with `--no-auth-mode`. The standalone
