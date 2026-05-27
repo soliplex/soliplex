@@ -14,6 +14,7 @@ from soliplex.config import installation as config_installation
 NOW = datetime.datetime.now(datetime.UTC)
 
 EMAIL = "phreddy@example.com"
+JSON_PATH = authz_package.token_field_json_path("email", EMAIL)
 
 ROOM_ID = "test-room"
 
@@ -44,10 +45,34 @@ def test__timestamp(dt, tz):
 
 
 def test_adminuser_ctor(the_session):
-    admin_user = authz_schema.AdminUser(email=EMAIL)
+    admin_user = authz_schema.AdminUser(json_path=JSON_PATH)
 
     the_session.add(admin_user)
     the_session.commit()
+
+
+def test_adminuser_ctor_invalid_json_path():
+    with pytest.raises(authz_package.InvalidJSONPath):
+        authz_schema.AdminUser(json_path="$[?(bogus")
+
+
+@pytest.mark.parametrize(
+    "w_json_path, w_token, exp",
+    [
+        # Email-shaped query matches the matching email claim.
+        (JSON_PATH, {"email": EMAIL}, True),
+        (JSON_PATH, {"email": "other@example.com"}, False),
+        # A missing / empty token never matches.
+        (JSON_PATH, None, False),
+        # An arbitrary (non-email) query matches on its own field.
+        ('$[?$.role == "admin"]', {"role": "admin"}, True),
+        ('$[?$.role == "admin"]', {"role": "user"}, False),
+    ],
+)
+def test_adminuser_check_token(w_json_path, w_token, exp):
+    admin_user = authz_schema.AdminUser(json_path=w_json_path)
+
+    assert admin_user.check_token(w_token) is exp
 
 
 def test_roompolicy_ctor(the_session):

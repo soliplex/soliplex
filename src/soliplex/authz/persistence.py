@@ -30,16 +30,25 @@ class NotAdminUser(ValueError):
         super().__init__(f"Non-admin user, email: {email}")
 
 
-async def _find_admin_user(
-    email: str,
+async def _find_admin_user_by_json_path(
+    json_path: str,
     session,
 ) -> authz_schema.AdminUser | None:
     query = sqla_sql.select(authz_schema.AdminUser).where(
-        authz_schema.AdminUser.email == email
+        authz_schema.AdminUser.json_path == json_path
     )
     user = (await session.scalars(query)).first()
 
     return user
+
+
+async def _user_is_admin(user_token, session) -> bool:
+    """Does any admin entry's JSONPath query match 'user_token'?"""
+    query = sqla_sql.select(authz_schema.AdminUser)
+    for admin_user in await session.scalars(query):
+        if admin_user.check_token(user_token):
+            return True
+    return False
 
 
 async def _find_room_policy(
@@ -65,29 +74,42 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
             yield self._session
 
     async def list_admin_users(self) -> list[str]:
-        """List user emails in the admin users table."""
+        """List admin users in the admin users table.
+
+        An email-keyed admin (stored as '$[?$.email == "..."]') is
+        surfaced as its email; an admin created with a non-email
+        JSONPath query is surfaced as the raw query string.
+        """
         query = sqla_sql.select(authz_schema.AdminUser)
         async with self.session as session:
-            result = [
-                admin_user.email for admin_user in await session.scalars(query)
-            ]
+            result = []
+            for admin_user in await session.scalars(query):
+                parsed = authz_package.parse_token_field_json_path(
+                    admin_user.json_path
+                )
+                if parsed is not None and parsed[0] == "email":
+                    result.append(parsed[1])
+                else:
+                    result.append(admin_user.json_path)
             return result
 
     async def add_admin_user(self, email: str):
-        """Add a user to the admin users table."""
+        """Add a user to the admin users table, keyed by email."""
+        json_path = authz_package.token_field_json_path("email", email)
         async with self.session as session:
-            user = await _find_admin_user(email, session)
+            user = await _find_admin_user_by_json_path(json_path, session)
 
             if user is not None:
                 raise AdminUserExists(email=email)
 
-            user = authz_schema.AdminUser(email=email)
+            user = authz_schema.AdminUser(json_path=json_path)
             session.add(user)
 
     async def remove_admin_user(self, email: str):
-        """Remove a user from the admin users table."""
+        """Remove a user from the admin users table, keyed by email."""
+        json_path = authz_package.token_field_json_path("email", email)
         async with self.session as session:
-            user = await _find_admin_user(email, session)
+            user = await _find_admin_user_by_json_path(json_path, session)
 
             if user is None:
                 raise NoSuchAdminUser(email=email)
@@ -100,9 +122,7 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
     ) -> bool:
         """Is the user represented by 'user_token' an admin user?"""
         async with self.session as session:
-            user = await _find_admin_user(user_token["email"], session)
-
-        return user is not None
+            return await _user_is_admin(user_token, session)
 
     async def check_room_access(
         self,
@@ -158,11 +178,8 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
     ) -> models.RoomPolicy | None:
         """Return the authorization policy for the room"""
         async with self.session as session:
-            email = user_token["email"]
-            user = await _find_admin_user(email, session)
-
-            if user is None:
-                raise NotAdminUser(email)
+            if not await _user_is_admin(user_token, session):
+                raise NotAdminUser(user_token["email"])
 
             policy = await _find_room_policy(room_id, session)
 
@@ -180,11 +197,8 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
     ) -> None:
         """Update the authorization policy for the room"""
         async with self.session as session:
-            email = user_token["email"]
-            user = await _find_admin_user(email, session)
-
-            if user is None:
-                raise NotAdminUser(email)
+            if not await _user_is_admin(user_token, session):
+                raise NotAdminUser(user_token["email"])
 
             policy = await _find_room_policy(room_id, session)
 
@@ -208,11 +222,8 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
     ) -> None:
         """Delete any existing authorization policy for the room"""
         async with self.session as session:
-            email = user_token["email"]
-            user = await _find_admin_user(email, session)
-
-            if user is None:
-                raise NotAdminUser(email)
+            if not await _user_is_admin(user_token, session):
+                raise NotAdminUser(user_token["email"])
 
             policy = await _find_room_policy(room_id, session)
 

@@ -1369,7 +1369,6 @@ def mcp_apps():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_max_age", [7200, "7200"])
-@pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
 @pytest.mark.parametrize(
     "w_ic_logging_config",
     [
@@ -1387,7 +1386,6 @@ def mcp_apps():
     ],
 )
 @mock.patch("soliplex.installation.add_no_auth_user_as_admin")
-@mock.patch("soliplex.installation.add_user_as_admin")
 @mock.patch("soliplex.installation.apply_logfire_configuration")
 @mock.patch("soliplex.secrets.resolve_secrets")
 @mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
@@ -1401,7 +1399,6 @@ async def test_lifespan(
     smfr,
     srs,
     alc,
-    auaa,
     anauaa,
     mcp_apps,
     temp_dir,
@@ -1409,7 +1406,6 @@ async def test_lifespan(
     exp_oidc_paths,
     w_log_config_file,
     w_ic_logging_config,
-    w_add_admin_user,
     w_max_age,
 ):
     INSTALLATION_PATH = "/path/to/installation"
@@ -1460,9 +1456,6 @@ root:
 """)
         kwargs["log_config_file"] = str(w_log_config_file)
 
-    if w_add_admin_user is not None:
-        kwargs["add_admin_user"] = w_add_admin_user
-
     found = [
         item
         async for item in installation.lifespan(
@@ -1512,12 +1505,7 @@ root:
         lcdc.assert_not_called()
         exp_lc_disable = False
 
-    if w_add_admin_user:
-        (auaa_called,) = auaa.call_args_list
-        (conn,) = auaa_called.args
-        assert isinstance(conn, sqlalchemy.Connection)
-        assert auaa_called.kwargs == {"email": w_add_admin_user}
-    elif exp_no_auth_mode:
+    if exp_no_auth_mode:
         (anauaa_called,) = anauaa.call_args_list
         (conn,) = anauaa_called.args
         assert isinstance(conn, sqlalchemy.Connection)

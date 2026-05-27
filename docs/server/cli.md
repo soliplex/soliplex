@@ -44,10 +44,12 @@ soliplex-cli serve [OPTIONS] [INSTALLATION_CONFIG_PATH]
 ### Authentication Options
 
 - `--no-auth-mode` — disable OIDC authentication providers
-  (development/testing only). **Never use in production.** Incompatible with
-  `--add-admin-user`.
-- `--add-admin-user USERNAME` — add `USERNAME` to the authorization
-  database as an admin before starting. Incompatible with `--no-auth-mode`.
+  (development/testing only). **Never use in production.**
+- `--add-admin-user USERNAME` — **removed.** Passing it now fails with a
+  non-zero exit and a pointer to seed admins out of band with
+  [`admin-users add`](#admin-users-add). The option is retained only so
+  that scripts still passing it get a clear error rather than an
+  "unknown option" failure.
 
 ### Hot Reload Options
 
@@ -119,11 +121,12 @@ soliplex-cli serve example/installation.yaml \
   --workers 4
 ```
 
-Bootstrap the first admin user on a fresh authz database:
+Bootstrap the first admin user on a fresh authz database (seed out of
+band, then start the server):
 
 ```bash
-soliplex-cli serve example/installation.yaml \
-  --add-admin-user alice@example.com
+soliplex-cli admin-users add example/installation.yaml alice@example.com
+soliplex-cli serve example/installation.yaml
 ```
 
 ## `audit`
@@ -1151,11 +1154,13 @@ soliplex-cli audit -q ollama example/installation.yaml
 ## `admin-users`
 
 The `admin-users` group manages the installation's admin-user table.
-Admin users are entries in the installation's authorization database,
-keyed by email address. A user whose OIDC-authenticated email matches
-an entry in this table is granted administrator privileges by the
-Soliplex authorization policy engine. The subcommands below read from
-and modify that table directly.
+Each admin entry is an RFC 9535 JSONPath query stored in the
+installation's authorization database; a user whose OIDC token matches
+any admin entry's query is granted administrator privileges by the
+Soliplex authorization policy engine. The common case — an admin keyed
+by email — is stored as `$[?$.email == "..."]`, mirroring how
+`room-authz` ACL entries store their discriminators. The subcommands
+below read from and modify that table directly.
 
 This group replaces the deprecated flat `list-admin-users` /
 `add-admin-user` / `clear-admin-users` commands; see
@@ -1174,16 +1179,36 @@ All three commands share the following conventions:
   installation configuration. May be a YAML file or a directory
   containing an `installation.yaml`. If omitted, falls back to the
   `SOLIPLEX_INSTALLATION_PATH` environment variable.
-- On completion, the current admin-user list is printed as a single
-  JSON object on stdout:
+- On completion, the current admin-user list is dumped as a single
+  JSON object on stdout (emitted via plain `print(...)`, not Rich, so
+  the output pipes cleanly into `jq` or other tooling). Email-keyed
+  admins surface as their email; an admin added with a non-email
+  `--json-path` query surfaces as the raw query string:
 
   ```json
-  {"admin_users": ["alice@example.com", "bob@example.com"]}
+  {"admin_users": ["alice@example.com", "$[?$.role == \"admin\"]"]}
   ```
 
-  Emitted via plain `print(...)` (not Rich), so the output pipes
-  cleanly into `jq` or other tooling.
-- Exit status is `0` on success, or `1` when the RAM-DB guard fires.
+- The `-v` / `--verbose` and `-q` / `--quiet` flags at the **group**
+  level (`soliplex-cli admin-users -v <subcommand> …`) toggle between
+  the default JSON dump and a human-focused, Rich-rendered summary.
+  Resolution: `--quiet` always forces JSON; `--verbose` (without
+  `--quiet`) forces the human summary; with neither, the
+  per-deployment default applies (currently JSON, set via
+  `_DEFAULT_VERBOSE` in `cli/admin_users.py`). `--quiet` is intended
+  as the override for scripts in a deployment that has flipped the
+  default to verbose. Example verbose output:
+
+  ```text
+  ─── Admin users ───
+  Admin users (2):
+    1. alice@example.com
+    2. bob@example.com
+  ```
+
+- Exit status is `0` on success, or `1` when the RAM-DB guard fires
+  (or, for [`admin-users add`](#admin-users-add), when the discriminator
+  selection is invalid or the resolved entry is already an admin).
 
 ### `admin-users list`
 
@@ -1212,40 +1237,71 @@ soliplex-cli admin-users list example/installation.yaml \
 
 ### `admin-users add`
 
-Insert a new admin-user row into the installation's authorization
-database and then dump the resulting list. (Replaces the deprecated
+Insert a new admin entry into the installation's authorization database
+and then dump the resulting list. (Replaces the deprecated
 `soliplex-cli add-admin-user`.)
 
 ```bash
-soliplex-cli admin-users add [OPTIONS] INSTALLATION_CONFIG_PATH EMAIL
+soliplex-cli admin-users add [OPTIONS] INSTALLATION_CONFIG_PATH [EMAIL]
 ```
+
+Exactly one discriminator must be supplied, naming which user token(s)
+the entry grants admin to: the positional `EMAIL` (shorthand for the
+common case), `--preferred-username USERNAME`, or `--json-path QUERY`.
+Each is stored as an RFC 9535 JSONPath query — `EMAIL` and
+`--preferred-username` as `$[?$.email == "..."]` /
+`$[?$.preferred_username == "..."]`, and `--json-path` verbatim (after
+validation). `check_admin_access` admits a user when their token matches
+any stored query, so `--json-path` can grant admin by an arbitrary
+claim (e.g. group membership).
 
 #### Positional Arguments
 
 - `INSTALLATION_CONFIG_PATH` — as described above.
-- `EMAIL` — the email address to grant admin privileges. This is the
-  value Soliplex will match against the authenticated user's
-  OIDC-asserted email; no format validation is performed by the CLI.
+- `EMAIL` — optional; the email address to grant admin privileges,
+  matched against the authenticated user's OIDC-asserted `email` claim.
+  No format validation is performed by the CLI. Mutually exclusive with
+  `--preferred-username` and `--json-path`.
+
+#### Options
+
+- `--preferred-username USERNAME` — grant admin by OIDC
+  `preferred_username` claim. Mutually exclusive with `EMAIL` and
+  `--json-path`.
+- `--json-path QUERY` — grant admin to any user token matched by this
+  RFC 9535 JSONPath query. The query is validated; a malformed query is
+  reported and the command exits non-zero. Mutually exclusive with
+  `EMAIL` and `--preferred-username`.
 
 #### Behavior Notes
 
-- **No deduplication.** The command inserts a row unconditionally; if
-  the same email is added twice, two rows are created (whether that
-  is rejected or quietly tolerated depends on the schema of the
-  authorization table you have configured). Use `admin-users list`
-  first if you need to check for an existing entry.
-- **Compare with `serve --add-admin-user`.** The `serve` subcommand's
-  `--add-admin-user` option bootstraps a single admin during startup
-  and is incompatible with `--no-auth-mode`. The standalone
-  `admin-users add` subcommand is for offline / ongoing administration
-  and has no such interaction with `--no-auth-mode`.
+- **Exactly one discriminator.** Supplying none — or more than one — of
+  `EMAIL` / `--preferred-username` / `--json-path` is reported and the
+  command exits with status `1` without touching the table.
+- **Rejects duplicates.** Before inserting, the command checks whether
+  the resolved query is already an admin. If it is, the command prints a
+  note and exits with status `1` without touching the table — the
+  `AdminUser.json_path` column is unique, so a blind second insert would
+  otherwise fail with a backend-specific `IntegrityError`. Re-adding an
+  already-present admin is thus a safe, non-destructive no-op, signalled
+  by the non-zero exit code; run `admin-users list` to see the current
+  set.
 
 #### Examples
 
-Grant admin privileges to a new operator:
+Grant admin privileges to a new operator by email:
 
 ```bash
 soliplex-cli admin-users add example/installation.yaml alice@example.com
+```
+
+Grant admin by `preferred_username`, or by an arbitrary claim:
+
+```bash
+soliplex-cli admin-users add example/installation.yaml \
+  --preferred-username alice
+soliplex-cli admin-users add example/installation.yaml \
+  --json-path '$[?$.groups[?@ == "admins"]]'
 ```
 
 ### `admin-users clear`
@@ -2299,7 +2355,7 @@ future major release. New scripts should use the grouped form.
 | `show-room-authz`             | `room-authz show`          |
 | `pull-models`                 | `ollama pull`              |
 
-The `serve --add-admin-user` option on the `serve` subcommand is **not**
-affected by this rename: it remains spelled `--add-admin-user` and is
-distinct from the standalone `admin-users add` subcommand (see the note
-under [`admin-users add`](#admin-users-add)).
+The `serve --add-admin-user` option is unrelated to this rename: it has
+been **removed**, and passing it now fails with a non-zero exit pointing
+to [`admin-users add`](#admin-users-add). Seed admins out of band with
+that subcommand instead.

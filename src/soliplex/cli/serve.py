@@ -76,19 +76,15 @@ def serve(
     no_auth_mode: bool = typer.Option(
         False,
         "--no-auth-mode",
-        help="""\
-Disable OIDC authentication providers
-
-Incompatible with '--add-admin-user'.
-""",
+        help="Disable OIDC authentication providers",
     ),
     add_admin_user: str | None = typer.Option(
         None,
         "--add-admin-user",
         help="""\
-Add an admin user to the authorization database
+Removed: seed admins with 'soliplex-cli admin-users add' instead.
 
-Incompatible with '--no-auth-mode'.
+Passing this option now fails with a non-zero exit.
 """,
     ),
     host: str = typer.Option(
@@ -151,12 +147,14 @@ Incompatible with '--no-auth-mode'.
     app_maker=app_maker_option,
 ):
     """Run the Soliplex server"""
-    if no_auth_mode and (add_admin_user is not None):
-        the_console.rule("Incompatible CLI arguments")
+    if add_admin_user is not None:
+        the_console.rule("'--add-admin-user' has been removed")
         the_console.print(
-            "'--no-auth-mode' and '--add-admin-user' are incompatible."
+            "Seed admin users out of band with "
+            "'soliplex-cli admin-users add INSTALLATION_CONFIG_PATH "
+            "EMAIL' instead."
         )
-        raise typer.Exit()
+        raise typer.Exit(1)
 
     # Temporary, to permit updating logging config if not passed on CLI.
     the_installation = cli_util.get_installation(installation_path)
@@ -226,9 +224,6 @@ Incompatible with '--no-auth-mode'.
         if log_config is not None:  # pass to the app, disable Uvicorn.
             os.environ["_SOLIPLEX_LOG_CONFIG_FILE"] = str(log_config)
 
-        if add_admin_user is not None:
-            os.environ["_SOLIPLEX_ADD_ADMIN_USER"] = add_admin_user
-
         if app_factory_name is None:
             app_factory_name = "soliplex.main:create_app_from_environment"
 
@@ -248,6 +243,5 @@ Incompatible with '--no-auth-mode'.
             installation_path=installation_path,
             no_auth_mode=no_auth_mode,
             log_config_file=log_config,
-            add_admin_user=add_admin_user,
         )
         uvicorn.run(app, **uvicorn_kw)

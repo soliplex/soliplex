@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import typing
 
 import typer
 
+from soliplex import authz as authz_package
 from soliplex.authz import schema as authz_schema
 from soliplex.cli import cli_util
 from soliplex.cli import types
@@ -18,10 +20,162 @@ app = typer.Typer(
 )
 
 
-def _dump_admin_users(session):
+# Flip this to True to make human-focused output the default.
+# '--quiet' will still force JSON.
+_DEFAULT_VERBOSE = False
+
+
+@app.callback()
+def _admin_users_callback(
+    ctx: typer.Context,
+    verbose: bool = typer.Option(
+        False,
+        "-v",
+        "--verbose",
+        help=(
+            "Print human-focused output instead of a JSON dump. "
+            "Overridden by '--quiet'."
+        ),
+    ),
+    quiet: bool = typer.Option(
+        False,
+        "-q",
+        "--quiet",
+        help=(
+            "Force JSON output, overriding '--verbose' and any "
+            "verbose-by-default setting."
+        ),
+    ),
+):
+    if quiet:
+        effective = False
+    elif verbose:
+        effective = True
+    else:
+        effective = _DEFAULT_VERBOSE
+    ctx.obj = {"verbose": effective}
+
+
+def _resolve_admin_json_path(email, preferred_username, json_path) -> str:
+    """Resolve the JSONPath for an admin entry from the CLI flags.
+
+    Exactly one discriminator must be supplied: the positional EMAIL
+    (shorthand for the common case), '--preferred-username', or
+    '--json-path'. 'email' / 'preferred_username' are stored as
+    equivalent JSONPath queries (see 'authz.token_field_json_path'),
+    mirroring how 'room-authz add-acl-entry' handles its discriminators.
+    Reports the problem and raises 'typer.Exit(1)' on a bad selection
+    or a malformed '--json-path'.
+    """
+    selected = [
+        name
+        for name, present in (
+            ("EMAIL", email is not None),
+            ("--preferred-username", preferred_username is not None),
+            ("--json-path", json_path is not None),
+        )
+        if present
+    ]
+    if len(selected) != 1:
+        the_console.rule("Exactly one discriminator required")
+        the_console.print(
+            "Pass exactly one of EMAIL, '--preferred-username', or "
+            f"'--json-path'. Got: {selected or ['(none)']}.",
+        )
+        raise typer.Exit(1)
+
+    if email is not None:
+        return authz_package.token_field_json_path("email", email)
+    if preferred_username is not None:
+        return authz_package.token_field_json_path(
+            "preferred_username", preferred_username
+        )
+
+    try:
+        authz_package.validate_json_path(json_path)
+    except authz_package.InvalidJSONPath as exc:
+        the_console.rule("Invalid JSONPath")
+        the_console.print(str(exc))
+        raise typer.Exit(1) from exc
+    return json_path
+
+
+def _describe_admin(json_path) -> str:
+    """Human-friendly descriptor for an admin entry's JSONPath."""
+    parsed = authz_package.parse_token_field_json_path(json_path)
+    if parsed is not None:
+        field, value = parsed
+        return f"{field}={value}"
+    return f"json_path={json_path}"
+
+
+def _admin_display(json_path) -> str:
+    """Value to show for an admin entry in the JSON dump.
+
+    Email-keyed admins show their email; others show the raw query.
+    """
+    parsed = authz_package.parse_token_field_json_path(json_path)
+    if parsed is not None and parsed[0] == "email":
+        return parsed[1]
+    return json_path
+
+
+def _check_existing_admin(session, json_path):
+    """Reject 'admin-users add' for a JSONPath that is already an admin.
+
+    Inserting a second row for the same query would violate the
+    'AdminUser.json_path' uniqueness constraint; rather than surface
+    that as an opaque IntegrityError traceback (exit code depending on
+    the backend), report it cleanly and exit non-zero.
+    """
+    existing = (
+        session.query(
+            authz_schema.AdminUser,
+        )
+        .where(
+            authz_schema.AdminUser.json_path == json_path,
+        )
+        .first()
+    )
+    if existing is None:
+        return
+
+    the_console.rule(f"{_describe_admin(json_path)} is already an admin")
+    the_console.print("Nothing to do.")
+    raise typer.Exit(1)
+
+
+def _dump(ctx, session):
+    if ctx.obj and ctx.obj.get("verbose"):
+        _human_dump_admin_users(session)
+    else:
+        _dump_admin_users(session)
+
+
+def _human_dump_admin_users(session):  # pragma NO COVER UI ONLY
+    with session:
+        json_paths = [
+            admin_user.json_path
+            for admin_user in session.query(
+                authz_schema.AdminUser,
+            )
+        ]
+
+    the_console.rule("Admin users")
+
+    if not json_paths:
+        the_console.print("No admin users configured.")
+        return
+
+    the_console.print(f"Admin users ({len(json_paths)}):")
+    for index, json_path in enumerate(json_paths, 1):
+        the_console.print(f"  {index}. {_describe_admin(json_path)}")
+
+
+def _dump_admin_users(session):  # pragma NO COVER UI ONLY
     with session:
         admin_users = [
-            admin_user.email
+            _admin_display(admin_user.json_path)
             for admin_user in session.query(
                 authz_schema.AdminUser,
             )
@@ -33,7 +187,7 @@ def _dump_admin_users(session):
 def list_admin_users(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """Show admin users defined in the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
@@ -41,14 +195,14 @@ def list_admin_users(
     cli_util._check_ram_dburi(dburi, "admin-users list")
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-    _dump_admin_users(session)
+    _dump(ctx, session)
 
 
 @app.command("clear")
 def clear_admin_users(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """Clear admin users from the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
@@ -62,16 +216,50 @@ def clear_admin_users(
             session.delete(admin_user)
         session.commit()
 
-        _dump_admin_users(session)
+    _dump(ctx, session)
 
 
 @app.command("add")
 def add_admin_user(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    admin_user_email: str,
-):
-    """Add an admin user to the installation's authz database."""
+    admin_user_email: typing.Annotated[
+        str | None,
+        typer.Argument(
+            metavar="EMAIL",
+            help=(
+                "Email address to grant admin (the common case). "
+                "Mutually exclusive with '--preferred-username' / "
+                "'--json-path'."
+            ),
+        ),
+    ] = None,
+    preferred_username: str | None = typer.Option(
+        None,
+        "--preferred-username",
+        help="Grant admin by OIDC preferred_username claim.",
+    ),
+    json_path: str | None = typer.Option(
+        None,
+        "--json-path",
+        help=(
+            "Grant admin to any user token matched by this RFC 9535 "
+            "JSONPath query."
+        ),
+    ),
+):  # pragma NO COVER command
+    """Add an admin user to the installation's authz database.
+
+    Exactly one discriminator must be supplied: the positional EMAIL
+    (shorthand for the common case), '--preferred-username', or
+    '--json-path'. If the resolved entry is already an admin, the
+    command reports that and exits non-zero without inserting a
+    duplicate row.
+    """
+    resolved = _resolve_admin_json_path(
+        admin_user_email, preferred_username, json_path
+    )
+
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
@@ -80,8 +268,9 @@ def add_admin_user(
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
     with session:
-        admin_user = authz_schema.AdminUser(email=admin_user_email)
+        _check_existing_admin(session, resolved)
+        admin_user = authz_schema.AdminUser(json_path=resolved)
         session.add(admin_user)
         session.commit()
 
-        _dump_admin_users(session)
+    _dump(ctx, session)
