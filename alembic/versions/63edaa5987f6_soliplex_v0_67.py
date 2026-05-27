@@ -12,6 +12,7 @@ import typing
 
 import sqlalchemy as sa
 
+from alembic import context
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -102,7 +103,18 @@ def _convert_legacy_discriminators() -> None:
     evaluates 'json_path' ahead of those columns, so a converted entry
     keeps matching the same tokens. Entries that already carry an
     explicit 'json_path' are left untouched.
+
+    Offline ('--sql') mode has no connection to read rows from, so it
+    gets a set-based rewrite; online mode keeps the row-by-row form.
     """
+    if context.is_offline_mode():
+        _convert_legacy_discriminators_offline()
+    else:
+        _convert_legacy_discriminators_online()
+
+
+def _convert_legacy_discriminators_online() -> None:
+    """Row-by-row conversion against a live connection."""
     acl = _acl_entries_table()
     bind = op.get_bind()
     rows = bind.execute(
@@ -132,13 +144,45 @@ def _convert_legacy_discriminators() -> None:
         )
 
 
+def _convert_legacy_discriminators_offline() -> None:
+    """Set-based conversion emitted as SQL for '--sql' mode.
+
+    SQLite's 'json_quote' mirrors 'json.dumps' for ASCII discriminators
+    (non-ASCII renders as literal UTF-8 rather than '\\uXXXX', which the
+    JSONPath evaluator treats identically). The preferred_username pass
+    runs first and sets json_path, so the email pass -- still gated on
+    'json_path IS NULL' -- skips those rows, matching the online branch
+    that prefers preferred_username.
+    """
+    for field in ("preferred_username", "email"):
+        # Mirrors _token_field_json_path; the prefix has no single quote.
+        prefix = f"$[?$.{field} == "
+        op.execute(
+            f"UPDATE room_acl_entries "
+            f"SET json_path = '{prefix}' || json_quote({field}) || ']', "
+            f"preferred_username = NULL, email = NULL "
+            f"WHERE json_path IS NULL AND {field} IS NOT NULL"
+        )
+
+
 def _restore_legacy_discriminators() -> None:
     """Reverse _convert_legacy_discriminators before dropping json_path.
 
     Only json_path values matching the converted-discriminator shape are
     restored. Genuine '--json-path' entries cannot be represented by the
     legacy columns and are dropped along with the column.
+
+    Offline ('--sql') mode has no connection to read rows from, so it
+    gets a set-based rewrite; online mode keeps the row-by-row form.
     """
+    if context.is_offline_mode():
+        _restore_legacy_discriminators_offline()
+    else:
+        _restore_legacy_discriminators_online()
+
+
+def _restore_legacy_discriminators_online() -> None:
+    """Row-by-row restore against a live connection."""
     acl = _acl_entries_table()
     bind = op.get_bind()
     rows = bind.execute(
@@ -156,3 +200,28 @@ def _restore_legacy_discriminators() -> None:
                     .values(**{field: json.loads(match.group("value"))})
                 )
                 break
+
+
+def _restore_legacy_discriminators_offline() -> None:
+    """Set-based restore emitted as SQL for '--sql' mode.
+
+    Mirrors _LEGACY_FIELD_RES: a json_path carrying the frozen
+    converted-discriminator shape ('<prefix>' ... ']') is decoded back
+    into its legacy column. SQLite's 'json_extract(..., '$')' inverts
+    'json_quote'/'json.dumps'. The two prefixes are mutually exclusive,
+    so the passes are order-independent; genuine '--json-path' entries
+    fail the prefix test and are left for the column drop to discard.
+    """
+    for field in ("preferred_username", "email"):
+        # Mirrors _token_field_json_path; the prefix has no single quote.
+        prefix = f"$[?$.{field} == "
+        plen = len(prefix)
+        op.execute(
+            f"UPDATE room_acl_entries "
+            f"SET {field} = json_extract("
+            f"substr(json_path, {plen + 1}, length(json_path) - {plen + 1})"
+            f", '$') "
+            f"WHERE json_path IS NOT NULL "
+            f"AND substr(json_path, 1, {plen}) = '{prefix}' "
+            f"AND substr(json_path, -1, 1) = ']'"
+        )
