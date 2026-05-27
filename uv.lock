@@ -3375,7 +3375,7 @@ requires-dist = [
     { name = "python-jsonpath" },
     { name = "python-keycloak" },
     { name = "sqlmodel" },
-    { name = "starlette", specifier = "!=1.0.1" },
+    { name = "starlette", specifier = ">=1.0.1" },
     { name = "trio" },
     { name = "uvicorn", extras = ["standard"] },
 ]
