@@ -31,9 +31,10 @@ dependencies = [
     "logfire[fastapi]",
     "pydantic-ai-slim[google] >= 1.95, < 2.0",
     "pyjwt",
+    "pymdown-extensions >= 10.21.3",  # CVE-2026-46338
     "python-keycloak",
     "sqlmodel",
-    "starlette",
+    "starlette >= 1.0.1",  # PYSEC-2026-161 aka CVE-2026-48710
     "trio",
     "uvicorn[standard]",
     "certifi >= 2025.11.12",
