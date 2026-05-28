@@ -623,83 +623,10 @@ def _resolve_allow_deny(allow: bool, deny: bool) -> authz_package.AllowDeny:
     return authz_package.AllowDeny.DENY
 
 
-def _check_discriminator(
-    everyone: bool,
-    authenticated: bool,
-    json_path: str | None,
-    preferred_username: str | None,
-    email: str | None,
-) -> None:
-    """Require exactly one discriminator option.
-
-    Raises 'typer.Exit(1)' when the caller passes zero or more than one
-    of '--everyone', '--authenticated', '--json-path',
-    '--preferred-username', or '--email'.
-    """
-    selected = [
-        name
-        for name, present in (
-            ("--everyone", everyone),
-            ("--authenticated", authenticated),
-            ("--json-path", json_path is not None),
-            ("--preferred-username", preferred_username is not None),
-            ("--email", email is not None),
-        )
-        if present
-    ]
-    if len(selected) != 1:
-        the_console.rule("Exactly one discriminator required")
-        the_console.print(
-            "Pass exactly one of '--everyone', '--authenticated', "
-            "'--json-path', '--preferred-username', or '--email'. "
-            f"Got: {selected or ['(none)']}.",
-        )
-        raise typer.Exit(1)
-
-
-def _resolve_json_path(
-    _the_installation,
-    json_path: str | None,
-    preferred_username: str | None,
-    email: str | None,
-    allow_invalid: bool = False,
-) -> str | None:
-    """Resolve and validate the JSONPath for an ACL entry.
-
-    Collapses the '--preferred-username' / '--email' claim shortcuts
-    into the canonical 'token_field_json_path' form, then validates
-    the result via 'authz_package.validate_json_path'.
-
-    The loaded installation is taken as a required positional argument
-    -- its presence at the call site enforces the ordering constraint
-    that the installation must be loaded (and any meta-config-defined
-    JSONPath filter functions thereby registered) before compilation.
-    '_the_installation' is not otherwise consumed here; the leading
-    underscore signals that to readers (and to ruff).
-
-    Pass 'allow_invalid=True' to skip the compile check; this lets
-    'delete-acl-entry' match a stored entry whose 'json_path' no longer
-    compiles (e.g. because the meta-config filter function it referenced
-    has been removed).
-    """
-    if preferred_username is not None:
-        json_path = authz_package.token_field_json_path(
-            "preferred_username", preferred_username
-        )
-    elif email is not None:
-        json_path = authz_package.token_field_json_path("email", email)
-
-    if json_path is None or allow_invalid:
-        return json_path
-
-    try:
-        authz_package.validate_json_path(json_path)
-    except authz_package.InvalidJSONPath as exc:
-        the_console.rule("Invalid JSONPath")
-        the_console.print(str(exc))
-        raise typer.Exit(1) from exc
-
-    return json_path
+_ACL_ENTRY_DISCRIMINATORS_SUMMARY = (
+    "'--everyone', '--authenticated', '--json-path', "
+    "'--preferred-username', or '--email'"
+)
 
 
 def _check_acl_entry_args(
@@ -735,10 +662,17 @@ def _check_acl_entry_args(
     _check_room_id(the_installation, room_id)
 
     allow_deny = _resolve_allow_deny(allow, deny)
-    _check_discriminator(
-        everyone, authenticated, json_path, preferred_username, email
+    cli_util._check_exactly_one_discriminator(
+        [
+            ("--everyone", everyone),
+            ("--authenticated", authenticated),
+            ("--json-path", json_path is not None),
+            ("--preferred-username", preferred_username is not None),
+            ("--email", email is not None),
+        ],
+        _ACL_ENTRY_DISCRIMINATORS_SUMMARY,
     )
-    json_path = _resolve_json_path(
+    json_path = cli_util._resolve_json_path(
         the_installation,
         json_path,
         preferred_username,

@@ -132,6 +132,7 @@ def audit_all(
     errors |= _audit_environment_section(ctx, installation_path)
     errors |= _audit_oidc_section(ctx, installation_path)
     errors |= _audit_rooms_section(ctx, installation_path)
+    errors |= _audit_admin_users_section(ctx, installation_path)
     errors |= _audit_room_authz_section(ctx, installation_path)
     errors |= _audit_completions_section(ctx, installation_path)
     errors |= _audit_quizzes_section(ctx, installation_path)
@@ -690,6 +691,105 @@ def _audit_room_authz_section(
     if sub_errors:
         errors["room_authz"] = sub_errors
     return errors
+
+
+def _admin_user_json_paths(the_installation) -> list[str]:
+    """Return every stored 'AdminUser.json_path', in insertion order.
+
+    Returns an empty list when the authz DB is RAM-based (no persisted
+    rows can exist).
+    """
+    dburi = the_installation.authorization_dburi_sync
+
+    if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
+        return []
+
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+    with session:
+        return [
+            admin_user.json_path
+            for admin_user in session.query(authz_schema.AdminUser)
+        ]
+
+
+def _invalid_admin_user_json_paths(
+    the_installation,
+) -> list[tuple[str, str]]:
+    """Collect admin entries whose 'json_path' fails to validate.
+
+    Same intent as '_invalid_acl_json_paths' but for the 'AdminUser'
+    table: a row typically lands here when it was authored under a
+    meta-config that registered filter functions which are no longer
+    present.
+
+    Returns a list of '(json_path, error)' pairs.
+    """
+    invalid: list[tuple[str, str]] = []
+    for json_path in _admin_user_json_paths(the_installation):
+        try:
+            authz_package.validate_json_path(json_path)
+        except authz_package.InvalidJSONPath as exc:
+            invalid.append((json_path, str(exc)))
+    return invalid
+
+
+def _audit_admin_users_section(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+) -> dict:  # pragma NO COVER UI ONLY
+    """Print the admin-users section (rule header + listing + invalid)."""
+    quiet = ctx.obj["quiet"]
+    the_installation = _get_installation(ctx, installation_path)
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured admin users")
+    tc_line()
+
+    json_paths = _admin_user_json_paths(the_installation)
+    tc_print(f"Admin users ({len(json_paths)}):")
+    if json_paths:
+        for json_path in json_paths:
+            parsed = authz_package.parse_token_field_json_path(json_path)
+            if parsed is not None:
+                field, value = parsed
+                tc_print(f"  - {field}={value}")
+            else:
+                tc_print(f"  - json_path={json_path}")
+    else:
+        tc_print("  (none)")
+    tc_line()
+
+    invalid = _invalid_admin_user_json_paths(the_installation)
+    tc_print("Admin users with invalid JSONPath:")
+    if invalid:
+        for json_path, error in invalid:
+            tc_print(f"  - {json_path}  ({error})")
+    else:
+        tc_print("  (none)")
+    tc_line()
+
+    errors: dict = {}
+    if invalid:
+        errors["admin_users"] = {"invalid_json_paths": invalid}
+    return errors
+
+
+@app.command("admin-users")
+def audit_admin_users(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):  # pragma NO COVER command
+    """List configured admin users and flag any with invalid JSONPath.
+
+    Each stored 'AdminUser.json_path' is re-validated against the
+    currently-loaded JSONPath environment. An entry whose query no
+    longer compiles (e.g. because the meta-config filter function it
+    referenced has been removed) is reported as an audit error.
+    """
+    quiet = ctx.obj["quiet"]
+    errors = _audit_admin_users_section(ctx, installation_path)
+    _emit_errors(errors, quiet)
 
 
 @app.command("room-authz")
