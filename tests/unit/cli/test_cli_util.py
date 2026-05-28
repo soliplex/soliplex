@@ -6,6 +6,7 @@ from unittest import mock
 import pytest
 import typer
 
+from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex.cli import cli_util
 from soliplex.config import installation as config_installation
@@ -108,3 +109,165 @@ def test__check_ram_dburi(the_console, dburi, expectation):
         the_console.print.assert_called_once_with(
             "'test-command' is a no-op with a RAM-based database",
         )
+
+
+SUMMARY = "'--a', '--b', or '--c'"
+
+
+@pytest.mark.parametrize(
+    "w_discriminators",
+    [
+        [("--a", True), ("--b", False), ("--c", False)],
+        [("--a", False), ("--b", True), ("--c", False)],
+        [("--a", False), ("--b", False), ("--c", True)],
+    ],
+)
+@mock.patch("soliplex.cli.cli_util.the_console")
+def test__check_exactly_one_discriminator_accepts_one(
+    the_console, w_discriminators
+):
+    cli_util._check_exactly_one_discriminator(w_discriminators, SUMMARY)
+
+    the_console.rule.assert_not_called()
+    the_console.print.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_discriminators, exp_selected",
+    [
+        # None set -> error reports '(none)'.
+        (
+            [("--a", False), ("--b", False), ("--c", False)],
+            ["(none)"],
+        ),
+        # Two set.
+        (
+            [("--a", True), ("--b", True), ("--c", False)],
+            ["--a", "--b"],
+        ),
+        # All set.
+        (
+            [("--a", True), ("--b", True), ("--c", True)],
+            ["--a", "--b", "--c"],
+        ),
+    ],
+)
+@mock.patch("soliplex.cli.cli_util.the_console")
+def test__check_exactly_one_discriminator_rejects_other_arities(
+    the_console, w_discriminators, exp_selected
+):
+    with pytest.raises(typer.Exit) as excinfo:
+        cli_util._check_exactly_one_discriminator(w_discriminators, SUMMARY)
+
+    (return_code,) = excinfo.value.args
+    assert return_code == 1
+
+    the_console.rule.assert_called_once_with(
+        "Exactly one discriminator required",
+    )
+    the_console.print.assert_called_once_with(
+        f"Pass exactly one of {SUMMARY}. Got: {exp_selected}.",
+    )
+
+
+@pytest.mark.parametrize(
+    "w_json_path, w_preferred_username, w_email, exp",
+    [
+        # No claim shortcut, no json_path -> None passes through.
+        (None, None, None, None),
+        # A literal json_path passes through unchanged.
+        ("$.foo", None, None, "$.foo"),
+        # 'preferred_username' is translated to the canonical form.
+        (None, "alice", None, '$[?$.preferred_username == "alice"]'),
+        # 'email' is translated to the canonical form.
+        (
+            None,
+            None,
+            "alice@example.com",
+            '$[?$.email == "alice@example.com"]',
+        ),
+        # 'preferred_username' takes precedence over a literal json_path
+        # (the caller should have ensured exclusivity already, but the
+        # helper is documented to prefer the claim shortcut).
+        ("$.ignored", "alice", None, '$[?$.preferred_username == "alice"]'),
+        # ... and over 'email' for the same reason.
+        (
+            None,
+            "alice",
+            "alice@example.com",
+            '$[?$.preferred_username == "alice"]',
+        ),
+    ],
+)
+def test__resolve_json_path(w_json_path, w_preferred_username, w_email, exp):
+    found = cli_util._resolve_json_path(
+        mock.sentinel.the_installation,
+        w_json_path,
+        w_preferred_username,
+        w_email,
+    )
+
+    assert found == exp
+
+
+@mock.patch("soliplex.cli.cli_util.the_console")
+def test__resolve_json_path_invalid_raises(the_console):
+    bogus = "$[?this is not a query]"
+
+    with pytest.raises(typer.Exit) as excinfo:
+        cli_util._resolve_json_path(
+            mock.sentinel.the_installation, bogus, None, None
+        )
+
+    (return_code,) = excinfo.value.args
+    assert return_code == 1
+
+    the_console.rule.assert_called_once_with("Invalid JSONPath")
+    (print_args, _) = the_console.print.call_args
+    (printed,) = print_args
+    assert bogus in printed
+
+
+def test__resolve_json_path_allow_invalid_skips_validation():
+    bogus = "$[?stale_filter_func($.email)]"
+
+    found = cli_util._resolve_json_path(
+        mock.sentinel.the_installation,
+        bogus,
+        None,
+        None,
+        allow_invalid=True,
+    )
+
+    assert found == bogus
+
+
+def test__resolve_json_path_w_meta_config_filter_function(
+    patched_jsonpath_functions,
+):
+    # Regression test for soliplex/soliplex#1017: a JSONPath query that
+    # uses a filter function registered into the shared environment
+    # (as 'InstallationConfigMeta.__post_init__' does for every
+    # 'meta.jsonpath_functions' entry) must validate successfully when
+    # '_resolve_json_path' runs after the installation has been loaded.
+    def filter_func(value):  # pragma: NO COVER (registered, not called)
+        return value
+
+    json_path = "$[?filter_func($.email)]"
+
+    # Sanity check: without the registration, the bare query fails to
+    # compile (and would fall through to 'typer.Exit(1)').
+    with pytest.raises(authz_package.InvalidJSONPath):
+        authz_package.validate_json_path(json_path)
+
+    authz_package.register_jsonpath_function("filter_func", filter_func)
+
+    found = cli_util._resolve_json_path(
+        mock.sentinel.the_installation,
+        json_path,
+        None,
+        None,
+    )
+
+    assert found == json_path
+    assert patched_jsonpath_functions["filter_func"] is filter_func

@@ -188,6 +188,7 @@ def test__audit_callback(ctx, w_quiet):
 @mock.patch("soliplex.cli.audit._audit_quizzes_section")
 @mock.patch("soliplex.cli.audit._audit_completions_section")
 @mock.patch("soliplex.cli.audit._audit_room_authz_section")
+@mock.patch("soliplex.cli.audit._audit_admin_users_section")
 @mock.patch("soliplex.cli.audit._audit_rooms_section")
 @mock.patch("soliplex.cli.audit._audit_oidc_section")
 @mock.patch("soliplex.cli.audit._audit_environment_section")
@@ -199,6 +200,7 @@ def test_audit_all(
     _audit_environment_section,
     _audit_oidc_section,
     _audit_rooms_section,
+    _audit_admin_users_section,
     _audit_room_authz_section,
     _audit_completions_section,
     _audit_quizzes_section,
@@ -220,6 +222,7 @@ def test_audit_all(
         _audit_environment_section.return_value = {"environment": None}
         _audit_oidc_section.return_value = {"oidc": None}
         _audit_rooms_section.return_value = {"rooms": None}
+        _audit_admin_users_section.return_value = {"admin_users": None}
         _audit_room_authz_section.return_value = {"room_authz": None}
         _audit_completions_section.return_value = {"completions": None}
         _audit_quizzes_section.return_value = {"quizzes": None}
@@ -234,6 +237,7 @@ def test_audit_all(
             "environment": None,
             "oidc": None,
             "rooms": None,
+            "admin_users": None,
             "room_authz": None,
             "completions": None,
             "quizzes": None,
@@ -248,6 +252,7 @@ def test_audit_all(
         _audit_environment_section.return_value = {}
         _audit_oidc_section.return_value = {}
         _audit_rooms_section.return_value = {}
+        _audit_admin_users_section.return_value = {}
         _audit_room_authz_section.return_value = {}
         _audit_completions_section.return_value = {}
         _audit_quizzes_section.return_value = {}
@@ -267,6 +272,7 @@ def test_audit_all(
     _audit_environment_section.assert_called_once_with(ctx, installation_path)
     _audit_oidc_section.assert_called_once_with(ctx, installation_path)
     _audit_rooms_section.assert_called_once_with(ctx, installation_path)
+    _audit_admin_users_section.assert_called_once_with(ctx, installation_path)
     _audit_room_authz_section.assert_called_once_with(ctx, installation_path)
     _audit_completions_section.assert_called_once_with(ctx, installation_path)
     _audit_quizzes_section.assert_called_once_with(ctx, installation_path)
@@ -881,6 +887,112 @@ def test__invalid_acl_json_paths(
 
 # _audit_room_authz_section: ui only
 # audit_room_authz: command
+
+
+@pytest.mark.parametrize(
+    "is_ram, json_paths, exp",
+    [
+        # RAM dburi -> no DB rows.
+        (True, [], []),
+        # Non-RAM, no admins.
+        (False, [], []),
+        # Non-RAM, populated.
+        (
+            False,
+            [
+                '$[?$.email == "alice@example.com"]',
+                "$[?some_func($.email)]",
+            ],
+            [
+                '$[?$.email == "alice@example.com"]',
+                "$[?some_func($.email)]",
+            ],
+        ),
+    ],
+)
+@mock.patch("soliplex.cli.audit.authz_schema.get_session")
+def test__admin_user_json_paths(
+    get_session, the_installation, is_ram, json_paths, exp
+):
+    if is_ram:
+        the_installation._config.authorization_dburi_sync = (
+            config_installation.SYNC_MEMORY_ENGINE_URL
+        )
+    else:
+        the_installation._config.authorization_dburi_sync = "sqlite:///x.db"
+
+        rows = [mock.Mock(json_path=jp) for jp in json_paths]
+        session = mock.MagicMock()
+        session.query.return_value = rows
+        get_session.return_value = session
+
+    found = cli_audit._admin_user_json_paths(the_installation)
+
+    assert found == exp
+
+    if is_ram:
+        get_session.assert_not_called()
+    else:
+        get_session.assert_called_once_with(
+            engine_url="sqlite:///x.db",
+            init_schema=True,
+        )
+        session.query.assert_called_once_with(authz_schema.AdminUser)
+
+
+@pytest.mark.parametrize(
+    "json_paths, exp_invalid",
+    [
+        # No admins.
+        ([], []),
+        # All valid.
+        (
+            [
+                '$[?$.email == "alice@example.com"]',
+                '$[?$.preferred_username == "bob"]',
+            ],
+            [],
+        ),
+        # Mixed: one invalid.
+        (
+            [
+                '$[?$.email == "alice@example.com"]',
+                "$[?missing_func($.email)]",
+            ],
+            [("$[?missing_func($.email)]", "<error>")],
+        ),
+        # All invalid.
+        (
+            ["$[?one_missing()]", "$[?another_missing()]"],
+            [
+                ("$[?one_missing()]", "<error>"),
+                ("$[?another_missing()]", "<error>"),
+            ],
+        ),
+    ],
+)
+@mock.patch("soliplex.cli.audit.authz_schema.get_session")
+def test__invalid_admin_user_json_paths(
+    get_session,
+    the_installation,
+    json_paths,
+    exp_invalid,
+):
+    the_installation._config.authorization_dburi_sync = "sqlite:///x.db"
+
+    rows = [mock.Mock(json_path=jp) for jp in json_paths]
+    session = mock.MagicMock()
+    session.query.return_value = rows
+    get_session.return_value = session
+
+    found = cli_audit._invalid_admin_user_json_paths(the_installation)
+
+    normalized = [(jp, "<error>") for (jp, _err) in found]
+    assert normalized == exp_invalid
+
+
+# _audit_admin_users_section: ui only
+# audit_admin_users: command
 
 
 @pytest.mark.parametrize(

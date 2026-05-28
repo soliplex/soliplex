@@ -91,28 +91,20 @@ def test__check_existing_admin(the_console, w_exists):
 
 
 @pytest.mark.parametrize(
-    "w_email, w_pref, w_jp, exp",
+    "w_email, w_pref, w_jp",
     [
-        (
-            "alice@example.com",
-            None,
-            None,
-            authz_package.token_field_json_path("email", "alice@example.com"),
-        ),
-        (
-            None,
-            "bob",
-            None,
-            authz_package.token_field_json_path("preferred_username", "bob"),
-        ),
-        (None, None, '$[?$.role == "admin"]', '$[?$.role == "admin"]'),
+        # Exactly one set: each branch in turn.
+        ("alice@example.com", None, None),
+        (None, "bob", None),
+        (None, None, '$[?$.role == "admin"]'),
     ],
 )
 @mock.patch("soliplex.cli.admin_users.the_console")
-def test__resolve_admin_json_path(the_console, w_email, w_pref, w_jp, exp):
-    found = cli_admin_users._resolve_admin_json_path(w_email, w_pref, w_jp)
+def test__check_admin_discriminator_accepts_one(
+    the_console, w_email, w_pref, w_jp
+):
+    cli_admin_users._check_admin_discriminator(w_email, w_pref, w_jp)
 
-    assert found == exp
     the_console.rule.assert_not_called()
 
 
@@ -127,12 +119,12 @@ def test__resolve_admin_json_path(the_console, w_email, w_pref, w_jp, exp):
         ("alice@example.com", "bob", '$[?$.role == "admin"]'),
     ],
 )
-@mock.patch("soliplex.cli.admin_users.the_console")
-def test__resolve_admin_json_path_not_exactly_one(
+@mock.patch("soliplex.cli.cli_util.the_console")
+def test__check_admin_discriminator_rejects_other_arities(
     the_console, w_email, w_pref, w_jp
 ):
     with pytest.raises(typer.Exit) as excinfo:
-        cli_admin_users._resolve_admin_json_path(w_email, w_pref, w_jp)
+        cli_admin_users._check_admin_discriminator(w_email, w_pref, w_jp)
 
     (return_code,) = excinfo.value.args
     assert return_code == 1
@@ -141,14 +133,52 @@ def test__resolve_admin_json_path_not_exactly_one(
     )
 
 
-@mock.patch("soliplex.cli.admin_users.the_console")
-def test__resolve_admin_json_path_invalid(the_console):
-    with pytest.raises(typer.Exit) as excinfo:
-        cli_admin_users._resolve_admin_json_path(None, None, "$[?(bogus")
+@mock.patch("soliplex.cli.admin_users.cli_util._check_ram_dburi")
+@mock.patch("soliplex.cli.admin_users.cli_util.get_installation")
+def test__check_admin_user_args(get_installation, _check_ram_dburi):
+    the_installation = get_installation.return_value
+    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
 
-    (return_code,) = excinfo.value.args
-    assert return_code == 1
-    the_console.rule.assert_called_once_with("Invalid JSONPath")
+    found = cli_admin_users._check_admin_user_args(
+        mock.sentinel.installation_path,
+        "alice@example.com",
+        None,
+        None,
+        "admin-users add",
+    )
+
+    assert found == (
+        "sqlite:///fake.sqlite",
+        '$[?$.email == "alice@example.com"]',
+    )
+
+    get_installation.assert_called_once_with(mock.sentinel.installation_path)
+    _check_ram_dburi.assert_called_once_with(
+        "sqlite:///fake.sqlite",
+        "admin-users add",
+    )
+
+
+@mock.patch("soliplex.cli.admin_users.cli_util._check_ram_dburi")
+@mock.patch("soliplex.cli.admin_users.cli_util.get_installation")
+def test__check_admin_user_args_allow_invalid_json_path(
+    get_installation, _check_ram_dburi
+):
+    the_installation = get_installation.return_value
+    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
+
+    bogus = "$[?stale_filter_func($.email)]"
+
+    found = cli_admin_users._check_admin_user_args(
+        mock.sentinel.installation_path,
+        None,
+        None,
+        bogus,
+        "admin-users delete",
+        allow_invalid_json_path=True,
+    )
+
+    assert found == ("sqlite:///fake.sqlite", bogus)
 
 
 @pytest.mark.parametrize(
