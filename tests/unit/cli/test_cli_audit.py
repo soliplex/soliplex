@@ -791,6 +791,94 @@ def test__room_authz_groups(
         session.query.assert_called_once_with(authz_schema.RoomPolicy)
 
 
+@pytest.mark.parametrize(
+    "is_ram, policy_specs, exp_invalid",
+    [
+        # RAM dburi -> no DB rows, returns empty.
+        (True, [], {}),
+        # Non-RAM, no policies.
+        (False, [], {}),
+        # Non-RAM, all entries valid.
+        (
+            False,
+            [
+                ("chat", [None, '$[?$.email == "alice@example.com"]']),
+            ],
+            {},
+        ),
+        # Non-RAM, one invalid entry.
+        (
+            False,
+            [
+                ("chat", ["$[?missing_func($.email)]"]),
+            ],
+            {"chat": [("$[?missing_func($.email)]", "<error>")]},
+        ),
+        # Non-RAM, mix of valid and invalid across rooms.
+        (
+            False,
+            [
+                (
+                    "chat",
+                    [
+                        '$[?$.email == "alice@example.com"]',
+                        "$[?missing_func($.email)]",
+                    ],
+                ),
+                ("search", [None]),
+                ("ghost", ["$[?other_missing($.email)]"]),
+            ],
+            {
+                "chat": [("$[?missing_func($.email)]", "<error>")],
+                "ghost": [("$[?other_missing($.email)]", "<error>")],
+            },
+        ),
+    ],
+)
+@mock.patch("soliplex.cli.audit.authz_schema.get_session")
+def test__invalid_acl_json_paths(
+    get_session,
+    the_installation,
+    is_ram,
+    policy_specs,
+    exp_invalid,
+):
+    if is_ram:
+        the_installation._config.authorization_dburi_sync = (
+            config_installation.SYNC_MEMORY_ENGINE_URL
+        )
+    else:
+        the_installation._config.authorization_dburi_sync = "sqlite:///x.db"
+
+        policy_rows = []
+        for room_id, json_paths in policy_specs:
+            policy = mock.Mock()
+            policy.room_id = room_id
+            policy.acl_entries = [mock.Mock(json_path=jp) for jp in json_paths]
+            policy_rows.append(policy)
+
+        session = mock.MagicMock()
+        session.query.return_value = policy_rows
+        get_session.return_value = session
+
+    found = cli_audit._invalid_acl_json_paths(the_installation)
+
+    # The error message is implementation-detail; normalize for compare.
+    normalized = {
+        room_id: [(jp, "<error>") for (jp, _err) in entries]
+        for room_id, entries in found.items()
+    }
+    assert normalized == exp_invalid
+
+    if is_ram:
+        get_session.assert_not_called()
+    else:
+        get_session.assert_called_once_with(
+            engine_url="sqlite:///x.db",
+            init_schema=True,
+        )
+
+
 # _audit_room_authz_section: ui only
 # audit_room_authz: command
 

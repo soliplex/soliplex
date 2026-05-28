@@ -597,6 +597,40 @@ def _room_authz_groups(the_installation):
     }
 
 
+def _invalid_acl_json_paths(the_installation) -> dict:
+    """Collect ACL entries whose stored 'json_path' fails to validate.
+
+    Reads each 'ACLEntry' row directly from the authz database
+    (bypassing 'policy.as_model', which would itself fail on invalid
+    entries) and re-validates 'json_path' against the currently-loaded
+    JSONPath environment. Typically an entry lands here when it was
+    authored under a meta-config that registered filter functions
+    which are no longer present.
+
+    Returns a dict mapping 'room_id' to a list of '(json_path, error)'
+    pairs. A RAM-based authz DB has no persisted rows and returns '{}'.
+    """
+    dburi = the_installation.authorization_dburi_sync
+
+    if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
+        return {}
+
+    invalid: dict = {}
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+    with session:
+        for policy in session.query(authz_schema.RoomPolicy):
+            for entry in policy.acl_entries:
+                if entry.json_path is None:
+                    continue
+                try:
+                    authz_package.validate_json_path(entry.json_path)
+                except authz_package.InvalidJSONPath as exc:
+                    invalid.setdefault(policy.room_id, []).append(
+                        (entry.json_path, str(exc)),
+                    )
+    return invalid
+
+
 def _audit_room_authz_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
@@ -636,9 +670,25 @@ def _audit_room_authz_section(
         tc_print("  (none)")
     tc_line()
 
-    errors: dict = {}
+    invalid_acls = _invalid_acl_json_paths(the_installation)
+    tc_print("ACL entries with invalid JSONPath:")
+    if invalid_acls:
+        for room_id in sorted(invalid_acls):
+            for json_path, error in invalid_acls[room_id]:
+                tc_print(f"  - {room_id}: {json_path}  ({error})")
+    else:
+        tc_print("  (none)")
+    tc_line()
+
+    sub_errors: dict = {}
     if groups["stale"]:
-        errors["room_authz"] = {"stale_rooms": groups["stale"]}
+        sub_errors["stale_rooms"] = groups["stale"]
+    if invalid_acls:
+        sub_errors["invalid_acls"] = invalid_acls
+
+    errors: dict = {}
+    if sub_errors:
+        errors["room_authz"] = sub_errors
     return errors
 
 

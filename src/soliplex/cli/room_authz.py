@@ -140,8 +140,42 @@ def _dump(ctx, session, room_id):
         _dump_room_policy(session, room_id)
 
 
+def _acl_entry_as_jsonable(entry) -> dict:
+    """JSON-serializable view of an ACL row, tolerant of invalid paths.
+
+    Mirrors the shape of 'authz_schema.ACLEntry.as_model' (and hence
+    the public 'models.ACLEntry') but bypasses pydantic validation, so
+    a row whose stored 'json_path' no longer compiles (e.g. it
+    references a meta-config filter function that's no longer
+    registered) still renders cleanly.
+    """
+    preferred_username = None
+    email = None
+    json_path = None
+    if entry.json_path is not None:
+        parsed = authz_package.parse_token_field_json_path(entry.json_path)
+        if parsed is not None and parsed[0] == "preferred_username":
+            preferred_username = parsed[1]
+        elif parsed is not None and parsed[0] == "email":
+            email = parsed[1]
+        else:
+            json_path = entry.json_path
+    return {
+        "allow_deny": entry.allow_deny.name,
+        "everyone": entry.everyone,
+        "authenticated": entry.authenticated,
+        "preferred_username": preferred_username,
+        "email": email,
+        "json_path": json_path,
+    }
+
+
 def _room_policy_as_jsonable(policy):
     """Render a RoomPolicy (or None) as a JSON-serializable dict.
+
+    Built directly from the ORM rows rather than via 'policy.as_model'
+    so an entry whose stored 'json_path' no longer compiles does not
+    raise when dumping (the round-trip pydantic model would reject it).
 
     AllowDeny values are emitted as their member names ('ALLOW' /
     'DENY') rather than the default 'AllowDeny.ALLOW' /
@@ -149,11 +183,13 @@ def _room_policy_as_jsonable(policy):
     """
     if policy is None:
         return None
-    to_dump = policy.as_model.model_dump()
-    to_dump["default_allow_deny"] = to_dump["default_allow_deny"].name
-    for dump_ae in to_dump["acl_entries"]:
-        dump_ae["allow_deny"] = dump_ae["allow_deny"].name
-    return to_dump
+    return {
+        "room_id": policy.room_id,
+        "default_allow_deny": policy.default_allow_deny.name,
+        "acl_entries": [
+            _acl_entry_as_jsonable(entry) for entry in policy.acl_entries
+        ],
+    }
 
 
 def _room_policy_as_yaml(policy) -> str:
@@ -626,6 +662,7 @@ def _resolve_json_path(
     json_path: str | None,
     preferred_username: str | None,
     email: str | None,
+    allow_invalid: bool = False,
 ) -> str | None:
     """Resolve and validate the JSONPath for an ACL entry.
 
@@ -639,6 +676,11 @@ def _resolve_json_path(
     JSONPath filter functions thereby registered) before compilation.
     '_the_installation' is not otherwise consumed here; the leading
     underscore signals that to readers (and to ruff).
+
+    Pass 'allow_invalid=True' to skip the compile check; this lets
+    'delete-acl-entry' match a stored entry whose 'json_path' no longer
+    compiles (e.g. because the meta-config filter function it referenced
+    has been removed).
     """
     if preferred_username is not None:
         json_path = authz_package.token_field_json_path(
@@ -647,8 +689,8 @@ def _resolve_json_path(
     elif email is not None:
         json_path = authz_package.token_field_json_path("email", email)
 
-    if json_path is None:
-        return None
+    if json_path is None or allow_invalid:
+        return json_path
 
     try:
         authz_package.validate_json_path(json_path)
@@ -671,12 +713,18 @@ def _check_acl_entry_args(
     preferred_username: str | None,
     email: str | None,
     command: str,
+    allow_invalid_json_path: bool = False,
 ) -> tuple[str, authz_package.AllowDeny, str | None]:
     """Run the validation prolog shared by add/delete-acl-entry.
 
     Loads the installation, checks the room id is configured, validates
     the '--allow'/'--deny' and discriminator selections, resolves and
     validates the JSONPath, and rejects a RAM-based authorization DB.
+
+    Pass 'allow_invalid_json_path=True' to skip the JSONPath compile
+    check -- intended for 'delete-acl-entry --allow-invalid-json-path',
+    so a stored entry whose 'json_path' no longer compiles can still
+    be matched and removed.
 
     Returns '(dburi, allow_deny, json_path)' -- the values both commands
     need to perform their database update.
@@ -691,7 +739,11 @@ def _check_acl_entry_args(
         everyone, authenticated, json_path, preferred_username, email
     )
     json_path = _resolve_json_path(
-        the_installation, json_path, preferred_username, email
+        the_installation,
+        json_path,
+        preferred_username,
+        email,
+        allow_invalid=allow_invalid_json_path,
     )
 
     dburi = the_installation.authorization_dburi_sync
@@ -858,6 +910,16 @@ def delete_acl_entry(
         "--email",
         help="Match an 'email' entry by claim value.",
     ),
+    allow_invalid_json_path: bool = typer.Option(
+        False,
+        "--allow-invalid-json-path",
+        help=(
+            "Skip JSONPath compile-validation of '--json-path' so an "
+            "entry whose stored 'json_path' no longer compiles (e.g. "
+            "because the meta-config filter function it referenced has "
+            "been removed) can still be matched and removed."
+        ),
+    ),
 ):  # pragma NO COVER command
     """Delete an ACL entry from a room's policy.
 
@@ -885,6 +947,7 @@ def delete_acl_entry(
         preferred_username,
         email,
         "room-authz delete-acl-entry",
+        allow_invalid_json_path=allow_invalid_json_path,
     )
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
