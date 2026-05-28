@@ -224,132 +224,244 @@ def test__dump(
         _human_dump_room_policy.assert_not_called()
 
 
+def _mock_acl_entry(
+    *,
+    allow_deny=authz_package.AllowDeny.DENY,
+    everyone=False,
+    authenticated=False,
+    json_path=None,
+):
+    return mock.Mock(
+        allow_deny=allow_deny,
+        everyone=everyone,
+        authenticated=authenticated,
+        json_path=json_path,
+    )
+
+
 @pytest.mark.parametrize(
-    "w_dumped, exp_jsonable",
+    "w_entry_kw, exp",
     [
-        # No policy row -> passes through as None.
-        (None, None),
-        # Empty policy: default-DENY, no ACL entries.
+        # 'everyone' entry: no discriminator fields beyond the flag.
         (
+            {"allow_deny": authz_package.AllowDeny.ALLOW, "everyone": True},
             {
-                "room_id": "chat",
-                "default_allow_deny": authz_package.AllowDeny.DENY,
-                "acl_entries": [],
-            },
-            {
-                "room_id": "chat",
-                "default_allow_deny": "DENY",
-                "acl_entries": [],
+                "allow_deny": "ALLOW",
+                "everyone": True,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": None,
+                "json_path": None,
             },
         ),
-        # Populated policy: both 'default_allow_deny' and each entry's
-        # 'allow_deny' must be emitted as their bare member names, not
-        # as the 'AllowDeny.<NAME>' default 'str()' form.
+        # 'authenticated' entry.
         (
             {
-                "room_id": "chat",
-                "default_allow_deny": authz_package.AllowDeny.ALLOW,
-                "acl_entries": [
-                    {
-                        "allow_deny": authz_package.AllowDeny.ALLOW,
-                        "everyone": False,
-                        "authenticated": False,
-                        "preferred_username": None,
-                        "email": "alice@example.com",
-                    },
-                    {
-                        "allow_deny": authz_package.AllowDeny.DENY,
-                        "everyone": True,
-                        "authenticated": False,
-                        "preferred_username": None,
-                        "email": None,
-                    },
-                ],
+                "allow_deny": authz_package.AllowDeny.DENY,
+                "authenticated": True,
             },
             {
-                "room_id": "chat",
-                "default_allow_deny": "ALLOW",
-                "acl_entries": [
-                    {
-                        "allow_deny": "ALLOW",
-                        "everyone": False,
-                        "authenticated": False,
-                        "preferred_username": None,
-                        "email": "alice@example.com",
-                    },
-                    {
-                        "allow_deny": "DENY",
-                        "everyone": True,
-                        "authenticated": False,
-                        "preferred_username": None,
-                        "email": None,
-                    },
-                ],
+                "allow_deny": "DENY",
+                "everyone": False,
+                "authenticated": True,
+                "preferred_username": None,
+                "email": None,
+                "json_path": None,
+            },
+        ),
+        # Stored canonical 'preferred_username' query -> surfaced back.
+        (
+            {
+                "allow_deny": authz_package.AllowDeny.ALLOW,
+                "json_path": '$[?$.preferred_username == "alice"]',
+            },
+            {
+                "allow_deny": "ALLOW",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": "alice",
+                "email": None,
+                "json_path": None,
+            },
+        ),
+        # Stored canonical 'email' query -> surfaced back.
+        (
+            {
+                "allow_deny": authz_package.AllowDeny.ALLOW,
+                "json_path": '$[?$.email == "alice@example.com"]',
+            },
+            {
+                "allow_deny": "ALLOW",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": "alice@example.com",
+                "json_path": None,
+            },
+        ),
+        # General-purpose JSONPath: surface as 'json_path' verbatim.
+        (
+            {
+                "allow_deny": authz_package.AllowDeny.DENY,
+                "json_path": "$[?match($.foo, 'b.*z')]",
+            },
+            {
+                "allow_deny": "DENY",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": None,
+                "json_path": "$[?match($.foo, 'b.*z')]",
+            },
+        ),
+        # Canonical-form-but-for-some-other-field: surface as 'json_path'.
+        (
+            {
+                "allow_deny": authz_package.AllowDeny.ALLOW,
+                "json_path": '$[?$.sub == "abc"]',
+            },
+            {
+                "allow_deny": "ALLOW",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": None,
+                "json_path": '$[?$.sub == "abc"]',
+            },
+        ),
+        # Invalid stored 'json_path': dumped verbatim, no validation.
+        (
+            {
+                "allow_deny": authz_package.AllowDeny.DENY,
+                "json_path": "$[?stale_filter_func($.email)]",
+            },
+            {
+                "allow_deny": "DENY",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": None,
+                "json_path": "$[?stale_filter_func($.email)]",
             },
         ),
     ],
 )
-def test__room_policy_as_jsonable(w_dumped, exp_jsonable):
-    if w_dumped is None:
-        policy = None
-    else:
-        policy = mock.Mock()
-        policy.as_model.model_dump.return_value = w_dumped
+def test__acl_entry_as_jsonable(w_entry_kw, exp):
+    entry = _mock_acl_entry(**w_entry_kw)
+
+    found = cli_room_authz._acl_entry_as_jsonable(entry)
+
+    assert found == exp
+
+
+def test__room_policy_as_jsonable_none():
+    assert cli_room_authz._room_policy_as_jsonable(None) is None
+
+
+def test__room_policy_as_jsonable_empty():
+    policy = mock.Mock(
+        room_id="chat",
+        default_allow_deny=authz_package.AllowDeny.DENY,
+        acl_entries=[],
+    )
 
     found = cli_room_authz._room_policy_as_jsonable(policy)
 
-    assert found == exp_jsonable
+    assert found == {
+        "room_id": "chat",
+        "default_allow_deny": "DENY",
+        "acl_entries": [],
+    }
 
 
-@pytest.mark.parametrize(
-    "w_dumped, exp_loaded",
-    [
-        # No policy row -> dumps as 'null'.
-        (None, None),
-        # Populated policy: round-trips to the JSON-serializable shape,
-        # with 'AllowDeny' values emitted as their member names.
-        (
+def test__room_policy_as_jsonable_populated_w_invalid_json_path():
+    # The middle entry's 'json_path' would fail compilation today;
+    # dumping must still succeed.
+    policy = mock.Mock(
+        room_id="chat",
+        default_allow_deny=authz_package.AllowDeny.ALLOW,
+        acl_entries=[
+            _mock_acl_entry(
+                allow_deny=authz_package.AllowDeny.ALLOW,
+                json_path='$[?$.email == "alice@example.com"]',
+            ),
+            _mock_acl_entry(
+                allow_deny=authz_package.AllowDeny.DENY,
+                json_path="$[?stale_filter_func($.email)]",
+            ),
+            _mock_acl_entry(
+                allow_deny=authz_package.AllowDeny.DENY,
+                everyone=True,
+            ),
+        ],
+    )
+
+    found = cli_room_authz._room_policy_as_jsonable(policy)
+
+    assert found == {
+        "room_id": "chat",
+        "default_allow_deny": "ALLOW",
+        "acl_entries": [
             {
-                "room_id": "chat",
-                "default_allow_deny": authz_package.AllowDeny.ALLOW,
-                "acl_entries": [
-                    {
-                        "allow_deny": authz_package.AllowDeny.ALLOW,
-                        "everyone": False,
-                        "authenticated": False,
-                        "preferred_username": None,
-                        "email": None,
-                        "json_path": '$[?$.email == "alice@example.com"]',
-                    },
-                ],
+                "allow_deny": "ALLOW",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": "alice@example.com",
+                "json_path": None,
             },
             {
-                "room_id": "chat",
-                "default_allow_deny": "ALLOW",
-                "acl_entries": [
-                    {
-                        "allow_deny": "ALLOW",
-                        "everyone": False,
-                        "authenticated": False,
-                        "preferred_username": None,
-                        "email": None,
-                        "json_path": '$[?$.email == "alice@example.com"]',
-                    },
-                ],
+                "allow_deny": "DENY",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": None,
+                "json_path": "$[?stale_filter_func($.email)]",
             },
-        ),
-    ],
-)
-def test__room_policy_as_yaml(w_dumped, exp_loaded):
-    if w_dumped is None:
-        policy = None
-    else:
-        policy = mock.Mock()
-        policy.as_model.model_dump.return_value = w_dumped
+            {
+                "allow_deny": "DENY",
+                "everyone": True,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": None,
+                "json_path": None,
+            },
+        ],
+    }
+
+
+def test__room_policy_as_yaml_none():
+    assert yaml.safe_load(cli_room_authz._room_policy_as_yaml(None)) is None
+
+
+def test__room_policy_as_yaml_populated():
+    policy = mock.Mock(
+        room_id="chat",
+        default_allow_deny=authz_package.AllowDeny.ALLOW,
+        acl_entries=[
+            _mock_acl_entry(
+                allow_deny=authz_package.AllowDeny.ALLOW,
+                json_path='$[?$.email == "alice@example.com"]',
+            ),
+        ],
+    )
 
     found = cli_room_authz._room_policy_as_yaml(policy)
 
-    assert yaml.safe_load(found) == exp_loaded
+    assert yaml.safe_load(found) == {
+        "room_id": "chat",
+        "default_allow_deny": "ALLOW",
+        "acl_entries": [
+            {
+                "allow_deny": "ALLOW",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": "alice@example.com",
+                "json_path": None,
+            },
+        ],
+    }
 
 
 @pytest.mark.parametrize(

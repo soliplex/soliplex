@@ -140,8 +140,42 @@ def _dump(ctx, session, room_id):
         _dump_room_policy(session, room_id)
 
 
+def _acl_entry_as_jsonable(entry) -> dict:
+    """JSON-serializable view of an ACL row, tolerant of invalid paths.
+
+    Mirrors the shape of 'authz_schema.ACLEntry.as_model' (and hence
+    the public 'models.ACLEntry') but bypasses pydantic validation, so
+    a row whose stored 'json_path' no longer compiles (e.g. it
+    references a meta-config filter function that's no longer
+    registered) still renders cleanly.
+    """
+    preferred_username = None
+    email = None
+    json_path = None
+    if entry.json_path is not None:
+        parsed = authz_package.parse_token_field_json_path(entry.json_path)
+        if parsed is not None and parsed[0] == "preferred_username":
+            preferred_username = parsed[1]
+        elif parsed is not None and parsed[0] == "email":
+            email = parsed[1]
+        else:
+            json_path = entry.json_path
+    return {
+        "allow_deny": entry.allow_deny.name,
+        "everyone": entry.everyone,
+        "authenticated": entry.authenticated,
+        "preferred_username": preferred_username,
+        "email": email,
+        "json_path": json_path,
+    }
+
+
 def _room_policy_as_jsonable(policy):
     """Render a RoomPolicy (or None) as a JSON-serializable dict.
+
+    Built directly from the ORM rows rather than via 'policy.as_model'
+    so an entry whose stored 'json_path' no longer compiles does not
+    raise when dumping (the round-trip pydantic model would reject it).
 
     AllowDeny values are emitted as their member names ('ALLOW' /
     'DENY') rather than the default 'AllowDeny.ALLOW' /
@@ -149,11 +183,13 @@ def _room_policy_as_jsonable(policy):
     """
     if policy is None:
         return None
-    to_dump = policy.as_model.model_dump()
-    to_dump["default_allow_deny"] = to_dump["default_allow_deny"].name
-    for dump_ae in to_dump["acl_entries"]:
-        dump_ae["allow_deny"] = dump_ae["allow_deny"].name
-    return to_dump
+    return {
+        "room_id": policy.room_id,
+        "default_allow_deny": policy.default_allow_deny.name,
+        "acl_entries": [
+            _acl_entry_as_jsonable(entry) for entry in policy.acl_entries
+        ],
+    }
 
 
 def _room_policy_as_yaml(policy) -> str:
