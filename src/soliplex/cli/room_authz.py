@@ -566,7 +566,138 @@ def clear_room_acl(
     _dump(ctx, session, room_id)
 
 
-# Deprecated and hidden BBB commands.
+def _resolve_allow_deny(allow: bool, deny: bool) -> authz_package.AllowDeny:
+    """Return the AllowDeny implied by --allow / --deny.
+
+    Raises 'typer.Exit(1)' when both or neither flag is supplied.
+    """
+    if allow == deny:
+        the_console.rule("Exactly one of '--allow' or '--deny' required")
+        flags_given = [
+            name for name, v in (("--allow", allow), ("--deny", deny)) if v
+        ]
+        the_console.print(
+            "Pass exactly one of '--allow' or '--deny'. "
+            f"Got: {flags_given or ['(none)']}.",
+        )
+        raise typer.Exit(1)
+
+    if allow:
+        return authz_package.AllowDeny.ALLOW
+    return authz_package.AllowDeny.DENY
+
+
+def _check_discriminator(
+    everyone: bool,
+    authenticated: bool,
+    json_path: str | None,
+    preferred_username: str | None,
+    email: str | None,
+) -> None:
+    """Require exactly one discriminator option.
+
+    Raises 'typer.Exit(1)' when the caller passes zero or more than one
+    of '--everyone', '--authenticated', '--json-path',
+    '--preferred-username', or '--email'.
+    """
+    selected = [
+        name
+        for name, present in (
+            ("--everyone", everyone),
+            ("--authenticated", authenticated),
+            ("--json-path", json_path is not None),
+            ("--preferred-username", preferred_username is not None),
+            ("--email", email is not None),
+        )
+        if present
+    ]
+    if len(selected) != 1:
+        the_console.rule("Exactly one discriminator required")
+        the_console.print(
+            "Pass exactly one of '--everyone', '--authenticated', "
+            "'--json-path', '--preferred-username', or '--email'. "
+            f"Got: {selected or ['(none)']}.",
+        )
+        raise typer.Exit(1)
+
+
+def _resolve_json_path(
+    _the_installation,
+    json_path: str | None,
+    preferred_username: str | None,
+    email: str | None,
+) -> str | None:
+    """Resolve and validate the JSONPath for an ACL entry.
+
+    Collapses the '--preferred-username' / '--email' claim shortcuts
+    into the canonical 'token_field_json_path' form, then validates
+    the result via 'authz_package.validate_json_path'.
+
+    The loaded installation is taken as a required positional argument
+    -- its presence at the call site enforces the ordering constraint
+    that the installation must be loaded (and any meta-config-defined
+    JSONPath filter functions thereby registered) before compilation.
+    '_the_installation' is not otherwise consumed here; the leading
+    underscore signals that to readers (and to ruff).
+    """
+    if preferred_username is not None:
+        json_path = authz_package.token_field_json_path(
+            "preferred_username", preferred_username
+        )
+    elif email is not None:
+        json_path = authz_package.token_field_json_path("email", email)
+
+    if json_path is None:
+        return None
+
+    try:
+        authz_package.validate_json_path(json_path)
+    except authz_package.InvalidJSONPath as exc:
+        the_console.rule("Invalid JSONPath")
+        the_console.print(str(exc))
+        raise typer.Exit(1) from exc
+
+    return json_path
+
+
+def _check_acl_entry_args(
+    installation_path: pathlib.Path,
+    room_id: str,
+    allow: bool,
+    deny: bool,
+    everyone: bool,
+    authenticated: bool,
+    json_path: str | None,
+    preferred_username: str | None,
+    email: str | None,
+    command: str,
+) -> tuple[str, authz_package.AllowDeny, str | None]:
+    """Run the validation prolog shared by add/delete-acl-entry.
+
+    Loads the installation, checks the room id is configured, validates
+    the '--allow'/'--deny' and discriminator selections, resolves and
+    validates the JSONPath, and rejects a RAM-based authorization DB.
+
+    Returns '(dburi, allow_deny, json_path)' -- the values both commands
+    need to perform their database update.
+
+    Raises 'typer.Exit(1)' on any validation failure.
+    """
+    the_installation = cli_util.get_installation(installation_path)
+    _check_room_id(the_installation, room_id)
+
+    allow_deny = _resolve_allow_deny(allow, deny)
+    _check_discriminator(
+        everyone, authenticated, json_path, preferred_username, email
+    )
+    json_path = _resolve_json_path(
+        the_installation, json_path, preferred_username, email
+    )
+
+    dburi = the_installation.authorization_dburi_sync
+    cli_util._check_ram_dburi(dburi, command)
+
+    return dburi, allow_deny, json_path
 
 
 @app.command("add-acl-entry")
@@ -630,62 +761,18 @@ def add_acl_entry(
     replaced by the new entry. Entries with different discriminators
     are left untouched.
     """
-    if allow == deny:
-        the_console.rule("Exactly one of '--allow' or '--deny' required")
-        flags_given = [
-            name for name, v in (("--allow", allow), ("--deny", deny)) if v
-        ]
-        the_console.print(
-            "Pass exactly one of '--allow' or '--deny'. "
-            f"Got: {flags_given or ['(none)']}.",
-        )
-        raise typer.Exit(1)
-
-    if allow:
-        allow_deny = authz_package.AllowDeny.ALLOW
-    else:
-        allow_deny = authz_package.AllowDeny.DENY
-
-    selected = [
-        name
-        for name, present in (
-            ("--everyone", everyone),
-            ("--authenticated", authenticated),
-            ("--json-path", json_path is not None),
-            ("--preferred-username", preferred_username is not None),
-            ("--email", email is not None),
-        )
-        if present
-    ]
-    if len(selected) != 1:
-        the_console.rule("Exactly one discriminator required")
-        the_console.print(
-            "Pass exactly one of '--everyone', '--authenticated', "
-            "'--json-path', '--preferred-username', or '--email'. "
-            f"Got: {selected or ['(none)']}.",
-        )
-        raise typer.Exit(1)
-
-    if preferred_username is not None:
-        json_path = authz_package.token_field_json_path(
-            "preferred_username", preferred_username
-        )
-    elif email is not None:
-        json_path = authz_package.token_field_json_path("email", email)
-
-    if json_path is not None:
-        try:
-            authz_package.validate_json_path(json_path)
-        except authz_package.InvalidJSONPath as exc:
-            the_console.rule("Invalid JSONPath")
-            the_console.print(str(exc))
-            raise typer.Exit(1) from exc
-
-    the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_sync
-
-    cli_util._check_ram_dburi(dburi, "room-authz add-acl-entry")
-    _check_room_id(the_installation, room_id)
+    dburi, allow_deny, json_path = _check_acl_entry_args(
+        installation_path,
+        room_id,
+        allow,
+        deny,
+        everyone,
+        authenticated,
+        json_path,
+        preferred_username,
+        email,
+        "room-authz add-acl-entry",
+    )
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
@@ -787,54 +874,18 @@ def delete_acl_entry(
     The RoomPolicy row is preserved; only matching ACL entries
     are removed.
     """
-    if allow == deny:
-        the_console.rule("Exactly one of '--allow' or '--deny' required")
-        flags_given = [
-            name for name, v in (("--allow", allow), ("--deny", deny)) if v
-        ]
-        the_console.print(
-            "Pass exactly one of '--allow' or '--deny'. "
-            f"Got: {flags_given or ['(none)']}.",
-        )
-        raise typer.Exit(1)
-
-    if allow:
-        allow_deny = authz_package.AllowDeny.ALLOW
-    else:
-        allow_deny = authz_package.AllowDeny.DENY
-
-    selected = [
-        name
-        for name, present in (
-            ("--everyone", everyone),
-            ("--authenticated", authenticated),
-            ("--json-path", json_path is not None),
-            ("--preferred-username", preferred_username is not None),
-            ("--email", email is not None),
-        )
-        if present
-    ]
-    if len(selected) != 1:
-        the_console.rule("Exactly one discriminator required")
-        the_console.print(
-            "Pass exactly one of '--everyone', '--authenticated', "
-            "'--json-path', '--preferred-username', or '--email'. "
-            f"Got: {selected or ['(none)']}.",
-        )
-        raise typer.Exit(1)
-
-    if preferred_username is not None:
-        json_path = authz_package.token_field_json_path(
-            "preferred_username", preferred_username
-        )
-    elif email is not None:
-        json_path = authz_package.token_field_json_path("email", email)
-
-    the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_sync
-
-    cli_util._check_ram_dburi(dburi, "room-authz delete-acl-entry")
-    _check_room_id(the_installation, room_id)
+    dburi, allow_deny, json_path = _check_acl_entry_args(
+        installation_path,
+        room_id,
+        allow,
+        deny,
+        everyone,
+        authenticated,
+        json_path,
+        preferred_username,
+        email,
+        "room-authz delete-acl-entry",
+    )
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
@@ -880,6 +931,9 @@ def delete_acl_entry(
         session.commit()
 
     _dump(ctx, session, room_id)
+
+
+# Deprecated and hidden BBB commands.
 
 
 @app.command("add-user", hidden=True, deprecated=True)

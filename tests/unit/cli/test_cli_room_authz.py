@@ -436,6 +436,281 @@ def test__effective_room_id(room_id, model, expected):
     assert cli_room_authz._effective_room_id(room_id, model) == expected
 
 
+@pytest.mark.parametrize(
+    "w_allow, w_deny, exp_allow_deny",
+    [
+        (True, False, authz_package.AllowDeny.ALLOW),
+        (False, True, authz_package.AllowDeny.DENY),
+    ],
+)
+def test__resolve_allow_deny_returns_enum(w_allow, w_deny, exp_allow_deny):
+    found = cli_room_authz._resolve_allow_deny(w_allow, w_deny)
+
+    assert found is exp_allow_deny
+
+
+@pytest.mark.parametrize(
+    "w_allow, w_deny, exp_flags_given",
+    [
+        # Neither set: the error message reports '(none)'.
+        (False, False, ["(none)"]),
+        # Both set: the error message lists both flag names.
+        (True, True, ["--allow", "--deny"]),
+    ],
+)
+@mock.patch("soliplex.cli.room_authz.the_console")
+def test__resolve_allow_deny_mutex_violation(
+    the_console,
+    w_allow,
+    w_deny,
+    exp_flags_given,
+):
+    with pytest.raises(typer.Exit) as excinfo:
+        cli_room_authz._resolve_allow_deny(w_allow, w_deny)
+
+    (return_code,) = excinfo.value.args
+    assert return_code == 1
+
+    the_console.rule.assert_called_once_with(
+        "Exactly one of '--allow' or '--deny' required",
+    )
+    the_console.print.assert_called_once_with(
+        f"Pass exactly one of '--allow' or '--deny'. Got: {exp_flags_given}.",
+    )
+
+
+@pytest.mark.parametrize(
+    "w_kwargs",
+    [
+        # Exactly one set: each branch in turn.
+        {"everyone": True},
+        {"authenticated": True},
+        {"json_path": "$.foo"},
+        {"preferred_username": "alice"},
+        {"email": "alice@example.com"},
+    ],
+)
+@mock.patch("soliplex.cli.room_authz.the_console")
+def test__check_discriminator_accepts_exactly_one(the_console, w_kwargs):
+    kwargs = {
+        "everyone": False,
+        "authenticated": False,
+        "json_path": None,
+        "preferred_username": None,
+        "email": None,
+        **w_kwargs,
+    }
+
+    cli_room_authz._check_discriminator(**kwargs)
+
+    the_console.rule.assert_not_called()
+    the_console.print.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_kwargs, exp_selected",
+    [
+        # None set -> error message reports '(none)'.
+        ({}, ["(none)"]),
+        # Two boolean flags collide.
+        (
+            {"everyone": True, "authenticated": True},
+            ["--everyone", "--authenticated"],
+        ),
+        # A boolean flag collides with a value-bearing option.
+        (
+            {"everyone": True, "json_path": "$.foo"},
+            ["--everyone", "--json-path"],
+        ),
+        # Two value-bearing options collide.
+        (
+            {"preferred_username": "alice", "email": "alice@example.com"},
+            ["--preferred-username", "--email"],
+        ),
+        # All five set.
+        (
+            {
+                "everyone": True,
+                "authenticated": True,
+                "json_path": "$.foo",
+                "preferred_username": "alice",
+                "email": "alice@example.com",
+            },
+            [
+                "--everyone",
+                "--authenticated",
+                "--json-path",
+                "--preferred-username",
+                "--email",
+            ],
+        ),
+    ],
+)
+@mock.patch("soliplex.cli.room_authz.the_console")
+def test__check_discriminator_rejects_other_arities(
+    the_console,
+    w_kwargs,
+    exp_selected,
+):
+    kwargs = {
+        "everyone": False,
+        "authenticated": False,
+        "json_path": None,
+        "preferred_username": None,
+        "email": None,
+        **w_kwargs,
+    }
+
+    with pytest.raises(typer.Exit) as excinfo:
+        cli_room_authz._check_discriminator(**kwargs)
+
+    (return_code,) = excinfo.value.args
+    assert return_code == 1
+
+    the_console.rule.assert_called_once_with(
+        "Exactly one discriminator required",
+    )
+    the_console.print.assert_called_once_with(
+        "Pass exactly one of '--everyone', '--authenticated', "
+        "'--json-path', '--preferred-username', or '--email'. "
+        f"Got: {exp_selected}.",
+    )
+
+
+@pytest.mark.parametrize(
+    "w_json_path, w_preferred_username, w_email, exp",
+    [
+        # No claim shortcut, no json_path -> None passes through.
+        (None, None, None, None),
+        # A literal json_path passes through unchanged.
+        ("$.foo", None, None, "$.foo"),
+        # 'preferred_username' is translated to the canonical form.
+        (
+            None,
+            "alice",
+            None,
+            '$[?$.preferred_username == "alice"]',
+        ),
+        # 'email' is translated to the canonical form.
+        (
+            None,
+            None,
+            "alice@example.com",
+            '$[?$.email == "alice@example.com"]',
+        ),
+        # 'preferred_username' takes precedence over a literal json_path
+        # (the caller should have ensured exclusivity already, but the
+        # helper is documented to prefer the claim shortcut).
+        ("$.ignored", "alice", None, '$[?$.preferred_username == "alice"]'),
+        # ... and over 'email' for the same reason.
+        (
+            None,
+            "alice",
+            "alice@example.com",
+            '$[?$.preferred_username == "alice"]',
+        ),
+    ],
+)
+def test__resolve_json_path(
+    w_json_path,
+    w_preferred_username,
+    w_email,
+    exp,
+):
+    # The first positional arg stands in for a loaded installation;
+    # its only role is to enforce the call ordering at the call site.
+    found = cli_room_authz._resolve_json_path(
+        mock.sentinel.the_installation,
+        w_json_path,
+        w_preferred_username,
+        w_email,
+    )
+
+    assert found == exp
+
+
+@mock.patch("soliplex.cli.room_authz.the_console")
+def test__resolve_json_path_invalid_raises(the_console):
+    bogus = "$[?this is not a query]"
+
+    with pytest.raises(typer.Exit) as excinfo:
+        cli_room_authz._resolve_json_path(
+            mock.sentinel.the_installation, bogus, None, None
+        )
+
+    (return_code,) = excinfo.value.args
+    assert return_code == 1
+
+    the_console.rule.assert_called_once_with("Invalid JSONPath")
+    (print_args, _) = the_console.print.call_args
+    (printed,) = print_args
+    assert bogus in printed
+
+
+def test__resolve_json_path_w_meta_config_filter_function(
+    patched_jsonpath_functions,
+):
+    # Regression test for soliplex/soliplex#1017: a JSONPath query that
+    # uses a filter function registered into the shared environment
+    # (as 'InstallationConfigMeta.__post_init__' does for every
+    # 'meta.jsonpath_functions' entry) must validate successfully when
+    # '_resolve_json_path' runs after the installation has been loaded.
+    def filter_func(value):  # pragma: NO COVER (registered, not called)
+        return value
+
+    json_path = "$[?filter_func($.email)]"
+
+    # Sanity check: without the registration, the bare query fails to
+    # compile (and would fall through to 'typer.Exit(1)').
+    with pytest.raises(authz_package.InvalidJSONPath):
+        authz_package.validate_json_path(json_path)
+
+    authz_package.register_jsonpath_function("filter_func", filter_func)
+
+    found = cli_room_authz._resolve_json_path(
+        mock.sentinel.the_installation,
+        json_path,
+        None,
+        None,
+    )
+
+    assert found == json_path
+    assert patched_jsonpath_functions["filter_func"] is filter_func
+
+
+@mock.patch("soliplex.cli.room_authz.cli_util._check_ram_dburi")
+@mock.patch("soliplex.cli.room_authz.cli_util.get_installation")
+def test__check_acl_entry_args(get_installation, _check_ram_dburi):
+    the_installation = get_installation.return_value
+    the_installation._config.room_configs = {"chat": mock.Mock()}
+    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
+
+    found = cli_room_authz._check_acl_entry_args(
+        mock.sentinel.installation_path,
+        "chat",
+        allow=True,
+        deny=False,
+        everyone=False,
+        authenticated=False,
+        json_path=None,
+        preferred_username="alice",
+        email=None,
+        command="room-authz add-acl-entry",
+    )
+
+    assert found == (
+        "sqlite:///fake.sqlite",
+        authz_package.AllowDeny.ALLOW,
+        '$[?$.preferred_username == "alice"]',
+    )
+
+    get_installation.assert_called_once_with(mock.sentinel.installation_path)
+    _check_ram_dburi.assert_called_once_with(
+        "sqlite:///fake.sqlite",
+        "room-authz add-acl-entry",
+    )
+
+
 # _human_dump_room_policy: ui only
 # _dump_room_policy: ui only
 # show_room_authz: command
