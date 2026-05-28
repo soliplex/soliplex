@@ -234,18 +234,29 @@ below for output details and JSON-error shapes.
    has a RAG database. Each LanceDB is opened and a live document
    count is issued (so this pass requires read access to the RAG
    files and may be slow against many large databases).
-6. **Completions** — every completion endpoint is listed with its
+6. **Admin users** — every `AdminUser.json_path` is listed; any that
+   no longer compile against the currently-loaded JSONPath
+   environment (e.g. because the meta-config filter function they
+   referenced has been removed) are reported. (See
+   [`audit admin-users`](#audit-admin-users) for the full output and
+   JSON shape.)
+7. **Room authorization** — configured rooms are bucketed by their
+   `RoomPolicy` state (default / public / private), stale policy rows
+   are surfaced, and any `ACLEntry.json_path` that no longer compiles
+   is reported. (See [`audit room-authz`](#audit-room-authz) for the
+   full output and JSON shape.)
+8. **Completions** — every completion endpoint is listed with its
    name; runtime-model failures are flagged with `ERROR:`.
-7. **Quizzes** — every `*.json` question file under each configured
+9. **Quizzes** — every `*.json` question file under each configured
    quizzes path loads and parses.
-8. **Skills** — every configured `skill_config` is checked for
-   load-time validation errors, and every skill found under each
-   configured filesystem skills path is run through the full
-   `skills_ref` validator.
-9. **Python logging** — if a `logging_config_file` is configured, it
-   parses as YAML and the logging headers / claims maps are printed.
-10. **Logfire** — the Logfire config (if any) is printed for review.
-11. **Ollama** — for each Ollama server URL referenced by the
+10. **Skills** — every configured `skill_config` is checked for
+    load-time validation errors, and every skill found under each
+    configured filesystem skills path is run through the full
+    `skills_ref` validator.
+11. **Python logging** — if a `logging_config_file` is configured, it
+    parses as YAML and the logging headers / claims maps are printed.
+12. **Logfire** — the Logfire config (if any) is printed for review.
+13. **Ollama** — for each Ollama server URL referenced by the
     installation, the available-models list is fetched and compared
     against the models the installation requires. Unreachable servers
     and missing models are flagged. (See [`audit ollama`](#audit-ollama)
@@ -680,11 +691,81 @@ Just the room IDs and names, skipping the RAG detail:
 soliplex-cli audit rooms example/installation.yaml | grep '^- \['
 ```
 
+### `audit admin-users`
+
+List every admin user stored in the installation's authorization
+database, and report any `AdminUser.json_path` queries that no longer
+compile against the currently-loaded JSONPath environment.
+
+```bash
+soliplex-cli audit [OPTIONS] admin-users [INSTALLATION_CONFIG_PATH]
+```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+Two blocks are printed:
+
+- **Admin users (N)** — one line per stored admin row. Email-keyed and
+  `preferred_username`-keyed admins (the canonical
+  `$[?$.<field> == "..."]` form) are surfaced back as `<field>=<value>`;
+  any other query is shown as `json_path=<query>` verbatim. `(none)` if
+  the table is empty.
+- **Admin users with invalid JSONPath** — one line per row whose stored
+  `json_path` fails to compile, showing the raw query and the
+  compiler's error. An entry typically lands here when it was authored
+  under a meta-config that registered filter functions which are no
+  longer present. Use
+  [`admin-users delete --allow-invalid-json-path`](#admin-users-delete)
+  to remove such an entry. `(none)` if every stored row validates.
+
+When the installation's `authorization_dburi` is the in-memory
+default (`sqlite://`), no admin rows are persisted; both blocks read
+as `(none)`.
+
+#### Exit Status
+
+- `0` when every stored `AdminUser.json_path` validates.
+- `1` when at least one row fails to validate. In `-q` / `--quiet`
+  mode, the errors are emitted to stdout as JSON of the form:
+
+  ```json
+  {
+    "admin_users": {
+      "invalid_json_paths": [["<json_path>", "<error>"], "..."]
+    }
+  }
+  ```
+
+#### Examples
+
+Inspect admin-user state for the example installation:
+
+```bash
+soliplex-cli audit admin-users example/installation.yaml
+```
+
+CI-friendly check that no admin entries have stale JSONPath:
+
+```bash
+soliplex-cli audit -q admin-users example/installation.yaml
+```
+
 ### `audit room-authz`
 
-Bucket the configured rooms by their authorization state, and surface
-any stale `RoomPolicy` rows left behind in the authorization database
-by past room renames or removals.
+Bucket the configured rooms by their authorization state, surface any
+stale `RoomPolicy` rows left behind in the authorization database by
+past room renames or removals, and report any `ACLEntry.json_path`
+queries that no longer compile against the currently-loaded JSONPath
+environment.
 
 ```bash
 soliplex-cli audit [OPTIONS] room-authz [INSTALLATION_CONFIG_PATH]
@@ -701,7 +782,7 @@ See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Output
 
-Four buckets are printed (each a bulleted list of `room_id`s, or
+Four state buckets are printed (each a bulleted list of `room_id`s, or
 `(none)` when empty):
 
 - **Default** — configured rooms with no `RoomPolicy` row in the
@@ -720,18 +801,42 @@ Four buckets are printed (each a bulleted list of `room_id`s, or
   [`room-authz show --allow-stale`](#room-authz-show) to inspect a
   specific stale policy.
 
+A fifth block lists any ACL entries whose stored `json_path` fails to
+compile:
+
+- **ACL entries with invalid JSONPath** — for each affected room, one
+  line per offending entry showing the raw `json_path` and the
+  compiler's error. An entry typically lands here when it was authored
+  under a meta-config that registered filter functions which are no
+  longer present. Use
+  [`room-authz delete-acl-entry --allow-invalid-json-path`](#room-authz-delete-acl-entry)
+  to remove such an entry.
+
 When the installation's `authorization_dburi` is the in-memory
 default (`sqlite://`), every configured room falls into the
-**Default** bucket and the other three buckets are empty.
+**Default** bucket, the other three state buckets are empty, and no
+ACL rows are persisted so the invalid-JSONPath block is empty.
 
 #### Exit Status
 
-- `0` when the **Stale** bucket is empty.
-- `1` when one or more stale rows are detected, regardless of how
-  the configured rooms are distributed across the other three
-  buckets. In `-q` / `--quiet` mode, the stale list is emitted to
-  stdout as JSON of the form
-  `{"room_authz": {"stale_rooms": ["<room_id>", …]}}`.
+- `0` when the **Stale** bucket is empty and no ACL `json_path` fails
+  to compile.
+- `1` when at least one stale row is detected, or at least one
+  `ACLEntry.json_path` fails to validate. In `-q` / `--quiet` mode, the
+  errors are emitted to stdout as JSON of the form:
+
+  ```json
+  {
+    "room_authz": {
+      "stale_rooms": ["<room_id>", "..."],
+      "invalid_acls": {
+        "<room_id>": [["<json_path>", "<error>"], "..."]
+      }
+    }
+  }
+  ```
+
+  Either sub-key may be absent if its corresponding bucket is empty.
 
 #### Examples
 
@@ -1173,7 +1278,7 @@ YAML). When the installation uses the default in-memory SQLite DB
 that the operation would be a no-op, and exits with status `1` without
 touching the database. There is no override.
 
-All three commands share the following conventions:
+All six commands share the following conventions:
 
 - Positional argument `INSTALLATION_CONFIG_PATH` — path to the
   installation configuration. May be a YAML file or a directory
@@ -1207,8 +1312,13 @@ All three commands share the following conventions:
   ```
 
 - Exit status is `0` on success, or `1` when the RAM-DB guard fires
-  (or, for [`admin-users add`](#admin-users-add), when the discriminator
-  selection is invalid or the resolved entry is already an admin).
+  or any per-command precondition fails: for
+  [`admin-users add`](#admin-users-add), when the discriminator
+  selection is invalid or the resolved entry is already an admin; for
+  [`admin-users delete`](#admin-users-delete), when the discriminator
+  selection is invalid or no admin matches the resolved query; for
+  [`admin-users from-yaml`](#admin-users-from-yaml), when an entry
+  fails its discriminator check.
 
 ### `admin-users list`
 
@@ -1269,9 +1379,11 @@ claim (e.g. group membership).
   `preferred_username` claim. Mutually exclusive with `EMAIL` and
   `--json-path`.
 - `--json-path QUERY` — grant admin to any user token matched by this
-  RFC 9535 JSONPath query. The query is validated; a malformed query is
-  reported and the command exits non-zero. Mutually exclusive with
-  `EMAIL` and `--preferred-username`.
+  RFC 9535 JSONPath query. The query is validated against the
+  currently-loaded JSONPath environment (so meta-config-registered
+  filter functions are usable); a malformed query is reported and the
+  command exits non-zero. Mutually exclusive with `EMAIL` and
+  `--preferred-username`.
 
 #### Behavior Notes
 
@@ -1304,6 +1416,70 @@ soliplex-cli admin-users add example/installation.yaml \
   --json-path '$[?$.groups[?@ == "admins"]]'
 ```
 
+### `admin-users delete`
+
+Remove a single admin entry from the installation's authorization
+database and then dump the resulting list. The entry is identified by
+the same parameter shape as [`admin-users add`](#admin-users-add):
+exactly one of the positional `EMAIL`, `--preferred-username`, or
+`--json-path` discriminator. The match is by string equality against
+the stored `AdminUser.json_path`, so the same discriminator that
+inserted the entry will remove it.
+
+```bash
+soliplex-cli admin-users delete [OPTIONS] INSTALLATION_CONFIG_PATH [EMAIL]
+```
+
+#### Positional Arguments
+
+- `INSTALLATION_CONFIG_PATH` — as described above.
+- `EMAIL` — optional; the email address to revoke admin from. Mutually
+  exclusive with `--preferred-username` and `--json-path`.
+
+#### Options
+
+- `--preferred-username USERNAME` — revoke admin by OIDC
+  `preferred_username` claim. Mutually exclusive with `EMAIL` and
+  `--json-path`.
+- `--json-path QUERY` — revoke admin from any user token matched by
+  this RFC 9535 JSONPath query. By default the query is validated
+  against the currently-loaded JSONPath environment; pass
+  `--allow-invalid-json-path` to skip that check. Mutually exclusive
+  with `EMAIL` and `--preferred-username`.
+- `--allow-invalid-json-path` — skip JSONPath compile-validation of
+  `--json-path` so a stored entry whose `json_path` no longer compiles
+  (e.g. because the meta-config filter function it referenced has been
+  removed) can still be matched and removed. Use the value reported by
+  [`audit admin-users`](#audit-admin-users) verbatim.
+
+#### Behavior Notes
+
+- **Exactly one discriminator.** Same rule as
+  [`admin-users add`](#admin-users-add): supplying none — or more than
+  one — is reported and the command exits with status `1` without
+  touching the table.
+- **No match is an error.** If no admin row matches the resolved
+  query, the command prints `<descriptor> is not an admin` and exits
+  with status `1` so the operator can tell that the delete was a
+  no-op.
+
+#### Examples
+
+Revoke admin from a single user by email:
+
+```bash
+soliplex-cli admin-users delete example/installation.yaml alice@example.com
+```
+
+Remove a stale entry reported by `audit admin-users`:
+
+```bash
+soliplex-cli admin-users delete \
+  --json-path '$[?stale_filter_func($.email)]' \
+  --allow-invalid-json-path \
+  example/installation.yaml
+```
+
 ### `admin-users clear`
 
 Remove **every** row from the installation's admin-user table, then
@@ -1318,9 +1494,10 @@ soliplex-cli admin-users clear [OPTIONS] [INSTALLATION_CONFIG_PATH]
 
 - **Destructive.** This command is unconditional: there is no
   per-email filter, no confirmation prompt, and no backup is taken.
-  If you have multiple admins and only want to remove one, use your
-  database's own tooling — this CLI has no single-user-delete
-  subcommand.
+  Use [`admin-users delete`](#admin-users-delete) to remove a single
+  admin without wiping the rest, or
+  [`admin-users from-yaml`](#admin-users-from-yaml) to replace the
+  entire admin set atomically.
 - **Follow-up required.** After clearing, no user is an admin. If the
   installation relies on admin privileges for its bootstrap flow
   (e.g. to configure rooms or seed authorization), re-run
@@ -1339,6 +1516,112 @@ Wipe-and-seed — start from a known state, then add a single admin:
 ```bash
 soliplex-cli admin-users clear example/installation.yaml
 soliplex-cli admin-users add example/installation.yaml alice@example.com
+```
+
+### `admin-users as-yaml`
+
+Dump every admin user as a YAML document. This is the YAML counterpart
+of [`list`](#admin-users-list) (which emits JSON), and the inverse of
+[`from-yaml`](#admin-users-from-yaml).
+
+```bash
+soliplex-cli admin-users as-yaml [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Options
+
+- `--output`, `-o PATH` — write the YAML to this file path. If
+  omitted, the YAML is written to standard output with no console or
+  rule decoration, so it is safe to pipe or redirect.
+
+#### Behavior Notes
+
+- **Structured per-entry shape.** Each admin row dumps as a dict with
+  three discriminator slots (`preferred_username`, `email`,
+  `json_path`); exactly one is non-null. An admin stored as the
+  canonical `$[?$.email == "..."]` / `$[?$.preferred_username == "..."]`
+  query is surfaced back under `email` / `preferred_username`; any
+  other query is surfaced under `json_path`.
+- **Empty table is empty list.** An installation with no admin rows
+  dumps as `admin_users: []`.
+- **Invalid `json_path` entries are tolerated.** A row whose stored
+  query no longer compiles (e.g. it references a meta-config filter
+  function that's no longer registered) is still emitted verbatim
+  under `json_path`. The dump never raises.
+
+#### Examples
+
+Dump the admin set to standard output:
+
+```bash
+soliplex-cli admin-users as-yaml example/installation.yaml
+```
+
+Save the admin set to a file (e.g. to back it up or edit it):
+
+```bash
+soliplex-cli admin-users as-yaml \
+  --output admins.yaml \
+  example/installation.yaml
+```
+
+### `admin-users from-yaml`
+
+Replace every admin entry with the rows in a YAML document. The YAML
+uses the same shape produced by
+[`as-yaml`](#admin-users-as-yaml), so the two commands round-trip.
+
+```bash
+soliplex-cli admin-users from-yaml [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Options
+
+- `--input`, `-i PATH` — read the YAML from this file path. If
+  omitted, the YAML is read from standard input.
+
+#### Behavior Notes
+
+- **Whole-table replace.** All existing admin rows are deleted; the
+  rows in the YAML (if any) are then inserted.
+- **`null` (or empty list) removes every admin.** Importing a `null`
+  document, an empty `admin_users: []`, or a document with no
+  `admin_users` key truncates the table.
+- **Per-entry discriminator check.** Each entry must specify exactly
+  one of `email`, `preferred_username`, or `json_path`; a malformed
+  entry is reported and the command exits with status `1` without
+  touching the table.
+- **Stored `json_path` validity is enforced on insert.** The storage
+  layer's `@validates` hook rejects a `json_path` that no longer
+  compiles against the currently-loaded JSONPath environment. To
+  re-import a YAML that includes such a query, ensure the meta-config
+  that registered its filter functions is in place first.
+
+#### Examples
+
+Round-trip the admin set through a file (export, then re-import):
+
+```bash
+soliplex-cli admin-users as-yaml \
+  --output admins.yaml \
+  example/installation.yaml
+soliplex-cli admin-users from-yaml \
+  --input admins.yaml \
+  example/installation.yaml
+```
+
+Copy the admin set from one installation onto another:
+
+```bash
+soliplex-cli admin-users as-yaml example/installation.yaml \
+  | soliplex-cli admin-users from-yaml staging/installation.yaml
+```
+
+Wipe every admin via an empty document:
+
+```bash
+echo 'admin_users: []' \
+  | soliplex-cli admin-users from-yaml example/installation.yaml
 ```
 
 ## `room-authz`
@@ -1360,8 +1643,11 @@ more `ACLEntry` rows attached to it. A `RoomPolicy` has a
 `default_allow_deny` flag (default: `DENY`) that applies when no ACL
 entry matches the requesting user. An `ACLEntry` has an `allow_deny`
 flag plus a discriminator — one of `everyone`, `authenticated`,
-`preferred_username`, or `email` — used to decide whether it matches
-the caller's token. The first matching entry wins; if none match, the
+`preferred_username`, `email`, or a free-form `json_path` — used to
+decide whether it matches the caller's token. (The
+`preferred_username` and `email` discriminators are stored as
+equivalent `json_path` queries; the row layout has just `everyone`,
+`authenticated`, and `json_path` underneath.) The first matching entry wins; if none match, the
 policy's `default_allow_deny` is used.
 
 The critical distinction to keep in mind is between **no policy row**
@@ -1374,12 +1660,12 @@ and **an empty policy row**:
   through to `default_allow_deny`, which defaults to `DENY` — making
   the room effectively **private**.
 
-The six commands below create, inspect, edit, and populate these
+The eight commands below create, inspect, edit, and populate these
 rows.
 
 ### Shared Conventions
 
-All six commands share the following:
+All eight commands share the following:
 
 - Positional argument `INSTALLATION_CONFIG_PATH` — as documented in the
   [`admin-users`](#admin-users) section. If omitted, falls back to
@@ -1415,7 +1701,8 @@ All six commands share the following:
         "everyone": false,
         "authenticated": false,
         "preferred_username": null,
-        "email": "alice@example.com"
+        "email": "alice@example.com",
+        "json_path": null
       }
     ]
   }
@@ -1484,6 +1771,14 @@ $ soliplex-cli room-authz show example/installation.yaml search
 null
 ```
 
+Entries whose stored `json_path` no longer compiles (e.g. it references
+a meta-config filter function that's no longer registered) are still
+dumped — the value comes back under `json_path` verbatim, so the dump
+itself never raises. Use
+[`audit room-authz`](#audit-room-authz) to surface such entries, and
+[`delete-acl-entry --allow-invalid-json-path`](#room-authz-delete-acl-entry)
+to remove them.
+
 Inspect a stale policy for a room that has since been removed from
 the YAML — without `--allow-stale` this would exit with status `1`:
 
@@ -1513,14 +1808,23 @@ soliplex-cli room-authz as-yaml [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
 
 #### Behavior Notes
 
-- **Public-model shape.** The YAML mirrors the public `ACLEntry`
-  model, so an entry stored as a `preferred_username` or `email`
-  query is surfaced back under `preferred_username` / `email` (with
-  `json_path: null`), and a general-purpose query is surfaced under
-  `json_path`. The document re-loads cleanly via
-  [`from-yaml`](#room-authz-from-yaml).
+- **Per-entry shape mirrors `ACLEntry`.** Each entry dumps with the
+  same fields as the public `ACLEntry` model: an entry stored as a
+  `preferred_username` or `email` query is surfaced back under
+  `preferred_username` / `email` (with `json_path: null`), and a
+  general-purpose query is surfaced under `json_path`. The document
+  re-loads cleanly via [`from-yaml`](#room-authz-from-yaml).
 - **No policy dumps as `null`.** A room with no `RoomPolicy` row dumps
   as a `null` document.
+- **Invalid `json_path` entries are tolerated.** The YAML is built
+  directly from the stored rows rather than via the pydantic model,
+  so an entry whose query no longer compiles (e.g. it references a
+  meta-config filter function that's no longer registered) is still
+  emitted verbatim under `json_path`. The dump never raises. Such an
+  entry will not survive a [`from-yaml`](#room-authz-from-yaml)
+  re-import unless the meta-config that registered its filter
+  functions is in place — the storage layer's `@validates` hook
+  rejects it on insert.
 
 #### Exit Status
 
@@ -1800,7 +2104,10 @@ Exactly one of (the discriminator — what the entry matches on):
 - `--json-path TEXT` — matches when the [RFC 9535][rfc9535] JSONPath
   query `TEXT` selects at least one node from the caller's token.
   This is the underlying claim discriminator; the two options below
-  are convenience aliases for the common equality case.
+  are convenience aliases for the common equality case. The query is
+  validated against the currently-loaded JSONPath environment (so
+  meta-config-registered filter functions are usable); a malformed
+  query is reported and the command exits non-zero.
 - `--preferred-username TEXT` — convenience alias matching a caller
   whose OIDC `preferred_username` claim equals `TEXT`. Stored as the
   equivalent `--json-path` query `$[?$.preferred_username == "TEXT"]`.
@@ -1926,6 +2233,16 @@ Exactly one of (the discriminator):
 - `--email TEXT` — convenience alias matching the entry stored as the
   equivalent `--json-path` query `$[?$.email == "TEXT"]`.
 
+Optional:
+
+- `--allow-invalid-json-path` — skip JSONPath compile-validation of
+  `--json-path` so a stored entry whose `json_path` no longer compiles
+  (e.g. because the meta-config filter function it referenced has been
+  removed) can still be matched and removed. Use the value reported by
+  [`audit room-authz`](#audit-room-authz) verbatim. Has no effect with
+  any other discriminator (the canonical `preferred_username` / `email`
+  forms always validate).
+
 #### Behavior Notes
 
 - **Exact match on (allow/deny, discriminator).** An entry with the
@@ -1975,6 +2292,15 @@ to widen access while keeping the policy private:
 ```bash
 soliplex-cli room-authz delete-acl-entry \
   --allow --authenticated \
+  example/installation.yaml chat
+```
+
+Remove a stale ACL entry reported by `audit room-authz`:
+
+```bash
+soliplex-cli room-authz delete-acl-entry \
+  --allow --json-path '$[?stale_filter_func($.email)]' \
+  --allow-invalid-json-path \
   example/installation.yaml chat
 ```
 
