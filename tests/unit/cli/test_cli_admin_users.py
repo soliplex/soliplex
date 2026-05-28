@@ -4,6 +4,7 @@ from unittest import mock
 
 import pytest
 import typer
+import yaml
 
 from soliplex import authz as authz_package
 from soliplex.cli import admin_users as cli_admin_users
@@ -244,3 +245,226 @@ def test__dump(
     else:
         _dump_admin_users.assert_called_once_with(session)
         _human_dump_admin_users.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_json_path, exp",
+    [
+        # Stored email-shortcut: surfaced back as 'email'.
+        (
+            authz_package.token_field_json_path("email", "alice@example.com"),
+            {
+                "preferred_username": None,
+                "email": "alice@example.com",
+                "json_path": None,
+            },
+        ),
+        # Stored preferred_username-shortcut.
+        (
+            authz_package.token_field_json_path("preferred_username", "bob"),
+            {
+                "preferred_username": "bob",
+                "email": None,
+                "json_path": None,
+            },
+        ),
+        # General-purpose JSONPath: surface as 'json_path' verbatim.
+        (
+            '$[?$.role == "admin"]',
+            {
+                "preferred_username": None,
+                "email": None,
+                "json_path": '$[?$.role == "admin"]',
+            },
+        ),
+        # Canonical-form-but-for-some-other-field: surface as 'json_path'.
+        (
+            '$[?$.sub == "abc"]',
+            {
+                "preferred_username": None,
+                "email": None,
+                "json_path": '$[?$.sub == "abc"]',
+            },
+        ),
+        # Invalid stored 'json_path': dumped verbatim, no validation.
+        (
+            "$[?stale_filter_func($.email)]",
+            {
+                "preferred_username": None,
+                "email": None,
+                "json_path": "$[?stale_filter_func($.email)]",
+            },
+        ),
+    ],
+)
+def test__admin_user_as_jsonable(w_json_path, exp):
+    assert cli_admin_users._admin_user_as_jsonable(w_json_path) == exp
+
+
+def test__admin_users_as_jsonable_empty():
+    assert cli_admin_users._admin_users_as_jsonable([]) == {"admin_users": []}
+
+
+def test__admin_users_as_jsonable_populated():
+    rows = [
+        mock.Mock(
+            json_path=authz_package.token_field_json_path(
+                "email", "alice@example.com"
+            )
+        ),
+        mock.Mock(
+            json_path=authz_package.token_field_json_path(
+                "preferred_username", "bob"
+            )
+        ),
+        mock.Mock(json_path="$[?stale_filter_func($.email)]"),
+    ]
+
+    found = cli_admin_users._admin_users_as_jsonable(rows)
+
+    assert found == {
+        "admin_users": [
+            {
+                "preferred_username": None,
+                "email": "alice@example.com",
+                "json_path": None,
+            },
+            {
+                "preferred_username": "bob",
+                "email": None,
+                "json_path": None,
+            },
+            {
+                "preferred_username": None,
+                "email": None,
+                "json_path": "$[?stale_filter_func($.email)]",
+            },
+        ],
+    }
+
+
+def test__admin_users_as_yaml_round_trips():
+    rows = [
+        mock.Mock(
+            json_path=authz_package.token_field_json_path(
+                "email", "alice@example.com"
+            )
+        ),
+    ]
+
+    yaml_text = cli_admin_users._admin_users_as_yaml(rows)
+
+    assert yaml.safe_load(yaml_text) == {
+        "admin_users": [
+            {
+                "preferred_username": None,
+                "email": "alice@example.com",
+                "json_path": None,
+            },
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "w_entry, exp",
+    [
+        # 'email' shortcut -> canonical query.
+        (
+            {
+                "preferred_username": None,
+                "email": "alice@example.com",
+                "json_path": None,
+            },
+            authz_package.token_field_json_path("email", "alice@example.com"),
+        ),
+        # 'preferred_username' shortcut -> canonical query.
+        (
+            {
+                "preferred_username": "bob",
+                "email": None,
+                "json_path": None,
+            },
+            authz_package.token_field_json_path("preferred_username", "bob"),
+        ),
+        # Literal 'json_path' passes through unchanged.
+        (
+            {
+                "preferred_username": None,
+                "email": None,
+                "json_path": '$[?$.role == "admin"]',
+            },
+            '$[?$.role == "admin"]',
+        ),
+    ],
+)
+def test__admin_user_from_jsonable(w_entry, exp):
+    assert cli_admin_users._admin_user_from_jsonable(w_entry) == exp
+
+
+@pytest.mark.parametrize(
+    "w_entry",
+    [
+        # Nothing specified.
+        {
+            "preferred_username": None,
+            "email": None,
+            "json_path": None,
+        },
+        # Multiple specified.
+        {
+            "preferred_username": "bob",
+            "email": "alice@example.com",
+            "json_path": None,
+        },
+    ],
+)
+@mock.patch("soliplex.cli.cli_util.the_console")
+def test__admin_user_from_jsonable_rejects_invalid(the_console, w_entry):
+    with pytest.raises(typer.Exit) as excinfo:
+        cli_admin_users._admin_user_from_jsonable(w_entry)
+
+    (return_code,) = excinfo.value.args
+    assert return_code == 1
+    the_console.rule.assert_called_once_with(
+        "Exactly one discriminator required",
+    )
+
+
+@pytest.mark.parametrize(
+    "w_data, exp",
+    [
+        # 'null' document -> empty list.
+        (None, []),
+        # Missing key -> empty list.
+        ({}, []),
+        # Empty list.
+        ({"admin_users": []}, []),
+        # Populated list.
+        (
+            {
+                "admin_users": [
+                    {
+                        "preferred_username": None,
+                        "email": "alice@example.com",
+                        "json_path": None,
+                    },
+                    {
+                        "preferred_username": "bob",
+                        "email": None,
+                        "json_path": None,
+                    },
+                ],
+            },
+            [
+                authz_package.token_field_json_path(
+                    "email", "alice@example.com"
+                ),
+                authz_package.token_field_json_path(
+                    "preferred_username", "bob"
+                ),
+            ],
+        ),
+    ],
+)
+def test__admin_users_from_jsonable(w_data, exp):
+    assert cli_admin_users._admin_users_from_jsonable(w_data) == exp
