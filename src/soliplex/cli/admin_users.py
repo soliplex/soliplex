@@ -56,48 +56,25 @@ def _admin_users_callback(
     ctx.obj = {"verbose": effective}
 
 
-def _resolve_admin_json_path(email, preferred_username, json_path) -> str:
-    """Resolve the JSONPath for an admin entry from the CLI flags.
+_ADMIN_DISCRIMINATORS_SUMMARY = (
+    "EMAIL, '--preferred-username', or '--json-path'"
+)
 
-    Exactly one discriminator must be supplied: the positional EMAIL
-    (shorthand for the common case), '--preferred-username', or
-    '--json-path'. 'email' / 'preferred_username' are stored as
-    equivalent JSONPath queries (see 'authz.token_field_json_path'),
-    mirroring how 'room-authz add-acl-entry' handles its discriminators.
-    Reports the problem and raises 'typer.Exit(1)' on a bad selection
-    or a malformed '--json-path'.
-    """
-    selected = [
-        name
-        for name, present in (
+
+def _check_admin_discriminator(
+    email: str | None,
+    preferred_username: str | None,
+    json_path: str | None,
+) -> None:
+    """Require exactly one of EMAIL / --preferred-username / --json-path."""
+    cli_util._check_exactly_one_discriminator(
+        [
             ("EMAIL", email is not None),
             ("--preferred-username", preferred_username is not None),
             ("--json-path", json_path is not None),
-        )
-        if present
-    ]
-    if len(selected) != 1:
-        the_console.rule("Exactly one discriminator required")
-        the_console.print(
-            "Pass exactly one of EMAIL, '--preferred-username', or "
-            f"'--json-path'. Got: {selected or ['(none)']}.",
-        )
-        raise typer.Exit(1)
-
-    if email is not None:
-        return authz_package.token_field_json_path("email", email)
-    if preferred_username is not None:
-        return authz_package.token_field_json_path(
-            "preferred_username", preferred_username
-        )
-
-    try:
-        authz_package.validate_json_path(json_path)
-    except authz_package.InvalidJSONPath as exc:
-        the_console.rule("Invalid JSONPath")
-        the_console.print(str(exc))
-        raise typer.Exit(1) from exc
-    return json_path
+        ],
+        _ADMIN_DISCRIMINATORS_SUMMARY,
+    )
 
 
 def _describe_admin(json_path) -> str:
@@ -256,13 +233,18 @@ def add_admin_user(
     command reports that and exits non-zero without inserting a
     duplicate row.
     """
-    resolved = _resolve_admin_json_path(
-        admin_user_email, preferred_username, json_path
+    the_installation = cli_util.get_installation(installation_path)
+
+    _check_admin_discriminator(admin_user_email, preferred_username, json_path)
+
+    resolved = cli_util._resolve_json_path(
+        the_installation,
+        json_path,
+        preferred_username,
+        admin_user_email,
     )
 
-    the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
-
     cli_util._check_ram_dburi(dburi, "admin-users add")
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)

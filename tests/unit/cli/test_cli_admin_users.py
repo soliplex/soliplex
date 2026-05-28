@@ -91,28 +91,20 @@ def test__check_existing_admin(the_console, w_exists):
 
 
 @pytest.mark.parametrize(
-    "w_email, w_pref, w_jp, exp",
+    "w_email, w_pref, w_jp",
     [
-        (
-            "alice@example.com",
-            None,
-            None,
-            authz_package.token_field_json_path("email", "alice@example.com"),
-        ),
-        (
-            None,
-            "bob",
-            None,
-            authz_package.token_field_json_path("preferred_username", "bob"),
-        ),
-        (None, None, '$[?$.role == "admin"]', '$[?$.role == "admin"]'),
+        # Exactly one set: each branch in turn.
+        ("alice@example.com", None, None),
+        (None, "bob", None),
+        (None, None, '$[?$.role == "admin"]'),
     ],
 )
 @mock.patch("soliplex.cli.admin_users.the_console")
-def test__resolve_admin_json_path(the_console, w_email, w_pref, w_jp, exp):
-    found = cli_admin_users._resolve_admin_json_path(w_email, w_pref, w_jp)
+def test__check_admin_discriminator_accepts_one(
+    the_console, w_email, w_pref, w_jp
+):
+    cli_admin_users._check_admin_discriminator(w_email, w_pref, w_jp)
 
-    assert found == exp
     the_console.rule.assert_not_called()
 
 
@@ -127,28 +119,18 @@ def test__resolve_admin_json_path(the_console, w_email, w_pref, w_jp, exp):
         ("alice@example.com", "bob", '$[?$.role == "admin"]'),
     ],
 )
-@mock.patch("soliplex.cli.admin_users.the_console")
-def test__resolve_admin_json_path_not_exactly_one(
+@mock.patch("soliplex.cli.cli_util.the_console")
+def test__check_admin_discriminator_rejects_other_arities(
     the_console, w_email, w_pref, w_jp
 ):
     with pytest.raises(typer.Exit) as excinfo:
-        cli_admin_users._resolve_admin_json_path(w_email, w_pref, w_jp)
+        cli_admin_users._check_admin_discriminator(w_email, w_pref, w_jp)
 
     (return_code,) = excinfo.value.args
     assert return_code == 1
     the_console.rule.assert_called_once_with(
         "Exactly one discriminator required",
     )
-
-
-@mock.patch("soliplex.cli.admin_users.the_console")
-def test__resolve_admin_json_path_invalid(the_console):
-    with pytest.raises(typer.Exit) as excinfo:
-        cli_admin_users._resolve_admin_json_path(None, None, "$[?(bogus")
-
-    (return_code,) = excinfo.value.args
-    assert return_code == 1
-    the_console.rule.assert_called_once_with("Invalid JSONPath")
 
 
 @pytest.mark.parametrize(
