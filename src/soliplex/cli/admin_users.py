@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import typing
 
 import typer
@@ -122,6 +123,48 @@ def _check_existing_admin(session, json_path):
     raise typer.Exit(1)
 
 
+def _check_admin_user_args(
+    installation_path: pathlib.Path,
+    admin_user_email: str | None,
+    preferred_username: str | None,
+    json_path: str | None,
+    command: str,
+    allow_invalid_json_path: bool = False,
+) -> tuple[str, str]:
+    """Run the validation prolog shared by 'admin-users' add/delete.
+
+    Loads the installation, validates the discriminator selection,
+    resolves and validates the JSONPath, and rejects a RAM-based
+    authorization DB.
+
+    Pass 'allow_invalid_json_path=True' to skip the JSONPath compile
+    check -- intended for 'admin-users delete --allow-invalid-json-path',
+    so a stored entry whose 'json_path' no longer compiles can still
+    be matched and removed.
+
+    Returns '(dburi, json_path)' -- the values both commands need to
+    perform their database update.
+
+    Raises 'typer.Exit(1)' on any validation failure.
+    """
+    the_installation = cli_util.get_installation(installation_path)
+
+    _check_admin_discriminator(admin_user_email, preferred_username, json_path)
+
+    resolved = cli_util._resolve_json_path(
+        the_installation,
+        json_path,
+        preferred_username,
+        admin_user_email,
+        allow_invalid=allow_invalid_json_path,
+    )
+
+    dburi = the_installation.authorization_dburi_sync
+    cli_util._check_ram_dburi(dburi, command)
+
+    return dburi, resolved
+
+
 def _dump(ctx, session):
     if ctx.obj and ctx.obj.get("verbose"):
         _human_dump_admin_users(session)
@@ -233,19 +276,13 @@ def add_admin_user(
     command reports that and exits non-zero without inserting a
     duplicate row.
     """
-    the_installation = cli_util.get_installation(installation_path)
-
-    _check_admin_discriminator(admin_user_email, preferred_username, json_path)
-
-    resolved = cli_util._resolve_json_path(
-        the_installation,
-        json_path,
-        preferred_username,
+    dburi, resolved = _check_admin_user_args(
+        installation_path,
         admin_user_email,
+        preferred_username,
+        json_path,
+        "admin-users add",
     )
-
-    dburi = the_installation.authorization_dburi_sync
-    cli_util._check_ram_dburi(dburi, "admin-users add")
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
@@ -253,6 +290,87 @@ def add_admin_user(
         _check_existing_admin(session, resolved)
         admin_user = authz_schema.AdminUser(json_path=resolved)
         session.add(admin_user)
+        session.commit()
+
+    _dump(ctx, session)
+
+
+@app.command("delete")
+def delete_admin_user(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+    admin_user_email: typing.Annotated[
+        str | None,
+        typer.Argument(
+            metavar="EMAIL",
+            help=(
+                "Email address to revoke admin from (the common case). "
+                "Mutually exclusive with '--preferred-username' / "
+                "'--json-path'."
+            ),
+        ),
+    ] = None,
+    preferred_username: str | None = typer.Option(
+        None,
+        "--preferred-username",
+        help="Revoke admin by OIDC preferred_username claim.",
+    ),
+    json_path: str | None = typer.Option(
+        None,
+        "--json-path",
+        help=(
+            "Revoke admin from any user token matched by this RFC 9535 "
+            "JSONPath query."
+        ),
+    ),
+    allow_invalid_json_path: bool = typer.Option(
+        False,
+        "--allow-invalid-json-path",
+        help=(
+            "Skip JSONPath compile-validation of '--json-path' so an "
+            "admin entry whose stored 'json_path' no longer compiles "
+            "(e.g. because the meta-config filter function it "
+            "referenced has been removed) can still be matched and "
+            "removed."
+        ),
+    ),
+):  # pragma NO COVER command
+    """Remove an admin user from the installation's authz database.
+
+    Exactly one discriminator must be supplied: the positional EMAIL
+    (shorthand for the common case), '--preferred-username', or
+    '--json-path'. The entry is matched by string equality against the
+    stored 'json_path'. If no admin entry matches the resolved
+    JSONPath, the command reports that and exits non-zero.
+    """
+    dburi, resolved = _check_admin_user_args(
+        installation_path,
+        admin_user_email,
+        preferred_username,
+        json_path,
+        "admin-users delete",
+        allow_invalid_json_path=allow_invalid_json_path,
+    )
+
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+
+    with session:
+        existing = (
+            session.query(
+                authz_schema.AdminUser,
+            )
+            .where(
+                authz_schema.AdminUser.json_path == resolved,
+            )
+            .first()
+        )
+
+        if existing is None:
+            the_console.rule(f"{_describe_admin(resolved)} is not an admin")
+            the_console.print("Nothing to do.")
+            raise typer.Exit(1)
+
+        session.delete(existing)
         session.commit()
 
     _dump(ctx, session)

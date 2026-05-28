@@ -133,6 +133,54 @@ def test__check_admin_discriminator_rejects_other_arities(
     )
 
 
+@mock.patch("soliplex.cli.admin_users.cli_util._check_ram_dburi")
+@mock.patch("soliplex.cli.admin_users.cli_util.get_installation")
+def test__check_admin_user_args(get_installation, _check_ram_dburi):
+    the_installation = get_installation.return_value
+    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
+
+    found = cli_admin_users._check_admin_user_args(
+        mock.sentinel.installation_path,
+        "alice@example.com",
+        None,
+        None,
+        "admin-users add",
+    )
+
+    assert found == (
+        "sqlite:///fake.sqlite",
+        '$[?$.email == "alice@example.com"]',
+    )
+
+    get_installation.assert_called_once_with(mock.sentinel.installation_path)
+    _check_ram_dburi.assert_called_once_with(
+        "sqlite:///fake.sqlite",
+        "admin-users add",
+    )
+
+
+@mock.patch("soliplex.cli.admin_users.cli_util._check_ram_dburi")
+@mock.patch("soliplex.cli.admin_users.cli_util.get_installation")
+def test__check_admin_user_args_allow_invalid_json_path(
+    get_installation, _check_ram_dburi
+):
+    the_installation = get_installation.return_value
+    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
+
+    bogus = "$[?stale_filter_func($.email)]"
+
+    found = cli_admin_users._check_admin_user_args(
+        mock.sentinel.installation_path,
+        None,
+        None,
+        bogus,
+        "admin-users delete",
+        allow_invalid_json_path=True,
+    )
+
+    assert found == ("sqlite:///fake.sqlite", bogus)
+
+
 @pytest.mark.parametrize(
     "w_json_path, exp_describe, exp_display",
     [
