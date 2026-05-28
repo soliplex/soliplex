@@ -662,6 +662,7 @@ def _resolve_json_path(
     json_path: str | None,
     preferred_username: str | None,
     email: str | None,
+    allow_invalid: bool = False,
 ) -> str | None:
     """Resolve and validate the JSONPath for an ACL entry.
 
@@ -675,6 +676,11 @@ def _resolve_json_path(
     JSONPath filter functions thereby registered) before compilation.
     '_the_installation' is not otherwise consumed here; the leading
     underscore signals that to readers (and to ruff).
+
+    Pass 'allow_invalid=True' to skip the compile check; this lets
+    'delete-acl-entry' match a stored entry whose 'json_path' no longer
+    compiles (e.g. because the meta-config filter function it referenced
+    has been removed).
     """
     if preferred_username is not None:
         json_path = authz_package.token_field_json_path(
@@ -683,8 +689,8 @@ def _resolve_json_path(
     elif email is not None:
         json_path = authz_package.token_field_json_path("email", email)
 
-    if json_path is None:
-        return None
+    if json_path is None or allow_invalid:
+        return json_path
 
     try:
         authz_package.validate_json_path(json_path)
@@ -707,12 +713,18 @@ def _check_acl_entry_args(
     preferred_username: str | None,
     email: str | None,
     command: str,
+    allow_invalid_json_path: bool = False,
 ) -> tuple[str, authz_package.AllowDeny, str | None]:
     """Run the validation prolog shared by add/delete-acl-entry.
 
     Loads the installation, checks the room id is configured, validates
     the '--allow'/'--deny' and discriminator selections, resolves and
     validates the JSONPath, and rejects a RAM-based authorization DB.
+
+    Pass 'allow_invalid_json_path=True' to skip the JSONPath compile
+    check -- intended for 'delete-acl-entry --allow-invalid-json-path',
+    so a stored entry whose 'json_path' no longer compiles can still
+    be matched and removed.
 
     Returns '(dburi, allow_deny, json_path)' -- the values both commands
     need to perform their database update.
@@ -727,7 +739,11 @@ def _check_acl_entry_args(
         everyone, authenticated, json_path, preferred_username, email
     )
     json_path = _resolve_json_path(
-        the_installation, json_path, preferred_username, email
+        the_installation,
+        json_path,
+        preferred_username,
+        email,
+        allow_invalid=allow_invalid_json_path,
     )
 
     dburi = the_installation.authorization_dburi_sync
@@ -894,6 +910,16 @@ def delete_acl_entry(
         "--email",
         help="Match an 'email' entry by claim value.",
     ),
+    allow_invalid_json_path: bool = typer.Option(
+        False,
+        "--allow-invalid-json-path",
+        help=(
+            "Skip JSONPath compile-validation of '--json-path' so an "
+            "entry whose stored 'json_path' no longer compiles (e.g. "
+            "because the meta-config filter function it referenced has "
+            "been removed) can still be matched and removed."
+        ),
+    ),
 ):  # pragma NO COVER command
     """Delete an ACL entry from a room's policy.
 
@@ -921,6 +947,7 @@ def delete_acl_entry(
         preferred_username,
         email,
         "room-authz delete-acl-entry",
+        allow_invalid_json_path=allow_invalid_json_path,
     )
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)

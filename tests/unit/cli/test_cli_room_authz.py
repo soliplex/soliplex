@@ -759,6 +759,20 @@ def test__resolve_json_path_invalid_raises(the_console):
     assert bogus in printed
 
 
+def test__resolve_json_path_allow_invalid_skips_validation():
+    bogus = "$[?stale_filter_func($.email)]"
+
+    found = cli_room_authz._resolve_json_path(
+        mock.sentinel.the_installation,
+        bogus,
+        None,
+        None,
+        allow_invalid=True,
+    )
+
+    assert found == bogus
+
+
 def test__resolve_json_path_w_meta_config_filter_function(
     patched_jsonpath_functions,
 ):
@@ -820,6 +834,39 @@ def test__check_acl_entry_args(get_installation, _check_ram_dburi):
     _check_ram_dburi.assert_called_once_with(
         "sqlite:///fake.sqlite",
         "room-authz add-acl-entry",
+    )
+
+
+@mock.patch("soliplex.cli.room_authz.cli_util._check_ram_dburi")
+@mock.patch("soliplex.cli.room_authz.cli_util.get_installation")
+def test__check_acl_entry_args_allow_invalid_json_path(
+    get_installation,
+    _check_ram_dburi,
+):
+    the_installation = get_installation.return_value
+    the_installation._config.room_configs = {"chat": mock.Mock()}
+    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
+
+    bogus = "$[?stale_filter_func($.email)]"
+
+    found = cli_room_authz._check_acl_entry_args(
+        mock.sentinel.installation_path,
+        "chat",
+        allow=False,
+        deny=True,
+        everyone=False,
+        authenticated=False,
+        json_path=bogus,
+        preferred_username=None,
+        email=None,
+        command="room-authz delete-acl-entry",
+        allow_invalid_json_path=True,
+    )
+
+    assert found == (
+        "sqlite:///fake.sqlite",
+        authz_package.AllowDeny.DENY,
+        bogus,
     )
 
 
