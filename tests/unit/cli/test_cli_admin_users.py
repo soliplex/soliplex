@@ -3,10 +3,12 @@ from __future__ import annotations
 from unittest import mock
 
 import pytest
+import sqlalchemy
 import typer
 import yaml
 
 from soliplex import authz as authz_package
+from soliplex.authz import schema as authz_schema
 from soliplex.cli import admin_users as cli_admin_users
 
 
@@ -468,3 +470,392 @@ def test__admin_user_from_jsonable_rejects_invalid(the_console, w_entry):
 )
 def test__admin_users_from_jsonable(w_data, exp):
     assert cli_admin_users._admin_users_from_jsonable(w_data) == exp
+
+
+# ---------------------------------------------------------------------------
+# Command-level tests.
+#
+# These drive the actual 'admin-users' subcommands through a Typer
+# 'CliRunner' against a throwaway copy of 'example/minimal.yaml' backed by
+# a scratch authorization database (see the 'scratch_installation' and
+# 'cli_runner' fixtures in 'tests/unit/cli/conftest.py'). Every active
+# command body is now exercised here rather than coverage-excluded; only
+# the two '_*_dump_admin_users' UI helpers stay '# pragma NO COVER UI ONLY'.
+# ---------------------------------------------------------------------------
+
+ALICE_EMAIL = "alice@example.com"
+ALICE_EMAIL_JP = authz_package.token_field_json_path("email", ALICE_EMAIL)
+BOB_PU_JP = authz_package.token_field_json_path("preferred_username", "bob")
+ROLE_JP = '$[?$.role == "admin"]'
+# A stored query that no longer compiles (e.g. it referenced a meta-config
+# filter function that has since been removed).
+STALE_JP = "$[?stale_filter_func($.email)]"
+
+
+def _seed_admins(scratch, *json_paths):
+    """Insert AdminUser rows straight into the scratch DB."""
+    session = scratch.session()
+    with session:
+        for json_path in json_paths:
+            session.add(authz_schema.AdminUser(json_path=json_path))
+        session.commit()
+    session.bind.dispose()
+
+
+def _seed_stale_admin(scratch, stale_json_path):
+    """Plant an admin whose stored 'json_path' no longer compiles.
+
+    The ORM's 'json_path' validator rejects a non-compiling query on
+    insert (and on any attribute-set), so the stale entry is created in
+    two steps: seed a normal admin carrying a *valid* placeholder query
+    through 'authz_schema.AdminUser', then rewrite its 'json_path' to the
+    non-compiling value with a raw UPDATE -- which does not run the
+    '@validates' hook. This reproduces the on-disk state left behind when
+    a meta-config filter function an entry referenced is removed, so
+    'delete --allow-invalid-json-path' can be exercised end-to-end.
+    """
+    _seed_admins(scratch, ALICE_EMAIL_JP)
+    session = scratch.session()
+    with session:
+        session.execute(
+            sqlalchemy.text(
+                "UPDATE admin_users SET json_path = :stale "
+                "WHERE json_path = :placeholder"
+            ),
+            {"stale": stale_json_path, "placeholder": ALICE_EMAIL_JP},
+        )
+        session.commit()
+    session.bind.dispose()
+
+
+def _read_admins(scratch):
+    """Read the stored admin 'json_path' values back as a set."""
+    session = scratch.session()
+    with session:
+        result = {
+            admin_user.json_path
+            for admin_user in session.query(authz_schema.AdminUser)
+        }
+    session.bind.dispose()
+    return result
+
+
+def _invoke(cli_runner, scratch, subcommand, *rest, **kwargs):
+    return cli_runner.invoke(
+        cli_admin_users.app,
+        [subcommand, str(scratch.path), *rest],
+        **kwargs,
+    )
+
+
+# -- list -------------------------------------------------------------------
+
+
+def test_list_empty(scratch_installation, cli_runner):
+    result = _invoke(cli_runner, scratch_installation, "list")
+
+    assert result.exit_code == 0
+    assert '"admin_users": []' in result.output
+
+
+def test_list_populated(scratch_installation, cli_runner):
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP, BOB_PU_JP)
+
+    result = _invoke(cli_runner, scratch_installation, "list")
+
+    assert result.exit_code == 0
+    # Email-keyed admins surface their email in the JSON dump.
+    assert ALICE_EMAIL in result.output
+
+
+# -- clear ------------------------------------------------------------------
+
+
+def test_clear_removes_all(scratch_installation, cli_runner):
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP, BOB_PU_JP)
+
+    result = _invoke(cli_runner, scratch_installation, "clear")
+
+    assert result.exit_code == 0
+    assert _read_admins(scratch_installation) == set()
+
+
+def test_clear_noop_when_empty(scratch_installation, cli_runner):
+    result = _invoke(cli_runner, scratch_installation, "clear")
+
+    assert result.exit_code == 0
+    assert _read_admins(scratch_installation) == set()
+
+
+# -- add --------------------------------------------------------------------
+
+
+def test_add_email(scratch_installation, cli_runner):
+    result = _invoke(cli_runner, scratch_installation, "add", ALICE_EMAIL)
+
+    assert result.exit_code == 0
+    assert _read_admins(scratch_installation) == {ALICE_EMAIL_JP}
+
+
+def test_add_preferred_username(scratch_installation, cli_runner):
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "add",
+        "--preferred-username",
+        "bob",
+    )
+
+    assert result.exit_code == 0
+    assert _read_admins(scratch_installation) == {BOB_PU_JP}
+
+
+def test_add_json_path(scratch_installation, cli_runner):
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "add",
+        "--json-path",
+        ROLE_JP,
+    )
+
+    assert result.exit_code == 0
+    assert _read_admins(scratch_installation) == {ROLE_JP}
+
+
+def test_add_duplicate_rejected(scratch_installation, cli_runner):
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP)
+
+    result = _invoke(cli_runner, scratch_installation, "add", ALICE_EMAIL)
+
+    assert result.exit_code == 1
+    # The pre-existing single row is left untouched (no duplicate inserted).
+    assert _read_admins(scratch_installation) == {ALICE_EMAIL_JP}
+
+
+# -- delete -----------------------------------------------------------------
+
+
+def test_delete_removes_matching(scratch_installation, cli_runner):
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP, BOB_PU_JP)
+
+    result = _invoke(cli_runner, scratch_installation, "delete", ALICE_EMAIL)
+
+    assert result.exit_code == 0
+    # Only the matched admin is removed; the other is preserved.
+    assert _read_admins(scratch_installation) == {BOB_PU_JP}
+
+
+def test_delete_no_match_errors(scratch_installation, cli_runner):
+    _seed_admins(scratch_installation, BOB_PU_JP)
+
+    result = _invoke(cli_runner, scratch_installation, "delete", ALICE_EMAIL)
+
+    assert result.exit_code == 1
+    # The non-matching admin is left in place.
+    assert _read_admins(scratch_installation) == {BOB_PU_JP}
+
+
+def test_delete_invalid_json_path_requires_flag(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_stale_admin(scratch_installation, STALE_JP)
+
+    # Without '--allow-invalid-json-path' the compile-validation rejects it.
+    rejected = _invoke(
+        cli_runner,
+        scratch_installation,
+        "delete",
+        "--json-path",
+        STALE_JP,
+    )
+    assert rejected.exit_code == 1
+    assert _read_admins(scratch_installation) == {STALE_JP}
+
+    # With the flag the stale entry can still be matched and removed.
+    allowed = _invoke(
+        cli_runner,
+        scratch_installation,
+        "delete",
+        "--json-path",
+        STALE_JP,
+        "--allow-invalid-json-path",
+    )
+    assert allowed.exit_code == 0
+    assert _read_admins(scratch_installation) == set()
+
+
+# -- as-yaml / from-yaml ----------------------------------------------------
+
+
+def test_as_yaml_empty_to_stdout(scratch_installation, cli_runner):
+    result = _invoke(cli_runner, scratch_installation, "as-yaml")
+
+    assert result.exit_code == 0
+    assert yaml.safe_load(result.output) == {"admin_users": []}
+
+
+def test_as_yaml_populated_to_stdout(scratch_installation, cli_runner):
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP)
+
+    result = _invoke(cli_runner, scratch_installation, "as-yaml")
+
+    assert result.exit_code == 0
+    assert yaml.safe_load(result.output) == {
+        "admin_users": [
+            {
+                "preferred_username": None,
+                "email": ALICE_EMAIL,
+                "json_path": None,
+            },
+        ],
+    }
+
+
+def test_as_yaml_to_file(scratch_installation, cli_runner, tmp_path):
+    _seed_admins(scratch_installation, BOB_PU_JP)
+    out = tmp_path / "admins.yaml"
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "as-yaml",
+        "-o",
+        str(out),
+    )
+
+    assert result.exit_code == 0
+    assert yaml.safe_load(out.read_text()) == {
+        "admin_users": [
+            {
+                "preferred_username": "bob",
+                "email": None,
+                "json_path": None,
+            },
+        ],
+    }
+
+
+def test_from_yaml_file_replaces(scratch_installation, cli_runner, tmp_path):
+    # A pre-existing admin is replaced wholesale by the document's entries.
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP)
+    doc = tmp_path / "admins.yaml"
+    doc.write_text(
+        yaml.safe_dump(
+            {
+                "admin_users": [
+                    {
+                        "preferred_username": "bob",
+                        "email": None,
+                        "json_path": None,
+                    },
+                    {
+                        "preferred_username": None,
+                        "email": None,
+                        "json_path": ROLE_JP,
+                    },
+                ],
+            },
+        )
+    )
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "from-yaml",
+        "-i",
+        str(doc),
+    )
+
+    assert result.exit_code == 0
+    assert _read_admins(scratch_installation) == {BOB_PU_JP, ROLE_JP}
+
+
+def test_from_yaml_stdin_populates(scratch_installation, cli_runner):
+    doc = yaml.safe_dump(
+        {
+            "admin_users": [
+                {
+                    "preferred_username": None,
+                    "email": ALICE_EMAIL,
+                    "json_path": None,
+                },
+            ],
+        },
+    )
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "from-yaml",
+        input=doc,
+    )
+
+    assert result.exit_code == 0
+    assert _read_admins(scratch_installation) == {ALICE_EMAIL_JP}
+
+
+def test_from_yaml_null_clears(scratch_installation, cli_runner):
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP, BOB_PU_JP)
+
+    # A 'null' document read from stdin removes every admin entry.
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "from-yaml",
+        input="null\n",
+    )
+
+    assert result.exit_code == 0
+    assert _read_admins(scratch_installation) == set()
+
+
+def test_as_yaml_clear_from_yaml_round_trip(
+    scratch_installation,
+    cli_runner,
+    tmp_path,
+):
+    # Build a mixed set of admins through the CLI: an email, a
+    # preferred_username, and a general-purpose JSONPath.
+    for add_args in (
+        ("add", ALICE_EMAIL),
+        ("add", "--preferred-username", "bob"),
+        ("add", "--json-path", ROLE_JP),
+    ):
+        assert (
+            _invoke(cli_runner, scratch_installation, *add_args).exit_code == 0
+        )
+
+    expected = {ALICE_EMAIL_JP, BOB_PU_JP, ROLE_JP}
+    assert _read_admins(scratch_installation) == expected
+
+    # Dump them to a file ...
+    dump = tmp_path / "admins.yaml"
+    assert (
+        _invoke(
+            cli_runner,
+            scratch_installation,
+            "as-yaml",
+            "-o",
+            str(dump),
+        ).exit_code
+        == 0
+    )
+
+    # ... wipe the database ...
+    assert _invoke(cli_runner, scratch_installation, "clear").exit_code == 0
+    assert _read_admins(scratch_installation) == set()
+
+    # ... and restore from the dump. Every admin comes back intact.
+    assert (
+        _invoke(
+            cli_runner,
+            scratch_installation,
+            "from-yaml",
+            "-i",
+            str(dump),
+        ).exit_code
+        == 0
+    )
+    assert _read_admins(scratch_installation) == expected
