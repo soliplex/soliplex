@@ -1,6 +1,6 @@
 # Documentation Skill
 
-Each Soliplex release publishes the full documentation as a filesystem
+Soliplex publishes its full documentation as a filesystem
 [Agent Skill](https://agentskills.io/), so any skills-compatible agent
 (Claude Code, Claude, and [many others](https://agentskills.io/clients))
 can answer questions about installing, configuring, and operating Soliplex
@@ -11,27 +11,55 @@ database, or GPU**. It is plain Markdown: a `SKILL.md` router plus a verbatim
 copy of this documentation under `references/`, which the agent reads on
 demand via progressive disclosure.
 
-## Getting the skill
+## How it is published
 
-The skill is attached to every [GitHub release](https://github.com/soliplex/soliplex/releases)
-as `soliplex-docs-skill.tar.gz` (and `soliplex-docs-skill.zip`). Download and
-unpack it wherever your agent discovers skills:
+Two kinds of build are published, both as
+[release](https://github.com/soliplex/soliplex/releases) assets named
+`soliplex-docs-skill.tar.gz` (and `.zip`):
 
-```bash
-# Example: install into a Claude Code skills directory
-mkdir -p ~/.claude/skills
-tar xzf soliplex-docs-skill.tar.gz -C ~/.claude/skills
+- **Rolling builds** track the docs. Every change to `docs/` on `main`
+  publishes an immutable, prerelease build tagged `docs-YYYY.MM.DD-<sha>`.
+  Old rolling builds are pruned automatically.
+- **Release snapshots** track the software. Each software release carries a
+  copy of the skill pinned to that version.
+
+A rolling `docs-latest` pointer is always updated to the newest rolling
+build. It hosts the skill directly (a stable download URL) plus a small
+`latest.json` manifest naming the immutable build it points at:
+
+```text
+# Always the newest rolling build:
+https://github.com/soliplex/soliplex/releases/download/docs-latest/soliplex-docs-skill.tar.gz
+
+# Machine-readable pointer (tag, source_commit, generated, sha256, asset_url):
+https://github.com/soliplex/soliplex/releases/download/docs-latest/latest.json
 ```
 
-This unpacks a `soliplex-docs/` directory containing `SKILL.md` and
-`references/`. Consult your agent's documentation for the exact location it
-scans for skills.
+To pin a specific version instead, download from its immutable tag (a
+`docs-YYYY.MM.DD-<sha>` rolling build, or a software-release tag).
+
+## Installing the skill
+
+Download and unpack it wherever your agent discovers skills:
+
+```bash
+# Example: install the latest build into a Claude Code skills directory
+mkdir -p ~/.claude/skills
+curl -fsSL \
+  https://github.com/soliplex/soliplex/releases/download/docs-latest/soliplex-docs-skill.tar.gz \
+  | tar xz -C ~/.claude/skills
+```
+
+This unpacks a `soliplex-docs/` directory. Consult your agent's documentation
+for the exact location it scans for skills.
 
 ## What it contains
 
 ```text
 soliplex-docs/
 ├── SKILL.md          # metadata + a navigable map of the documentation
+├── scripts/
+│   └── skill_versions.py   # list published versions / diff against this copy
 └── references/       # this documentation tree, verbatim
     ├── config/...
     ├── server/...
@@ -39,8 +67,36 @@ soliplex-docs/
 ```
 
 The `SKILL.md` `metadata` block records the `version`, `source_commit`, and
-generation date, so you can tell which release a given skill copy was built
-from.
+generation date, so you can tell which build a given copy came from.
+
+## Listing versions and checking for updates
+
+The skill bundles `scripts/skill_versions.py` (standard library only; honors
+`GITHUB_TOKEN` / `GH_TOKEN` for higher API rate limits). Run it from inside
+the installed skill directory:
+
+```bash
+# List published versions (rolling builds + release snapshots), newest
+# first, marking the installed copy and the current 'latest' pointer.
+python scripts/skill_versions.py list
+
+# Show what changed upstream since this copy was built (Markdown only).
+python scripts/skill_versions.py diff latest
+
+# Just the changed-file names, or a diff between two published versions.
+python scripts/skill_versions.py diff latest --name-only
+python scripts/skill_versions.py diff docs-2026.05.20-abc1234 docs-2026.05.29-def5678
+```
+
+`diff` exits non-zero when there are differences, so it composes in scripts.
+To refresh, re-download (as above) after removing the old copy so files
+deleted upstream do not linger:
+
+```bash
+rm -rf ~/.claude/skills/soliplex-docs
+curl -fsSL https://github.com/soliplex/soliplex/releases/download/docs-latest/soliplex-docs-skill.tar.gz \
+  | tar xz -C ~/.claude/skills
+```
 
 ## Building it yourself
 
@@ -53,5 +109,21 @@ uv run --group dev python scripts/generate_docs_skill.py --out dist/
 ```
 
 The output lands in `dist/soliplex-docs/`. Continuous integration runs the
-same command on each release (see `.github/workflows/build-docs-skill.yaml`)
-and uploads the packaged skill as a release asset.
+same command (see `.github/workflows/build-docs-skill.yaml`) and publishes
+the packaged skill as described above.
+
+## Trying it in the example installations
+
+The bundled example configurations discover filesystem skills under their
+`./skills` directory (see `filesystem_skills_paths` in
+`example/minimal.yaml`). Generate the skill straight into that directory so
+agents launched from the examples can use it:
+
+```bash
+uv run --group dev python scripts/generate_docs_skill.py --out example/skills/
+```
+
+This creates `example/skills/soliplex-docs/`, which sits alongside the
+checked-in example skills and is picked up automatically. That path is
+git-ignored, so generating it here will not accidentally commit the skill
+(or the whole documentation tree) into the repository.

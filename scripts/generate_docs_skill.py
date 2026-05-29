@@ -41,6 +41,18 @@ DESCRIPTION = (
     "troubleshooting Soliplex."
 )
 LICENSE = "MIT"
+COMPATIBILITY = (
+    "The documentation itself needs no special environment. The bundled "
+    "scripts/skill_versions.py requires Python 3.12+ and network access to "
+    "api.github.com / github.com (honors GITHUB_TOKEN / GH_TOKEN)."
+)
+
+# Files under this directory are copied verbatim onto the generated skill,
+# mirroring its layout (e.g. ``docs_skill_template/scripts/foo.py`` lands at
+# ``<skill>/scripts/foo.py``).
+_SKILL_TEMPLATE = (
+    pathlib.Path(__file__).resolve().parent / "docs_skill_template"
+)
 
 # Max length of the per-entry summary line in the doc map.
 _SUMMARY_MAX = 200
@@ -209,6 +221,7 @@ def _render_skill_md(
     lines.append(f"name: {name}")
     lines.append(f"description: {_yaml_dq(DESCRIPTION)}")
     lines.append(f"license: {LICENSE}")
+    lines.append(f"compatibility: {_yaml_dq(COMPATIBILITY)}")
     lines.append("metadata:")
     lines.append(f'  version: "{version}"')
     lines.append(f'  source_commit: "{commit}"')
@@ -238,6 +251,30 @@ def _render_skill_md(
         "3. Answer strictly from the documentation. If the docs do not "
         "cover it, say so rather than guessing."
     )
+    lines.append("")
+    lines.append("## Checking for updates")
+    lines.append("")
+    lines.append(
+        "This skill is a point-in-time snapshot (see `metadata` above). To "
+        "see what has been published and whether a newer build exists, run "
+        "the bundled helper:"
+    )
+    lines.append("")
+    lines.append("```bash")
+    lines.append(
+        "# List published versions (rolling builds + release snapshots)"
+    )
+    lines.append("python scripts/skill_versions.py list")
+    lines.append("")
+    lines.append("# Show what changed upstream since this copy was built")
+    lines.append("python scripts/skill_versions.py diff latest")
+    lines.append("")
+    lines.append("# Compare any two published versions (see 'list' for tags)")
+    lines.append(
+        "python scripts/skill_versions.py diff "
+        "docs-2026.05.20-abc1234 docs-2026.05.29-def5678"
+    )
+    lines.append("```")
     lines.append("")
     lines.append("## Documentation map")
     lines.append("")
@@ -308,6 +345,11 @@ def generate(
         nav=nav,
     )
     (skill_dir / "SKILL.md").write_text(skill_md, encoding="utf-8")
+
+    # Overlay the static template (bundled scripts, etc.) onto the skill.
+    if _SKILL_TEMPLATE.is_dir():
+        shutil.copytree(_SKILL_TEMPLATE, skill_dir, dirs_exist_ok=True)
+
     return skill_dir
 
 

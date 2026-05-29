@@ -33,5 +33,9 @@ dist/
 site/
 
 uploads/
+
+# Generated skills (see docs/docs-skill.md). The already-tracked bare-bones
+# example skill is unaffected; new skills generated here stay uncommitted.
+example/skills/
 sandbox/workdirs/
 .claude/
