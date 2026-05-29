@@ -67,10 +67,17 @@ async def get_login_system(
     redirect_uri = redirect_uri.replace_query_params(return_to=return_to)
     redirect_uri = util.strip_default_port(redirect_uri)
 
+    auth_params = {}
+    prompt = request.query_params.get("prompt")
+    if prompt is not None:
+        auth_params["prompt"] = prompt
+
     oauth = authn.get_oauth(the_installation)
     oauth_app = oauth.create_client(system)
 
-    found = await oauth_app.authorize_redirect(request, redirect_uri)
+    found = await oauth_app.authorize_redirect(
+        request, redirect_uri, **auth_params
+    )
     bound_logger.debug(loggers.AUTHN_GET_LOGIN_SYSTEM)
     return found
 
