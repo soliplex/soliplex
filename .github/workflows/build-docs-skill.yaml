@@ -1,0 +1,73 @@
+name: Build & publish docs skill
+
+# Generates a filesystem Agent Skill (https://agentskills.io/) from the
+# 'docs/' tree and publishes it as a release asset. No embeddings, vector
+# database, or GPU are involved -- the skill is plain Markdown the agent
+# reads on demand, so this runs in well under a minute.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: "pyproject.toml"
+
+      # The 'dev' group provides 'skills-ref', which the generator uses to
+      # validate the skill against the Agent Skills spec.
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Generate docs skill
+        run: >
+          uv run --group dev python scripts/generate_docs_skill.py
+          --out dist --commit ${{ github.sha }}
+
+      - name: Package docs skill
+        run: |
+          tar czf soliplex-docs-skill.tar.gz -C dist soliplex-docs
+          (cd dist && zip -qr ../soliplex-docs-skill.zip soliplex-docs)
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release upload ${{ github.event.release.tag_name }}
+          soliplex-docs-skill.tar.gz soliplex-docs-skill.zip --clobber
+
+      - name: Upload workflow artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: soliplex-docs-skill
+          path: |
+            soliplex-docs-skill.tar.gz
+            soliplex-docs-skill.zip
+          retention-days: 7
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_NOTIFY_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "channel": "#soliplex",
+              "username": "soliplex",
+              "text": ":x: ${{ github.workflow }} failed:\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "icon_emoji": ":ghost:"
+            }
