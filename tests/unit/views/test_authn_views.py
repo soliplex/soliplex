@@ -1,4 +1,5 @@
 from unittest import mock
+from urllib import parse as urllib_parse
 
 import fastapi
 import pytest
@@ -49,10 +50,16 @@ async def test_get_login(with_auth_systems):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("w_auth_disabled", [False, True])
+@pytest.mark.parametrize("w_prompt", [False, True])
 @pytest.mark.parametrize("w_return_to", [False, True])
+@pytest.mark.parametrize("w_auth_disabled", [False, True])
 @mock.patch("soliplex.authn.get_oauth")
-async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
+async def test_get_login_system(
+    get_oauth,
+    w_auth_disabled,
+    w_return_to,
+    w_prompt,
+):
     system = "test_oauth_appname"
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = w_auth_disabled
@@ -63,17 +70,21 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
     oidc = cc.return_value
     ar = oidc.authorize_redirect = mock.AsyncMock()
 
+    qs_dict = {}
+    exp_auth_params = {}
+
     if w_return_to:
-        exp_path = "/another/path"
-        qs = f"return_to={exp_path}"
+        qs_dict["return_to"] = exp_return_to = "/another/path"
     else:
-        qs = ""
-        exp_path = "/"
+        exp_return_to = "/"
+
+    if w_prompt:
+        qs_dict["prompt"] = exp_auth_params["prompt"] = "test"
 
     request = fastapi.Request(
         scope={
             "type": "http",
-            "query_string": qs,
+            "query_string": urllib_parse.urlencode(qs_dict),
         }
     )
     ruf = request.url_for = mock.Mock(spec_set=())
@@ -108,8 +119,10 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
 
         assert found is oidc.authorize_redirect.return_value
 
-        ar.assert_awaited_once_with(request, rqp.return_value)
-        rqp.assert_called_once_with(return_to=exp_path)
+        ar.assert_awaited_once_with(
+            request, rqp.return_value, **exp_auth_params
+        )
+        rqp.assert_called_once_with(return_to=exp_return_to)
         ruf.assert_called_once_with("get_auth_system", system=system)
         cc.assert_called_once_with(system)
 
