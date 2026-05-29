@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import pathlib
 
 import typer
@@ -7,6 +8,7 @@ from rich import console
 
 from soliplex import authz as authz_package
 from soliplex import installation
+from soliplex.authz import schema as authz_schema
 from soliplex.config import installation as config_installation
 
 the_console = console.Console()
@@ -35,6 +37,23 @@ def _check_ram_dburi(dburi: str, command: str):
         the_console.rule("Authorization DB is RAM-based")
         the_console.print(f"'{command}' is a no-op with a RAM-based database")
         raise typer.Exit(1)
+
+
+@contextlib.contextmanager
+def _authz_session(dburi):
+    """Yield a sync authz session, disposing its engine on exit.
+
+    'authz_schema.get_session' builds a fresh engine (and connection
+    pool) per call. Disposing it when the caller finishes -- on both the
+    success and 'typer.Exit' paths -- closes the underlying SQLite
+    connection deterministically instead of leaking it until garbage
+    collection.
+    """
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+    try:
+        yield session
+    finally:
+        session.get_bind().dispose()
 
 
 def _check_exactly_one_discriminator(
