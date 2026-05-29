@@ -19,6 +19,7 @@ nav = [
     { "Client" = "client.md" },
     { "Docker" = "docker.md" },
     { "RAG DB" = "rag.md" },
+    { "Documentation Skill" = "docs-skill.md" },
   ]},
   { "Configuration" = [
     { "Filesystem Layout" = "config/filesystem_layout.md" },
