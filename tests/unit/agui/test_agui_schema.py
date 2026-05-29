@@ -339,11 +339,13 @@ async def test_run_events(the_session):
 
 
 @pytest.mark.parametrize("init_schema", [None, False, True])
+@mock.patch("sqlalchemy.event.listens_for")
 @mock.patch("sqlalchemy.create_engine")
 @mock.patch("soliplex.agui.schema.metadata.create_all")
 def test_get_engine(
     ca,
     ce,
+    lf,
     init_schema,
 ):
     kwargs = {}
@@ -359,6 +361,9 @@ def test_get_engine(
         config_installation.SYNC_MEMORY_ENGINE_URL,
         json_serializer=util.serialize_sqla_json,
     )
+
+    # A 'connect' listener is registered to enable SQLite foreign keys.
+    lf.assert_called_once_with(ce.return_value, "connect")
 
     if init_schema:
         connection = ce.return_value.connect.return_value

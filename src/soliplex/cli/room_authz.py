@@ -265,7 +265,7 @@ def show_room_authz(
             "by a removed or renamed room can still be inspected."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Show room ACL entries defined in the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
@@ -274,9 +274,8 @@ def show_room_authz(
     if not allow_stale:
         _check_room_id(the_installation, room_id)
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    _dump(ctx, session, room_id)
+    with cli_util._authz_session(dburi) as session:
+        _dump(ctx, session, room_id)
 
 
 @app.command("as-yaml")
@@ -302,7 +301,7 @@ def room_authz_as_yaml(
             "by a removed or renamed room can still be dumped."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Dump a room's RoomPolicy and ACL entries as YAML.
 
     With '--output', the YAML is written to the given file path;
@@ -318,19 +317,18 @@ def room_authz_as_yaml(
     if not allow_stale:
         _check_room_id(the_installation, room_id)
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    with session:
-        policy = (
-            session.query(
-                authz_schema.RoomPolicy,
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            policy = (
+                session.query(
+                    authz_schema.RoomPolicy,
+                )
+                .where(
+                    authz_schema.RoomPolicy.room_id == room_id,
+                )
+                .first()
             )
-            .where(
-                authz_schema.RoomPolicy.room_id == room_id,
-            )
-            .first()
-        )
-        yaml_text = _room_policy_as_yaml(policy)
+            yaml_text = _room_policy_as_yaml(policy)
 
     if output is not None:
         output.write_text(yaml_text)
@@ -361,7 +359,7 @@ def room_authz_from_yaml(
             ),
         ),
     ] = None,
-):  # pragma NO COVER command
+):
     """Load a room's RoomPolicy and ACL entries from YAML.
 
     The YAML uses the same shape produced by 'room-authz as-yaml'.
@@ -397,27 +395,26 @@ def room_authz_from_yaml(
 
     _check_room_id(the_installation, room_id)
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    with session:
-        existing = (
-            session.query(
-                authz_schema.RoomPolicy,
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            existing = (
+                session.query(
+                    authz_schema.RoomPolicy,
+                )
+                .where(
+                    authz_schema.RoomPolicy.room_id == room_id,
+                )
+                .first()
             )
-            .where(
-                authz_schema.RoomPolicy.room_id == room_id,
-            )
-            .first()
-        )
-        if existing is not None:
-            session.delete(existing)
-            session.commit()
+            if existing is not None:
+                session.delete(existing)
+                session.commit()
 
-        if model is not None:
-            new_policy = authz_schema.RoomPolicy.from_model(model)
-            new_policy.room_id = room_id
-            session.add(new_policy)
-            session.commit()
+            if model is not None:
+                new_policy = authz_schema.RoomPolicy.from_model(model)
+                new_policy.room_id = room_id
+                session.add(new_policy)
+                session.commit()
 
 
 @app.command("make-private")
@@ -434,7 +431,7 @@ def make_room_private(
             "(preserving existing ACL entries)."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Ensure a room is private
 
     A room with no RoomPolicy row is public-to-all-authenticated-users
@@ -457,38 +454,37 @@ def make_room_private(
     cli_util._check_ram_dburi(dburi, "room-authz make-private")
     _check_room_id(the_installation, room_id)
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    with session:
-        policy = (
-            session.query(
-                authz_schema.RoomPolicy,
-            )
-            .where(
-                authz_schema.RoomPolicy.room_id == room_id,
-            )
-            .first()
-        )
-
-        if policy is None:
-            policy = authz_schema.RoomPolicy(room_id=room_id)
-            session.add(policy)
-            session.commit()
-        elif policy.default_allow_deny == authz_package.AllowDeny.ALLOW:
-            if not update:
-                the_console.rule(
-                    "Room policy already exists with default ALLOW",
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            policy = (
+                session.query(
+                    authz_schema.RoomPolicy,
                 )
-                the_console.print(
-                    f"Room '{room_id}' has an existing policy with "
-                    "default_allow_deny=ALLOW; pass '--update' to "
-                    "flip it to DENY.",
+                .where(
+                    authz_schema.RoomPolicy.room_id == room_id,
                 )
-                raise typer.Exit(1)
-            policy.default_allow_deny = authz_package.AllowDeny.DENY
-            session.commit()
+                .first()
+            )
 
-    _dump(ctx, session, room_id)
+            if policy is None:
+                policy = authz_schema.RoomPolicy(room_id=room_id)
+                session.add(policy)
+                session.commit()
+            elif policy.default_allow_deny == authz_package.AllowDeny.ALLOW:
+                if not update:
+                    the_console.rule(
+                        "Room policy already exists with default ALLOW",
+                    )
+                    the_console.print(
+                        f"Room '{room_id}' has an existing policy with "
+                        "default_allow_deny=ALLOW; pass '--update' to "
+                        "flip it to DENY.",
+                    )
+                    raise typer.Exit(1)
+                policy.default_allow_deny = authz_package.AllowDeny.DENY
+                session.commit()
+
+        _dump(ctx, session, room_id)
 
 
 @app.command("make-public")
@@ -505,7 +501,7 @@ def make_room_public(
             "(preserving existing ACL entries)."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Ensure a room is public
 
     A room with no RoomPolicy row is public-to-all-authenticated-users
@@ -527,36 +523,35 @@ def make_room_public(
     cli_util._check_ram_dburi(dburi, "room-authz make-public")
     _check_room_id(the_installation, room_id)
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    with session:
-        policy = (
-            session.query(
-                authz_schema.RoomPolicy,
-            )
-            .where(
-                authz_schema.RoomPolicy.room_id == room_id,
-            )
-            .first()
-        )
-
-        if policy is not None and (
-            policy.default_allow_deny == authz_package.AllowDeny.DENY
-        ):
-            if not update:
-                the_console.rule(
-                    "Room policy already exists with default DENY",
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            policy = (
+                session.query(
+                    authz_schema.RoomPolicy,
                 )
-                the_console.print(
-                    f"Room '{room_id}' has an existing policy with "
-                    "default_allow_deny=DENY; pass '--update' to "
-                    "flip it to ALLOW.",
+                .where(
+                    authz_schema.RoomPolicy.room_id == room_id,
                 )
-                raise typer.Exit(1)
-            policy.default_allow_deny = authz_package.AllowDeny.ALLOW
-            session.commit()
+                .first()
+            )
 
-    _dump(ctx, session, room_id)
+            if policy is not None and (
+                policy.default_allow_deny == authz_package.AllowDeny.DENY
+            ):
+                if not update:
+                    the_console.rule(
+                        "Room policy already exists with default DENY",
+                    )
+                    the_console.print(
+                        f"Room '{room_id}' has an existing policy with "
+                        "default_allow_deny=DENY; pass '--update' to "
+                        "flip it to ALLOW.",
+                    )
+                    raise typer.Exit(1)
+                policy.default_allow_deny = authz_package.AllowDeny.ALLOW
+                session.commit()
+
+        _dump(ctx, session, room_id)
 
 
 @app.command("clear-acl")
@@ -564,7 +559,7 @@ def clear_room_acl(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
     room_id: str,
-):  # pragma NO COVER command
+):
     """Clear ACL entries from a room's policy, preserving the policy
 
     Unlike 'clear', this command does not delete the room's
@@ -581,25 +576,24 @@ def clear_room_acl(
     cli_util._check_ram_dburi(dburi, "room-authz clear-acl")
     _check_room_id(the_installation, room_id)
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    with session:
-        policy = (
-            session.query(
-                authz_schema.RoomPolicy,
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            policy = (
+                session.query(
+                    authz_schema.RoomPolicy,
+                )
+                .where(
+                    authz_schema.RoomPolicy.room_id == room_id,
+                )
+                .first()
             )
-            .where(
-                authz_schema.RoomPolicy.room_id == room_id,
-            )
-            .first()
-        )
 
-        if policy is not None:
-            for acl_entry in policy.acl_entries:
-                session.delete(acl_entry)
-            session.commit()
+            if policy is not None:
+                for acl_entry in policy.acl_entries:
+                    session.delete(acl_entry)
+                session.commit()
 
-    _dump(ctx, session, room_id)
+        _dump(ctx, session, room_id)
 
 
 def _resolve_allow_deny(allow: bool, deny: bool) -> authz_package.AllowDeny:
@@ -729,7 +723,7 @@ def add_acl_entry(
         "--email",
         help="Match a user by OIDC email claim.",
     ),
-):  # pragma NO COVER command
+):
     """Add an ACL entry to a room's policy.
 
     Exactly one of '--allow' or '--deny' must be supplied.
@@ -760,48 +754,47 @@ def add_acl_entry(
         "room-authz add-acl-entry",
     )
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    with session:
-        policy = (
-            session.query(
-                authz_schema.RoomPolicy,
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            policy = (
+                session.query(
+                    authz_schema.RoomPolicy,
+                )
+                .where(
+                    authz_schema.RoomPolicy.room_id == room_id,
+                )
+                .first()
             )
-            .where(
-                authz_schema.RoomPolicy.room_id == room_id,
+
+            if policy is None:
+                the_console.rule(f"No policy exists for room '{room_id}'")
+                the_console.print(
+                    f"Run 'room-authz make-private' or "
+                    "'room-authz make-public' to establish a policy "
+                    f"for '{room_id}' before adding ACL entries.",
+                )
+                raise typer.Exit(1)
+
+            for entry in list(policy.acl_entries):
+                if everyone and entry.everyone:
+                    session.delete(entry)
+                elif authenticated and entry.authenticated:
+                    session.delete(entry)
+                elif json_path is not None and entry.json_path == json_path:
+                    session.delete(entry)
+            session.commit()
+
+            new_acl = authz_schema.ACLEntry(
+                room_policy=policy,
+                allow_deny=allow_deny,
+                everyone=everyone,
+                authenticated=authenticated,
+                json_path=json_path,
             )
-            .first()
-        )
+            session.add(new_acl)
+            session.commit()
 
-        if policy is None:
-            the_console.rule(f"No policy exists for room '{room_id}'")
-            the_console.print(
-                f"Run 'room-authz make-private' or "
-                "'room-authz make-public' to establish a policy "
-                f"for '{room_id}' before adding ACL entries.",
-            )
-            raise typer.Exit(1)
-
-        for entry in list(policy.acl_entries):
-            if everyone and entry.everyone:
-                session.delete(entry)
-            elif authenticated and entry.authenticated:
-                session.delete(entry)
-            elif json_path is not None and entry.json_path == json_path:
-                session.delete(entry)
-        session.commit()
-
-        new_acl = authz_schema.ACLEntry(
-            room_policy=policy,
-            allow_deny=allow_deny,
-            everyone=everyone,
-            authenticated=authenticated,
-            json_path=json_path,
-        )
-        session.add(new_acl)
-        session.commit()
-
-    _dump(ctx, session, room_id)
+        _dump(ctx, session, room_id)
 
 
 @app.command("delete-acl-entry")
@@ -854,7 +847,7 @@ def delete_acl_entry(
             "been removed) can still be matched and removed."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Delete an ACL entry from a room's policy.
 
     The entry to delete is identified by the combination of
@@ -884,50 +877,49 @@ def delete_acl_entry(
         allow_invalid_json_path=allow_invalid_json_path,
     )
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    with session:
-        policy = (
-            session.query(
-                authz_schema.RoomPolicy,
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            policy = (
+                session.query(
+                    authz_schema.RoomPolicy,
+                )
+                .where(
+                    authz_schema.RoomPolicy.room_id == room_id,
+                )
+                .first()
             )
-            .where(
-                authz_schema.RoomPolicy.room_id == room_id,
-            )
-            .first()
-        )
 
-        if policy is None:
-            the_console.rule(f"No policy exists for room '{room_id}'")
-            the_console.print(
-                f"Room '{room_id}' has no RoomPolicy; nothing to delete.",
-            )
-            raise typer.Exit(1)
+            if policy is None:
+                the_console.rule(f"No policy exists for room '{room_id}'")
+                the_console.print(
+                    f"Room '{room_id}' has no RoomPolicy; nothing to delete.",
+                )
+                raise typer.Exit(1)
 
-        matches = []
-        for entry in policy.acl_entries:
-            if entry.allow_deny != allow_deny:
-                continue
-            if everyone and entry.everyone:
-                matches.append(entry)
-            elif authenticated and entry.authenticated:
-                matches.append(entry)
-            elif json_path is not None and entry.json_path == json_path:
-                matches.append(entry)
+            matches = []
+            for entry in policy.acl_entries:
+                if entry.allow_deny != allow_deny:
+                    continue
+                if everyone and entry.everyone:
+                    matches.append(entry)
+                elif authenticated and entry.authenticated:
+                    matches.append(entry)
+                elif json_path is not None and entry.json_path == json_path:
+                    matches.append(entry)
 
-        if not matches:
-            the_console.rule("No matching ACL entry found")
-            the_console.print(
-                f"Room '{room_id}' has no ACL entry matching the "
-                "supplied --allow/--deny and discriminator.",
-            )
-            raise typer.Exit(1)
+            if not matches:
+                the_console.rule("No matching ACL entry found")
+                the_console.print(
+                    f"Room '{room_id}' has no ACL entry matching the "
+                    "supplied --allow/--deny and discriminator.",
+                )
+                raise typer.Exit(1)
 
-        for entry in matches:
-            session.delete(entry)
-        session.commit()
+            for entry in matches:
+                session.delete(entry)
+            session.commit()
 
-    _dump(ctx, session, room_id)
+        _dump(ctx, session, room_id)
 
 
 # Deprecated and hidden BBB commands.

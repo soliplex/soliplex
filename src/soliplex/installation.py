@@ -45,12 +45,31 @@ NO_AUTH_MODE_USER_TOKEN = {
 
 
 def _create_async_engine(url, **kwargs):
-    """Create an async engine with SQLite WAL support.
+    """Create an async engine, tuned for file-based SQLite.
 
-    For file-based SQLite databases, enables WAL journal mode
-    (persistent), uses NullPool to avoid pool-exhaustion under
-    async concurrency, and sets a 30-second busy timeout so
-    concurrent writers wait rather than raise immediately.
+    For file-based SQLite databases this applies three PRAGMAs, in two
+    different ways depending on their scope in SQLite:
+
+    - 'journal_mode=WAL' (Write-Ahead Logging) lets readers and the
+      writer proceed concurrently. It is a *persistent*, database-level
+      setting stored in the file header, so it is set exactly once on a
+      dedicated throwaway connection before the engine (and its pool)
+      exist -- switching journal mode requires no other connection to be
+      holding a lock. It does not apply to ':memory:' databases.
+
+    - 'synchronous=NORMAL' and 'foreign_keys=ON' are *per-connection*
+      settings that SQLite resets to its defaults (and 'foreign_keys'
+      defaults to OFF) on every new connection, so they are re-applied
+      from a 'connect' event listener that fires for each pooled
+      connection. 'synchronous=NORMAL' is the recommended, fsync-light
+      companion to WAL (crash-safe; only an OS crash / power loss can
+      drop the last un-checkpointed transactions, never corrupt the
+      file). 'foreign_keys=ON' turns on FK enforcement -- including
+      'ON DELETE CASCADE' -- which SQLite otherwise leaves off.
+
+    File-based SQLite additionally uses NullPool to avoid
+    pool-exhaustion under async concurrency, and a 30-second busy
+    timeout so concurrent writers wait rather than raise immediately.
     """
     connect_args = {}
     if "sqlite" in url:
@@ -59,6 +78,8 @@ def _create_async_engine(url, **kwargs):
         if db_path and db_path != ":memory:":
             connect_args["timeout"] = 30
             kwargs["poolclass"] = NullPool
+            # WAL is persisted in the database file, so set it once here
+            # rather than on every connection.
             db = sqlite3.connect(db_path)
             try:
                 with db as conn:
@@ -78,11 +99,18 @@ def _create_async_engine(url, **kwargs):
         def _set_sqlite_pragma(  # pragma: no cover
             dbapi_connection, connection_record
         ):
+            # Both PRAGMAs below are per-connection and reset to their
+            # defaults on every new connection, so they must be set here
+            # (unlike WAL, which persists in the file).
+
+            # 'NORMAL' is the recommended fsync level under WAL: much
+            # faster than the 'FULL' default, still crash-safe.
             cursor_sync = dbapi_connection.cursor()
             cursor_sync.execute("PRAGMA synchronous=NORMAL")
             cursor_sync.close()
 
-            # Fix https://github.com/soliplex/soliplex/issues/950
+            # Enable FK enforcement / 'ON DELETE CASCADE' (off by
+            # default). Fix https://github.com/soliplex/soliplex/issues/950
             cursor_fk = dbapi_connection.cursor()
             cursor_fk.execute("PRAGMA foreign_keys=ON")
             cursor_fk.close()

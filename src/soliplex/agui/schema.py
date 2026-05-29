@@ -532,6 +532,22 @@ def get_engine(
         **engine_kwargs,
     )
 
+    @sqlalchemy.event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(  # pragma: no cover
+        dbapi_connection, connection_record
+    ):
+        # SQLite ignores foreign-key constraints -- and hence the
+        # 'ON DELETE CASCADE' threading thread -> run -> events -- unless
+        # they are enabled per connection. Mirrors
+        # 'soliplex.installation._set_sqlite_pragma' (issue #950) for the
+        # sync engine; without it, deleting a parent row orphans its
+        # children instead of cascading.
+        if engine.dialect.name != "sqlite":
+            return
+        cursor_fk = dbapi_connection.cursor()
+        cursor_fk.execute("PRAGMA foreign_keys=ON")
+        cursor_fk.close()
+
     if init_schema:
         with engine.connect() as connection:
             Base.metadata.create_all(connection)
