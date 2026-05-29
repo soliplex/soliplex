@@ -251,6 +251,9 @@ and will NOT work with `[dependency-groups]`. Always use `--group dev` instead.
 # Run unit tests with coverage
 pytest
 
+# Run in parallel with pytest-xdist (much faster on multi-core machines)
+pytest -n 8
+
 # Run with specific coverage threshold (CI enforces 100%)
 pytest --cov-fail-under=100
 
@@ -260,6 +263,14 @@ ruff check
 # Check formatting
 ruff format --check
 ```
+
+The full suite with coverage is CPU-bound, so parallelizing it with
+`pytest-xdist` (the `-n` option) is the biggest single speedup. Coverage
+instrumentation is itself CPU-heavy, so the fastest worker count is *fewer*
+than the core count -- `-n 8` is a good default on a 16-core box. Tune `-n`
+to roughly half your physical cores, or use `-n auto` to let pytest-xdist
+pick one worker per core (portable, but slightly slower than the hand-tuned
+value when coverage is enabled).
 
 ## Configuration
 
