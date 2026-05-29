@@ -48,11 +48,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --group dev
 
+      # '-n auto' parallelizes via pytest-xdist (one worker per core); CI
+      # runners have few cores, so 'auto' is portable here (locally, '-n 8'
+      # on a 16-core box is faster -- see README "Running tests").
       - name: Run unit tests with coverage
-        run: uv run py.test -s ${{ matrix.pytest-args }}
+        run: uv run py.test -s -n auto ${{ matrix.pytest-args }}
 
       - name: Run functional tests
-        run: uv run py.test -s --no-cov -m "not needs_llm" tests/functional/
+        run: uv run py.test -s -n auto --no-cov -m "not needs_llm" tests/functional/
 
       - name: Notify Slack on failure
         if: failure()

@@ -41,7 +41,14 @@ def test_run_thread_id():
     assert run.thread_id == agui_constants.THREAD_UUID
 
 
-@pytest.mark.parametrize("w_parent_id", [None, agui_constants.PARENT_RUN_ID])
+# 'PARENT_RUN_ID' is a fresh 'uuid4()' generated at import time, so the
+# auto-derived parametrize id differs between processes. Pin explicit
+# 'ids' to keep collection identical across pytest-xdist workers.
+@pytest.mark.parametrize(
+    "w_parent_id",
+    [None, agui_constants.PARENT_RUN_ID],
+    ids=["no_parent", "w_parent"],
+)
 def test_run_parent_run_id(w_parent_id):
     thread = agui_schema.Thread(thread_id=agui_constants.THREAD_UUID)
 

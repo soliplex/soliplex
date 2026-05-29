@@ -30,6 +30,12 @@ def _auth_systems(n_auth_systems):
     ]
 
 
+@pytest.fixture(scope="module")
+def anyio_backend():
+    """Run anyio-marked tests on asyncio only (no trio)."""
+    return "asyncio"
+
+
 @pytest.fixture
 def temp_dir() -> pathlib.Path:
     with tempfile.TemporaryDirectory() as td:
