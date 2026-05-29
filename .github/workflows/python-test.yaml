@@ -54,8 +54,11 @@ jobs:
       - name: Run unit tests with coverage
         run: uv run py.test -s -n auto ${{ matrix.pytest-args }}
 
+      # Functional tests run serially: they share on-disk state (e.g. the
+      # 'sandbox/workdirs' tree, keyed by a constant room id) and
+      # module-scoped app fixtures, so xdist workers race each other.
       - name: Run functional tests
-        run: uv run py.test -s -n auto --no-cov -m "not needs_llm" tests/functional/
+        run: uv run py.test -s --no-cov -m "not needs_llm" tests/functional/
 
       - name: Notify Slack on failure
         if: failure()
