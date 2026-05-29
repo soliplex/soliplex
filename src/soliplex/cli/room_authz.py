@@ -265,7 +265,7 @@ def show_room_authz(
             "by a removed or renamed room can still be inspected."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Show room ACL entries defined in the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
@@ -302,7 +302,7 @@ def room_authz_as_yaml(
             "by a removed or renamed room can still be dumped."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Dump a room's RoomPolicy and ACL entries as YAML.
 
     With '--output', the YAML is written to the given file path;
@@ -361,7 +361,7 @@ def room_authz_from_yaml(
             ),
         ),
     ] = None,
-):  # pragma NO COVER command
+):
     """Load a room's RoomPolicy and ACL entries from YAML.
 
     The YAML uses the same shape produced by 'room-authz as-yaml'.
@@ -434,7 +434,7 @@ def make_room_private(
             "(preserving existing ACL entries)."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Ensure a room is private
 
     A room with no RoomPolicy row is public-to-all-authenticated-users
@@ -505,7 +505,7 @@ def make_room_public(
             "(preserving existing ACL entries)."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Ensure a room is public
 
     A room with no RoomPolicy row is public-to-all-authenticated-users
@@ -564,7 +564,7 @@ def clear_room_acl(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
     room_id: str,
-):  # pragma NO COVER command
+):
     """Clear ACL entries from a room's policy, preserving the policy
 
     Unlike 'clear', this command does not delete the room's
@@ -729,7 +729,7 @@ def add_acl_entry(
         "--email",
         help="Match a user by OIDC email claim.",
     ),
-):  # pragma NO COVER command
+):
     """Add an ACL entry to a room's policy.
 
     Exactly one of '--allow' or '--deny' must be supplied.
@@ -854,7 +854,7 @@ def delete_acl_entry(
             "been removed) can still be matched and removed."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Delete an ACL entry from a room's policy.
 
     The entry to delete is identified by the combination of

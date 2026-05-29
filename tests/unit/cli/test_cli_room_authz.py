@@ -9,6 +9,7 @@ import yaml
 from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import models
+from soliplex.authz import schema as authz_schema
 from soliplex.cli import room_authz as cli_room_authz
 from soliplex.config import installation as config_installation
 
@@ -657,13 +658,649 @@ def test__check_acl_entry_args_allow_invalid_json_path(
     )
 
 
-# _human_dump_room_policy: ui only
-# _dump_room_policy: ui only
-# show_room_authz: command
-# make_room_private: command
-# make_room_public: command
-# clear_room_acl: command
-# add_acl_entry: command
-# delete_acl_entry: command
-# add_room_user: command (deprecated)
-# clear_room_authz: command (deprecated)
+# ---------------------------------------------------------------------------
+# Command-level tests.
+#
+# These drive the actual 'room-authz' subcommands through a Typer
+# 'CliRunner' against a throwaway copy of 'example/minimal.yaml' backed by
+# a scratch authorization database (see the 'scratch_installation' and
+# 'cli_runner' fixtures in 'tests/unit/cli/conftest.py'). Every active
+# command body is now exercised here rather than coverage-excluded; the
+# two '_*_dump_room_policy' helpers stay '# pragma NO COVER UI ONLY', and
+# the deprecated/hidden 'add-user' / 'clear' commands keep their
+# '# pragma NO COVER command'.
+# ---------------------------------------------------------------------------
+
+ALLOW = authz_package.AllowDeny.ALLOW
+DENY = authz_package.AllowDeny.DENY
+
+ALICE_EMAIL = "alice@example.com"
+ALICE_EMAIL_JP = authz_package.token_field_json_path("email", ALICE_EMAIL)
+
+
+def _entry(allow_deny, *, everyone=False, authenticated=False, json_path=None):
+    """An ACL-entry kwargs dict in the shape the commands build/store."""
+    return {
+        "allow_deny": allow_deny,
+        "everyone": everyone,
+        "authenticated": authenticated,
+        "json_path": json_path,
+    }
+
+
+def _seed_policy(scratch, room_id, default_allow_deny, entries=()):
+    """Insert a RoomPolicy (and ACL entries) straight into the scratch DB."""
+    session = scratch.session()
+    with session:
+        policy = authz_schema.RoomPolicy(
+            room_id=room_id,
+            default_allow_deny=default_allow_deny,
+        )
+        session.add(policy)
+        session.flush()
+        for entry_kw in entries:
+            session.add(
+                authz_schema.ACLEntry(room_policy=policy, **entry_kw),
+            )
+        session.commit()
+    session.bind.dispose()
+
+
+def _read_policy(scratch, room_id):
+    """Read a room's policy back from the scratch DB, or None.
+
+    ACL entries are returned as a set of '(allow_deny, everyone,
+    authenticated, json_path)' tuples -- a set because the 'AllowDeny'
+    enum is not orderable, so sets sidestep ordering entirely.
+    """
+    session = scratch.session()
+    with session:
+        policy = (
+            session.query(authz_schema.RoomPolicy)
+            .where(authz_schema.RoomPolicy.room_id == room_id)
+            .first()
+        )
+        if policy is None:
+            result = None
+        else:
+            result = {
+                "default": policy.default_allow_deny,
+                "entries": {
+                    (
+                        entry.allow_deny,
+                        entry.everyone,
+                        entry.authenticated,
+                        entry.json_path,
+                    )
+                    for entry in policy.acl_entries
+                },
+            }
+    session.bind.dispose()
+    return result
+
+
+def _invoke(cli_runner, scratch, subcommand, *rest, **kwargs):
+    return cli_runner.invoke(
+        cli_room_authz.app,
+        [subcommand, str(scratch.path), *rest],
+        **kwargs,
+    )
+
+
+# -- show -------------------------------------------------------------------
+
+
+def test_show_configured_room(scratch_installation, cli_runner):
+    _seed_policy(scratch_installation, "chat", DENY)
+
+    result = _invoke(cli_runner, scratch_installation, "show", "chat")
+
+    assert result.exit_code == 0
+    assert '"room_id": "chat"' in result.output
+
+
+def test_show_unconfigured_room_requires_allow_stale(
+    scratch_installation,
+    cli_runner,
+):
+    # A policy left behind by a removed/renamed room.
+    _seed_policy(scratch_installation, "ghost", DENY)
+
+    # Without '--allow-stale' the configured-room check rejects it.
+    rejected = _invoke(cli_runner, scratch_installation, "show", "ghost")
+    assert rejected.exit_code == 1
+
+    # With '--allow-stale' the stale policy can still be inspected.
+    allowed = _invoke(
+        cli_runner,
+        scratch_installation,
+        "show",
+        "ghost",
+        "--allow-stale",
+    )
+    assert allowed.exit_code == 0
+    assert '"room_id": "ghost"' in allowed.output
+
+
+# -- make-private -----------------------------------------------------------
+
+
+def test_make_private_creates_policy(scratch_installation, cli_runner):
+    result = _invoke(cli_runner, scratch_installation, "make-private", "chat")
+
+    assert result.exit_code == 0
+    assert _read_policy(scratch_installation, "chat") == {
+        "default": DENY,
+        "entries": set(),
+    }
+
+
+def test_make_private_noop_when_already_deny(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [_entry(ALLOW, everyone=True)],
+    )
+
+    result = _invoke(cli_runner, scratch_installation, "make-private", "chat")
+
+    assert result.exit_code == 0
+    # Existing default + ACL entries are left untouched.
+    policy = _read_policy(scratch_installation, "chat")
+    assert policy["default"] == DENY
+    assert policy["entries"] == {(ALLOW, True, False, None)}
+
+
+def test_make_private_existing_allow_requires_update(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_policy(scratch_installation, "chat", ALLOW)
+
+    result = _invoke(cli_runner, scratch_installation, "make-private", "chat")
+
+    assert result.exit_code == 1
+    # Left as ALLOW because '--update' was not supplied.
+    assert _read_policy(scratch_installation, "chat")["default"] == ALLOW
+
+
+def test_make_private_update_flips_allow_to_deny(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        ALLOW,
+        [_entry(ALLOW, everyone=True)],
+    )
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "make-private",
+        "chat",
+        "--update",
+    )
+
+    assert result.exit_code == 0
+    policy = _read_policy(scratch_installation, "chat")
+    assert policy["default"] == DENY
+    # ACL entries are preserved across the flip.
+    assert policy["entries"] == {(ALLOW, True, False, None)}
+
+
+# -- make-public ------------------------------------------------------------
+
+
+def test_make_public_noop_when_no_policy(scratch_installation, cli_runner):
+    result = _invoke(cli_runner, scratch_installation, "make-public", "chat")
+
+    assert result.exit_code == 0
+    # A room with no policy is already public-by-default; none is created.
+    assert _read_policy(scratch_installation, "chat") is None
+
+
+def test_make_public_noop_when_already_allow(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_policy(scratch_installation, "chat", ALLOW)
+
+    result = _invoke(cli_runner, scratch_installation, "make-public", "chat")
+
+    assert result.exit_code == 0
+    assert _read_policy(scratch_installation, "chat")["default"] == ALLOW
+
+
+def test_make_public_existing_deny_requires_update(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_policy(scratch_installation, "chat", DENY)
+
+    result = _invoke(cli_runner, scratch_installation, "make-public", "chat")
+
+    assert result.exit_code == 1
+    assert _read_policy(scratch_installation, "chat")["default"] == DENY
+
+
+def test_make_public_update_flips_deny_to_allow(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [_entry(DENY, everyone=True)],
+    )
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "make-public",
+        "chat",
+        "--update",
+    )
+
+    assert result.exit_code == 0
+    policy = _read_policy(scratch_installation, "chat")
+    assert policy["default"] == ALLOW
+    assert policy["entries"] == {(DENY, True, False, None)}
+
+
+# -- clear-acl --------------------------------------------------------------
+
+
+def test_clear_acl_noop_when_no_policy(scratch_installation, cli_runner):
+    result = _invoke(cli_runner, scratch_installation, "clear-acl", "chat")
+
+    assert result.exit_code == 0
+    assert _read_policy(scratch_installation, "chat") is None
+
+
+def test_clear_acl_removes_entries_preserving_policy(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [
+            _entry(ALLOW, everyone=True),
+            _entry(ALLOW, authenticated=True),
+        ],
+    )
+
+    result = _invoke(cli_runner, scratch_installation, "clear-acl", "chat")
+
+    assert result.exit_code == 0
+    # Policy row (and its default) survives; only ACL entries are cleared.
+    assert _read_policy(scratch_installation, "chat") == {
+        "default": DENY,
+        "entries": set(),
+    }
+
+
+# -- add-acl-entry ----------------------------------------------------------
+
+
+def test_add_acl_entry_requires_existing_policy(
+    scratch_installation,
+    cli_runner,
+):
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "add-acl-entry",
+        "chat",
+        "--allow",
+        "--everyone",
+    )
+
+    assert result.exit_code == 1
+    assert _read_policy(scratch_installation, "chat") is None
+
+
+def test_add_acl_entry_replaces_matching_discriminators(
+    scratch_installation,
+    cli_runner,
+):
+    # One entry of each discriminator kind, so each replace branch fires.
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [
+            _entry(ALLOW, everyone=True),
+            _entry(ALLOW, authenticated=True),
+            _entry(ALLOW, json_path=ALICE_EMAIL_JP),
+        ],
+    )
+
+    # 'everyone' branch: replaces the existing everyone entry (ALLOW->DENY).
+    res = _invoke(
+        cli_runner,
+        scratch_installation,
+        "add-acl-entry",
+        "chat",
+        "--deny",
+        "--everyone",
+    )
+    assert res.exit_code == 0
+
+    # 'authenticated' branch.
+    res = _invoke(
+        cli_runner,
+        scratch_installation,
+        "add-acl-entry",
+        "chat",
+        "--allow",
+        "--authenticated",
+    )
+    assert res.exit_code == 0
+
+    # 'json_path' (via --email) branch.
+    res = _invoke(
+        cli_runner,
+        scratch_installation,
+        "add-acl-entry",
+        "chat",
+        "--allow",
+        "--email",
+        ALICE_EMAIL,
+    )
+    assert res.exit_code == 0
+
+    policy = _read_policy(scratch_installation, "chat")
+    # Each discriminator still appears exactly once (replaced, not dup'd).
+    assert policy["entries"] == {
+        (DENY, True, False, None),
+        (ALLOW, False, True, None),
+        (ALLOW, False, False, ALICE_EMAIL_JP),
+    }
+
+
+# -- delete-acl-entry -------------------------------------------------------
+
+
+def test_delete_acl_entry_requires_existing_policy(
+    scratch_installation,
+    cli_runner,
+):
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "delete-acl-entry",
+        "chat",
+        "--allow",
+        "--everyone",
+    )
+
+    assert result.exit_code == 1
+
+
+def test_delete_acl_entry_no_match_errors(scratch_installation, cli_runner):
+    # The only entry has the opposite allow/deny, so nothing matches.
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [_entry(DENY, everyone=True)],
+    )
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "delete-acl-entry",
+        "chat",
+        "--allow",
+        "--everyone",
+    )
+
+    assert result.exit_code == 1
+    # The non-matching entry is left in place.
+    assert _read_policy(scratch_installation, "chat")["entries"] == {
+        (DENY, True, False, None),
+    }
+
+
+def test_delete_acl_entry_removes_matching(scratch_installation, cli_runner):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [
+            _entry(ALLOW, everyone=True),
+            _entry(ALLOW, authenticated=True),
+            _entry(ALLOW, json_path=ALICE_EMAIL_JP),
+            # Opposite allow/deny: skipped via the 'continue' branch.
+            _entry(DENY, everyone=True),
+        ],
+    )
+
+    for discriminator in (
+        ("--everyone",),
+        ("--authenticated",),
+        ("--email", ALICE_EMAIL),
+    ):
+        res = _invoke(
+            cli_runner,
+            scratch_installation,
+            "delete-acl-entry",
+            "chat",
+            "--allow",
+            *discriminator,
+        )
+        assert res.exit_code == 0
+
+    # Only the opposite-sense DENY entry that never matched remains.
+    assert _read_policy(scratch_installation, "chat")["entries"] == {
+        (DENY, True, False, None),
+    }
+
+
+# -- as-yaml / from-yaml ----------------------------------------------------
+
+
+def test_as_yaml_to_stdout(scratch_installation, cli_runner):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [_entry(ALLOW, json_path=ALICE_EMAIL_JP)],
+    )
+
+    result = _invoke(cli_runner, scratch_installation, "as-yaml", "chat")
+
+    assert result.exit_code == 0
+    dumped = yaml.safe_load(result.output)
+    assert dumped["room_id"] == "chat"
+    assert dumped["default_allow_deny"] == "DENY"
+    assert dumped["acl_entries"][0]["email"] == ALICE_EMAIL
+
+
+def test_as_yaml_allow_stale_to_file(
+    scratch_installation,
+    cli_runner,
+    tmp_path,
+):
+    # A stale (unconfigured) room dumped to a file via '--allow-stale'.
+    _seed_policy(scratch_installation, "ghost", ALLOW)
+    out = tmp_path / "ghost.yaml"
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "as-yaml",
+        "ghost",
+        "--allow-stale",
+        "-o",
+        str(out),
+    )
+
+    assert result.exit_code == 0
+    assert yaml.safe_load(out.read_text())["room_id"] == "ghost"
+
+
+def test_as_yaml_then_from_yaml_populates_other_room(
+    scratch_installation,
+    cli_runner,
+    tmp_path,
+):
+    # Build a fully-configured policy on 'chat' through the CLI ...
+    assert (
+        _invoke(
+            cli_runner, scratch_installation, "make-private", "chat"
+        ).exit_code
+        == 0
+    )
+    assert (
+        _invoke(
+            cli_runner,
+            scratch_installation,
+            "add-acl-entry",
+            "chat",
+            "--allow",
+            "--email",
+            ALICE_EMAIL,
+        ).exit_code
+        == 0
+    )
+    assert (
+        _invoke(
+            cli_runner,
+            scratch_installation,
+            "add-acl-entry",
+            "chat",
+            "--deny",
+            "--everyone",
+        ).exit_code
+        == 0
+    )
+
+    # ... dump it to YAML ...
+    dump = tmp_path / "chat-policy.yaml"
+    assert (
+        _invoke(
+            cli_runner,
+            scratch_installation,
+            "as-yaml",
+            "chat",
+            "-o",
+            str(dump),
+        ).exit_code
+        == 0
+    )
+
+    # ... and use it to populate a *different* room, 'search'. The
+    # explicit ROOM_ID overrides the 'room_id' recorded in the YAML.
+    assert (
+        _invoke(
+            cli_runner,
+            scratch_installation,
+            "from-yaml",
+            "search",
+            "-i",
+            str(dump),
+        ).exit_code
+        == 0
+    )
+
+    chat = _read_policy(scratch_installation, "chat")
+    search = _read_policy(scratch_installation, "search")
+    assert search["default"] == chat["default"]
+    assert search["entries"] == chat["entries"]
+
+
+def test_from_yaml_replaces_existing_policy(
+    scratch_installation,
+    cli_runner,
+    tmp_path,
+):
+    # 'search' already has a policy; importing replaces it wholesale.
+    _seed_policy(
+        scratch_installation,
+        "search",
+        ALLOW,
+        [_entry(ALLOW, everyone=True)],
+    )
+    doc = tmp_path / "policy.yaml"
+    doc.write_text(
+        yaml.safe_dump(
+            {
+                "room_id": "search",
+                "default_allow_deny": "DENY",
+                "acl_entries": [
+                    {
+                        "allow_deny": "ALLOW",
+                        "everyone": False,
+                        "authenticated": True,
+                        "preferred_username": None,
+                        "email": None,
+                        "json_path": None,
+                    },
+                ],
+            },
+        )
+    )
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "from-yaml",
+        "search",
+        "-i",
+        str(doc),
+    )
+
+    assert result.exit_code == 0
+    assert _read_policy(scratch_installation, "search") == {
+        "default": DENY,
+        "entries": {(ALLOW, False, True, None)},
+    }
+
+
+def test_from_yaml_stdin_null_removes_existing(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [_entry(ALLOW, everyone=True)],
+    )
+
+    # 'null' read from stdin removes the target room's policy entirely.
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "from-yaml",
+        "chat",
+        input="null\n",
+    )
+
+    assert result.exit_code == 0
+    assert _read_policy(scratch_installation, "chat") is None
+
+
+def test_from_yaml_null_without_room_id_errors(
+    scratch_installation,
+    cli_runner,
+):
+    # A 'null' document with no explicit ROOM_ID has no target room.
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "from-yaml",
+        input="null\n",
+    )
+
+    assert result.exit_code == 1
