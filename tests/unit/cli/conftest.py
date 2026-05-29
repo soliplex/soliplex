@@ -20,6 +20,12 @@ _AUTHZ_DBURI_RE = re.compile(
     r'authorization_dburi:\n  sync: "[^"]*"\n  async: "[^"]*"',
 )
 
+# Matches the bare 'OLLAMA_BASE_URL' environment requirement so a scratch
+# copy can pin a dummy value inline (the CLI never connects to it),
+# keeping the installation self-contained rather than depending on an
+# ambient env var or a gitignored repo-root '.env'.
+_OLLAMA_ENV_RE = re.compile(r'^  - "OLLAMA_BASE_URL"$', re.MULTILINE)
+
 
 @dataclasses.dataclass(frozen=True)
 class ScratchInstallation:
@@ -62,6 +68,26 @@ def _point_authz_db(config_path: pathlib.Path, db_path: pathlib.Path) -> None:
     config_path.write_text(text)
 
 
+def _pin_ollama_base_url(config_path: pathlib.Path) -> None:
+    """Pin a dummy 'OLLAMA_BASE_URL' value inline in a copied config.
+
+    'example/minimal.yaml' lists a bare 'OLLAMA_BASE_URL' under
+    'environment', i.e. one that must resolve from the ambient
+    environment. Rewriting it to the 'name'/'value' form (the same shape
+    'INSTALLATION_PATH' already uses) makes the scratch installation
+    self-contained, so the suite does not depend on a host env var or a
+    gitignored repo-root '.env' (which CI lacks). The CLI never connects
+    to it -- the value only needs to resolve at config-load time.
+    """
+    text = config_path.read_text()
+    replacement = (
+        '  - name: "OLLAMA_BASE_URL"\n    value: "http://localhost:11434"'
+    )
+    text, n_subs = _OLLAMA_ENV_RE.subn(replacement, text)
+    assert n_subs == 1, f"expected one OLLAMA_BASE_URL entry, found {n_subs}"
+    config_path.write_text(text)
+
+
 @pytest.fixture(scope="module")
 def _installation_template(tmp_path_factory):
     """Copy the example installation once per module (copytree is slow)."""
@@ -72,6 +98,7 @@ def _installation_template(tmp_path_factory):
     config_path = dst / "minimal.yaml"
     db_path = base / "authz.sqlite"
     _point_authz_db(config_path, db_path)
+    _pin_ollama_base_url(config_path)
 
     return config_path, db_path
 
