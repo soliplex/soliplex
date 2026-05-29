@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest import mock
 
 import pytest
+import sqlalchemy
 import typer
 import yaml
 
@@ -676,6 +677,9 @@ DENY = authz_package.AllowDeny.DENY
 
 ALICE_EMAIL = "alice@example.com"
 ALICE_EMAIL_JP = authz_package.token_field_json_path("email", ALICE_EMAIL)
+# A stored query that no longer compiles (e.g. it referenced a meta-config
+# filter function that has since been removed).
+STALE_JP = "$[?stale_filter_func($.email)]"
 
 
 def _entry(allow_deny, *, everyone=False, authenticated=False, json_path=None):
@@ -702,6 +706,38 @@ def _seed_policy(scratch, room_id, default_allow_deny, entries=()):
             session.add(
                 authz_schema.ACLEntry(room_policy=policy, **entry_kw),
             )
+        session.commit()
+    session.bind.dispose()
+
+
+def _seed_stale_acl_entry(scratch, room_id, allow_deny, stale_json_path):
+    """Plant an ACL entry whose stored 'json_path' no longer compiles.
+
+    The ORM's 'json_path' validator rejects a non-compiling query on
+    insert (and on any attribute-set), so the stale entry is created in
+    two steps: seed a normal entry carrying a *valid* placeholder query
+    through 'authz_schema.ACLEntry', then rewrite that entry's
+    'json_path' to the non-compiling value with a raw UPDATE -- which
+    does not run the '@validates' hook. This reproduces the on-disk
+    state left behind when a meta-config filter function an entry
+    referenced is removed, so 'delete-acl-entry --allow-invalid-json-path'
+    can be exercised end-to-end.
+    """
+    _seed_policy(
+        scratch,
+        room_id,
+        DENY,
+        [_entry(allow_deny, json_path=ALICE_EMAIL_JP)],
+    )
+    session = scratch.session()
+    with session:
+        session.execute(
+            sqlalchemy.text(
+                "UPDATE room_acl_entries SET json_path = :stale "
+                "WHERE json_path = :placeholder"
+            ),
+            {"stale": stale_json_path, "placeholder": ALICE_EMAIL_JP},
+        )
         session.commit()
     session.bind.dispose()
 
@@ -1104,6 +1140,43 @@ def test_delete_acl_entry_removes_matching(scratch_installation, cli_runner):
     assert _read_policy(scratch_installation, "chat")["entries"] == {
         (DENY, True, False, None),
     }
+
+
+def test_delete_acl_entry_invalid_json_path_requires_flag(
+    scratch_installation,
+    cli_runner,
+):
+    _seed_stale_acl_entry(scratch_installation, "chat", DENY, STALE_JP)
+
+    # Without '--allow-invalid-json-path' the compile-validation of the
+    # supplied --json-path rejects it before the database is touched.
+    rejected = _invoke(
+        cli_runner,
+        scratch_installation,
+        "delete-acl-entry",
+        "chat",
+        "--deny",
+        "--json-path",
+        STALE_JP,
+    )
+    assert rejected.exit_code == 1
+    assert _read_policy(scratch_installation, "chat")["entries"] == {
+        (DENY, False, False, STALE_JP),
+    }
+
+    # With the flag the stale entry can still be matched and removed.
+    allowed = _invoke(
+        cli_runner,
+        scratch_installation,
+        "delete-acl-entry",
+        "chat",
+        "--deny",
+        "--json-path",
+        STALE_JP,
+        "--allow-invalid-json-path",
+    )
+    assert allowed.exit_code == 0
+    assert _read_policy(scratch_installation, "chat")["entries"] == set()
 
 
 # -- as-yaml / from-yaml ----------------------------------------------------

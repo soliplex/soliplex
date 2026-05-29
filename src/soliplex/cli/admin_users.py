@@ -297,36 +297,35 @@ def _dump_admin_users(session):  # pragma NO COVER UI ONLY
 def list_admin_users(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):  # pragma NO COVER command
+):
     """Show admin users defined in the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
     cli_util._check_ram_dburi(dburi, "admin-users list")
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-    _dump(ctx, session)
+    with cli_util._authz_session(dburi) as session:
+        _dump(ctx, session)
 
 
 @app.command("clear")
 def clear_admin_users(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):  # pragma NO COVER command
+):
     """Clear admin users from the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
     cli_util._check_ram_dburi(dburi, "admin-users clear")
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            for admin_user in session.query(authz_schema.AdminUser):
+                session.delete(admin_user)
+            session.commit()
 
-    with session:
-        for admin_user in session.query(authz_schema.AdminUser):
-            session.delete(admin_user)
-        session.commit()
-
-    _dump(ctx, session)
+        _dump(ctx, session)
 
 
 @app.command("add")
@@ -357,7 +356,7 @@ def add_admin_user(
             "JSONPath query."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Add an admin user to the installation's authz database.
 
     Exactly one discriminator must be supplied: the positional EMAIL
@@ -374,15 +373,14 @@ def add_admin_user(
         "admin-users add",
     )
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            _check_existing_admin(session, resolved)
+            admin_user = authz_schema.AdminUser(json_path=resolved)
+            session.add(admin_user)
+            session.commit()
 
-    with session:
-        _check_existing_admin(session, resolved)
-        admin_user = authz_schema.AdminUser(json_path=resolved)
-        session.add(admin_user)
-        session.commit()
-
-    _dump(ctx, session)
+        _dump(ctx, session)
 
 
 @app.command("delete")
@@ -424,7 +422,7 @@ def delete_admin_user(
             "removed."
         ),
     ),
-):  # pragma NO COVER command
+):
     """Remove an admin user from the installation's authz database.
 
     Exactly one discriminator must be supplied: the positional EMAIL
@@ -442,28 +440,29 @@ def delete_admin_user(
         allow_invalid_json_path=allow_invalid_json_path,
     )
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    with session:
-        existing = (
-            session.query(
-                authz_schema.AdminUser,
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            existing = (
+                session.query(
+                    authz_schema.AdminUser,
+                )
+                .where(
+                    authz_schema.AdminUser.json_path == resolved,
+                )
+                .first()
             )
-            .where(
-                authz_schema.AdminUser.json_path == resolved,
-            )
-            .first()
-        )
 
-        if existing is None:
-            the_console.rule(f"{_describe_admin(resolved)} is not an admin")
-            the_console.print("Nothing to do.")
-            raise typer.Exit(1)
+            if existing is None:
+                the_console.rule(
+                    f"{_describe_admin(resolved)} is not an admin"
+                )
+                the_console.print("Nothing to do.")
+                raise typer.Exit(1)
 
-        session.delete(existing)
-        session.commit()
+            session.delete(existing)
+            session.commit()
 
-    _dump(ctx, session)
+        _dump(ctx, session)
 
 
 @app.command("as-yaml")
@@ -480,7 +479,7 @@ def admin_users_as_yaml(
             ),
         ),
     ] = None,
-):  # pragma NO COVER command
+):
     """Dump every admin user as YAML.
 
     With '--output', the YAML is written to the given file path;
@@ -496,11 +495,10 @@ def admin_users_as_yaml(
 
     cli_util._check_ram_dburi(dburi, "admin-users as-yaml")
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-
-    with session:
-        admin_users = session.query(authz_schema.AdminUser).all()
-        yaml_text = _admin_users_as_yaml(admin_users)
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            admin_users = session.query(authz_schema.AdminUser).all()
+            yaml_text = _admin_users_as_yaml(admin_users)
 
     if output is not None:
         output.write_text(yaml_text)
@@ -522,7 +520,7 @@ def admin_users_from_yaml(
             ),
         ),
     ] = None,
-):  # pragma NO COVER command
+):
     """Replace admin users with the entries in a YAML document.
 
     The YAML uses the same shape produced by 'admin-users as-yaml'.
@@ -545,13 +543,12 @@ def admin_users_from_yaml(
 
     json_paths = _admin_users_from_jsonable(yaml.safe_load(yaml_text))
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+    with cli_util._authz_session(dburi) as session:
+        with session:
+            for admin_user in session.query(authz_schema.AdminUser):
+                session.delete(admin_user)
+            session.commit()
 
-    with session:
-        for admin_user in session.query(authz_schema.AdminUser):
-            session.delete(admin_user)
-        session.commit()
-
-        for json_path in json_paths:
-            session.add(authz_schema.AdminUser(json_path=json_path))
-        session.commit()
+            for json_path in json_paths:
+                session.add(authz_schema.AdminUser(json_path=json_path))
+            session.commit()
