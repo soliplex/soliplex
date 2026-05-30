@@ -23,6 +23,7 @@ or ``GH_TOKEN`` to raise the API rate limit.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import difflib
 import hashlib
 import json
@@ -32,8 +33,10 @@ import shutil
 import sys
 import tarfile
 import tempfile
-import urllib.error
-import urllib.request
+import urllib.error as urllib_error
+import urllib.parse as urllib_parse
+import urllib.request as urllib_request
+from collections.abc import Iterator
 from pathlib import Path
 
 OWNER = "soliplex"
@@ -45,6 +48,11 @@ POINTER_MANIFEST = "latest.json"
 _API = f"https://api.github.com/repos/{OWNER}/{REPO}"
 _DL = f"https://github.com/{OWNER}/{REPO}/releases/download"
 _USER_AGENT = "soliplex-docs-skill"
+
+# Schemes ``_get`` is willing to open: https for GitHub, file:// for the
+# ``--asset-url`` override (advanced/testing). Anything else is refused
+# before reaching urlopen, which is what makes the S310 finding there safe.
+_ALLOWED_SCHEMES = frozenset({"https", "file"})
 
 # The skill root is the parent of this script's ``scripts/`` directory.
 _SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -63,6 +71,17 @@ class GitHubAPIError(SystemExit):
         self.url = url
         self.reason = reason
         super().__init__(f"GitHub request failed ({reason}): {url}")
+
+
+class UnsupportedURLScheme(SystemExit):
+    """A URL used a scheme outside :data:`_ALLOWED_SCHEMES`."""
+
+    def __init__(self, url: str, scheme: str):
+        self.url = url
+        self.scheme = scheme
+        super().__init__(
+            f"Refusing to open URL with unsupported scheme {scheme!r}: {url}"
+        )
 
 
 class ChecksumMismatch(SystemExit):
@@ -97,18 +116,23 @@ def _token() -> str | None:
 
 
 def _get(url: str, *, accept: str = "application/vnd.github+json") -> bytes:
-    request = urllib.request.Request(url)
+    scheme = urllib_parse.urlsplit(url).scheme
+    if scheme not in _ALLOWED_SCHEMES:
+        raise UnsupportedURLScheme(url, scheme)
+    request = urllib_request.Request(url)
     request.add_header("User-Agent", _USER_AGENT)
     request.add_header("Accept", accept)
     token = _token()
     if token:
         request.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(request) as response:  # noqa: S310
+        # The scheme allowlist above bounds this to https/file, so the
+        # audited-open finding (S310) is mitigated rather than ignored.
+        with urllib_request.urlopen(request) as response:  # noqa: S310
             return response.read()
-    except urllib.error.HTTPError as exc:
+    except urllib_error.HTTPError as exc:
         raise GitHubAPIError(url, f"HTTP {exc.code}") from exc
-    except urllib.error.URLError as exc:
+    except urllib_error.URLError as exc:
         raise GitHubAPIError(url, str(exc.reason)) from exc
 
 
@@ -378,6 +402,13 @@ def _resolve_target(
     return target, asset_url, None
 
 
+@contextlib.contextmanager
+def _temp_dest() -> Iterator[Path]:
+    """Yield a fresh temporary directory as a ``Path`` (removed on exit)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        yield Path(tmp)
+
+
 def cmd_diff(args: argparse.Namespace) -> int:
     if not _REFERENCES.is_dir():
         raise NoSuchReference(None)
@@ -387,16 +418,16 @@ def cmd_diff(args: argparse.Namespace) -> int:
     )
 
     installed = _markdown(_REFERENCES)
-    with tempfile.TemporaryDirectory() as tmp:
+    with _temp_dest() as dest:
         refs = _fetch_references(
-            target, Path(tmp), asset_url=asset_url, sha256=sha256
+            target, dest, asset_url=asset_url, sha256=sha256
         )
         published = _markdown(refs)
 
         if args.other:
-            with tempfile.TemporaryDirectory() as tmp2:
+            with _temp_dest() as other_dest:
                 other_refs = _fetch_references(
-                    args.other, Path(tmp2), asset_url=None, sha256=None
+                    args.other, other_dest, asset_url=None, sha256=None
                 )
                 return _diff_trees(
                     published,
@@ -443,9 +474,9 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
     )
 
     installed = _installed_commit()
-    with tempfile.TemporaryDirectory() as tmp:
+    with _temp_dest() as dest:
         new_skill = _fetch_skill(
-            target, Path(tmp), asset_url=asset_url, sha256=sha256
+            target, dest, asset_url=asset_url, sha256=sha256
         )
         new_commit = _commit_of(new_skill / "SKILL.md")
 
