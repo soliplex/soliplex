@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""List and diff published versions of the ``soliplex-docs`` skill.
+"""List, diff, and upgrade published versions of the ``soliplex-docs`` skill.
 
 This script is bundled inside the skill (under ``scripts/``) so an agent --
-or a human -- can answer two questions without leaving the skill:
+or a human -- can manage the installed copy without leaving the skill:
 
 * ``list``  -- which versions have been published? Both the rolling builds
   (``docs-YYYY.MM.DD-<sha>``) and the snapshots attached to software
@@ -11,6 +11,9 @@ or a human -- can answer two questions without leaving the skill:
 * ``diff``  -- how does the installed documentation differ from a published
   version (default: ``latest``)? Only Markdown under ``references/`` is
   compared.
+* ``upgrade``  -- download a published version (default: ``latest``) and
+  install it in place, replacing the skill's own files so documents deleted
+  upstream do not linger.
 
 Standard library only -- no third-party packages are required. Network
 access to ``api.github.com`` / ``github.com`` is needed; set ``GITHUB_TOKEN``
@@ -25,6 +28,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -61,15 +65,6 @@ class GitHubAPIError(SystemExit):
         super().__init__(f"GitHub request failed ({reason}): {url}")
 
 
-class AssetNotFound(SystemExit):
-    """A release does not carry the expected asset."""
-
-    def __init__(self, tag: str, name: str):
-        self.tag = tag
-        self.name = name
-        super().__init__(f"Release {tag!r} has no asset named {name!r}.")
-
-
 class ChecksumMismatch(SystemExit):
     """A downloaded asset did not match its recorded sha256."""
 
@@ -87,6 +82,14 @@ class NoSuchReference(SystemExit):
         self.tag = tag
         where = f"version {tag!r}" if tag else "the installed skill"
         super().__init__(f"No references/ directory found in {where}.")
+
+
+class PointerUnavailable(SystemExit):
+    """The ``docs-latest`` pointer manifest could not be read."""
+
+    def __init__(self, tag: str):
+        self.tag = tag
+        super().__init__(f"Could not resolve the {tag!r} pointer.")
 
 
 def _token() -> str | None:
@@ -142,14 +145,19 @@ def _classify(release: dict) -> tuple[str, str]:
     return "release", commit
 
 
-def _installed_commit() -> str | None:
-    if not _SKILL_MD.exists():
+def _commit_of(skill_md: Path) -> str | None:
+    """Return the 7-char ``source_commit`` recorded in a ``SKILL.md``."""
+    if not skill_md.exists():
         return None
-    for line in _SKILL_MD.read_text(encoding="utf-8").splitlines():
+    for line in skill_md.read_text(encoding="utf-8").splitlines():
         match = _COMMIT_RE.match(line)
         if match:
             return match.group(1)[:7]
     return None
+
+
+def _installed_commit() -> str | None:
+    return _commit_of(_SKILL_MD)
 
 
 def _read_pointer() -> dict | None:
@@ -245,10 +253,14 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _fetch_references(
+def _download_and_extract(
     tag: str, dest: Path, *, asset_url: str | None, sha256: str | None
 ) -> Path:
-    """Download + extract a version's tarball; return its ``references/``."""
+    """Download a version's tarball into ``dest`` and unpack it.
+
+    Returns the directory the archive was extracted into; the skill itself
+    lives in a single ``*/`` subdirectory beneath it.
+    """
     url = asset_url or _asset_url(tag, ASSET_TARBALL)
     tarball = dest / ASSET_TARBALL
     tarball.write_bytes(_get(url, accept="application/octet-stream"))
@@ -262,11 +274,37 @@ def _fetch_references(
     extract_dir.mkdir()
     with tarfile.open(tarball) as archive:
         archive.extractall(extract_dir, filter="data")
+    return extract_dir
 
+
+def _fetch_references(
+    tag: str, dest: Path, *, asset_url: str | None, sha256: str | None
+) -> Path:
+    """Download + extract a version's tarball; return its ``references/``."""
+    extract_dir = _download_and_extract(
+        tag, dest, asset_url=asset_url, sha256=sha256
+    )
     matches = list(extract_dir.glob("*/references"))
     if not matches:
         raise NoSuchReference(tag)
     return matches[0]
+
+
+def _fetch_skill(
+    tag: str, dest: Path, *, asset_url: str | None, sha256: str | None
+) -> Path:
+    """Download + extract a version's tarball; return its skill root.
+
+    The skill root is the directory containing ``SKILL.md``, ``references/``,
+    and ``scripts/`` -- i.e. what gets installed onto disk.
+    """
+    extract_dir = _download_and_extract(
+        tag, dest, asset_url=asset_url, sha256=sha256
+    )
+    matches = list(extract_dir.glob("*/references"))
+    if not matches:
+        raise NoSuchReference(tag)
+    return matches[0].parent
 
 
 def _markdown(root: Path) -> dict[str, list[str]]:
@@ -319,21 +357,34 @@ def _diff_trees(
     return 1
 
 
+def _resolve_target(
+    target: str, asset_url: str | None
+) -> tuple[str, str | None, str | None]:
+    """Resolve ``target``, expanding ``latest`` via the pointer manifest.
+
+    Returns ``(tag, asset_url, sha256)``. When ``target`` is ``latest`` and
+    no explicit ``asset_url`` was supplied, the ``docs-latest`` pointer is
+    consulted; :class:`PointerUnavailable` is raised if it cannot be read.
+    """
+    if target == "latest" and asset_url is None:
+        pointer = _read_pointer()
+        if not pointer:
+            raise PointerUnavailable(target)
+        return (
+            pointer.get("tag", "latest"),
+            pointer.get("asset_url"),
+            pointer.get("sha256"),
+        )
+    return target, asset_url, None
+
+
 def cmd_diff(args: argparse.Namespace) -> int:
     if not _REFERENCES.is_dir():
         raise NoSuchReference(None)
 
-    target = args.target or "latest"
-    asset_url = args.asset_url
-    sha256 = None
-    if target == "latest" and asset_url is None:
-        pointer = _read_pointer()
-        if not pointer:
-            print("Could not resolve the 'latest' pointer.", file=sys.stderr)
-            return 2
-        target = pointer.get("tag", "latest")
-        asset_url = pointer.get("asset_url")
-        sha256 = pointer.get("sha256")
+    target, asset_url, sha256 = _resolve_target(
+        args.target or "latest", args.asset_url
+    )
 
     installed = _markdown(_REFERENCES)
     with tempfile.TemporaryDirectory() as tmp:
@@ -362,6 +413,61 @@ def cmd_diff(args: argparse.Namespace) -> int:
             right_label=target,
             name_only=args.name_only,
         )
+
+
+def _install_over(src: Path, dst: Path) -> None:
+    """Replace ``dst``'s skill files with those from ``src`` in place.
+
+    Each top-level entry of the freshly extracted skill root (``SKILL.md``,
+    ``references/``, ``scripts/``) overwrites its counterpart under ``dst``.
+    Directories are removed first so files deleted upstream do not linger.
+    Replacing the running ``scripts/`` directory is safe on POSIX: the
+    interpreter has already read this script into memory.
+    """
+    for item in sorted(src.iterdir()):
+        target = dst / item.name
+        if item.is_dir():
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(item, target)
+        else:
+            shutil.copy2(item, target)
+
+
+def cmd_upgrade(args: argparse.Namespace) -> int:
+    if not _SKILL_ROOT.is_dir():
+        raise NoSuchReference(None)
+
+    target, asset_url, sha256 = _resolve_target(
+        args.tag or "latest", args.asset_url
+    )
+
+    installed = _installed_commit()
+    with tempfile.TemporaryDirectory() as tmp:
+        new_skill = _fetch_skill(
+            target, Path(tmp), asset_url=asset_url, sha256=sha256
+        )
+        new_commit = _commit_of(new_skill / "SKILL.md")
+
+        if new_commit and new_commit == installed and not args.force:
+            print(
+                f"Already up to date: installed commit {installed} matches "
+                f"{target}. Use --force to reinstall."
+            )
+            return 0
+
+        summary = (
+            f"{target} (commit {new_commit or 'unknown'}; "
+            f"installed {installed or 'unknown'})"
+        )
+        if args.dry_run:
+            print(f"Would upgrade to {summary}.")
+            return 0
+
+        _install_over(new_skill, _SKILL_ROOT)
+
+    print(f"Upgraded soliplex-docs to {summary}.")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -406,9 +512,36 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_diff.set_defaults(func=cmd_diff)
 
+    p_upgrade = sub.add_parser(
+        "upgrade",
+        help="Download a published version and install it in place.",
+    )
+    p_upgrade.add_argument(
+        "tag",
+        nargs="?",
+        default="latest",
+        help="Version tag to upgrade to (default: latest).",
+    )
+    p_upgrade.add_argument(
+        "--force",
+        action="store_true",
+        help="Reinstall even when the installed copy is already current.",
+    )
+    p_upgrade.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be installed without writing any files.",
+    )
+    p_upgrade.add_argument(
+        "--asset-url",
+        help="Override the tarball URL for 'tag' (advanced/testing; "
+        "accepts file:// URLs).",
+    )
+    p_upgrade.set_defaults(func=cmd_upgrade)
+
     args = parser.parse_args(argv)
     return args.func(args)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: NO COVER
     sys.exit(main())
