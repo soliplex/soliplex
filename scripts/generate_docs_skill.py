@@ -274,6 +274,11 @@ def _render_skill_md(
         "python scripts/skill_versions.py diff "
         "docs-2026.05.20-abc1234 docs-2026.05.29-def5678"
     )
+    lines.append("")
+    lines.append(
+        "# Upgrade this copy in place to the newest build (or a given tag)"
+    )
+    lines.append("python scripts/skill_versions.py upgrade")
     lines.append("```")
     lines.append("")
     lines.append("## Documentation map")
@@ -430,5 +435,5 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())
