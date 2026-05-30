@@ -76,7 +76,7 @@ pythonpath = [".", "tests/unit"]
 python_files = "test_*.py"
 # skip 'tests/functional' by default
 testpaths = ["tests/unit"]
-addopts = "--cov=soliplex --cov=tests/unit --cov-branch --cov-fail-under=100"
+addopts = "--cov=soliplex --cov=tests/unit --cov=scripts --cov-branch --cov-fail-under=100"
 filterwarnings = [
     # "ignore::DeprecationWarning:<source-package>",
 ]
