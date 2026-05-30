@@ -59,7 +59,7 @@ for the exact location it scans for skills.
 soliplex-docs/
 ├── SKILL.md          # metadata + a navigable map of the documentation
 ├── scripts/
-│   └── skill_versions.py   # list published versions / diff against this copy
+│   └── skill_versions.py   # list / diff / upgrade published versions
 └── references/       # this documentation tree, verbatim
     ├── config/...
     ├── server/...
@@ -89,8 +89,26 @@ python scripts/skill_versions.py diff docs-2026.05.20-abc1234 docs-2026.05.29-de
 ```
 
 `diff` exits non-zero when there are differences, so it composes in scripts.
-To refresh, re-download (as above) after removing the old copy so files
-deleted upstream do not linger:
+
+To refresh, let the helper upgrade the installed copy in place. It downloads
+the requested version (default: the newest rolling build), verifies its
+checksum, and replaces the skill's files so documents deleted upstream do not
+linger:
+
+```bash
+# Upgrade to the newest published build.
+python scripts/skill_versions.py upgrade
+
+# Preview the change first, or pin a specific tag (see 'list' for tags).
+python scripts/skill_versions.py upgrade --dry-run
+python scripts/skill_versions.py upgrade docs-2026.05.29-def5678
+
+# Reinstall even when the installed copy is already current.
+python scripts/skill_versions.py upgrade --force
+```
+
+`upgrade` no-ops when the installed `source_commit` already matches the
+target. Equivalently, you can re-download by hand after removing the old copy:
 
 ```bash
 rm -rf ~/.claude/skills/soliplex-docs
