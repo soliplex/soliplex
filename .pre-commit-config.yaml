@@ -3,6 +3,8 @@ repos:
     # Ruff version matching your devenv setup
     rev: v0.15.10
     hooks:
+      - id: ruff-check
+        types: [python]
       - id: ruff-format
         types: [python]
 
