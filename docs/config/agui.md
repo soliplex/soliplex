@@ -110,9 +110,8 @@ field a default value.
 The `soliplex-cli agui-feature-schemas` command iterates the
 registry (via `installation._config.agui_features`) and emits a
 JSON document mapping each feature name to `{source, json_schema}`.
-The `scripts/generate_feature_schemas.sh` helper uses this output
-to regenerate `schemas/schema.json`, which downstream client
-projects consume to generate type-safe client code.
+Downstream client projects might consume this output to generate
+type-safe client code.
 
 ### YAML Round-Trip
 
