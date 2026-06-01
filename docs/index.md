@@ -6,13 +6,14 @@ and question answering.
 
 ## Quick Start
 
-1. **[Prerequisites](prerequisites.md)** - Complete installation checklist and setup guide
-2. **[Overview](overview.md)** - Learn about the system architecture and features
-3. **[RAG Database Setup](rag.md)** - Set up the RAG search database
-4. **[Server Setup](server/index.md)** - Set up the FastAPI backend server
-5. **[Client Setup](client.md)** - Configure the Flutter web client
-6. **[Docker Deployment](docker.md)** - Run Soliplex with Docker and Docker Compose
-7. **[Usage Guide](usage.md)** - Start using the system
+1. **[Quickstart](quickstart.md)** - Stand up Soliplex the fast way, by letting a skills-compatible AI agent deploy it
+2. **[Prerequisites](prerequisites.md)** - Complete installation checklist and setup guide
+3. **[Overview](overview.md)** - Learn about the system architecture and features
+4. **[RAG Database Setup](rag.md)** - Set up the RAG search database
+5. **[Server Setup](server/index.md)** - Set up the FastAPI backend server
+6. **[Client Setup](client.md)** - Configure the Flutter web client
+7. **[Docker Deployment](docker.md)** - Run Soliplex with Docker and Docker Compose
+8. **[Usage Guide](usage.md)** - Start using the system
 
 ## What is Soliplex?
 
