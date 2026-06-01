@@ -1,7 +1,19 @@
 # AGENTS.md
 
-Detailed guidance for AI coding agents working on the Soliplex project.
-See CLAUDE.md for a concise project overview and quick reference.
+Guidance for AI coding agents working on the Soliplex project. Human
+contributors should read [DEVELOPMENT.md](DEVELOPMENT.md), which covers the
+same ground in prose. (`CLAUDE.md` is a thin stub that imports this file so
+Claude Code loads it automatically.)
+
+## Project Overview
+
+Soliplex is an AI-powered RAG system with a FastAPI backend, Flutter web
+frontend, and terminal UI. It provides semantic document retrieval,
+multi-room chat, and multi-provider LLM support.
+
+**This repository contains the Python backend and TUI only.** The Flutter
+frontend lives in a sibling repo at <https://github.com/soliplex/frontend>
+with its own tooling.
 
 ## Build and Test
 
@@ -12,8 +24,9 @@ uv sync --group dev
 # Run unit tests with 100% coverage requirement
 uv run pytest
 
-# Run a specific test file
+# Run a specific test file / test
 uv run pytest tests/unit/test_agents.py
+uv run pytest tests/unit/test_agents.py::test_name
 
 # Run functional tests (require a running LLM)
 uv run pytest tests/functional/ -m needs_llm
@@ -25,6 +38,12 @@ uv run ruff format --check
 # Auto-fix lint and format issues
 uv run ruff check --fix
 uv run ruff format
+
+# Start a dev server (no auth)
+uv run soliplex-cli serve example/minimal.yaml --no-auth-mode
+
+# Validate a configuration
+uv run soliplex-cli audit example/minimal.yaml
 ```
 
 ## Code Style
@@ -35,21 +54,74 @@ uv run ruff format
 - Target version: Python 3.13
 - Use `uv run` to execute all Python commands
 
+## Pre-commit Hooks
+
+Optional: `uv run pre-commit install` automates the CI checks before each
+commit (`uv run pre-commit run --all-files` runs them once against the whole
+tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
+
+- `ruff-check` / `ruff-format` -- lint and format Python sources
+- `pymarkdown` -- lint Markdown files
+- `actionlint` -- lint GitHub Actions workflow files
+- `check-toml` / `check-yaml` -- validate TOML and YAML syntax
+- `gitleaks` -- scan for committed secrets
+- `pip-audit` -- scan dependencies for known vulnerabilities (runs when
+  `pyproject.toml`, `uv.lock`, or `.pre-commit-config.yaml` changes)
+- `debug-statements` -- reject leftover `pdb` / `breakpoint()` calls
+- `trailing-whitespace` / `end-of-file-fixer` -- normalize whitespace
+- `check-merge-conflict` -- reject unresolved merge-conflict markers
+- `no-commit-to-branch` -- block direct commits to `main` / `master`
+
 ## Testing Requirements
 
 - Unit tests live in `tests/unit/`, mirroring the `src/soliplex/` structure
 - 100% branch coverage is enforced via pytest-cov (`--cov-fail-under=100`)
-- Coverage omits: `cli.py`, `examples.py`, `tui.py`
+- Coverage omits `cli.py`, `examples.py`, and `tui.py` (see
+  `[tool.coverage.run]` in `pyproject.toml`) -- new code in those modules
+  silently bypasses the threshold
 - Use pytest-asyncio for async tests
 - Functional tests (`tests/functional/`) require a running LLM and are
   skipped by default (marker: `needs_llm`)
+
+## Repository Structure
+
+Non-obvious modules and directories (the rest are self-explanatory from
+their filenames -- `ls src/soliplex/` for the full layout):
+
+- `agui/` -- AG-UI protocol (threads, runs, persistence)
+- `authz/` -- authorization policy engine
+- `config/` -- YAML config parsing (16 modules; see `installation.py` for
+  the top-level entry)
+- `tools/` -- agent tools (RAG, feedback, file uploads)
+- `agents.py` -- Pydantic AI agent creation
+- `completions.py` -- OpenAI-compatible streaming endpoint (not just
+  LLM-level completions)
+- `installation.py` -- installation lifespan, admin bootstrap, and global
+  state management
+- `main.py` -- FastAPI app factory (`create_app`)
+- `tests/unit/` -- 100% coverage required; mirrors `src/soliplex/`
+- `tests/functional/` -- tests requiring an LLM (marked `needs_llm`) are
+  skipped by default; other functional tests run
+- `example/` -- sample configs (rooms, completions, oidc, quizzes, skills)
+- `schemas/` -- AG-UI feature JSON schemas
+
+Key files:
+
+- `pyproject.toml` -- dependencies, scripts, tool config
+- `src/soliplex/config/installation.py` -- master config parsing
+- `src/soliplex/main.py` -- FastAPI app factory
+- `example/installation.yaml` -- full config example
+- `example/minimal.yaml` -- minimal config for development
+- `.env.example` -- environment variable reference
 
 ## Configuration System
 
 - YAML-based hierarchical config in `src/soliplex/config/` (16 modules)
 - Top-level entry: `InstallationConfig` in `config/installation.py`
 - Config classes use dataclasses with a `from_yaml` classmethod
-- Private fields `_installation_config` and `_config_path` carry context
+- Private fields `_installation_config` and `_config_path` carry context so
+  nested configs can resolve env vars, secrets, and paths relative to the
+  config file without threading them through every `from_yaml` call
 - Environment variables resolved via `Installation.get_environment()`
 - Secrets resolved via a configurable source chain (env vars, files,
   subprocess, random generation) in `config/secrets.py`
@@ -86,12 +158,36 @@ uv run ruff format
 - Authentication via OIDC/JWT in `authn.py`
 - Public API models defined in `models.py`
 
-## File Reference
+## Key Dependencies
 
-- `pyproject.toml` -- Dependencies, scripts, tool config
-- `src/soliplex/config/installation.py` -- Master config parsing
-- `src/soliplex/main.py` -- FastAPI app factory
-- `example/installation.yaml` -- Full config example
-- `example/minimal.yaml` -- Minimal config for development
-- `.env.example` -- Environment variable reference
-- `docs/` -- MkDocs documentation site
+See `pyproject.toml` for authoritative version constraints.
+
+- FastAPI / Uvicorn -- REST API and ASGI server
+- pydantic-ai-slim[google] -- agent framework
+- haiku.rag-slim -- RAG functionality
+- FastMCP -- Model Context Protocol
+- ag-ui-protocol -- AG-UI event protocol
+- SQLModel / aiosqlite -- database ORM
+- haiku-skills -- Haiku skills framework
+
+## Entry Points
+
+- `soliplex-cli` -- backend CLI; run `soliplex-cli --help` for the full
+  command list
+- `soliplex-tui` -- terminal UI client
+- `soliplex-tui-serve` -- TUI server
+
+## Environment Variables
+
+See `.env.example` for the full reference. Key variables:
+
+- `OLLAMA_BASE_URL` -- Ollama server URL (without `/v1` suffix)
+- `OPENAI_API_KEY` / `GEMINI_API_KEY` -- LLM provider keys
+- `SOLIPLEX_URL_SAFE_TOKEN_SECRET` -- MCP token secret (auto-generated if
+  unset)
+- `LOGFIRE_TOKEN` -- Pydantic Logfire token (optional)
+
+## Documentation
+
+Detailed configuration and usage docs are in [docs/](docs/) (served via
+Zensical). Example configurations are in [example/](example/).
