@@ -9,6 +9,7 @@ nav = [
   { "Home" = "index.md" },
   { "Overview" = "overview.md" },
   { "Setup" = [
+    { "Quickstart" = "quickstart.md" },
     { "Prerequisites" = "prerequisites.md" },
     { "Server" = [
       { "Overview" = "server/index.md" },
