@@ -238,3 +238,127 @@ See `.env.example` for the full reference. Key variables:
 Detailed configuration and usage docs are in [docs/](docs/), published as a
 [Zensical site](https://soliplex.github.io/soliplex/). Example
 configurations are in [example/](example/).
+
+## Releasing `soliplex` to PyPI
+
+Soliplex distributions get pushed to [PyPI](https://pypi.org) via a GitHub
+workflow action, defined in `.github/workflows/pypi.yaml`. This workflow
+is triggered by publishing a GitHub release, typically from a pre-existing
+signed tag.
+
+### Minor releases
+
+Minor releases typically indicate new features (a la <https://semver.org>).
+
+1. For each "minor" release, e.g. `v0.47`, the developer first creates
+   a release branch (in the example case, `v0.47.x`), with an associated
+   new [Git worktree](https://git-scm.com/docs/git-worktree):
+
+   ```bash
+   git worktree add -b v0.47.x ../soliplex-v0.47.x
+   ```
+
+2. In the new worktree, the developer captures a git log since the previous
+   minor release:
+
+   ```bash
+   cd ../soliplex-v0.47.x
+   git log v0.46..HEAD > ../soliplex-v0.47.txt
+   ```
+
+   and edits it into a condensed, human-focused change log, dropping
+   any changes backported to previous patch releases (e.g., in `v0.46.1`,
+   etc.).
+
+   ```bash
+   "$EDITOR" ../soliplex-v0.47.txt
+   ```
+
+3. The developer then prepares the new release, editing the version
+   in `pyproject.toml` (no `v` prefix, e.g. `version = "0.47"`)
+   and then synchronizing the `uv` lock file:
+
+   ```bash
+   uv sync --all-groups
+   ```
+
+   and committing the release prep changes:
+
+   ```bash
+   git commit pyproject.toml uv.lock -m "chore: prep 'v0.47' release"
+   ```
+
+4. The developer then creates a signed tag using the changelog created
+   in step #2:
+
+   ```bash
+   git tag -s -F ../soliplex-v0.47.txt v0.47
+   ```
+
+   and pushes the new branch and tag to GitHub:
+
+   ```bash
+   git push origin v0.47.x v0.47
+   ```
+
+5. The developer then visits the GitHub page for the new tag in the browser
+   (in this case, <https://github.com/soliplex/soliplex/releases/tag/v0.47>)
+   and clicks the "Create release from tag" button.
+
+   After filling in the "Release title" value (e.g.,
+   `soliplex v0.47: <terse summary>`), the developer pastes the changelog
+   text into the "Describe this release" textarea, and submits the form.
+
+### Patch releases
+
+Patch releases typically indicate bug fixes (a la <https://semver.org>).
+
+1. After merging a bugfix PR to `main`, the developer backports
+   the fix onto the most recent minor release branch inside its worktree
+   using [`git cherry-pick`](https://git-scm.com/docs/git-cherry-pick).
+
+   In the worktree for `main`, where the bugfix branch was created:
+
+   ```bash
+   git checkout main && git fetch --prune origin && git merge origin/main
+   git log # verify the PR squash-merge hash
+   ```
+
+   In the release branch worktree:
+
+   ```bash
+   cd ../soliplex-v0.47.x
+   git cherry-pick <pr-squash-merge-release-hash>
+   ```
+
+2. Once all bugfix PRs to be released have been merged and backported, the
+   developer creates a new changelog using `git log`, using as the base
+   either the most recent patch release for the branch (e.g. `v0.47.2`
+   when making a new `v0.47.3` release), or the minor release tag if
+   making the first patch release (i.e., `v0.47` when making the `v0.47.1`
+   release):
+
+   ```bash
+   git log <base-tag>..v0.47.x > ../soliplex-v0.47.<patch#>.txt
+   "$EDITOR" ../soliplex-v0.47.<patch#>.txt
+   ```
+
+3. The developer then creates a patch release tag in the release branch
+   worktree:
+
+   ```bash
+   cd ../soliplex-v0.47.x
+   "$EDITOR" pyproject.toml  # 'version = "0.47.<patch#>"'
+   uv sync --all-groups
+   git commit pyproject.toml uv.lock -m "chore: prep 'v0.47.<patch#>' release"
+   git tag -s -F ../soliplex-v0.47.<patch#>.txt v0.47.<patch#>
+   ```
+
+   and pushes the tag / branch to GitHub:
+
+   ```bash
+   git push origin v0.47.x v0.47.<patch#>
+   ```
+
+4. The developer then makes a GitHub release from the new tag, exactly as
+   for the minor release tag above.
