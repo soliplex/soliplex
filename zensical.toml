@@ -18,6 +18,7 @@ nav = [
       { "SSE Resume" = "server/sse_resume.md" },
     ]},
     { "Client" = "client.md" },
+    { "TUI" = "tui.md" },
     { "Docker" = "docker.md" },
     { "RAG DB" = "rag.md" },
     { "Documentation Skill" = "docs-skill.md" },
