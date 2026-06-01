@@ -2,327 +2,169 @@
 
 An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface.
 
-## Features
+## Quickstart
 
-- **RAG-Powered Search**: Semantic document retrieval using LanceDB vector database
-- **Multi-Room Architecture**: Independent chat environments (rooms) with separate configurations and knowledge bases
-- **Multiple LLM Providers**: OpenAI, Ollama, Google Gemini, Anthropic, Groq, and compatible APIs
-- **AI Agent System**: Function calling and tool integration for AI agents
-- **OIDC Authentication**: Enterprise SSO with Keycloak integration
-- **Model Context Protocol (MCP)**: Extended AI capabilities through MCP client or exposing Room as MCP server
-- **Real-time Communication**: [AG-UI](https://docs.ag-ui.com/introduction) streams over [SSE](https://fastapi.tiangolo.com/tutorial/server-sent-events/)
-- **Quiz System**: Custom quizzes with LLM-based evaluation
-- **Observability**: Logfire integration for monitoring
+The fastest way to stand up and run your own Soliplex is to let a
+skills-compatible AI agent (e.g. Claude Code, Codex, Copilot)
+do it for you. Soliplex publishes two [Agent Skills](https://agentskills.io/)
+that teach your agent how to deploy and operate it -- no need to clone or hack
+on this repository:
 
-## Architecture
+- **`soliplex-template`** scaffolds a complete, runnable Docker Compose stack
+  (nginx, the Soliplex backend, the Flutter frontend, an ingester, Postgres,
+  and a TUI). It prompts for the parameters you care about -- project name,
+  host ports, your Ollama URL, models, version pins, auth mode -- and writes
+  out the full project. Published from
+  [soliplex/soliplex-template](https://github.com/soliplex/soliplex-template).
 
-### Backend (`/src/soliplex/`)
+- **`soliplex-docs`** is the full Soliplex documentation, so your agent can
+  answer questions about installing, configuring, and operating your
+  deployment straight from the official docs. Published from this repository.
 
-**Python 3.12+ / FastAPI**
+### Install the skills
 
-- **Core**: FastAPI application with async support
-- **RAG Engine**: [haiku.rag-slim](https://pypi.org/project/haiku.rag-slim/)
-  with LanceDB vector storage
-- **AI Integration**: [Pydantic AI](https://pypi.org/project/pydantic-ai/)
-  for agent management
-- **Authentication**: Python-Keycloak with OIDC/JWT support
-- **MCP**: [FastMCP](https://pypi.org/project/fastmcp/) server and client
-  implementations
-- **Configuration**: YAML-based configuration system
+Each skill is a tarball that unpacks into a `soliplex-template/` or
+`soliplex-docs/` directory. Install them by unpacking both into whichever
+directory your agent scans for skills. The directory differs per agent:
 
-Key modules:
-- `views/` - API endpoints (auth, completions, conversations, rooms, quizzes)
-- `agents.py` - AI agent configuration and management
-- `agui/` - AG-UI thread persistence and retrieval
-- `tools/` - Tool definitions for AI agents
-- `mcp_server.py` / `mcp_client.py` - Model Context Protocol integration
-- `tui/` - Terminal user interface
+| Agent | Per user | Per project |
+|-------|----------|-------------|
+| [Claude Code](https://code.claude.com/docs/en/skills) | `~/.claude/skills` | `.claude/skills` |
+| [OpenAI Codex](https://developers.openai.com/codex/skills/) | `~/.agents/skills` | `.agents/skills` |
+| [GitHub Copilot](https://code.visualstudio.com/docs/copilot/customization/agent-skills) | `~/.copilot/skills` | `.github/skills` |
 
-### Frontend
-
-The Flutter client lives in its own
-[repository](https://github.com/soliplex/frontend).
-
-**Flutter 3.35+ / Dart 3.10.0+**
-
-- **Framework**: Flutter web with Material Design
-- **State Management**: Riverpod (2.6.1)
-- **Navigation**: Go Router (16.0.0)
-- **Authentication**: Flutter AppAuth (9.0.1) for OIDC
-- **Real-time**: WebSocket communication
-- **Secure Storage**: Flutter Secure Storage for credentials
-
-### TUI (`src/soliplex/tui`)
-
-Quick-and-dirty client for room queries
-
-- **Framework**: Python `textual`
-
-## Quick Start
-
-For detailed installation instructions, see the [Prerequisites Guide](docs/prerequisites.md).
-
-### Install Soliplex and dependencies
+Point `SKILLS_DIR` at the row that matches your agent (the examples below use
+the Claude Code per-user location) and unpack both skills into it:
 
 ```bash
-# Install (requires uv: https://docs.astral.sh/uv/)
-uv sync
+SKILLS_DIR=~/.claude/skills
+mkdir -p "$SKILLS_DIR"
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
+# Deployment scaffolder
+curl -fsSL \
+  https://github.com/soliplex/soliplex-template/releases/download/template-skill-latest/soliplex-template-skill.tar.gz \
+  | tar xz -C "$SKILLS_DIR"
+
+# Documentation
+curl -fsSL \
+  https://github.com/soliplex/soliplex/releases/download/docs-latest/soliplex-docs-skill.tar.gz \
+  | tar xz -C "$SKILLS_DIR"
 ```
 
-### Index Soliplex docs into RAG database
+For example, to install into a Codex project instead:
 
 ```bash
-source venv/bin/activate
-export OLLAMA_BASE_URL=<your Ollama server / port>
-# Run docling-serve if you have not installed the full haiku.rag
-docker run -p 5001:5001 -d -e DOCLING_SERVE_ENABLE_UI=1 \
-  quay.io/docling-project/docling-serve
-haiku-rag --config example/haiku.rag.yaml \
-  init --db  db/rag/rag.lancedb
-haiku-rag --config example/haiku.rag.yaml \
-  add-src --db db/rag/rag.lancedb docs/
-...
-17 documents added successfully.
+SKILLS_DIR=.agents/skills
 ```
 
-See: `docs/rag.md` for more options.
+The table covers the common cases; consult your agent's documentation (linked
+above) for the authoritative list of locations it scans. Both skills bundle a
+`scripts/skill_versions.py` helper to list published builds and upgrade in
+place; see [docs/docs-skill.md](docs/docs-skill.md) for details.
 
-### Backend Server CLI Commands
+### Use the skills
 
-The `soliplex-cli` command provides several utilities for managing your Soliplex installation:
+Start your agent in the directory where you want the deployment to live and
+ask it to scaffold a stack -- for example, *"Use the soliplex-template skill
+to set up a new Soliplex deployment."* The skill walks you through the
+parameters and generates the project; then `docker compose up` brings it
+online (the frontend defaults to <http://localhost:9000>).
 
-#### Check Configuration
+Tell your agent to answer configuration or operations questions about Soliplex
+using the `soliplex-docs` skill -- for example, *"Use the soliplex-docs skill
+to answer questions about configuring or operating a Soliplex installation."*
+and then *"What is a Soliplex installation?"*
 
-Validate your configuration file and report any missing secrets or environment variables:
+> The remainder of this README covers running Soliplex from a source checkout
+> and developing on the backend itself. If you only want to *use* Soliplex,
+> the two skills above are all you need.
 
-```bash
-soliplex-cli check-config example/minimal.yaml
-```
+## Overview
 
-#### List Rooms
+Soliplex is a self-hosted, full-stack RAG/AI system: a FastAPI backend
+(a thin configuration and authentication layer around
+[pydantic-ai](https://ai.pydantic.dev/)), a hardened
+[Flutter client](https://github.com/soliplex/frontend), and a terminal UI.
 
-Show all configured chat rooms:
+See the [Overview](docs/overview.md) for what Soliplex is, when (and when not)
+to use it, how it compares to alternatives, and the full feature and
+architecture breakdown.
 
-```bash
-soliplex-cli list-rooms example/minimal.yaml
-```
+## Running from source
 
-#### List Completions
+The skills-based [Quickstart](#quickstart) above is the recommended path for
+most users. To run Soliplex from a checkout of this repository instead, see:
 
-Show all configured completion endpoints:
-
-```bash
-soliplex-cli list-completions example/minimal.yaml
-```
-
-#### List Secrets
-
-Display all configured secrets and their status:
-
-```bash
-soliplex-cli list-secrets example/minimal.yaml
-```
-
-#### List Environment Variables
-
-Show all environment variables and their values:
-
-```bash
-soliplex-cli list-environment example/minimal.yaml
-```
-
-#### List OIDC Providers
-
-Display configured OIDC authentication providers:
-
-```bash
-soliplex-cli list-oidc-auth-providers example/minimal.yaml
-```
-
-#### Export Configuration
-
-Export the installation configuration as YAML:
-
-```bash
-soliplex-cli config example/minimal.yaml
-```
-
-#### Export AG-UI Feature Schemas
-
-Export AG-UI feature schemas as JSON:
-
-```bash
-soliplex-cli agui-feature-schemas example/minimal.yaml
-```
-
-#### Run Backend Server
-
-Start the Soliplex backend server:
-
-```bash
-export OLLAMA_BASE_URL=<your Ollama server / port>
-soliplex-cli serve example/minimal.yaml --no-auth-mode
-```
-
-Server options:
-- `--no-auth-mode` - Disable authentication (for development/testing)
-- `--host HOST` - Bind to specific host (default: 127.0.0.1)
-- `--port PORT` - Listen on specific port (default: 8000)
-- `--reload {python,config,both}` - Enable hot reload for python code, config, or both
-- `--reload-dirs DIRS` - Additional directories to watch for reload
-- `--reload-includes PATTERNS` - File patterns to include in reload watch
-- `--proxy-headers` - Enable proxy header parsing
-- `--forwarded-allow-ips IPS` - Trusted IP addresses for proxy headers
-
-### Frontend
-
-```bash
-cd src/flutter
-flutter pub get
-flutter run -d chrome --web-port 59001
-```
-
-### TUI
-
-The TUI does not yet support authentication, so run the back-end with
-`--no-auth-mode` when using the TUI.
-
-Within the virtual environment where you installed `soliplex`:
-
-```bash
-soliplex-tui --help
-
- Usage: soliplex-tui [OPTIONS]
-
-╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --version             -v                                                     │
-│ --url                      TEXT  Base URL for Soliplex back-end              │
-│                                  [default: http://127.0.0.1:8000]            │
-│ --help                -h         Show this message and exit.                 │
-╰──────────────────────────────────────────────────────────────────────────────╯
-```
-
-```bash
-soliplex-tui
-```
-
-By default, the TUI connects to a Soliplex back-end server running
-on port 8000 on your local machine:
-
-```bash
-soliplex-tui --url http://127.0.0.1:8000
-```
-
-## Development
-
-This project uses [PEP 735 Dependency Groups](https://peps.python.org/pep-0735/)
-for managing development dependencies. This is the modern standard supported by
-`uv` and recent versions of `pip`.
-
-### Installing dev dependencies
-
-```bash
-# Using pip (requires pip 24.0+)
-pip install -e . --group dev
-
-# Using uv (recommended)
-uv sync --group dev
-```
-
-**Note:** The older syntax `pip install -e ".[dev]"` is for `[project.optional-dependencies]`
-and will NOT work with `[dependency-groups]`. Always use `--group dev` instead.
-
-### Available dependency groups
-
-| Group | Purpose |
-|-------|---------|
-| `dev` | Testing tools (pytest, ruff, coverage) |
-| `docs` | Documentation (mkdocs, mkdocs-material) |
-| `postgres` | PostgreSQL support (asyncpg) |
-| `tui` | Terminal UI (textual, typer) |
-
-### Running tests
-
-```bash
-# Run unit tests with coverage
-pytest
-
-# Run in parallel with pytest-xdist (much faster on multi-core machines)
-pytest -n 8
-
-# Run with specific coverage threshold (CI enforces 100%)
-pytest --cov-fail-under=100
-
-# Run linting
-ruff check
-
-# Check formatting
-ruff format --check
-```
-
-The full suite with coverage is CPU-bound, so parallelizing it with
-`pytest-xdist` (the `-n` option) is the biggest single speedup. Coverage
-instrumentation is itself CPU-heavy, so the fastest worker count is *fewer*
-than the core count -- `-n 8` is a good default on a 16-core box. Tune `-n`
-to roughly half your physical cores, or use `-n auto` to let pytest-xdist
-pick one worker per core (portable, but slightly slower than the hand-tuned
-value when coverage is enabled).
+- [Prerequisites](docs/prerequisites.md) -- system requirements and an
+  installation checklist.
+- [Server Setup](docs/server/index.md) -- install the backend, run the example
+  installations, and start the server.
+- [`soliplex-cli` reference](docs/server/cli.md) -- every subcommand and option
+  (config audits, serving, admin users, model pulls, ...).
+- [RAG Database](docs/rag.md) -- create and populate the LanceDB database the
+  examples expect.
+- [Client Setup](docs/client.md) -- run the Flutter web client.
+- [Docker Deployment](docs/docker.md) -- run the full stack with Docker Compose.
 
 ## Configuration
 
-YAML-based configuration with:
-- **Installation** (`installation.yaml`) - Main config referencing agents, rooms, and OIDC providers
-- **Rooms** (`rooms/*.yaml`) - Individual chat room configurations with RAG settings
-- **Agents** (`completions/*.yaml`) - LLM provider and model configurations
-- **OIDC** (`oidc/*.yaml`) - Authentication provider settings
+Soliplex is configured by a tree of YAML files rooted at an
+`installation.yaml`; sample configurations live in the
+[`example/`](example/) directory. See the configuration docs:
 
-See `example/` directory for sample configurations.
-
-### Environment Variables
-
-See the [environment](docs/server/environment.md) docs for an explanation
-of when to configure Soliplex using OS environment variables.
+- [Filesystem Layout](docs/config/filesystem_layout.md),
+  [Installation](docs/config/installation.md),
+  [Meta](docs/config/meta.md)
+- [Rooms](docs/config/rooms.md),
+  [Agents](docs/config/agents.md),
+  [Completions](docs/config/completions.md)
+- [RAG](docs/config/rag.md),
+  [Quizzes](docs/config/quizzes.md),
+  [AI Skills](docs/config/skills.md),
+  [AG-UI Features](docs/config/agui.md)
+- [Secrets](docs/config/secrets.md),
+  [Environment](docs/config/environment.md),
+  [OIDC Authentication](docs/config/oidc_providers.md)
+- [Logfire](docs/config/logfire.md),
+  [Console logging](docs/config/logging.md),
+  [SQLAlchemy DBURIs](docs/config/dburis.md)
 
 ## Documentation
 
-Comprehensive documentation is available in the `docs/` directory:
+The full documentation set lives in [`docs/`](docs/) and is published as a
+[Zensical site](https://soliplex.github.io/soliplex/):
 
-- **[Prerequisites Guide](docs/prerequisites.md)** - Step-by-step installation checklist
-- **[Server Setup](docs/server/index.md)** - Backend server configuration and CLI reference
-- **[Client Setup](docs/client.md)** - Frontend Flutter application setup
-- **[Docker Deployment](docs/docker.md)** - Complete Docker and docker-compose guide
-- **[RAG Setup](docs/rag.md)** - RAG database initialization and management
-- **[Configuration](docs/config/)** - Detailed configuration options
+> **Tip:** the same documentation is also available as the `soliplex-docs`
+> Agent Skill, so a skills-compatible agent can answer questions straight from
+> it -- see the [Quickstart](#quickstart) above.
 
-### Running with Docker
+- [Overview](docs/overview.md)
+- [Prerequisites](docs/prerequisites.md)
+- [Server Setup](docs/server/index.md) and
+  [CLI Reference](docs/server/cli.md)
+- [Client Setup](docs/client.md)
+- [Docker Deployment](docs/docker.md)
+- [RAG Database](docs/rag.md)
+- [Documentation Skill](docs/docs-skill.md)
+- [Configuration](docs/config/)
+- [Usage](docs/usage.md)
 
-See the [Docker Deployment Guide](docs/docker.md) for complete instructions:
+## Development
 
-```bash
-# Setup
-cp .env.example .env
-# Edit .env with your settings
-
-# Run
-docker-compose up
-```
-
-Access:
-- Backend API: <http://localhost:8000>
-- API Documentation: <http://localhost:8000/docs>
-- Frontend Web UI: <http://localhost:9000>
+Contributor guidance -- setup, build and test commands, code style, the
+configuration system, and how to add tools, rooms, and API endpoints -- lives
+in [DEVELOPMENT.md](DEVELOPMENT.md). [AGENTS.md](AGENTS.md) and
+[CLAUDE.md](CLAUDE.md) are condensed, agent-facing versions of the same
+guidance.
 
 ## Related Repositories
 
-- **[soliplex/flutter](https://github.com/soliplex/flutter)** - Flutter frontend (cross-platform mobile/desktop)
-- **[Documentation](https://soliplex.github.io/)** - Documentation site (MkDocs)
-- **[soliplex/ingester](https://github.com/soliplex/ingester)** - Content ingestion pipeline
-- **[soliplex/ingester-agents](https://github.com/soliplex/ingester-agents)** - Document ingestion agents
-- **[soliplex/whitelabel](https://github.com/soliplex/whitelabel)** - Customer white-label appshell template
+- [soliplex/frontend](https://github.com/soliplex/frontend) -- Flutter client (cross-platform mobile/desktop)
+- [soliplex/soliplex-template](https://github.com/soliplex/soliplex-template) -- Docker Compose deployment template
+- [soliplex/ingester](https://github.com/soliplex/ingester) -- Content ingestion pipeline
+- [soliplex/ingester-agents](https://github.com/soliplex/ingester-agents) -- Document ingestion agents
+- [soliplex/whitelabel](https://github.com/soliplex/whitelabel) -- Customer white-label appshell template
+- [Documentation site](https://soliplex.github.io/soliplex/)
 
 ## License
 
