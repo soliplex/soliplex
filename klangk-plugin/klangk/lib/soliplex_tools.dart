@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:klangk_plugin_api/klangk_plugin_api.dart';
+import 'package:web/web.dart' as web;
 
 /// Cached Soliplex URL fetched from the Klangk backend config.
 String? _soliplexUrl;
@@ -21,10 +22,17 @@ Future<String> _getSoliplexUrl() async {
 class SoliplexClient {
   SoliplexClient();
 
-  Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
+  Map<String, String> get _headers {
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    final token = web.window.localStorage.getItem('auth_access_token');
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
 
  /// List all rooms the user has access to.
   Future<List<Map<String, dynamic>>> listRooms() async {
@@ -96,6 +104,10 @@ class SoliplexClient {
       final request = http.Request('POST', Uri.parse(sseUrl));
       request.headers['Content-Type'] = 'application/json';
       request.headers['Accept'] = 'text/event-stream';
+      final token = web.window.localStorage.getItem('auth_access_token');
+      if (token != null && token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
       request.body = runInput;
 
       final streamedResp = await client.send(request);
