@@ -53,7 +53,10 @@ Future<String> _getAccessToken() async {
   if (systems.isEmpty) {
     throw Exception('No OIDC auth systems configured on Soliplex');
   }
-  final systemId = systems.keys.first;
+  // Prefer the 'pydio' (Enfold) auth system if available.
+  final systemId = systems.containsKey('pydio')
+      ? 'pydio'
+      : systems.keys.first;
 
   // The Soliplex callback redirects to:
   //   {return_to}?token=XXX&refresh_token=YYY&expires_in=ZZZ
