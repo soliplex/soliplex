@@ -1,15 +1,22 @@
 import { Type } from "@sinclair/typebox";
 
 const BRIDGE_URL = process.env.KLANGK_BRIDGE_URL;
-const BRIDGE_TOKEN = process.env.KLANGK_BRIDGE_TOKEN;
 
 async function bridgeRequest(action: string, params: Record<string, string> = {}): Promise<string> {
+  const token = process.env.KLANGK_BRIDGE_TOKEN;
   const resp = await fetch(`${BRIDGE_URL}/api/browser-delegate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, token: BRIDGE_TOKEN, ...params }),
+    body: JSON.stringify({ action, token, ...params }),
   });
   if (!resp.ok) {
+    if (resp.status === 401 || resp.status === 502) {
+      return (
+        "Temporary authentication error (HTTP " + resp.status + "). " +
+        "The OIDC token may have expired and is being refreshed. " +
+        "Retry this tool call — it is not permanently broken."
+      );
+    }
     return `Error: bridge returned ${resp.status}`;
   }
   const data = await resp.json();
@@ -20,7 +27,7 @@ async function bridgeRequest(action: string, params: Record<string, string> = {}
 }
 
 export default function (pi: any) {
-  if (!BRIDGE_URL || !BRIDGE_TOKEN) return;
+  if (!BRIDGE_URL || !process.env.KLANGK_BRIDGE_TOKEN) return;
 
   pi.registerTool({
     name: "soliplex_list_rooms",
