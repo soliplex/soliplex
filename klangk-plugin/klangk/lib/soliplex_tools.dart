@@ -75,11 +75,10 @@ Future<String> _getAccessToken() async {
   // we can read it.
   final completer = Completer<String>();
 
-  late final int timerId;
-  timerId = web.window.setInterval((() {
+  final timer = Timer.periodic(Duration(milliseconds: 500), (t) {
     try {
       if (popup == null || popup.closed) {
-        web.window.clearInterval(timerId);
+        t.cancel();
         if (!completer.isCompleted) {
           completer.completeError(
               Exception('Auth popup was closed before completing'));
@@ -88,7 +87,7 @@ Future<String> _getAccessToken() async {
       }
       final href = popup.location.href;
       if (href.contains('token=')) {
-        web.window.clearInterval(timerId);
+        t.cancel();
         popup.close();
         final uri = Uri.parse(href);
         final token = uri.queryParameters['token'];
@@ -116,12 +115,12 @@ Future<String> _getAccessToken() async {
     } catch (_) {
       // Cross-origin access to popup.location throws — keep polling.
     }
-  }).toJS, 500);
+  });
 
   // Timeout after 2 minutes.
   Future.delayed(Duration(minutes: 2), () {
     if (!completer.isCompleted) {
-      web.window.clearInterval(timerId);
+      timer.cancel();
       try {
         popup?.close();
       } catch (_) {}
