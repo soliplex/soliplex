@@ -89,10 +89,23 @@ Future<String?> _tryRefreshToken() async {
   return newToken;
 }
 
+/// Check whether we have a valid (non-expired) access token.
+bool hasValidToken() {
+  final stored = web.window.localStorage.getItem(_tokenKey);
+  final expiresAtStr = web.window.localStorage.getItem(_expiresAtKey);
+  if (stored == null || stored.isEmpty || expiresAtStr == null) {
+    return false;
+  }
+  final expiresAt = DateTime.tryParse(expiresAtStr);
+  return expiresAt != null &&
+      expiresAt.isAfter(DateTime.now().add(Duration(seconds: 30)));
+}
+
 /// Get a valid access token. Tries in order:
 /// 1. Cached token if not expired
 /// 2. Silent refresh using refresh_token
-/// 3. OIDC popup login
+/// Throws if neither works (caller should direct user to log in
+/// via the overlay button).
 Future<String> _getAccessToken() async {
   // 1. Check for a stored token that hasn't expired.
   final stored = web.window.localStorage.getItem(_tokenKey);
@@ -109,13 +122,16 @@ Future<String> _getAccessToken() async {
   final refreshed = await _tryRefreshToken();
   if (refreshed != null) return refreshed;
 
-  // 3. Fall back to OIDC popup login.
-  return _popupLogin();
+  // 3. No valid token and refresh failed.
+  throw Exception(
+      'Not authenticated. Click "Connect to Soliplex" to log in.');
 }
 
-/// Perform OIDC login via a browser popup. Stores the access token,
-/// refresh token, expiry, server URL, and client ID in localStorage.
-Future<String> _popupLogin() async {
+/// Perform OIDC login via a browser popup. Must be called from a
+/// user gesture (e.g., button click) to avoid popup blockers.
+/// Stores the access token, refresh token, expiry, server URL,
+/// and client ID in localStorage.
+Future<String> popupLogin() async {
   final soliplexUrl = await _getSoliplexUrl();
 
   // Discover available auth systems.
