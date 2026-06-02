@@ -4,13 +4,18 @@ import 'package:http/http.dart' as http;
 import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'package:web/web.dart' as web;
 
-/// localStorage key for the Soliplex access token.
+/// localStorage keys for the Soliplex auth state.
 const _tokenKey = 'soliplex_access_token';
 const _refreshTokenKey = 'soliplex_refresh_token';
 const _expiresAtKey = 'soliplex_expires_at';
+const _serverUrlKey = 'soliplex_server_url';
+const _clientIdKey = 'soliplex_client_id';
 
 /// Cached Soliplex URL fetched from the Klangk backend config.
 String? _soliplexUrl;
+
+/// Cached OIDC token endpoint from discovery.
+String? _tokenEndpoint;
 
 /// Fetch the Soliplex URL from the Klangk backend config endpoint.
 Future<String> _getSoliplexUrl() async {
@@ -25,9 +30,71 @@ Future<String> _getSoliplexUrl() async {
   return _soliplexUrl!;
 }
 
-/// Get a valid access token, triggering OIDC login via popup if needed.
+/// Discover the OIDC token endpoint from the server_url.
+Future<String?> _getTokenEndpoint(String serverUrl) async {
+  if (_tokenEndpoint != null) return _tokenEndpoint;
+  final url = serverUrl.replaceAll(RegExp(r'/+$'), '');
+  final resp = await http.get(
+      Uri.parse('$url/.well-known/openid-configuration'));
+  if (resp.statusCode == 200) {
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    _tokenEndpoint = data['token_endpoint'] as String?;
+  }
+  return _tokenEndpoint;
+}
+
+/// Try to refresh the access token using the stored refresh token.
+/// Returns the new access token, or null if refresh failed.
+Future<String?> _tryRefreshToken() async {
+  final refreshToken =
+      web.window.localStorage.getItem(_refreshTokenKey);
+  final serverUrl = web.window.localStorage.getItem(_serverUrlKey);
+  final clientId = web.window.localStorage.getItem(_clientIdKey);
+  if (refreshToken == null || serverUrl == null || clientId == null) {
+    return null;
+  }
+
+  final tokenEndpoint = await _getTokenEndpoint(serverUrl);
+  if (tokenEndpoint == null) return null;
+
+  final resp = await http.post(
+    Uri.parse(tokenEndpoint),
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: {
+      'grant_type': 'refresh_token',
+      'refresh_token': refreshToken,
+      'client_id': clientId,
+    },
+  );
+
+  if (resp.statusCode != 200) return null;
+
+  final data = jsonDecode(resp.body) as Map<String, dynamic>;
+  final newToken = data['access_token'] as String?;
+  final newRefresh = data['refresh_token'] as String?;
+  final expiresIn = data['expires_in'] as int?;
+
+  if (newToken == null) return null;
+
+  web.window.localStorage.setItem(_tokenKey, newToken);
+  if (newRefresh != null) {
+    web.window.localStorage.setItem(_refreshTokenKey, newRefresh);
+  }
+  if (expiresIn != null) {
+    final expiry =
+        DateTime.now().add(Duration(seconds: expiresIn));
+    web.window.localStorage.setItem(
+        _expiresAtKey, expiry.toIso8601String());
+  }
+  return newToken;
+}
+
+/// Get a valid access token. Tries in order:
+/// 1. Cached token if not expired
+/// 2. Silent refresh using refresh_token
+/// 3. OIDC popup login
 Future<String> _getAccessToken() async {
-  // Check for a stored token that hasn't expired.
+  // 1. Check for a stored token that hasn't expired.
   final stored = web.window.localStorage.getItem(_tokenKey);
   final expiresAtStr = web.window.localStorage.getItem(_expiresAtKey);
   if (stored != null && stored.isNotEmpty && expiresAtStr != null) {
@@ -38,10 +105,20 @@ Future<String> _getAccessToken() async {
     }
   }
 
-  // No valid token — trigger OIDC login via popup.
+  // 2. Try silent refresh.
+  final refreshed = await _tryRefreshToken();
+  if (refreshed != null) return refreshed;
+
+  // 3. Fall back to OIDC popup login.
+  return _popupLogin();
+}
+
+/// Perform OIDC login via a browser popup. Stores the access token,
+/// refresh token, expiry, server URL, and client ID in localStorage.
+Future<String> _popupLogin() async {
   final soliplexUrl = await _getSoliplexUrl();
 
-  // Discover the first available auth system.
+  // Discover available auth systems.
   final loginResp =
       await http.get(Uri.parse('$soliplexUrl/api/login'));
   if (loginResp.statusCode != 200) {
@@ -58,12 +135,17 @@ Future<String> _getAccessToken() async {
       ? 'pydio'
       : systems.keys.first;
 
-  // The Soliplex callback redirects to:
-  //   {return_to}?token=XXX&refresh_token=YYY&expires_in=ZZZ
-  //
-  // We set return_to to a path on the same origin. There's no page
-  // there, but we only need to read the URL query params from the
-  // popup before the browser tries to render it.
+  // Store the server_url and client_id for future token refreshes.
+  final systemData = systems[systemId] as Map<String, dynamic>;
+  final serverUrl = systemData['server_url'] as String?;
+  final clientId = systemData['client_id'] as String?;
+  if (serverUrl != null) {
+    web.window.localStorage.setItem(_serverUrlKey, serverUrl);
+  }
+  if (clientId != null) {
+    web.window.localStorage.setItem(_clientIdKey, clientId);
+  }
+
   final callbackPath = '/soliplex-auth-callback';
   final loginUrl = '$soliplexUrl/api/login/$systemId'
       '?return_to=$callbackPath';
