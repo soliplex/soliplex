@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 
-const BRIDGE_URL = process.env.BARK_BRIDGE_URL;
-const BRIDGE_TOKEN = process.env.BARK_BRIDGE_TOKEN;
+const BRIDGE_URL = process.env.KLANGK_BRIDGE_URL;
+const BRIDGE_TOKEN = process.env.KLANGK_BRIDGE_TOKEN;
 
 async function bridgeRequest(action: string, params: Record<string, string> = {}): Promise<string> {
   const resp = await fetch(`${BRIDGE_URL}/api/browser-delegate`, {

@@ -1,5 +1,5 @@
-name: bark_plugin_soliplex
-description: Soliplex knowledge base plugin for Bark
+name: klangk_plugin_soliplex
+description: Soliplex knowledge base plugin for Klangk
 publish_to: none
 version: 0.1.0
 
@@ -13,4 +13,4 @@ dependencies:
   http: ^1.2.0
   bark_plugin_api:
     git:
-      url: https://github.com/mcdonc/bark-plugin-api.git
+      url: https://github.com/mcdonc/klangk-plugin-api.git

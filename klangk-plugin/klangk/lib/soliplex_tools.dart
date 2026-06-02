@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:bark_plugin_api/bark_plugin_api.dart';
+import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 
-/// Cached Soliplex URL fetched from the Bark backend config.
+/// Cached Soliplex URL fetched from the Klangk backend config.
 String? _soliplexUrl;
 
-/// Fetch the Soliplex URL from the Bark backend config endpoint.
+/// Fetch the Soliplex URL from the Klangk backend config endpoint.
 Future<String> _getSoliplexUrl() async {
   if (_soliplexUrl != null) return _soliplexUrl!;
   final resp = await http.get(Uri.parse('$baseUrl/api/config'));
@@ -26,7 +26,7 @@ class SoliplexClient {
         'Accept': 'application/json',
       };
 
-  /// List all rooms the user has access to.
+ /// List all rooms the user has access to.
   Future<List<Map<String, dynamic>>> listRooms() async {
     final soliplexUrl = await _getSoliplexUrl();
     final response = await http.get(
