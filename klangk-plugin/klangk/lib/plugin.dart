@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:klangk_plugin_api/klangk_plugin_api.dart';
+import 'package:web/web.dart' as web;
 import 'soliplex_tools.dart';
+
+const soliplexPluginVersion = '2026-06-02a';
 
 class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
   bool _authenticated = hasValidToken();
   bool _loggingIn = false;
+
+  SoliplexPlugin() {
+    web.window.localStorage.setItem(
+        'soliplex_plugin_version', soliplexPluginVersion);
+  }
 
   bool get authenticated => _authenticated;
   bool get loggingIn => _loggingIn;
