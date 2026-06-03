@@ -5,7 +5,7 @@ import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'package:web/web.dart' as web;
 import 'soliplex_tools.dart';
 
-const soliplexPluginVersion = '2026-06-02d';
+const soliplexPluginVersion = '2026-06-02e';
 
 class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
   bool _authenticated = hasValidToken();
@@ -59,9 +59,14 @@ class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
         'soliplex_query': _query,
       };
 
+  late final _overlay = _SoliplexAuthOverlay(
+    key: const ValueKey('soliplex_auth_overlay'),
+    plugin: this,
+  );
+
   @override
   Widget? buildOverlay(BuildContext context) {
-    return _SoliplexAuthOverlay(plugin: this);
+    return _overlay;
   }
 
   Future<void> login(String systemId) async {
@@ -117,7 +122,7 @@ class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
 
 class _SoliplexAuthOverlay extends StatefulWidget {
   final SoliplexPlugin plugin;
-  const _SoliplexAuthOverlay({required this.plugin});
+  const _SoliplexAuthOverlay({super.key, required this.plugin});
 
   @override
   State<_SoliplexAuthOverlay> createState() =>
