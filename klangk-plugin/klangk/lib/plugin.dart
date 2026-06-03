@@ -5,7 +5,7 @@ import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'package:web/web.dart' as web;
 import 'soliplex_tools.dart';
 
-const soliplexPluginVersion = '2026-06-02c';
+const soliplexPluginVersion = '2026-06-02d';
 
 class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
   bool _authenticated = hasValidToken();
@@ -31,6 +31,21 @@ class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
       (() {
         debugPrint('Soliplex plugin version: $soliplexPluginVersion');
         return soliplexPluginVersion.toJS;
+      }).toJS,
+    );
+    globalContext.setProperty(
+      'soliplexShowTokens'.toJS,
+      (() {
+        final token = web.window.localStorage.getItem('soliplex_access_token');
+        final refresh = web.window.localStorage.getItem('soliplex_refresh_token');
+        final expires = web.window.localStorage.getItem('soliplex_expires_at');
+        final server = web.window.localStorage.getItem('soliplex_server_url');
+        final client = web.window.localStorage.getItem('soliplex_client_id');
+        debugPrint('soliplex_access_token: ${token?.substring(0, token.length > 40 ? 40 : token.length)}...');
+        debugPrint('soliplex_refresh_token: ${refresh != null ? "${refresh.substring(0, refresh.length > 40 ? 40 : refresh.length)}..." : "null"}');
+        debugPrint('soliplex_expires_at: $expires');
+        debugPrint('soliplex_server_url: $server');
+        debugPrint('soliplex_client_id: $client');
       }).toJS,
     );
   }
