@@ -89,6 +89,14 @@ Future<String?> _tryRefreshToken() async {
   return newToken;
 }
 
+/// Clear all stored auth tokens. Called on 401 responses to force
+/// re-authentication via the overlay button.
+void clearStoredTokens() {
+  web.window.localStorage.removeItem(_tokenKey);
+  web.window.localStorage.removeItem(_refreshTokenKey);
+  web.window.localStorage.removeItem(_expiresAtKey);
+}
+
 /// Check whether we have a valid (non-expired) access token.
 bool hasValidToken() {
   final stored = web.window.localStorage.getItem(_tokenKey);
@@ -268,6 +276,11 @@ class SoliplexClient {
       Uri.parse('$soliplexUrl/api/v1/rooms'),
       headers: headers,
     );
+    if (response.statusCode == 401) {
+      clearStoredTokens();
+      throw Exception(
+          'Not authenticated. Click "Connect to Soliplex" to log in.');
+    }
     if (response.statusCode != 200) {
       throw Exception(
           'Failed to list rooms: ${response.statusCode} ${response.body}');
@@ -297,6 +310,11 @@ class SoliplexClient {
       headers: headers,
       body: jsonEncode({}),
     );
+    if (threadResp.statusCode == 401) {
+      clearStoredTokens();
+      throw Exception(
+          'Not authenticated. Click "Connect to Soliplex" to log in.');
+    }
     if (threadResp.statusCode != 200) {
       throw Exception(
           'Failed to create thread: '
@@ -344,6 +362,11 @@ class SoliplexClient {
 
       final streamedResp = await client.send(request);
 
+      if (streamedResp.statusCode == 401) {
+        clearStoredTokens();
+        throw Exception(
+            'Not authenticated. Click "Connect to Soliplex" to log in.');
+      }
       if (streamedResp.statusCode != 200) {
         final body = await streamedResp.stream.bytesToString();
         throw Exception(
