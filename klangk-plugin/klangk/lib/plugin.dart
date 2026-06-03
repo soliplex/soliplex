@@ -3,7 +3,7 @@ import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'package:web/web.dart' as web;
 import 'soliplex_tools.dart';
 
-const soliplexPluginVersion = '2026-06-02a';
+const soliplexPluginVersion = '2026-06-02b';
 
 class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
   bool _authenticated = hasValidToken();
@@ -111,22 +111,31 @@ class _SoliplexAuthOverlayState extends State<_SoliplexAuthOverlay> {
   }
 
   Future<void> _expand() async {
+    debugPrint('soliplex: _expand called, '
+        'authenticated=${widget.plugin.authenticated}, '
+        'mounted=$mounted');
     if (_authSystems == null && !_loadingSystems) {
       _loadingSystems = true;
       setState(() {});
       try {
         _authSystems = await getAuthSystems();
+        debugPrint('soliplex: got auth systems: '
+            '${_authSystems?.keys.toList()}');
         // Pre-select the first system.
         if (_authSystems!.isNotEmpty) {
           _selectedSystem = _authSystems!.keys.first;
         }
-      } catch (_) {
+      } catch (e) {
+        debugPrint('soliplex: getAuthSystems failed: $e');
         // Leave _authSystems null; user can retry.
       } finally {
         _loadingSystems = false;
       }
     }
     _expanded = true;
+    debugPrint('soliplex: setting expanded=true, '
+        'authenticated=${widget.plugin.authenticated}, '
+        'mounted=$mounted');
     if (mounted) setState(() {});
   }
 
@@ -137,6 +146,9 @@ class _SoliplexAuthOverlayState extends State<_SoliplexAuthOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('soliplex: build called, '
+        'authenticated=${widget.plugin.authenticated}, '
+        'expanded=$_expanded');
     if (widget.plugin.authenticated) {
       return const SizedBox.shrink();
     }
