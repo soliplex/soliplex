@@ -5,7 +5,7 @@ import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'package:web/web.dart' as web;
 import 'soliplex_tools.dart';
 
-const soliplexPluginVersion = '2026-06-02e';
+const soliplexPluginVersion = '2026-06-02f';
 
 class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
   bool _authenticated = hasValidToken();
@@ -234,18 +234,22 @@ class _SoliplexAuthOverlayState extends State<_SoliplexAuthOverlay> {
     }
 
     // Expanded state: radio buttons + connect button.
+    debugPrint('soliplex: rendering expanded view with '
+        '${_authSystems?.length ?? 0} systems');
     return Positioned(
       top: 8,
       right: 8,
-      child: Material(
-        elevation: 4,
-        borderRadius: BorderRadius.circular(8),
-        color: errorContainer,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: SizedBox(
+        width: 250,
+        child: Material(
+          elevation: 4,
+          borderRadius: BorderRadius.circular(8),
+          color: errorContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -339,6 +343,7 @@ class _SoliplexAuthOverlayState extends State<_SoliplexAuthOverlay> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
