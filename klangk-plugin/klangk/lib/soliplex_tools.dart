@@ -89,12 +89,15 @@ Future<String?> _tryRefreshToken() async {
   return newToken;
 }
 
-/// Clear all stored auth tokens. Called on 401 responses to force
+/// Clear all stored auth state. Called on 401 responses to force
 /// re-authentication via the overlay button.
 void clearStoredTokens() {
   web.window.localStorage.removeItem(_tokenKey);
   web.window.localStorage.removeItem(_refreshTokenKey);
   web.window.localStorage.removeItem(_expiresAtKey);
+  web.window.localStorage.removeItem(_serverUrlKey);
+  web.window.localStorage.removeItem(_clientIdKey);
+  _tokenEndpoint = null;
 }
 
 /// Check whether we have a valid (non-expired) access token.

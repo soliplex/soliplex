@@ -1,3 +1,4 @@
+import 'dart:js_interop';
 import 'package:flutter/material.dart';
 import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'package:web/web.dart' as web;
@@ -12,6 +13,26 @@ class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
   SoliplexPlugin() {
     web.window.localStorage.setItem(
         'soliplex_plugin_version', soliplexPluginVersion);
+    // Register a global JS function for easy console debugging.
+    _registerJsHelpers();
+  }
+
+  static void _registerJsHelpers() {
+    (web.window as JSObject).setProperty(
+      'soliplexClearTokens'.toJS,
+      (() {
+        clearStoredTokens();
+        web.window.console.log('Soliplex tokens cleared.'.toJS);
+      }).toJS,
+    );
+    (web.window as JSObject).setProperty(
+      'soliplexVersion'.toJS,
+      (() {
+        web.window.console.log(
+            'Soliplex plugin version: $soliplexPluginVersion'.toJS);
+        return soliplexPluginVersion.toJS;
+      }).toJS,
+    );
   }
 
   bool get authenticated => _authenticated;
