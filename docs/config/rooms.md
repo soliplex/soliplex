@@ -136,6 +136,36 @@ for configuring an agent.
   Each tool mapping can contain additional elements, which are used to
   configure the tool's behavior.
 
+### MCP Client Toolsets
+
+- `mcp_client_toolsets` should be a mapping of toolset name to a toolset
+  configuration.  Each configuration selects a transport via its `kind`:
+
+  - `"stdio"` runs an MCP server as a subprocess, configured with
+    `command`, `args`, and `env`.
+
+  - `"http"` or `"sse"` connect to a remote MCP server, configured with
+    `url`, `headers`, and `query_params`.
+
+  Any configuration may also set `allowed_tools` (a list of strings) to
+  restrict which of the server's tools are exposed.  E.g.:
+
+  ```yaml
+  mcp_client_toolsets:
+    google_maps:
+      kind: "stdio"
+      command: "npx"
+      args:
+        - "-y"
+        - "@modelcontextprotocol/server-google-maps"
+      env:
+        GOOGLE_MAPS_API_KEY: "secret:GOOGLE_MAPS_API_KEY"
+  ```
+
+  String values in these fields can interpolate installation secrets and
+  environment variables; see [Installation Secret / Environment
+  Interpolation](installation.md#installation-secret-environment-interpolation).
+
 ### Skill Configuration
 
 - `installation_skill_names` (a list of strings, default empty);  if set,
