@@ -1,10 +1,11 @@
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'package:flutter/material.dart';
 import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'package:web/web.dart' as web;
 import 'soliplex_tools.dart';
 
-const soliplexPluginVersion = '2026-06-02b';
+const soliplexPluginVersion = '2026-06-02c';
 
 class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
   bool _authenticated = hasValidToken();
@@ -18,18 +19,17 @@ class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
   }
 
   static void _registerJsHelpers() {
-    (web.window as JSObject).setProperty(
+    globalContext.setProperty(
       'soliplexClearTokens'.toJS,
       (() {
         clearStoredTokens();
-        web.window.console.log('Soliplex tokens cleared.'.toJS);
+        debugPrint('Soliplex tokens cleared.');
       }).toJS,
     );
-    (web.window as JSObject).setProperty(
+    globalContext.setProperty(
       'soliplexVersion'.toJS,
       (() {
-        web.window.console.log(
-            'Soliplex plugin version: $soliplexPluginVersion'.toJS);
+        debugPrint('Soliplex plugin version: $soliplexPluginVersion');
         return soliplexPluginVersion.toJS;
       }).toJS,
     );
