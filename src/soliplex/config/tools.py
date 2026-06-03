@@ -416,14 +416,13 @@ class Stdio_MCP_ClientToolsetConfig:
 
     @property
     def tool_kwargs(self) -> dict:
-        env_map = {
-            key: self._installation_config.get_secret(value)
-            for (key, value) in self.env.items()
-        }
+        interpolate = self._installation_config.interpolate
         return {
-            "command": self.command,
-            "args": self.args,
-            "env": env_map,
+            "command": interpolate(self.command),
+            "args": [interpolate(arg) for arg in self.args],
+            "env": {
+                key: interpolate(value) for (key, value) in self.env.items()
+            },
             "allowed_tools": self.allowed_tools,
         }
 
@@ -474,16 +473,17 @@ class _Remote_MCP_ClientToolsetConfig:
 
     @property
     def tool_kwargs(self) -> dict:
-        url = self.url
+        interpolate = self._installation_config.interpolate
+
+        url = interpolate(self.url)
 
         headers = {
-            key: self._installation_config.interpolate_secrets(value)
-            for (key, value) in self.headers.items()
+            key: interpolate(value) for (key, value) in self.headers.items()
         }
 
         if self.query_params:
             qp = {
-                key: self._installation_config.get_secret(value)
+                key: interpolate(value)
                 for (key, value) in self.query_params.items()
             }
             qs = url_parse.urlencode(qp)
