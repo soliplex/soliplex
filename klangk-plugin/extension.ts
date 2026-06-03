@@ -33,7 +33,7 @@ export default function (pi: any) {
     name: "soliplex_list_rooms",
     description:
       "List available Soliplex knowledge base rooms. Returns room IDs, names, and descriptions. " +
-      "Only use this tool when the user explicitly mentions 'soliplex' or asks about Soliplex knowledge bases.",
+      "Only use this tool when the user explicitly mentions 'soliplex' or asks to list Soliplex knowledge bases. ",
     promptSnippet: "soliplex_list_rooms: List Soliplex knowledge base rooms",
     parameters: Type.Object({}),
     async execute(
@@ -60,10 +60,10 @@ export default function (pi: any) {
     promptSnippet:
       "soliplex_query(room_id, question): Query a Soliplex knowledge base room",
     promptGuidelines: [
-      "If the user's message contains the word 'soliplex', always use the soliplex tools to answer it.",
+      "If the user's message contains the word 'soliplex', and appears to be a question that is not explicitly asking for a rooms list, use soliplex_query.",
       "Before using soliplex_query, call soliplex_list_rooms to see available rooms and their descriptions.",
       "Choose the room whose description best matches the user's question — different rooms have different knowledge bases.",
-      "If no room is an obvious match, use the 'search' room as a general-purpose fallback.",
+      "If no room is an obvious match, use the room that is best suited to general-purpose queries."
     ],
     parameters: Type.Object({
       room_id: Type.String({
