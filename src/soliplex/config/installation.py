@@ -554,6 +554,18 @@ class InstallationConfig:
         else:
             return value
 
+    def interpolate(self, value):
+        """Interpolate 'secret:' then 'env:' markers in a string.
+
+        Non-string values are returned unchanged, so this is safe to map
+        over heterogeneous config dict values (e.g. headers).
+        """
+        if not isinstance(value, str):
+            return value
+
+        w_secrets = self.interpolate_secrets(value)
+        return self.interpolate_environment(w_secrets)
+
     #
     # Global haiku-rag configuration
     #
@@ -791,10 +803,7 @@ class InstallationConfig:
         if dburi is None:
             return default
 
-        w_secrets = self.interpolate_secrets(dburi)
-        w_environ = self.interpolate_environment(w_secrets)
-
-        return w_environ
+        return self.interpolate(dburi)
 
     #
     # Thread persistence DB-URI

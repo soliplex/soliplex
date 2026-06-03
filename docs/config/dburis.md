@@ -115,7 +115,7 @@ authorization_dburi:
 ## Interpolation
 
 Each of the DBURI values can include values
-[interpolated](installation.md#installation-environment-interpolation)
+[interpolated](installation.md#installation-secret-environment-interpolation)
 from the installation configuration's environment.  E.g:
 
 ```yaml

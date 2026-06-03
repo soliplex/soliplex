@@ -75,7 +75,7 @@ agent:
   provider.
 
   If provided, the value can
-  [interpolate](installation.md#installation-environment-interpolation)
+  [interpolate](installation.md#installation-secret-environment-interpolation)
   installation configuration environment variables, e.g.,
   `"env:MY_PROVIDER_BASE_URL"`.
 

@@ -9,6 +9,7 @@ from soliplex import agents
 from soliplex import mcp_client
 from soliplex import tools
 from soliplex.config import agents as config_agents
+from soliplex.config import installation as config_installation
 from soliplex.config import tools as config_tools
 
 SYSTEM_PROMPT = "You are a test"
@@ -80,8 +81,14 @@ def tool_configs_tools(request):
             yield [(tc, ai_tool)]
 
 
+@pytest.fixture
+def installation_config():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    i_config.interpolate.side_effect = lambda value: value
+    return i_config
+
+
 @pytest.fixture(
-    scope="module",
     params=[
         [],
         [(STDIO_MCTC, STDIO_TOOL)],
@@ -89,8 +96,16 @@ def tool_configs_tools(request):
         [(SSE_MCTC, SSE_TOOL)],
     ],
 )
-def mcp_ct_configs_tools(request):
-    return request.param
+def mcp_ct_configs_tools(request, installation_config):
+    return [
+        (
+            dataclasses.replace(
+                mctc, _installation_config=installation_config
+            ),
+            tool,
+        )
+        for (mctc, tool) in request.param
+    ]
 
 
 @pytest.mark.parametrize(
@@ -124,14 +139,24 @@ def test_make_ai_tool(w_aitp, exp_aitp):
 
 
 @pytest.mark.parametrize(
-    "mcp_toolset_config, expected",
+    "mcp_toolset_config, expected, exp_interpolated",
     [
-        (STDIO_MCTC, STDIO_TOOL),
-        (HTTP_MCTC, HTTP_TOOL),
-        (SSE_MCTC, SSE_TOOL),
+        (STDIO_MCTC, STDIO_TOOL, [mock.call("cat"), mock.call("-")]),
+        (HTTP_MCTC, HTTP_TOOL, [mock.call("https://example.com/mcp")]),
+        (SSE_MCTC, SSE_TOOL, [mock.call("https://example.com/sse")]),
     ],
 )
-def test_make_mcp_client_toolset(mcp_toolset_config, expected):
+def test_make_mcp_client_toolset(
+    installation_config,
+    mcp_toolset_config,
+    expected,
+    exp_interpolated,
+):
+    mcp_toolset_config = dataclasses.replace(
+        mcp_toolset_config,
+        _installation_config=installation_config,
+    )
+
     with mock.patch.object(
         mcp_client,
         "TOOLSET_FACTORY_BY_KIND",
@@ -140,6 +165,12 @@ def test_make_mcp_client_toolset(mcp_toolset_config, expected):
         found = agents.make_mcp_client_toolset(mcp_toolset_config)
 
     assert found is expected
+
+    interpolated = installation_config.interpolate.call_args_list
+    for found_call, exp_call in zip(
+        interpolated, exp_interpolated, strict=True
+    ):
+        assert found_call == exp_call
 
 
 @pytest.mark.parametrize("w_capabilities", [False, True])

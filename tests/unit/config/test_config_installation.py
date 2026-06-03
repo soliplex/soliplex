@@ -1242,6 +1242,52 @@ def test_installationconfig_interpolate_environment(
         assert found == exp_value
 
 
+@pytest.mark.parametrize(
+    "value, secret_map, environment, exp_value",
+    [
+        (None, {}, {}, None),
+        (42, {}, {}, 42),
+        ("No markers here", {}, {}, "No markers here"),
+        (
+            f"secret:{SECRET_NAME_1}",
+            {SECRET_NAME_1: SECRET_CONFIG_1},
+            {},
+            "<secret1>",
+        ),
+        (
+            f"env:{ENVVAR_NAME_1}",
+            {},
+            {ENVVAR_NAME_1: ENVVAR_VALUE_1},
+            ENVVAR_VALUE_1,
+        ),
+        (
+            f"secret:{SECRET_NAME_1}@env:{ENVVAR_NAME_1}",
+            {SECRET_NAME_1: SECRET_CONFIG_1},
+            {ENVVAR_NAME_1: ENVVAR_VALUE_1},
+            f"<secret1>@{ENVVAR_VALUE_1}",
+        ),
+    ],
+)
+@mock.patch("soliplex.secrets.get_secret")
+def test_installationconfig_interpolate(
+    gs,
+    value,
+    secret_map,
+    environment,
+    exp_value,
+):
+    gs.return_value = "<secret1>"
+    i_config = config_installation.InstallationConfig(
+        id="test-ic",
+        environment=environment,
+        _secrets_map=secret_map,
+    )
+
+    found = i_config.interpolate(value)
+
+    assert found == exp_value
+
+
 @pytest.mark.parametrize("w_obu", [False, True])
 def test_installationconfig_haiku_rag_config(temp_dir, w_obu):
     hr_config_file = temp_dir / "haiku.rag.yaml"

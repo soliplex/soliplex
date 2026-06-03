@@ -871,6 +871,7 @@ def test_stdio_mctc_toolset_params(w_env):
 
 @pytest.mark.parametrize("w_env", [{}, {"FOO_KEY": "secret:FOO_KEY"}])
 def test_stdio_mctc_tool_kwargs(installation_config, w_env):
+    installation_config.interpolate.side_effect = lambda value: value
     stdio_mctc = config_tools.Stdio_MCP_ClientToolsetConfig(
         command="cat",
         args=["-"],
@@ -884,17 +885,19 @@ def test_stdio_mctc_tool_kwargs(installation_config, w_env):
     assert found["args"] == stdio_mctc.args
     assert found["allowed_tools"] == stdio_mctc.allowed_tools
 
+    interpolated = installation_config.interpolate.call_args_list
+    assert mock.call(stdio_mctc.command) in interpolated
+    for arg in stdio_mctc.args:
+        assert mock.call(arg) in interpolated
+
     for (f_key, f_val), (cfg_key, cfg_value) in zip(
         found["env"].items(),
         w_env.items(),
         strict=True,
     ):
         assert f_key == cfg_key
-        assert f_val is installation_config.get_secret.return_value
-        assert (
-            mock.call(cfg_value)
-            in installation_config.get_secret.call_args_list
-        )
+        assert f_val == cfg_value
+        assert mock.call(cfg_value) in interpolated
 
 
 @pytest.mark.parametrize(
@@ -968,8 +971,7 @@ def test_http_mctc_tool_kwargs(
     w_query_params,
     w_headers,
 ):
-    installation_config.get_secret.return_value = "<secret>"
-    installation_config.interpolate_secrets.return_value = "<interp>"
+    installation_config.interpolate.side_effect = lambda value: value
 
     http_mctc = config_tools.HTTP_MCP_ClientToolsetConfig(
         url=HTTP_MCP_URL,
@@ -981,6 +983,9 @@ def test_http_mctc_tool_kwargs(
     found = http_mctc.tool_kwargs
 
     assert found["allowed_tools"] == http_mctc.allowed_tools
+
+    interpolated = installation_config.interpolate.call_args_list
+    assert mock.call(http_mctc.url) in interpolated
 
     if w_query_params:
         base, qs = found["url"].split("?")
@@ -994,11 +999,8 @@ def test_http_mctc_tool_kwargs(
             strict=True,
         ):
             assert f_key == cfg_key
-            assert f_val == installation_config.get_secret.return_value
-            assert (
-                mock.call(cfg_value)
-                in installation_config.get_secret.call_args_list
-            )
+            assert f_val == cfg_value
+            assert mock.call(cfg_value) in interpolated
 
     else:
         assert found["url"] == http_mctc.url
@@ -1009,11 +1011,8 @@ def test_http_mctc_tool_kwargs(
         strict=True,
     ):
         assert f_key == cfg_key
-        assert f_val is installation_config.interpolate_secrets.return_value
-        assert (
-            mock.call(cfg_value)
-            in installation_config.interpolate_secrets.call_args_list
-        )
+        assert f_val == cfg_value
+        assert mock.call(cfg_value) in interpolated
 
 
 @pytest.mark.parametrize(
@@ -1087,8 +1086,7 @@ def test_sse_mctc_tool_kwargs(
     w_query_params,
     w_headers,
 ):
-    installation_config.get_secret.return_value = "<secret>"
-    installation_config.interpolate_secrets.return_value = "<interp>"
+    installation_config.interpolate.side_effect = lambda value: value
 
     sse_mctc = config_tools.SSE_MCP_ClientToolsetConfig(
         url=HTTP_MCP_URL,
@@ -1100,6 +1098,9 @@ def test_sse_mctc_tool_kwargs(
     found = sse_mctc.tool_kwargs
 
     assert found["allowed_tools"] == sse_mctc.allowed_tools
+
+    interpolated = installation_config.interpolate.call_args_list
+    assert mock.call(sse_mctc.url) in interpolated
 
     if w_query_params:
         base, qs = found["url"].split("?")
@@ -1113,11 +1114,8 @@ def test_sse_mctc_tool_kwargs(
             strict=True,
         ):
             assert f_key == cfg_key
-            assert f_val == installation_config.get_secret.return_value
-            assert (
-                mock.call(cfg_value)
-                in installation_config.get_secret.call_args_list
-            )
+            assert f_val == cfg_value
+            assert mock.call(cfg_value) in interpolated
 
     else:
         assert found["url"] == sse_mctc.url
@@ -1128,11 +1126,8 @@ def test_sse_mctc_tool_kwargs(
         strict=True,
     ):
         assert f_key == cfg_key
-        assert f_val is installation_config.interpolate_secrets.return_value
-        assert (
-            mock.call(cfg_value)
-            in installation_config.interpolate_secrets.call_args_list
-        )
+        assert f_val == cfg_value
+        assert mock.call(cfg_value) in interpolated
 
 
 def test_noargsmcpwrapper_call():

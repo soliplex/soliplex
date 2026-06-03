@@ -59,12 +59,44 @@ installation environment.
 the operating system environment: see [this page](../server/environment.md)
 for that topic.
 
-### Installation Environment Interpolation
+## Installation Secret / Environment Interpolation
 
-Certain configuration elements can interpolate values from the installation
-configuration's environment, by spelling their own value as
-`"env:SOME_INSTALLATION_ENVIRONMENT_NAME"`.  Fields which support this
-interpolation:
+Certain configuration elements can interpolate values resolved by the
+installation configuration.  Two marker styles are used:
+
+- `"secret:SOME_SECRET_NAME"` resolves an installation
+  [secret](secrets.md).
+- `"env:SOME_INSTALLATION_ENVIRONMENT_NAME"` resolves an installation
+  [environment](environment.md) value.
+
+Which markers a given field honors depends on the field, as enumerated
+below.
+
+### Fields which interpolate only secrets
+
+The entire value may be given as a `secret:` reference, resolved from the
+installation secrets:
+
+- `provider_key`, in the `agent_configs:` stanza of the main installation
+  configuration, or in the `agent_config:` stanza of a completion, room,
+  or skill configuration.
+- `client_secret`, in an OIDC provider configuration (see
+  [OIDC providers](oidc_providers.md)).
+- `token`, in the `logfire:` configuration (see [Logfire](logfire.md)).
+
+### Fields which interpolate only environment variables
+
+The value may embed one or more `env:` markers, resolved from the
+installation environment:
+
+- `provider_base_url`, in the `agent_configs:` stanza of the main
+  installation configuration, or in the `agent_config:` stanza of a
+  completion, room, or skill configuration.
+
+### Fields which interpolate both secrets and environment variables
+
+The value may embed one or more `secret:` and/or `env:` markers; the two
+marker styles may be mixed within a single value.
 
 In the main installation configuration:
 
@@ -73,11 +105,12 @@ In the main installation configuration:
 - `authorization_dburi_sync`
 - `authorization_dburi_async`
 
-In the `agent_configs:` stanza of the main installation configuration,
-or in the `agent_config:` stanza of a completion, room, or skill
-configuration:
+In the `mcp_client_toolsets:` stanza of a room or completion configuration,
+for each configured MCP client toolset:
 
-- `provider_base_url`
+- `kind: "stdio"`: `command`, each entry in `args`, and each value in `env`
+- `kind: "http"` or `kind: "sse"`: `url`, each value in `headers`, and each
+  value in `query_params`
 
 ## `haiku.rag` Configuration File
 
