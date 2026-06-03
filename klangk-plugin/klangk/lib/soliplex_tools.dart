@@ -127,14 +127,11 @@ Future<String> _getAccessToken() async {
       'Not authenticated. Click "Connect to Soliplex" to log in.');
 }
 
-/// Perform OIDC login via a browser popup. Must be called from a
-/// user gesture (e.g., button click) to avoid popup blockers.
-/// Stores the access token, refresh token, expiry, server URL,
-/// and client ID in localStorage.
-Future<String> popupLogin() async {
+/// Fetch available OIDC auth systems from the Soliplex backend.
+/// Returns a map of system ID to system data (title, server_url,
+/// client_id, etc.).
+Future<Map<String, dynamic>> getAuthSystems() async {
   final soliplexUrl = await _getSoliplexUrl();
-
-  // Discover available auth systems.
   final loginResp =
       await http.get(Uri.parse('$soliplexUrl/api/login'));
   if (loginResp.statusCode != 200) {
@@ -146,10 +143,22 @@ Future<String> popupLogin() async {
   if (systems.isEmpty) {
     throw Exception('No OIDC auth systems configured on Soliplex');
   }
-  // Prefer the 'pydio' (Enfold) auth system if available.
-  final systemId = systems.containsKey('pydio')
-      ? 'pydio'
-      : systems.keys.first;
+  return systems;
+}
+
+/// Perform OIDC login via a browser popup. Must be called from a
+/// user gesture (e.g., button click) to avoid popup blockers.
+/// [systemId] specifies which OIDC provider to use.
+/// Stores the access token, refresh token, expiry, server URL,
+/// and client ID in localStorage.
+Future<String> popupLogin(String systemId) async {
+  final soliplexUrl = await _getSoliplexUrl();
+
+  // Fetch auth system details for the selected provider.
+  final systems = await getAuthSystems();
+  if (!systems.containsKey(systemId)) {
+    throw Exception('Auth system "$systemId" not found');
+  }
 
   // Store the server_url and client_id for future token refreshes.
   final systemData = systems[systemId] as Map<String, dynamic>;

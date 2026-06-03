@@ -20,11 +20,11 @@ class SoliplexPlugin extends ToolPlugin with ChangeNotifier {
     return _SoliplexAuthOverlay(plugin: this);
   }
 
-  Future<void> login() async {
+  Future<void> login(String systemId) async {
     _loggingIn = true;
     notifyListeners();
     try {
-      await popupLogin();
+      await popupLogin(systemId);
       _authenticated = true;
     } catch (_) {
       _authenticated = false;
@@ -81,6 +81,11 @@ class _SoliplexAuthOverlay extends StatefulWidget {
 }
 
 class _SoliplexAuthOverlayState extends State<_SoliplexAuthOverlay> {
+  Map<String, dynamic>? _authSystems;
+  bool _loadingSystems = false;
+  bool _expanded = false;
+  String? _selectedSystem;
+
   @override
   void initState() {
     super.initState();
@@ -97,56 +102,180 @@ class _SoliplexAuthOverlayState extends State<_SoliplexAuthOverlay> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _expand() async {
+    if (_authSystems == null && !_loadingSystems) {
+      _loadingSystems = true;
+      setState(() {});
+      try {
+        _authSystems = await getAuthSystems();
+        // Pre-select the first system.
+        if (_authSystems!.isNotEmpty) {
+          _selectedSystem = _authSystems!.keys.first;
+        }
+      } catch (_) {
+        // Leave _authSystems null; user can retry.
+      } finally {
+        _loadingSystems = false;
+      }
+    }
+    _expanded = true;
+    if (mounted) setState(() {});
+  }
+
+  void _connect() {
+    if (_selectedSystem == null) return;
+    widget.plugin.login(_selectedSystem!);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.plugin.authenticated) {
       return const SizedBox.shrink();
     }
+
+    final errorContainer =
+        Theme.of(context).colorScheme.errorContainer;
+    final onErrorContainer =
+        Theme.of(context).colorScheme.onErrorContainer;
+
+    // Collapsed state: just the button.
+    if (!_expanded) {
+      return Positioned(
+        top: 8,
+        right: 8,
+        child: Material(
+          elevation: 4,
+          borderRadius: BorderRadius.circular(8),
+          color: errorContainer,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _expand,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.link,
+                      size: 16, color: onErrorContainer),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Connect to Soliplex',
+                    style: TextStyle(
+                        fontSize: 12, color: onErrorContainer),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Expanded state: radio buttons + connect button.
     return Positioned(
       top: 8,
       right: 8,
       child: Material(
         elevation: 4,
         borderRadius: BorderRadius.circular(8),
-        color: Theme.of(context).colorScheme.errorContainer,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: widget.plugin.loggingIn ? null : () {
-            widget.plugin.login();
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.plugin.loggingIn)
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2),
-                  )
-                else
+        color: errorContainer,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   Icon(Icons.link,
-                      size: 16,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onErrorContainer),
-                const SizedBox(width: 6),
-                Text(
-                  widget.plugin.loggingIn
-                      ? 'Connecting...'
-                      : 'Connect to Soliplex',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onErrorContainer,
+                      size: 16, color: onErrorContainer),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Connect to Soliplex',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: onErrorContainer,
+                    ),
                   ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => setState(() => _expanded = false),
+                    child: Icon(Icons.close,
+                        size: 14, color: onErrorContainer),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              if (_loadingSystems)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (_authSystems == null)
+                Text('Failed to load providers',
+                    style: TextStyle(
+                        fontSize: 11, color: onErrorContainer))
+              else
+                ..._authSystems!.entries.map((entry) {
+                  final systemData =
+                      entry.value as Map<String, dynamic>;
+                  final title =
+                      systemData['title'] as String? ?? entry.key;
+                  return InkWell(
+                    onTap: widget.plugin.loggingIn
+                        ? null
+                        : () =>
+                            setState(() => _selectedSystem = entry.key),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Radio<String>(
+                          value: entry.key,
+                          groupValue: _selectedSystem,
+                          onChanged: widget.plugin.loggingIn
+                              ? null
+                              : (v) =>
+                                  setState(() => _selectedSystem = v),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        Text(title,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: onErrorContainer)),
+                      ],
+                    ),
+                  );
+                }),
+              const SizedBox(height: 4),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: (widget.plugin.loggingIn ||
+                          _selectedSystem == null)
+                      ? null
+                      : _connect,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                  child: widget.plugin.loggingIn
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2),
+                        )
+                      : const Text('Connect'),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
