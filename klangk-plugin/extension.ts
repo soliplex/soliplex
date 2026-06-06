@@ -2,6 +2,10 @@ import { Type } from "@sinclair/typebox";
 
 const BRIDGE_URL = process.env.KLANGK_BRIDGE_URL;
 
+// Per-chunk read timeout (ms). If no data arrives within this window,
+// the stream is considered stalled and the accumulated result is returned.
+const CHUNK_READ_TIMEOUT_MS = 120_000;
+
 type ToolUpdate = (partial: {
   content: { type: "text"; text: string }[];
   details: Record<string, unknown>;
@@ -75,7 +79,13 @@ async function bridgeStream(
   };
 
   for (;;) {
-    const { done, value } = await reader.read();
+    const readOrTimeout = Promise.race([
+      reader.read(),
+      new Promise<{ done: true; value: undefined }>((resolve) =>
+        setTimeout(() => resolve({ done: true, value: undefined }), CHUNK_READ_TIMEOUT_MS),
+      ),
+    ]);
+    const { done, value } = await readOrTimeout;
     if (done) break;
     buf += decoder.decode(value, { stream: true });
     let nl: number;
