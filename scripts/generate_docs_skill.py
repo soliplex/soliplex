@@ -3,12 +3,16 @@
 
 The skill's static body is committed under ``skills/soliplex-docs/`` (its
 ``SKILL.md``, an empty ``references/``, and ``scripts/skill_versions.py``).
-This script assembles the *published* skill: it copies that tree into
-``dist/soliplex-docs/``, fills ``references/`` with a verbatim copy of
-``docs/``, appends a ``## Documentation map`` derived from the
-``zensical.toml`` nav (mirroring the published site), stamps ``SKILL.md``
-with the source commit, and validates the result with the agent-skills
-reference library. No embeddings, vector database, or LLM are involved.
+
+This script delegates to :func:`soliplex_skills.build.build_skill`, passing a
+*generator* hook that:
+
+- Fills ``references/`` with a verbatim copy of ``docs/``
+
+- Appends a ``## Documentation map`` derived from the ``zensical.toml`` nav
+  (mirroring the published site).
+
+No embeddings, vector database, or LLM are involved.
 
 Usage::
 
@@ -24,13 +28,11 @@ import shutil
 import sys
 import tomllib
 
-import skills_ref
 from soliplex_skills import build
-from soliplex_skills import metadata
 
 SKILL_NAME = "soliplex-docs"
 REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
-SRC = REPO_DIR / "skills" / SKILL_NAME
+SKILLS_DIR = REPO_DIR / "skills"
 DOCS = REPO_DIR / "docs"
 ZENSICAL = REPO_DIR / "zensical.toml"
 DIST = REPO_DIR / "dist"
@@ -47,15 +49,6 @@ class DocsDirNotFound(SystemExit):
     def __init__(self, docs_dir: pathlib.Path):
         self.docs_dir = docs_dir
         super().__init__(f"docs directory not found: {docs_dir}")
-
-
-class SkillValidationFailed(SystemExit):
-    """skills-ref rejected the assembled skill."""
-
-    def __init__(self, errors: list[str]):
-        self.errors = errors
-        joined = "\n  ".join(errors)
-        super().__init__(f"Assembled skill failed validation:\n  {joined}")
 
 
 def _load_nav(zensical: pathlib.Path) -> list:
@@ -173,55 +166,32 @@ def _doc_map(docs_dir: pathlib.Path, nav: list) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def generate(*, out_dir: pathlib.Path, commit: str | None) -> pathlib.Path:
-    """Assemble the published skill under ``out_dir/soliplex-docs/``.
+def _add_references_and_map(out_dir: pathlib.Path) -> None:
+    """``build_skill`` generator hook for the docs skill.
 
-    Copies the committed ``skills/soliplex-docs/`` tree, fills ``references/``
-    from ``docs/``, appends the nav-derived documentation map to ``SKILL.md``,
-    and stamps the source *commit* (when given).
+    Fills the template's empty ``references/`` with a verbatim copy of
+    ``docs/`` and appends the nav-derived ``## Documentation map`` to
+    ``SKILL.md``. Invoked by :func:`soliplex_skills.build.build_skill` after
+    the commit stamp and before validation, so the docs and the map are part
+    of the validated skill.
     """
     if not DOCS.is_dir():
         raise DocsDirNotFound(DOCS)
 
-    out = out_dir / SKILL_NAME
-    if out.exists():
-        shutil.rmtree(out)
-    shutil.copytree(SRC, out, ignore=shutil.ignore_patterns("__pycache__"))
-
-    # Fill the template's empty references/ with a verbatim copy of docs/.
-    references = out / "references"
+    references = out_dir / "references"
     shutil.rmtree(references)
     shutil.copytree(DOCS, references)
 
-    # Append the nav-derived documentation map to the static body.
-    skill_md = out / "SKILL.md"
+    skill_md = out_dir / "SKILL.md"
     nav = _load_nav(ZENSICAL)
     body = skill_md.read_text(encoding="utf-8").rstrip()
     skill_md.write_text(f"{body}\n\n{_doc_map(DOCS, nav)}", encoding="utf-8")
 
-    # Stamp the build's source commit via the shared library helper.
-    if commit:
-        metadata.stamp_source_commit(skill_md, commit)
-
-    return out
-
-
-def _validate(skill_dir: pathlib.Path) -> None:
-    """Validate the assembled skill with the Agent Skills reference library.
-
-    ``skills_ref`` is an unconditional dependency of ``soliplex-skills`` (a
-    ``dev`` dependency), so it is always available here -- matching how
-    ``soliplex_skills.build`` validates a built skill.
-    """
-    errors = skills_ref.validate(skill_dir)
-    if errors:
-        raise SkillValidationFailed(errors)
-    print(f"Validated skill: {skill_dir}")
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Assemble the soliplex-docs skill into dist/."
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--out",
@@ -237,15 +207,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-validate",
         action="store_true",
-        help="Skip skills-ref validation of the assembled skill.",
+        help="Skip agent-skills validation of the assembled skill.",
     )
     args = parser.parse_args(argv)
 
     commit = args.commit or build.git_head_commit(REPO_DIR)
-    out = generate(out_dir=args.out.resolve(), commit=commit)
+    try:
+        out = build.build_skill(
+            SKILL_NAME,
+            src=SKILLS_DIR,
+            dist=args.out.resolve(),
+            commit=commit,
+            validate=not args.no_validate,
+            generator=_add_references_and_map,
+        )
+    except (build.SkillNotFound, build.ValidationFailed) as exc:
+        print(f"generate_docs_skill: error: {exc}", file=sys.stderr)
+        return 1
+
     print(f"Generated skill: {out}")
-    if not args.no_validate:
-        _validate(out)
     return 0
 
 

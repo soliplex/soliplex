@@ -1,10 +1,11 @@
 """Unit tests for ``scripts/generate_docs_skill.py``.
 
 The generator is not part of the importable ``soliplex`` package, so it is
-loaded here by file path. It assembles the published ``soliplex-docs`` skill
-from the committed ``skills/soliplex-docs/`` tree plus the live ``docs/`` and
-``zensical.toml`` nav; tests build throwaway trees in ``tmp_path`` and stub the
-``skills_ref`` / git seams -- no real repo, network, or dev dependency.
+loaded here by file path. It delegates to ``build.build_skill``, passing a
+generator hook that fills ``references/`` from the live ``docs/`` and appends
+a nav-derived map to ``SKILL.md``. Tests exercise the nav helpers and that
+hook directly, and stub ``build.build_skill`` for ``main``'s delegation -- no
+real repo, network, or dev dependency.
 
 Each test is laid out in three blank-line-separated phases -- setup, then the
 single call under test (the "act"), then the assertions -- and performs that
@@ -41,40 +42,35 @@ def _doc(directory: pathlib.Path, name: str, text: str) -> pathlib.Path:
 
 
 @pytest.fixture
-def layout(tmp_path, monkeypatch):
-    """Pin SRC/DOCS/ZENSICAL/DIST into a fake repo under ``tmp_path``."""
+def docs_tree(tmp_path, monkeypatch):
+    """Fake ``docs/`` + ``zensical.toml`` pinned onto the module constants."""
     docs = tmp_path / "docs"
     docs.mkdir()
     _doc(docs, "index.md", "# Home\n\nWelcome home.\n")
     _doc(docs, "guide.md", "# Guide\n\nA guide.\n")
-    _doc(docs, "extra.md", "# Extra\n\nExtra info.\n")
-
     zensical = tmp_path / "zensical.toml"
     zensical.write_text(
         "[project]\n"
         'nav = [{ Home = "index.md" }, { Docs = [{ Guide = "guide.md" }] }]\n',
         encoding="utf-8",
     )
+    monkeypatch.setattr(gd, "DOCS", docs)
+    monkeypatch.setattr(gd, "ZENSICAL", zensical)
+    return docs
 
-    src = tmp_path / "skills" / "soliplex-docs"
-    (src / "references").mkdir(parents=True)
-    (src / "references" / ".gitkeep").write_text("", encoding="utf-8")
-    (src / "scripts").mkdir()
-    (src / "scripts" / "skill_versions.py").write_text(
-        "# shim\n", encoding="utf-8"
-    )
-    (src / "SKILL.md").write_text(
-        "---\nname: soliplex-docs\nmetadata:\n  source: https://x/repo\n"
+
+def _built_skill(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A freshly-copied skill dir, as build_skill hands to the generator."""
+    out = tmp_path / "dist" / "soliplex-docs"
+    (out / "references").mkdir(parents=True)
+    (out / "references" / ".gitkeep").write_text("", encoding="utf-8")
+    (out / "SKILL.md").write_text(
+        "---\nname: soliplex-docs\nmetadata:\n"
+        '  source_commit: "abc1234"\n'
         "---\n# Soliplex documentation\n\nStatic body.\n",
         encoding="utf-8",
     )
-
-    dist = tmp_path / "dist"
-    monkeypatch.setattr(gd, "SRC", src)
-    monkeypatch.setattr(gd, "DOCS", docs)
-    monkeypatch.setattr(gd, "ZENSICAL", zensical)
-    monkeypatch.setattr(gd, "DIST", dist)
-    return tmp_path, docs, src, dist
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -206,100 +202,78 @@ def test_doc_map_without_extras(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# generate
+# _add_references_and_map (the build_skill generator hook)
 # --------------------------------------------------------------------------
-def test_generate_assembles_skill(layout):
-    _tmp, _docs, _src, dist = layout
+def test_generator_fills_references_and_appends_map(docs_tree, tmp_path):
+    out = _built_skill(tmp_path)
 
-    out = gd.generate(out_dir=dist, commit="deadbee")
+    gd._add_references_and_map(out)
 
-    assert out == dist / "soliplex-docs"
     assert (out / "references" / "index.md").is_file()  # filled from docs/
     assert not (out / "references" / ".gitkeep").exists()  # placeholder gone
-    assert (out / "scripts" / "skill_versions.py").is_file()  # carried over
     text = (out / "SKILL.md").read_text(encoding="utf-8")
     assert "# Soliplex documentation" in text  # static body kept
+    assert 'source_commit: "abc1234"' in text  # stamp preserved
     assert "## Documentation map" in text  # map appended
-    assert 'source_commit: "deadbee"' in text  # stamped
 
 
-def test_generate_replaces_existing_out(layout):
-    _tmp, _docs, _src, dist = layout
-    stale = dist / "soliplex-docs"
-    stale.mkdir(parents=True)
-    (stale / "stale.txt").write_text("old", encoding="utf-8")
-
-    gd.generate(out_dir=dist, commit="deadbee")
-
-    assert not (dist / "soliplex-docs" / "stale.txt").exists()
-
-
-def test_generate_without_commit_skips_stamp(layout):
-    _tmp, _docs, _src, dist = layout
-
-    out = gd.generate(out_dir=dist, commit=None)
-
-    assert "source_commit" not in (out / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-
-
-def test_generate_missing_docs(layout, monkeypatch):
-    _tmp, _docs, _src, dist = layout
-    monkeypatch.setattr(gd, "DOCS", dist / "nonexistent")
+def test_generator_missing_docs(tmp_path, monkeypatch):
+    out = _built_skill(tmp_path)
+    monkeypatch.setattr(gd, "DOCS", tmp_path / "nonexistent")
 
     with pytest.raises(gd.DocsDirNotFound):
-        gd.generate(out_dir=dist, commit="x")
-
-
-# --------------------------------------------------------------------------
-# _validate
-# --------------------------------------------------------------------------
-def test_validate_ok(monkeypatch, capsys, tmp_path):
-    validate = mock.Mock(return_value=[])
-    monkeypatch.setattr(gd.skills_ref, "validate", validate)
-
-    gd._validate(tmp_path)
-
-    assert "Validated skill:" in capsys.readouterr().out
-    validate.assert_called_once_with(tmp_path)
-
-
-def test_validate_reports_errors(monkeypatch, tmp_path):
-    validate = mock.Mock(return_value=["boom"])
-    monkeypatch.setattr(gd.skills_ref, "validate", validate)
-
-    with pytest.raises(gd.SkillValidationFailed) as excinfo:
-        gd._validate(tmp_path)
-
-    assert excinfo.value.errors == ["boom"]
-    validate.assert_called_once_with(tmp_path)
+        gd._add_references_and_map(out)
 
 
 # --------------------------------------------------------------------------
 # main
 # --------------------------------------------------------------------------
-def test_main_assembles_and_validates(layout, monkeypatch, capsys):
-    _tmp, _docs, _src, dist = layout
+def test_main_delegates_to_build_skill(monkeypatch, capsys, tmp_path):
+    dist = tmp_path / "dist"
+    build_skill = mock.Mock(return_value=dist / "soliplex-docs")
+    monkeypatch.setattr(gd.build, "build_skill", build_skill)
     monkeypatch.setattr(gd.build, "git_head_commit", lambda repo: "feedface")
-    validate = mock.Mock(return_value=[])
-    monkeypatch.setattr(gd.skills_ref, "validate", validate)
 
     rc = gd.main(["--out", str(dist)])
 
-    out = dist / "soliplex-docs"
     assert rc == 0
-    assert 'source_commit: "feedface"' in (out / "SKILL.md").read_text()
-    validate.assert_called_once_with(out)
-    assert "Validated skill:" in capsys.readouterr().out
+    build_skill.assert_called_once_with(
+        "soliplex-docs",
+        src=gd.SKILLS_DIR,
+        dist=dist.resolve(),
+        commit="feedface",
+        validate=True,
+        generator=gd._add_references_and_map,
+    )
+    assert "Generated skill:" in capsys.readouterr().out
 
 
-def test_main_explicit_commit_skips_validation(layout, capsys):
-    _tmp, _docs, _src, dist = layout
+def test_main_no_validate_and_explicit_commit(monkeypatch, tmp_path):
+    dist = tmp_path / "dist"
+    build_skill = mock.Mock(return_value=dist / "soliplex-docs")
+    monkeypatch.setattr(gd.build, "build_skill", build_skill)
 
     rc = gd.main(["--out", str(dist), "--commit", "abc1234", "--no-validate"])
 
-    out = dist / "soliplex-docs"
     assert rc == 0
-    assert 'source_commit: "abc1234"' in (out / "SKILL.md").read_text()
-    assert "Generated skill:" in capsys.readouterr().out
+    build_skill.assert_called_once_with(
+        "soliplex-docs",
+        src=gd.SKILLS_DIR,
+        dist=dist.resolve(),
+        commit="abc1234",
+        validate=False,
+        generator=gd._add_references_and_map,
+    )
+
+
+def test_main_reports_build_error(monkeypatch, capsys, tmp_path):
+    def boom(*args, **kwargs):
+        raise gd.build.ValidationFailed("soliplex-docs", ["bad frontmatter"])
+
+    monkeypatch.setattr(gd.build, "build_skill", boom)
+    monkeypatch.setattr(gd.build, "git_head_commit", lambda repo: "abc1234")
+
+    rc = gd.main(["--out", str(tmp_path / "dist")])
+
+    assert rc == 1
+    assert "bad frontmatter" in capsys.readouterr().err
