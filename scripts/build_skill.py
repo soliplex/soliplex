@@ -16,7 +16,7 @@ No embeddings, vector database, or LLM are involved.
 
 Usage::
 
-    uv run --group dev python scripts/generate_docs_skill.py --out dist/
+    uv run --group dev python scripts/build_skill.py --out dist/
 """
 
 from __future__ import annotations
@@ -222,10 +222,10 @@ def main(argv: list[str] | None = None) -> int:
             generator=_add_references_and_map,
         )
     except (build.SkillNotFound, build.ValidationFailed) as exc:
-        print(f"generate_docs_skill: error: {exc}", file=sys.stderr)
+        print(f"build_skill: error: {exc}", file=sys.stderr)
         return 1
 
-    print(f"Generated skill: {out}")
+    print(f"Built skill: {out}")
     return 0
 
 
