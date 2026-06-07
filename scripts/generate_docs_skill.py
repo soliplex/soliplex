@@ -26,6 +26,8 @@ import subprocess
 import sys
 import tomllib
 
+from soliplex_skills import metadata
+
 # Skill ``name``/``description`` per the Agent Skills spec.  ``name`` must be
 # 1-64 chars, lowercase ``a-z0-9`` and single hyphens, and match the parent
 # directory name.  ``description`` (1-1024 chars) must convey what + when.
@@ -201,7 +203,6 @@ def _render_skill_md(
     *,
     name: str,
     version: str,
-    commit: str,
     generated: str,
     docs_dir: pathlib.Path,
     nav: list,
@@ -224,7 +225,7 @@ def _render_skill_md(
     lines.append(f"compatibility: {_yaml_dq(COMPATIBILITY)}")
     lines.append("metadata:")
     lines.append(f'  version: "{version}"')
-    lines.append(f'  source_commit: "{commit}"')
+    # source_commit is stamped after rendering by metadata.stamp_source_commit.
     lines.append(f'  generated: "{generated}"')
     lines.append("  source: https://github.com/soliplex/soliplex")
     lines.append("---")
@@ -344,12 +345,14 @@ def generate(
     skill_md = _render_skill_md(
         name=name,
         version=version,
-        commit=commit,
         generated=generated,
         docs_dir=docs_dir,
         nav=nav,
     )
     (skill_dir / "SKILL.md").write_text(skill_md, encoding="utf-8")
+    # Stamp the build's source commit using the same idempotent helper the
+    # versioning library and the other skills' build scripts share.
+    metadata.stamp_source_commit(skill_dir / "SKILL.md", commit)
 
     # Overlay the static template (bundled scripts, etc.) onto the skill.
     if _SKILL_TEMPLATE.is_dir():
