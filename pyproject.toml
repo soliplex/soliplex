@@ -145,6 +145,20 @@ plugins.code-block-style.enabled = false        # md046
 # plugins.md060.enabled = false                 # md060
 
 
+# Lets the `soliplex-skills` console script (and CI) manage the published
+# `soliplex-docs` skill without repeating these constants on the command line.
+# The bundled scripts/skill_versions.py hardcodes the same values, since it
+# cannot read this file once the skill is installed elsewhere.
+[[tool.soliplex-skills.skill]]
+name = "soliplex-docs"
+owner = "soliplex"
+repo = "soliplex"
+asset_tarball = "soliplex-docs-skill.tar.gz"
+pointer_tag = "docs-latest"
+rolling_prefix = "docs"
+compare_scope = "references"
+
+
 [tool.alembic]
 
 
