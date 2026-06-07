@@ -1,81 +1,44 @@
 #!/usr/bin/env python
-"""Generate a filesystem Agent Skill from the Soliplex ``docs/`` tree.
+"""Assemble the ``soliplex-docs`` Agent Skill into ``dist/``.
 
-The output is a self-contained `Agent Skills <https://agentskills.io/>`_
-package: a directory named after the skill containing a ``SKILL.md`` router
-plus a verbatim copy of ``docs/`` under ``references/``.  No embeddings,
-vector database, or LLM are involved -- the skill is plain Markdown that any
-skills-compatible agent reads on demand via progressive disclosure.
-
-The doc map embedded in ``SKILL.md`` is derived from the ``nav`` table in
-``zensical.toml`` so it mirrors the published documentation site.
+The skill's static body is committed under ``skills/soliplex-docs/`` (its
+``SKILL.md``, an empty ``references/``, and ``scripts/skill_versions.py``).
+This script assembles the *published* skill: it copies that tree into
+``dist/soliplex-docs/``, fills ``references/`` with a verbatim copy of
+``docs/``, appends a ``## Documentation map`` derived from the
+``zensical.toml`` nav (mirroring the published site), stamps ``SKILL.md``
+with the source commit, and validates the result with the agent-skills
+reference library. No embeddings, vector database, or LLM are involved.
 
 Usage::
 
-    uv run python scripts/generate_docs_skill.py --out dist/
+    uv run --group dev python scripts/generate_docs_skill.py --out dist/
 """
 
 from __future__ import annotations
 
 import argparse
-import datetime
 import pathlib
 import re
 import shutil
-import subprocess
 import sys
 import tomllib
 
+import skills_ref
+from soliplex_skills import build
 from soliplex_skills import metadata
 
-# Skill ``name``/``description`` per the Agent Skills spec.  ``name`` must be
-# 1-64 chars, lowercase ``a-z0-9`` and single hyphens, and match the parent
-# directory name.  ``description`` (1-1024 chars) must convey what + when.
-DEFAULT_NAME = "soliplex-docs"
-DESCRIPTION = (
-    "Soliplex documentation: how to install, configure, run, and use "
-    "Soliplex -- a self-hosted RAG/AI system with a FastAPI backend, "
-    "Flutter client, and terminal UI. Covers configuration (rooms, "
-    "agents, completions, RAG, OIDC, skills, quizzes, AG-UI features), "
-    "server setup and CLI, environment variables, secrets, Docker "
-    "deployment, RAG database setup, and client usage. Use when "
-    "answering questions about installing, configuring, operating, or "
-    "troubleshooting Soliplex."
-)
-LICENSE = "MIT"
-COMPATIBILITY = (
-    "The documentation itself needs no special environment. The bundled "
-    "scripts/skill_versions.py is a uv PEP 723 script (Python 3.12+): run it "
-    "with 'uv run scripts/skill_versions.py ...', which provisions the "
-    "'soliplex-skills' library from PyPI on first use. Network access to "
-    "pypi.org and api.github.com / github.com is required (honors "
-    "GITHUB_TOKEN / GH_TOKEN)."
-)
-
-# Files under this directory are copied verbatim onto the generated skill,
-# mirroring its layout (e.g. ``docs_skill_template/scripts/foo.py`` lands at
-# ``<skill>/scripts/foo.py``).
-_SKILL_TEMPLATE = (
-    pathlib.Path(__file__).resolve().parent / "docs_skill_template"
-)
+SKILL_NAME = "soliplex-docs"
+REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
+SRC = REPO_DIR / "skills" / SKILL_NAME
+DOCS = REPO_DIR / "docs"
+ZENSICAL = REPO_DIR / "zensical.toml"
+DIST = REPO_DIR / "dist"
 
 # Max length of the per-entry summary line in the doc map.
 _SUMMARY_MAX = 200
-
-_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 # Collapse Markdown links ``[text](url)`` down to their visible ``text``.
 _LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]*\)")
-
-
-class InvalidSkillName(SystemExit):
-    """The requested skill name violates the Agent Skills spec."""
-
-    def __init__(self, name: str):
-        self.name = name
-        super().__init__(
-            f"Invalid skill name {name!r}: must be 1-64 chars, lowercase "
-            f"alphanumerics and single non-leading/trailing hyphens."
-        )
 
 
 class DocsDirNotFound(SystemExit):
@@ -87,55 +50,15 @@ class DocsDirNotFound(SystemExit):
 
 
 class SkillValidationFailed(SystemExit):
-    """skills-ref rejected the generated skill."""
+    """skills-ref rejected the assembled skill."""
 
     def __init__(self, errors: list[str]):
         self.errors = errors
         joined = "\n  ".join(errors)
-        super().__init__(f"Generated skill failed validation:\n  {joined}")
+        super().__init__(f"Assembled skill failed validation:\n  {joined}")
 
 
-def _yaml_dq(value: str) -> str:
-    """Render ``value`` as a double-quoted YAML scalar.
-
-    ``description`` contains ``": "`` (colon-space), which is illegal in an
-    unquoted plain scalar, so it must be quoted and escaped.
-    """
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
-
-
-def _validate_name(name: str) -> None:
-    if not (1 <= len(name) <= 64) or not _NAME_RE.match(name):
-        raise InvalidSkillName(name)
-
-
-def _repo_root() -> pathlib.Path:
-    out = subprocess.check_output(
-        ["git", "rev-parse", "--show-toplevel"], text=True
-    )
-    return pathlib.Path(out.strip())
-
-
-def _git_commit(repo_root: pathlib.Path) -> str:
-    try:
-        out = subprocess.check_output(
-            ["git", "-C", str(repo_root), "rev-parse", "--short", "HEAD"],
-            text=True,
-        )
-        return out.strip()
-    except (subprocess.CalledProcessError, OSError):  # pragma: no cover
-        return "unknown"
-
-
-def _project_version(repo_root: pathlib.Path) -> str:
-    pyproject = repo_root / "pyproject.toml"
-    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    return data["project"]["version"]
-
-
-def _load_nav(repo_root: pathlib.Path) -> list:
-    zensical = repo_root / "zensical.toml"
+def _load_nav(zensical: pathlib.Path) -> list:
     data = tomllib.loads(zensical.read_text(encoding="utf-8"))
     return data["project"]["nav"]
 
@@ -202,94 +125,22 @@ def _h1_title(doc: pathlib.Path) -> str:
     return doc.stem
 
 
-def _render_skill_md(
-    *,
-    name: str,
-    version: str,
-    generated: str,
-    docs_dir: pathlib.Path,
-    nav: list,
-) -> str:
+def _doc_map(docs_dir: pathlib.Path, nav: list) -> str:
+    """Render the ``## Documentation map`` section from the nav + docs.
+
+    Sections follow nav order; docs present on disk but absent from the nav
+    (e.g. ``examples/``) are listed under a trailing ``Other`` section.
+    """
     entries = flatten_nav(nav)
     in_nav = {path for _, _, path in entries}
-
-    # Docs present on disk but absent from the nav (e.g. examples/, rag.md).
     all_docs = sorted(
         str(p.relative_to(docs_dir)).replace("\\", "/")
         for p in docs_dir.rglob("*.md")
     )
     extras = [p for p in all_docs if p not in in_nav]
 
-    lines: list[str] = []
-    lines.append("---")
-    lines.append(f"name: {name}")
-    lines.append(f"description: {_yaml_dq(DESCRIPTION)}")
-    lines.append(f"license: {LICENSE}")
-    lines.append(f"compatibility: {_yaml_dq(COMPATIBILITY)}")
-    lines.append("metadata:")
-    lines.append(f'  version: "{version}"')
-    # source_commit is stamped after rendering by metadata.stamp_source_commit.
-    lines.append(f'  generated: "{generated}"')
-    lines.append("  source: https://github.com/soliplex/soliplex")
-    lines.append("---")
-    lines.append("")
-    lines.append("# Soliplex documentation")
-    lines.append("")
-    lines.append(
-        "This skill bundles the full Soliplex documentation. Use it to "
-        "answer questions about installing, configuring, operating, or "
-        "troubleshooting Soliplex."
-    )
-    lines.append("")
-    lines.append("## How to use this skill")
-    lines.append("")
-    lines.append(
-        "1. Scan the **Documentation map** below and pick the entries "
-        "whose topic matches the question."
-    )
-    lines.append(
-        "2. Read the matching file(s) under `references/` (they preserve "
-        "the site's structure and cross-links)."
-    )
-    lines.append(
-        "3. Answer strictly from the documentation. If the docs do not "
-        "cover it, say so rather than guessing."
-    )
-    lines.append("")
-    lines.append("## Checking for updates")
-    lines.append("")
-    lines.append(
-        "This skill is a point-in-time snapshot (see `metadata` above). To "
-        "see what has been published and whether a newer build exists, run "
-        "the bundled helper with `uv` (the first run fetches the small "
-        "`soliplex-skills` library it depends on):"
-    )
-    lines.append("")
-    lines.append("```bash")
-    lines.append(
-        "# List published versions (rolling builds + release snapshots)"
-    )
-    lines.append("uv run scripts/skill_versions.py list")
-    lines.append("")
-    lines.append("# Show what changed upstream since this copy was built")
-    lines.append("uv run scripts/skill_versions.py diff latest")
-    lines.append("")
-    lines.append("# Compare any two published versions (see 'list' for tags)")
-    lines.append(
-        "uv run scripts/skill_versions.py diff "
-        "docs-2026.05.20-abc1234 docs-2026.05.29-def5678"
-    )
-    lines.append("")
-    lines.append(
-        "# Upgrade this copy in place to the newest build (or a given tag)"
-    )
-    lines.append("uv run scripts/skill_versions.py upgrade")
-    lines.append("```")
-    lines.append("")
-    lines.append("## Documentation map")
-    lines.append("")
+    lines: list[str] = ["## Documentation map", ""]
 
-    # Render sections in nav order; "General" first if present.
     sections: list[str] = []
     for section, _, _ in entries:
         if section not in sections:
@@ -322,64 +173,46 @@ def _render_skill_md(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def generate(
-    *,
-    out_dir: pathlib.Path,
-    name: str,
-    repo_root: pathlib.Path,
-    commit: str,
-    generated: str,
-) -> pathlib.Path:
-    _validate_name(name)
-    docs_dir = repo_root / "docs"
-    if not docs_dir.is_dir():
-        raise DocsDirNotFound(docs_dir)
+def generate(*, out_dir: pathlib.Path, commit: str | None) -> pathlib.Path:
+    """Assemble the published skill under ``out_dir/soliplex-docs/``.
 
-    nav = _load_nav(repo_root)
-    version = _project_version(repo_root)
+    Copies the committed ``skills/soliplex-docs/`` tree, fills ``references/``
+    from ``docs/``, appends the nav-derived documentation map to ``SKILL.md``,
+    and stamps the source *commit* (when given).
+    """
+    if not DOCS.is_dir():
+        raise DocsDirNotFound(DOCS)
 
-    skill_dir = out_dir / name
-    if skill_dir.exists():
-        shutil.rmtree(skill_dir)
-    references = skill_dir / "references"
-    references.parent.mkdir(parents=True, exist_ok=True)
+    out = out_dir / SKILL_NAME
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(SRC, out, ignore=shutil.ignore_patterns("__pycache__"))
 
-    shutil.copytree(docs_dir, references)
+    # Fill the template's empty references/ with a verbatim copy of docs/.
+    references = out / "references"
+    shutil.rmtree(references)
+    shutil.copytree(DOCS, references)
 
-    skill_md = _render_skill_md(
-        name=name,
-        version=version,
-        generated=generated,
-        docs_dir=docs_dir,
-        nav=nav,
-    )
-    (skill_dir / "SKILL.md").write_text(skill_md, encoding="utf-8")
-    # Stamp the build's source commit using the same idempotent helper the
-    # versioning library and the other skills' build scripts share.
-    metadata.stamp_source_commit(skill_dir / "SKILL.md", commit)
+    # Append the nav-derived documentation map to the static body.
+    skill_md = out / "SKILL.md"
+    nav = _load_nav(ZENSICAL)
+    body = skill_md.read_text(encoding="utf-8").rstrip()
+    skill_md.write_text(f"{body}\n\n{_doc_map(DOCS, nav)}", encoding="utf-8")
 
-    # Overlay the static template (bundled scripts, etc.) onto the skill.
-    if _SKILL_TEMPLATE.is_dir():
-        shutil.copytree(_SKILL_TEMPLATE, skill_dir, dirs_exist_ok=True)
+    # Stamp the build's source commit via the shared library helper.
+    if commit:
+        metadata.stamp_source_commit(skill_md, commit)
 
-    return skill_dir
+    return out
 
 
 def _validate(skill_dir: pathlib.Path) -> None:
-    """Validate the generated skill with the Agent Skills reference library.
+    """Validate the assembled skill with the Agent Skills reference library.
 
-    ``skills-ref`` is provided by the ``dev`` dependency group, so run this
-    script with ``uv run --group dev`` to enable the check.
+    ``skills_ref`` is an unconditional dependency of ``soliplex-skills`` (a
+    ``dev`` dependency), so it is always available here -- matching how
+    ``soliplex_skills.build`` validates a built skill.
     """
-    try:
-        import skills_ref
-    except ImportError:
-        print(
-            "skills-ref not installed; skipping validation "
-            "(run with 'uv run --group dev' to enable).",
-            file=sys.stderr,
-        )
-        return
     errors = skills_ref.validate(skill_dir)
     if errors:
         raise SkillValidationFailed(errors)
@@ -387,58 +220,32 @@ def _validate(skill_dir: pathlib.Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Assemble the soliplex-docs skill into dist/."
+    )
     parser.add_argument(
         "--out",
         type=pathlib.Path,
-        default=pathlib.Path("dist"),
-        help="Output directory for the generated skill (default: dist).",
-    )
-    parser.add_argument(
-        "--name",
-        default=DEFAULT_NAME,
-        help=f"Skill name (default: {DEFAULT_NAME}).",
+        default=DIST,
+        help="Output directory for the assembled skill (default: dist).",
     )
     parser.add_argument(
         "--commit",
         default=None,
-        help="Source commit to record in metadata (default: git HEAD).",
-    )
-    parser.add_argument(
-        "--generated",
-        default=None,
-        help="ISO date to record in metadata (default: today, UTC).",
-    )
-    parser.add_argument(
-        "--repo-root",
-        type=pathlib.Path,
-        default=None,
-        help="Repository root (default: git toplevel).",
+        help="Source commit to stamp into SKILL.md (default: git HEAD).",
     )
     parser.add_argument(
         "--no-validate",
         action="store_true",
-        help="Skip skills-ref validation of the generated skill.",
+        help="Skip skills-ref validation of the assembled skill.",
     )
     args = parser.parse_args(argv)
 
-    repo_root = (args.repo_root or _repo_root()).resolve()
-    commit = args.commit or _git_commit(repo_root)
-    generated = (
-        args.generated
-        or datetime.datetime.now(datetime.UTC).date().isoformat()
-    )
-
-    skill_dir = generate(
-        out_dir=args.out.resolve(),
-        name=args.name,
-        repo_root=repo_root,
-        commit=commit,
-        generated=generated,
-    )
-    print(f"Generated skill: {skill_dir}")
+    commit = args.commit or build.git_head_commit(REPO_DIR)
+    out = generate(out_dir=args.out.resolve(), commit=commit)
+    print(f"Generated skill: {out}")
     if not args.no_validate:
-        _validate(skill_dir)
+        _validate(out)
     return 0
 
 

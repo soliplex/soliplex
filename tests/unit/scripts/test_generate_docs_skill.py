@@ -1,9 +1,10 @@
 """Unit tests for ``scripts/generate_docs_skill.py``.
 
 The generator is not part of the importable ``soliplex`` package, so it is
-loaded here by file path. Tests build throwaway ``docs/`` trees and config
-files in ``tmp_path`` and stub out git / ``skills_ref`` -- no real repo,
-network, or dev dependency is required.
+loaded here by file path. It assembles the published ``soliplex-docs`` skill
+from the committed ``skills/soliplex-docs/`` tree plus the live ``docs/`` and
+``zensical.toml`` nav; tests build throwaway trees in ``tmp_path`` and stub the
+``skills_ref`` / git seams -- no real repo, network, or dev dependency.
 
 Each test is laid out in three blank-line-separated phases -- setup, then the
 single call under test (the "act"), then the assertions -- and performs that
@@ -14,8 +15,6 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
-import sys
-import types
 from unittest import mock
 
 import pytest
@@ -33,7 +32,7 @@ _spec.loader.exec_module(gd)
 
 
 # --------------------------------------------------------------------------
-# Helpers
+# Helpers / fixtures
 # --------------------------------------------------------------------------
 def _doc(directory: pathlib.Path, name: str, text: str) -> pathlib.Path:
     path = directory / name
@@ -41,106 +40,55 @@ def _doc(directory: pathlib.Path, name: str, text: str) -> pathlib.Path:
     return path
 
 
-def _fake_repo(root: pathlib.Path, *, with_docs: bool) -> pathlib.Path:
-    """Build a minimal repo root the generator can ingest."""
-    root.mkdir(parents=True)
-    if with_docs:
-        docs = root / "docs"
-        docs.mkdir()
-        (docs / "index.md").write_text(
-            "# Home\n\nWelcome home.\n", encoding="utf-8"
-        )
-    (root / "pyproject.toml").write_text(
-        '[project]\nversion = "9.9.9"\n', encoding="utf-8"
-    )
-    (root / "zensical.toml").write_text(
-        '[project]\nnav = [{ Home = "index.md" }]\n', encoding="utf-8"
-    )
-    return root
-
-
-# --------------------------------------------------------------------------
-# Fixtures
-# --------------------------------------------------------------------------
 @pytest.fixture
-def check_output(monkeypatch):
-    """Install a Mock at ``subprocess.check_output`` and return it."""
-    check_output = mock.Mock()
-    monkeypatch.setattr(gd.subprocess, "check_output", check_output)
-    return check_output
+def layout(tmp_path, monkeypatch):
+    """Pin SRC/DOCS/ZENSICAL/DIST into a fake repo under ``tmp_path``."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    _doc(docs, "index.md", "# Home\n\nWelcome home.\n")
+    _doc(docs, "guide.md", "# Guide\n\nA guide.\n")
+    _doc(docs, "extra.md", "# Extra\n\nExtra info.\n")
 
-
-# --------------------------------------------------------------------------
-# _yaml_dq / _validate_name
-# --------------------------------------------------------------------------
-def test_yaml_dq_escapes_quotes():
-    assert gd._yaml_dq('x"y') == '"x\\"y"'
-
-
-def test_yaml_dq_escapes_backslash():
-    assert gd._yaml_dq("a\\b") == '"a\\\\b"'
-
-
-def test_validate_name_ok():
-    gd._validate_name("soliplex-docs")
-
-
-def test_validate_name_bad_length():
-    with pytest.raises(gd.InvalidSkillName):
-        gd._validate_name("")
-
-
-def test_validate_name_bad_chars():
-    with pytest.raises(gd.InvalidSkillName) as excinfo:
-        gd._validate_name("Bad_Name")
-
-    assert excinfo.value.name == "Bad_Name"
-
-
-# --------------------------------------------------------------------------
-# git / config helpers
-# --------------------------------------------------------------------------
-def test_repo_root(check_output):
-    check_output.return_value = "/some/root\n"
-
-    root = gd._repo_root()
-
-    assert root == pathlib.Path("/some/root")
-    check_output.assert_called_once_with(
-        ["git", "rev-parse", "--show-toplevel"], text=True
+    zensical = tmp_path / "zensical.toml"
+    zensical.write_text(
+        "[project]\n"
+        'nav = [{ Home = "index.md" }, { Docs = [{ Guide = "guide.md" }] }]\n',
+        encoding="utf-8",
     )
 
-
-def test_git_commit(check_output):
-    check_output.return_value = "abc1234\n"
-
-    commit = gd._git_commit(pathlib.Path("/r"))
-
-    assert commit == "abc1234"
-    check_output.assert_called_once_with(
-        ["git", "-C", "/r", "rev-parse", "--short", "HEAD"], text=True
+    src = tmp_path / "skills" / "soliplex-docs"
+    (src / "references").mkdir(parents=True)
+    (src / "references" / ".gitkeep").write_text("", encoding="utf-8")
+    (src / "scripts").mkdir()
+    (src / "scripts" / "skill_versions.py").write_text(
+        "# shim\n", encoding="utf-8"
+    )
+    (src / "SKILL.md").write_text(
+        "---\nname: soliplex-docs\nmetadata:\n  source: https://x/repo\n"
+        "---\n# Soliplex documentation\n\nStatic body.\n",
+        encoding="utf-8",
     )
 
+    dist = tmp_path / "dist"
+    monkeypatch.setattr(gd, "SRC", src)
+    monkeypatch.setattr(gd, "DOCS", docs)
+    monkeypatch.setattr(gd, "ZENSICAL", zensical)
+    monkeypatch.setattr(gd, "DIST", dist)
+    return tmp_path, docs, src, dist
 
-def test_project_version(tmp_path):
-    (tmp_path / "pyproject.toml").write_text(
-        '[project]\nversion = "1.2.3"\n', encoding="utf-8"
-    )
 
-    assert gd._project_version(tmp_path) == "1.2.3"
-
-
+# --------------------------------------------------------------------------
+# _load_nav / flatten_nav
+# --------------------------------------------------------------------------
 def test_load_nav(tmp_path):
-    (tmp_path / "zensical.toml").write_text(
+    zensical = tmp_path / "zensical.toml"
+    zensical.write_text(
         '[project]\nnav = [{ Home = "index.md" }]\n', encoding="utf-8"
     )
 
-    assert gd._load_nav(tmp_path) == [{"Home": "index.md"}]
+    assert gd._load_nav(zensical) == [{"Home": "index.md"}]
 
 
-# --------------------------------------------------------------------------
-# flatten_nav / _walk_group
-# --------------------------------------------------------------------------
 def test_flatten_nav_nested():
     nav = [
         {"Home": "index.md"},
@@ -187,9 +135,7 @@ def test_summarize_full(tmp_path):
 
 def test_summarize_skips_special_lines(tmp_path):
     doc = _doc(
-        tmp_path,
-        "b.md",
-        "# T\n- a list item\nreal paragraph\n## sub\n",
+        tmp_path, "b.md", "# T\n- a list item\nreal paragraph\n## sub\n"
     )
 
     assert gd._summarize(doc) == "real paragraph"
@@ -218,65 +164,43 @@ def test_h1_title(tmp_path, text, expected):
 
 
 # --------------------------------------------------------------------------
-# _render_skill_md
+# _doc_map
 # --------------------------------------------------------------------------
-def test_render_with_extras(tmp_path):
+def test_doc_map_renders_sections_extras_and_summaries(tmp_path):
     docs = tmp_path / "docs"
     docs.mkdir()
-    (docs / "index.md").write_text(
-        "# Home\n\nHome summary.\n", encoding="utf-8"
-    )
-    (docs / "guide").mkdir()
-    (docs / "guide" / "intro.md").write_text("# Intro\n", encoding="utf-8")
-    (docs / "guide" / "setup.md").write_text("# Setup\n", encoding="utf-8")
-    (docs / "extra1.md").write_text(
-        "# Extra One\n\nExtra summary.\n", encoding="utf-8"
-    )
-    (docs / "extra2.md").write_text(
-        "plain text no heading\n", encoding="utf-8"
-    )
-    # Two leaves under "Guide" exercise the section-dedup skip path.
+    _doc(docs, "index.md", "# Home\n\nHome summary.\n")
+    guide = docs / "guide"
+    guide.mkdir()
+    _doc(guide, "intro.md", "# Intro\n")  # H1 only -> no summary
+    _doc(guide, "setup.md", "# Setup\n\nSetup summary.\n")
+    _doc(docs, "extra1.md", "# Extra One\n\nExtra summary.\n")  # not in nav
+    _doc(docs, "extra2.md", "plain text, no heading\n")  # extra, no summary
+    # Two leaves under "Guide" exercise the section-dedup skip path; the two
+    # extras (with/without a summary) cover both branches of the extras loop.
     nav = [
         {"Home": "index.md"},
-        {
-            "Guide": [
-                {"Intro": "guide/intro.md"},
-                {"Setup": "guide/setup.md"},
-            ]
-        },
+        {"Guide": [{"Intro": "guide/intro.md"}, {"Setup": "guide/setup.md"}]},
     ]
 
-    out = gd._render_skill_md(
-        name="soliplex-docs",
-        version="1.0",
-        generated="2026-01-01",
-        docs_dir=docs,
-        nav=nav,
-    )
+    out = gd._doc_map(docs, nav)
 
+    assert out.startswith("## Documentation map")
     assert "### General" in out
     assert "### Guide" in out
     assert "### Other" in out
-    assert "Home summary." in out
-    assert "**Extra One**" in out
-    assert "**extra2**" in out
-    # source_commit is stamped by generate(), not _render_skill_md.
-    assert "source_commit:" not in out
-    assert "skill_versions.py upgrade" in out
+    assert "  Home summary." in out
+    assert "  Setup summary." in out
+    assert "**Extra One** — `references/extra1.md`" in out  # via _h1_title
+    assert "**extra2** — `references/extra2.md`" in out  # extra, no summary
 
 
-def test_render_without_extras(tmp_path):
+def test_doc_map_without_extras(tmp_path):
     docs = tmp_path / "docs"
     docs.mkdir()
-    (docs / "index.md").write_text("# Home\n\nHi.\n", encoding="utf-8")
+    _doc(docs, "index.md", "# Home\n\nHi.\n")
 
-    out = gd._render_skill_md(
-        name="n",
-        version="1",
-        generated="d",
-        docs_dir=docs,
-        nav=[{"Home": "index.md"}],
-    )
+    out = gd._doc_map(docs, [{"Home": "index.md"}])
 
     assert "### Other" not in out
 
@@ -284,149 +208,98 @@ def test_render_without_extras(tmp_path):
 # --------------------------------------------------------------------------
 # generate
 # --------------------------------------------------------------------------
-def test_generate_happy(tmp_path):
-    repo = _fake_repo(tmp_path / "repo", with_docs=True)
-    out = tmp_path / "out"
+def test_generate_assembles_skill(layout):
+    _tmp, _docs, _src, dist = layout
 
-    skill = gd.generate(
-        out_dir=out,
-        name="soliplex-docs",
-        repo_root=repo,
-        commit="abc1234",
-        generated="2026-01-01",
-    )
+    out = gd.generate(out_dir=dist, commit="deadbee")
 
-    assert skill == out / "soliplex-docs"
-    assert (skill / "SKILL.md").is_file()
-    assert (skill / "references" / "index.md").is_file()
-    assert (skill / "scripts" / "skill_versions.py").is_file()
-    text = (skill / "SKILL.md").read_text(encoding="utf-8")
-    assert 'version: "9.9.9"' in text
-    assert 'source_commit: "abc1234"' in text
+    assert out == dist / "soliplex-docs"
+    assert (out / "references" / "index.md").is_file()  # filled from docs/
+    assert not (out / "references" / ".gitkeep").exists()  # placeholder gone
+    assert (out / "scripts" / "skill_versions.py").is_file()  # carried over
+    text = (out / "SKILL.md").read_text(encoding="utf-8")
+    assert "# Soliplex documentation" in text  # static body kept
+    assert "## Documentation map" in text  # map appended
+    assert 'source_commit: "deadbee"' in text  # stamped
 
 
-def test_generate_replaces_existing(tmp_path):
-    repo = _fake_repo(tmp_path / "repo", with_docs=True)
-    out = tmp_path / "out"
-    stale = out / "soliplex-docs"
+def test_generate_replaces_existing_out(layout):
+    _tmp, _docs, _src, dist = layout
+    stale = dist / "soliplex-docs"
     stale.mkdir(parents=True)
     (stale / "stale.txt").write_text("old", encoding="utf-8")
 
-    gd.generate(
-        out_dir=out,
-        name="soliplex-docs",
-        repo_root=repo,
-        commit="c",
-        generated="d",
+    gd.generate(out_dir=dist, commit="deadbee")
+
+    assert not (dist / "soliplex-docs" / "stale.txt").exists()
+
+
+def test_generate_without_commit_skips_stamp(layout):
+    _tmp, _docs, _src, dist = layout
+
+    out = gd.generate(out_dir=dist, commit=None)
+
+    assert "source_commit" not in (out / "SKILL.md").read_text(
+        encoding="utf-8"
     )
 
-    assert not (out / "soliplex-docs" / "stale.txt").exists()
 
-
-def test_generate_without_template(tmp_path, monkeypatch):
-    repo = _fake_repo(tmp_path / "repo", with_docs=True)
-    out = tmp_path / "out"
-    monkeypatch.setattr(gd, "_SKILL_TEMPLATE", tmp_path / "no-template")
-
-    skill = gd.generate(
-        out_dir=out,
-        name="soliplex-docs",
-        repo_root=repo,
-        commit="c",
-        generated="d",
-    )
-
-    assert not (skill / "scripts").exists()
-
-
-def test_generate_missing_docs(tmp_path):
-    repo = _fake_repo(tmp_path / "repo", with_docs=False)
+def test_generate_missing_docs(layout, monkeypatch):
+    _tmp, _docs, _src, dist = layout
+    monkeypatch.setattr(gd, "DOCS", dist / "nonexistent")
 
     with pytest.raises(gd.DocsDirNotFound):
-        gd.generate(
-            out_dir=tmp_path / "out",
-            name="soliplex-docs",
-            repo_root=repo,
-            commit="c",
-            generated="d",
-        )
+        gd.generate(out_dir=dist, commit="x")
 
 
 # --------------------------------------------------------------------------
 # _validate
 # --------------------------------------------------------------------------
-def test_validate_skipped_when_missing(monkeypatch, capsys, tmp_path):
-    monkeypatch.setitem(sys.modules, "skills_ref", None)
-
-    gd._validate(tmp_path)
-
-    assert "skills-ref not installed" in capsys.readouterr().err
-
-
 def test_validate_ok(monkeypatch, capsys, tmp_path):
-    fake = types.ModuleType("skills_ref")
-    fake.validate = mock.Mock(return_value=[])
-    monkeypatch.setitem(sys.modules, "skills_ref", fake)
+    validate = mock.Mock(return_value=[])
+    monkeypatch.setattr(gd.skills_ref, "validate", validate)
 
     gd._validate(tmp_path)
 
     assert "Validated skill:" in capsys.readouterr().out
-    fake.validate.assert_called_once_with(tmp_path)
+    validate.assert_called_once_with(tmp_path)
 
 
 def test_validate_reports_errors(monkeypatch, tmp_path):
-    fake = types.ModuleType("skills_ref")
-    fake.validate = mock.Mock(return_value=["boom"])
-    monkeypatch.setitem(sys.modules, "skills_ref", fake)
+    validate = mock.Mock(return_value=["boom"])
+    monkeypatch.setattr(gd.skills_ref, "validate", validate)
 
     with pytest.raises(gd.SkillValidationFailed) as excinfo:
         gd._validate(tmp_path)
 
     assert excinfo.value.errors == ["boom"]
-    fake.validate.assert_called_once_with(tmp_path)
+    validate.assert_called_once_with(tmp_path)
 
 
 # --------------------------------------------------------------------------
 # main
 # --------------------------------------------------------------------------
-def test_main_with_explicit_args(tmp_path, capsys):
-    repo = _fake_repo(tmp_path / "repo", with_docs=True)
-    out = tmp_path / "out"
+def test_main_assembles_and_validates(layout, monkeypatch, capsys):
+    _tmp, _docs, _src, dist = layout
+    monkeypatch.setattr(gd.build, "git_head_commit", lambda repo: "feedface")
+    validate = mock.Mock(return_value=[])
+    monkeypatch.setattr(gd.skills_ref, "validate", validate)
 
-    rc = gd.main(
-        [
-            "--repo-root",
-            str(repo),
-            "--out",
-            str(out),
-            "--commit",
-            "abc",
-            "--generated",
-            "2026-02-02",
-            "--no-validate",
-        ]
-    )
+    rc = gd.main(["--out", str(dist)])
 
+    out = dist / "soliplex-docs"
     assert rc == 0
-    assert (out / "soliplex-docs" / "SKILL.md").is_file()
+    assert 'source_commit: "feedface"' in (out / "SKILL.md").read_text()
+    validate.assert_called_once_with(out)
+    assert "Validated skill:" in capsys.readouterr().out
+
+
+def test_main_explicit_commit_skips_validation(layout, capsys):
+    _tmp, _docs, _src, dist = layout
+
+    rc = gd.main(["--out", str(dist), "--commit", "abc1234", "--no-validate"])
+
+    out = dist / "soliplex-docs"
+    assert rc == 0
+    assert 'source_commit: "abc1234"' in (out / "SKILL.md").read_text()
     assert "Generated skill:" in capsys.readouterr().out
-
-
-def test_main_defaults(tmp_path, monkeypatch):
-    repo = _fake_repo(tmp_path / "repo", with_docs=True)
-    out = tmp_path / "out"
-    repo_root = mock.Mock(return_value=repo)
-    git_commit = mock.Mock(return_value="deadbee")
-    validate = mock.Mock()
-    monkeypatch.setattr(gd, "_repo_root", repo_root)
-    monkeypatch.setattr(gd, "_git_commit", git_commit)
-    monkeypatch.setattr(gd, "_validate", validate)
-
-    rc = gd.main(["--out", str(out)])
-
-    assert rc == 0
-    repo_root.assert_called_once_with()
-    git_commit.assert_called_once_with(repo.resolve())
-    validate.assert_called_once_with(out.resolve() / "soliplex-docs")
-    text = (out / "soliplex-docs" / "SKILL.md").read_text(encoding="utf-8")
-    assert 'source_commit: "deadbee"' in text

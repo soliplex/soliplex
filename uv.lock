@@ -3389,7 +3389,6 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
     { name = "ruff" },
-    { name = "skills-ref" },
     { name = "soliplex-skills" },
 ]
 docs = [
@@ -3445,8 +3444,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.0.0,<7.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0,<3.9" },
     { name = "ruff", specifier = ">=0.15.6,<0.16" },
-    { name = "skills-ref" },
-    { name = "soliplex-skills", specifier = ">=0.2.1" },
+    { name = "soliplex-skills", specifier = ">=0.2.2" },
 ]
 docs = [{ name = "zensical", specifier = ">=0.0.43" }]
 postgres = [
@@ -3462,11 +3460,14 @@ tui = [
 
 [[package]]
 name = "soliplex-skills"
-version = "0.2.1"
+version = "0.2.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fe/ea/70c03f1cb98c77d4a14cc1ee57d0c6b49bc5af8cf229a585047eaa418702/soliplex_skills-0.2.1.tar.gz", hash = "sha256:00872105972c81a7722169e3233f559278e0dab3a59fdf29f17b1f4d56726146", size = 80450, upload-time = "2026-06-07T01:15:10.151Z" }
+dependencies = [
+    { name = "skills-ref" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/08/6e/2e8c5036399ccfde53910e9805e70a4627116fcd2326728cb9d19cff3ec8/soliplex_skills-0.2.2.tar.gz", hash = "sha256:2f73957fa33ddae7186f71736e61f0722ecbe7f70a9f5c8220cf7be4967e3b13", size = 81013, upload-time = "2026-06-07T03:23:46.443Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/55/3261cb13be4fb3b3a87ef21b5876bacbd67af32c26457cd918d26fb1c45e/soliplex_skills-0.2.1-py3-none-any.whl", hash = "sha256:9fc49e6d3ee5ea9b003874c5315c3e300127d886142df5ab1f8c6bde6821a4db", size = 22681, upload-time = "2026-06-07T01:15:08.978Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/e9/c14457d4352784d42fad713b04c8d1a9c7ae43083de7d21e4e504fec3208/soliplex_skills-0.2.2-py3-none-any.whl", hash = "sha256:79287b2c34ad31b14185155ebf814e7b0b3bd631f31a9f574734b75471244084", size = 22470, upload-time = "2026-06-07T03:23:45.249Z" },
 ]
 
 [[package]]

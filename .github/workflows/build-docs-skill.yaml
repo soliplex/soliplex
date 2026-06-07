@@ -22,7 +22,7 @@ on:
       - 'docs/**'
       - 'zensical.toml'
       - 'scripts/generate_docs_skill.py'
-      - 'scripts/docs_skill_template/**'
+      - 'skills/soliplex-docs/**'
       - '.github/workflows/build-docs-skill.yaml'
   workflow_dispatch:
 
@@ -55,8 +55,9 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
-      # The 'dev' group provides 'skills-ref', which the generator uses to
-      # validate the skill against the Agent Skills spec.
+      # The 'dev' group installs 'soliplex-skills' (which depends on
+      # 'skills-ref'), used by the generator to validate the skill against
+      # the Agent Skills spec.
       - name: Install dependencies
         run: uv sync --frozen --group dev
 
