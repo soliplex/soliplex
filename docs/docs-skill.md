@@ -71,21 +71,23 @@ generation date, so you can tell which build a given copy came from.
 
 ## Listing versions and checking for updates
 
-The skill bundles `scripts/skill_versions.py` (standard library only; honors
-`GITHUB_TOKEN` / `GH_TOKEN` for higher API rate limits). Run it from inside
-the installed skill directory:
+The skill bundles `scripts/skill_versions.py`, a
+[PEP 723](https://peps.python.org/pep-0723/) script that delegates to the
+[`soliplex-skills`](https://soliplex.github.io/soliplex-skills/) library. Run
+it with `uv` from inside the installed skill directory — the first run fetches
+the library; set `GITHUB_TOKEN` / `GH_TOKEN` for higher API rate limits:
 
 ```bash
 # List published versions (rolling builds + release snapshots), newest
 # first, marking the installed copy and the current 'latest' pointer.
-python scripts/skill_versions.py list
+uv run scripts/skill_versions.py list
 
 # Show what changed upstream since this copy was built (Markdown only).
-python scripts/skill_versions.py diff latest
+uv run scripts/skill_versions.py diff latest
 
 # Just the changed-file names, or a diff between two published versions.
-python scripts/skill_versions.py diff latest --name-only
-python scripts/skill_versions.py diff docs-2026.05.20-abc1234 docs-2026.05.29-def5678
+uv run scripts/skill_versions.py diff latest --name-only
+uv run scripts/skill_versions.py diff docs-2026.05.20-abc1234 docs-2026.05.29-def5678
 ```
 
 `diff` exits non-zero when there are differences, so it composes in scripts.
@@ -97,14 +99,14 @@ linger:
 
 ```bash
 # Upgrade to the newest published build.
-python scripts/skill_versions.py upgrade
+uv run scripts/skill_versions.py upgrade
 
 # Preview the change first, or pin a specific tag (see 'list' for tags).
-python scripts/skill_versions.py upgrade --dry-run
-python scripts/skill_versions.py upgrade docs-2026.05.29-def5678
+uv run scripts/skill_versions.py upgrade --dry-run
+uv run scripts/skill_versions.py upgrade docs-2026.05.29-def5678
 
 # Reinstall even when the installed copy is already current.
-python scripts/skill_versions.py upgrade --force
+uv run scripts/skill_versions.py upgrade --force
 ```
 
 `upgrade` no-ops when the installed `source_commit` already matches the

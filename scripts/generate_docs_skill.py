@@ -45,8 +45,11 @@ DESCRIPTION = (
 LICENSE = "MIT"
 COMPATIBILITY = (
     "The documentation itself needs no special environment. The bundled "
-    "scripts/skill_versions.py requires Python 3.12+ and network access to "
-    "api.github.com / github.com (honors GITHUB_TOKEN / GH_TOKEN)."
+    "scripts/skill_versions.py is a uv PEP 723 script (Python 3.12+): run it "
+    "with 'uv run scripts/skill_versions.py ...', which provisions the "
+    "'soliplex-skills' library from PyPI on first use. Network access to "
+    "pypi.org and api.github.com / github.com is required (honors "
+    "GITHUB_TOKEN / GH_TOKEN)."
 )
 
 # Files under this directory are copied verbatim onto the generated skill,
@@ -258,28 +261,29 @@ def _render_skill_md(
     lines.append(
         "This skill is a point-in-time snapshot (see `metadata` above). To "
         "see what has been published and whether a newer build exists, run "
-        "the bundled helper:"
+        "the bundled helper with `uv` (the first run fetches the small "
+        "`soliplex-skills` library it depends on):"
     )
     lines.append("")
     lines.append("```bash")
     lines.append(
         "# List published versions (rolling builds + release snapshots)"
     )
-    lines.append("python scripts/skill_versions.py list")
+    lines.append("uv run scripts/skill_versions.py list")
     lines.append("")
     lines.append("# Show what changed upstream since this copy was built")
-    lines.append("python scripts/skill_versions.py diff latest")
+    lines.append("uv run scripts/skill_versions.py diff latest")
     lines.append("")
     lines.append("# Compare any two published versions (see 'list' for tags)")
     lines.append(
-        "python scripts/skill_versions.py diff "
+        "uv run scripts/skill_versions.py diff "
         "docs-2026.05.20-abc1234 docs-2026.05.29-def5678"
     )
     lines.append("")
     lines.append(
         "# Upgrade this copy in place to the newest build (or a given tag)"
     )
-    lines.append("python scripts/skill_versions.py upgrade")
+    lines.append("uv run scripts/skill_versions.py upgrade")
     lines.append("```")
     lines.append("")
     lines.append("## Documentation map")
