@@ -21,7 +21,7 @@ on:
     paths:
       - 'docs/**'
       - 'zensical.toml'
-      - 'scripts/generate_docs_skill.py'
+      - 'scripts/build_skill.py'
       - 'skills/soliplex-docs/**'
       - '.github/workflows/build-docs-skill.yaml'
   workflow_dispatch:
@@ -61,9 +61,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --group dev
 
-      - name: Generate docs skill
+      - name: Build docs skill
         run: >
-          uv run --group dev python scripts/generate_docs_skill.py
+          uv run --group dev python scripts/build_skill.py
           --out dist --commit ${{ github.sha }}
 
       - name: Package docs skill

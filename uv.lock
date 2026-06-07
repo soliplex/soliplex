@@ -3444,7 +3444,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.0.0,<7.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0,<3.9" },
     { name = "ruff", specifier = ">=0.15.6,<0.16" },
-    { name = "soliplex-skills", specifier = ">=0.2.2" },
+    { name = "soliplex-skills", specifier = ">=0.3" },
 ]
 docs = [{ name = "zensical", specifier = ">=0.0.43" }]
 postgres = [
@@ -3460,14 +3460,14 @@ tui = [
 
 [[package]]
 name = "soliplex-skills"
-version = "0.2.2"
+version = "0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "skills-ref" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/08/6e/2e8c5036399ccfde53910e9805e70a4627116fcd2326728cb9d19cff3ec8/soliplex_skills-0.2.2.tar.gz", hash = "sha256:2f73957fa33ddae7186f71736e61f0722ecbe7f70a9f5c8220cf7be4967e3b13", size = 81013, upload-time = "2026-06-07T03:23:46.443Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/a1/a7d8cc0dc9da711b82fe9ae6714009f64bc1640fcf9d4ca37fa0879987f2/soliplex_skills-0.3.tar.gz", hash = "sha256:bb505ccf6d208c259a3ba6594871d0878934c69f393404adac2fb931f15a56b4", size = 81411, upload-time = "2026-06-07T16:26:38.848Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/e9/c14457d4352784d42fad713b04c8d1a9c7ae43083de7d21e4e504fec3208/soliplex_skills-0.2.2-py3-none-any.whl", hash = "sha256:79287b2c34ad31b14185155ebf814e7b0b3bd631f31a9f574734b75471244084", size = 22470, upload-time = "2026-06-07T03:23:45.249Z" },
+    { url = "https://files.pythonhosted.org/packages/25/a9/ea530a6b3129236565f5593f868506dd09f8a5e6995e0d789baa126f158f/soliplex_skills-0.3-py3-none-any.whl", hash = "sha256:3a9b555a924fdffac1ee9de6eabeb1313f4c46f4578f6ce5d2d4f20d4e97162f", size = 22613, upload-time = "2026-06-07T16:26:39.603Z" },
 ]
 
 [[package]]
