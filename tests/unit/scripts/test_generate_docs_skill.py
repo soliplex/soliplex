@@ -249,7 +249,6 @@ def test_render_with_extras(tmp_path):
     out = gd._render_skill_md(
         name="soliplex-docs",
         version="1.0",
-        commit="c0ffee",
         generated="2026-01-01",
         docs_dir=docs,
         nav=nav,
@@ -261,7 +260,8 @@ def test_render_with_extras(tmp_path):
     assert "Home summary." in out
     assert "**Extra One**" in out
     assert "**extra2**" in out
-    assert 'source_commit: "c0ffee"' in out
+    # source_commit is stamped by generate(), not _render_skill_md.
+    assert "source_commit:" not in out
     assert "skill_versions.py upgrade" in out
 
 
@@ -273,7 +273,6 @@ def test_render_without_extras(tmp_path):
     out = gd._render_skill_md(
         name="n",
         version="1",
-        commit="c",
         generated="d",
         docs_dir=docs,
         nav=[{"Home": "index.md"}],

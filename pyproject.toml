@@ -57,6 +57,7 @@ dev = [
     "pytest-xdist >= 3.8.0, < 3.9",
     "ruff >= 0.15.6, < 0.16",
     "skills-ref",
+    "soliplex-skills >= 0.2.1",
 ]
 docs = [
     "zensical>=0.0.43",
@@ -142,6 +143,20 @@ plugins.first-line-heading.enabled = false      # md041
 plugins.code-block-style.enabled = false        # md046
 # There is no rule 'md060'
 # plugins.md060.enabled = false                 # md060
+
+
+# Lets the `soliplex-skills` console script (and CI) manage the published
+# `soliplex-docs` skill without repeating these constants on the command line.
+# The bundled scripts/skill_versions.py hardcodes the same values, since it
+# cannot read this file once the skill is installed elsewhere.
+[[tool.soliplex-skills.skill]]
+name = "soliplex-docs"
+owner = "soliplex"
+repo = "soliplex"
+asset_tarball = "soliplex-docs-skill.tar.gz"
+pointer_tag = "docs-latest"
+rolling_prefix = "docs"
+compare_scope = "references"
 
 
 [tool.alembic]
