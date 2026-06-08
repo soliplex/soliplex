@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Slack notification when new PR is opened
-        uses: slackapi/slack-github-action@v2.1.0
+        uses: slackapi/slack-github-action@v3
         with:
           webhook: ${{ secrets.SLACK_NOTIFY_URL }}
           webhook-type: incoming-webhook
