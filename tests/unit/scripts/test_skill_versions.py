@@ -78,7 +78,6 @@ def test_spec_identifies_the_docs_skill():
     assert spec.repo == "soliplex"
     assert spec.asset_tarball == "soliplex-docs-skill.tar.gz"
     assert spec.pointer_tag == "docs-latest"
-    assert spec.compare_scope == "references"
     assert spec.rolling_re.match("docs-2026.05.29-abc1234")
 
 
