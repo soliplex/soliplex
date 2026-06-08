@@ -82,7 +82,8 @@ the library; set `GITHUB_TOKEN` / `GH_TOKEN` for higher API rate limits:
 # first, marking the installed copy and the current 'latest' pointer.
 uv run scripts/skill_versions.py list
 
-# Show what changed upstream since this copy was built (Markdown only).
+# Show what changed upstream since this copy was built (the whole skill
+# tree, including the documentation map; the build stamp is ignored).
 uv run scripts/skill_versions.py diff latest
 
 # Just the changed-file names, or a diff between two published versions.

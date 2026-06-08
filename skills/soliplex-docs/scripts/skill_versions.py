@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["soliplex-skills>=0.2.1"]
+# dependencies = ["soliplex-skills>=0.4"]
 # ///
 """List, diff, and upgrade published versions of the ``soliplex-docs`` skill.
 
@@ -13,7 +13,9 @@ a human -- can manage the installed copy without leaving the skill:
   with the installed copy and the current ``latest`` pointer marked.
 * ``diff``    -- how does the installed documentation differ from a published
   version (default: ``latest``)? Pass two tags to compare them against each
-  other instead. Only Markdown under ``references/`` is compared.
+  other instead. The whole skill tree is compared (including the build-time
+  ``## Documentation map``, which flags structural changes); the per-build
+  ``source_commit`` stamp in ``SKILL.md`` is ignored.
 * ``upgrade`` -- download a published version (default: ``latest``) and install
   it in place, so documents deleted upstream do not linger.
 
@@ -45,8 +47,7 @@ from soliplex_skills import versions
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 
 # The only values that distinguish this skill from any other; everything else
-# is handled by the library. ``compare_scope="references"`` because the docs
-# skill's payload is the Markdown under ``references/``.
+# is handled by the library.
 SPEC = versions.SkillSpec(
     owner="soliplex",
     repo="soliplex",
@@ -54,7 +55,6 @@ SPEC = versions.SkillSpec(
     asset_tarball="soliplex-docs-skill.tar.gz",
     pointer_tag="docs-latest",
     rolling_re=re.compile(r"^docs-\d{4}\.\d{2}\.\d{2}-[0-9a-f]+$"),
-    compare_scope="references",
 )
 
 
