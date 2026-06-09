@@ -31,6 +31,12 @@ repos:
         language: system
         pass_filenames: false
         files: (^pyproject\.toml$|^uv\.lock|^.pre-commit-config.yaml$)
+      - id: agentskills-validate
+        name: agentskills validate
+        entry: uv run --group dev agentskills validate skills/soliplex-docs
+        language: system
+        pass_filenames: false
+        files: ^skills/soliplex-docs/
 
   - repo: https://github.com/jackdewinter/pymarkdown
     rev: v0.9.36
