@@ -117,6 +117,15 @@ AUTH_USER_CLAIMS = {
     "email": EMAIL,
 }
 
+EXTRA_SCALAR = "test-scalar"
+EXTRA_DICT_KEY = "test-key"
+EXTRA_DICT_VALUE = "test-value"
+EXTRA_CLAIMS = {
+    "extra_scalar": EXTRA_SCALAR,
+    "extra_dict": {EXTRA_DICT_KEY: EXTRA_DICT_VALUE},
+}
+AUTH_USER_CLAIMS_WITH_EXTRAS = AUTH_USER_CLAIMS | EXTRA_CLAIMS
+
 UNKNOWN_USER_PROFILE_KW = {
     "preferred_username": "<unknown>",
     "given_name": "<unknown>",
@@ -1304,18 +1313,22 @@ def test_installation_from_config_w_agui_feature(
 
 
 @pytest.mark.parametrize(
-    "user_claims, exp_profile_kw",
+    "user_claims, exp_profile_kw, exp_extra",
     [
-        ({}, UNKNOWN_USER_PROFILE_KW),
-        (AUTH_USER_CLAIMS, AUTH_USER_CLAIMS),
+        ({}, UNKNOWN_USER_PROFILE_KW, {}),
+        (AUTH_USER_CLAIMS, AUTH_USER_CLAIMS, {}),
+        (
+            AUTH_USER_CLAIMS_WITH_EXTRAS,
+            AUTH_USER_CLAIMS_WITH_EXTRAS,
+            EXTRA_CLAIMS,
+        ),
     ],
 )
-def test_userprofile_from_user_claims(user_claims, exp_profile_kw):
-    expected = models.UserProfile(**exp_profile_kw)
-
+def test_userprofile_from_user_claims(user_claims, exp_profile_kw, exp_extra):
     found = models.UserProfile.from_user_claims(user_claims)
 
-    assert found == expected
+    assert found.model_dump() == exp_profile_kw
+    assert found.__pydantic_extra__ == exp_extra
 
 
 @pytest.mark.parametrize(

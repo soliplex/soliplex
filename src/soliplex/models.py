@@ -529,6 +529,8 @@ class MCPToken(pydantic.BaseModel):
 
 
 class UserProfile(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="allow")
+
     given_name: str
     family_name: str
     email: str
@@ -536,15 +538,16 @@ class UserProfile(pydantic.BaseModel):
 
     @classmethod
     def from_user_claims(cls, user_claims: dict[str, typing.Any]):
-        return cls(
-            given_name=user_claims.get("given_name", "<unknown>"),
-            family_name=user_claims.get("family_name", "<unknown>"),
-            email=user_claims.get("email", "<unknown>"),
-            preferred_username=user_claims.get(
+        defaults = {
+            "given_name": user_claims.get("given_name", "<unknown>"),
+            "family_name": user_claims.get("family_name", "<unknown>"),
+            "email": user_claims.get("email", "<unknown>"),
+            "preferred_username": user_claims.get(
                 "preferred_username",
                 "<unknown>",
             ),
-        )
+        }
+        return cls(**(user_claims | defaults))
 
 
 # ----------------------------------------------------------------------------
