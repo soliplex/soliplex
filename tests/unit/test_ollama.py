@@ -347,6 +347,51 @@ def test_ollama_rest_api_delete_model(
     )
 
 
+@pytest.mark.parametrize("w_prompt", [None, "are you there?"])
+@pytest.mark.parametrize(
+    "status_code, expectation",
+    [
+        (None, contextlib.nullcontext()),
+        (400, pytest.raises(requests.exceptions.HTTPError)),
+    ],
+)
+@mock.patch("soliplex.ollama.requests.post")
+def test_ollama_rest_api_chat_completion(
+    r_post,
+    rest_api,
+    status_code,
+    expectation,
+    w_prompt,
+):
+    kwargs = {}
+    exp_prompt = "ping"
+    if w_prompt is not None:
+        kwargs["prompt"] = exp_prompt = w_prompt
+
+    exp_data = {
+        "model": TEST_MODEL_NAME,
+        "messages": [{"role": "user", "content": exp_prompt}],
+        "max_tokens": 1,
+        "stream": False,
+    }
+
+    if status_code is not None:
+        r_post.side_effect = requests.HTTPError(status_code)
+
+    with expectation as expected:
+        found = rest_api.chat_completion(TEST_MODEL_NAME, **kwargs)
+
+    if status_code is not None:
+        assert expected.value.args == (status_code,)
+    else:
+        assert found is r_post.return_value.json.return_value
+
+    r_post.assert_called_once_with(
+        f"{TEST_OLLAMA_URL}/v1/chat/completions",
+        json=exp_data,
+    )
+
+
 # pull_model tests
 
 
