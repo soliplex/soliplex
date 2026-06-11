@@ -1150,15 +1150,38 @@ def audit_logfire(
     _emit_errors(errors, quiet)
 
 
+def _unresponsive_ollama_models(rest_api, model_names) -> dict:
+    """Return ``{model_name: error}`` for models that fail to respond.
+
+    Sends a minimal chat-completion request to each name in
+    ``model_names`` (which should already be present on the server) and
+    records those that raise a network error or non-2xx response. The
+    result is empty when every model responds.
+    """
+    unresponsive: dict[str, str] = {}
+
+    for model_name in model_names:
+        try:
+            rest_api.chat_completion(model_name)
+        except requests.RequestException as exc:
+            unresponsive[model_name] = str(exc.args)
+
+    return unresponsive
+
+
 def _missing_ollama_models(
     the_installation: installation.Installation,
+    *,
+    check_responsive: bool = False,
 ) -> dict:
-    """Return per-URL info about Ollama models missing from each server.
+    """Return per-URL info about Ollama models on each server.
 
-    Each value is either ``{"unreachable": str}`` (the server refused
-    the connection or returned an HTTP error) or
-    ``{"missing_models": [str, ...]}`` (the server is reachable but is
-    missing one or more models the installation references).
+    Each value may carry ``{"unreachable": str}`` (the server refused
+    the connection or returned an HTTP error), ``{"missing_models":
+    [str, ...]}`` (the server is reachable but missing one or more
+    models the installation references), and -- when ``check_responsive``
+    is set -- ``{"unresponsive_models": {name: error}}`` (a model is
+    installed but failed to answer a minimal chat-completion request).
     """
     ollama_url_models = the_installation.all_provider_info.get("ollama", {})
     per_url: dict[str, dict] = {}
@@ -1177,8 +1200,21 @@ def _missing_ollama_models(
 
         available = {entry["name"] for entry in response.get("models", ())}
         missing = sorted(required - available)
+
+        url_info: dict = {}
         if missing:
-            per_url[url] = {"missing_models": missing}
+            url_info["missing_models"] = missing
+
+        if check_responsive:
+            unresponsive = _unresponsive_ollama_models(
+                rest_api,
+                sorted(required & available),
+            )
+            if unresponsive:
+                url_info["unresponsive_models"] = unresponsive
+
+        if url_info:
+            per_url[url] = url_info
 
     if per_url:
         return {"ollama": per_url}
@@ -1188,6 +1224,8 @@ def _missing_ollama_models(
 def _audit_ollama_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
+    *,
+    check_responsive: bool = False,
 ) -> dict:  # pragma NO COVER UI ONLY
     """Print the Ollama section (rule header + per-URL availability check)."""
     quiet = ctx.obj["quiet"]
@@ -1199,7 +1237,10 @@ def _audit_ollama_section(
     tc_line()
 
     ollama_url_models = the_installation.all_provider_info.get("ollama", {})
-    errors = _missing_ollama_models(the_installation)
+    errors = _missing_ollama_models(
+        the_installation,
+        check_responsive=check_responsive,
+    )
     per_url = errors.get("ollama", {})
 
     if not ollama_url_models:
@@ -1212,15 +1253,23 @@ def _audit_ollama_section(
         url_errors = per_url.get(url, {})
         unreachable = url_errors.get("unreachable")
         missing = url_errors.get("missing_models")
+        unresponsive = url_errors.get("unresponsive_models")
         if unreachable is not None:
             tc_print(f"  ERROR: {unreachable}")
-        elif missing:
-            tc_print(f"  MISSING: {', '.join(missing)}")
-            tc_print(
-                "  Run 'soliplex-cli ollama pull' to pull missing models.",
-            )
         else:
-            tc_print("  OK")
+            if missing:
+                tc_print(f"  MISSING: {', '.join(missing)}")
+                tc_print(
+                    "  Run 'soliplex-cli ollama pull' to pull missing models.",
+                )
+            if unresponsive:
+                tc_print(
+                    f"  UNRESPONSIVE: {', '.join(sorted(unresponsive))}",
+                )
+                for model_name in sorted(unresponsive):
+                    tc_print(f"    - {model_name}: {unresponsive[model_name]}")
+            if not missing and not unresponsive:
+                tc_print("  OK")
         tc_line()
 
     return errors
@@ -1230,8 +1279,21 @@ def _audit_ollama_section(
 def audit_ollama(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
+    check_responsive: bool = typer.Option(
+        False,
+        "-r",
+        "--check-responsive",
+        help=(
+            "Also confirm each installed model answers a minimal "
+            "chat-completion request (slower; contacts each model)"
+        ),
+    ),
 ):  # pragma NO COVER command
     """Compare configured Ollama models against each server's available set"""
     quiet = ctx.obj["quiet"]
-    errors = _audit_ollama_section(ctx, installation_path)
+    errors = _audit_ollama_section(
+        ctx,
+        installation_path,
+        check_responsive=check_responsive,
+    )
     _emit_errors(errors, quiet)
