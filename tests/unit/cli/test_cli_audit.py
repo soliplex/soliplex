@@ -1521,5 +1521,122 @@ def test__missing_ollama_models_reports_unreachable_server(
     }
 
 
+def test__unresponsive_ollama_models_all_respond():
+    rest_api = mock.Mock()
+
+    found = cli_audit._unresponsive_ollama_models(
+        rest_api,
+        ["llama3", "mistral"],
+    )
+
+    assert found == {}
+    assert rest_api.chat_completion.call_args_list == [
+        mock.call("llama3"),
+        mock.call("mistral"),
+    ]
+
+
+def test__unresponsive_ollama_models_records_failures():
+    rest_api = mock.Mock()
+    rest_api.chat_completion.side_effect = [
+        None,
+        requests.ConnectionError("boom"),
+    ]
+
+    found = cli_audit._unresponsive_ollama_models(
+        rest_api,
+        ["llama3", "mistral"],
+    )
+
+    assert found == {"mistral": "('boom',)"}
+
+
+@mock.patch("soliplex.cli.audit.ollama.REST_API")
+def test__missing_ollama_models_checks_responsiveness_when_requested(
+    rest_api_cls,
+    the_installation,
+):
+    the_installation._all_provider_info = {
+        "ollama": {"http://a.example.com": {"llama3", "mistral", "phi3"}},
+    }
+
+    instance = mock.Mock()
+    instance.get_available_models.return_value = {
+        "models": [{"name": "llama3"}, {"name": "mistral"}],
+    }
+
+    # 'llama3' answers; 'mistral' fails. 'phi3' is missing, so never probed.
+    def chat_completion(model_name):
+        if model_name == "mistral":
+            raise requests.ConnectionError("boom")
+
+    instance.chat_completion.side_effect = chat_completion
+    rest_api_cls.return_value = instance
+
+    found = cli_audit._missing_ollama_models(
+        the_installation,
+        check_responsive=True,
+    )
+
+    assert found == {
+        "ollama": {
+            "http://a.example.com": {
+                "missing_models": ["phi3"],
+                "unresponsive_models": {"mistral": "('boom',)"},
+            },
+        },
+    }
+    # Only installed-and-required models are probed for responsiveness.
+    assert instance.chat_completion.call_args_list == [
+        mock.call("llama3"),
+        mock.call("mistral"),
+    ]
+
+
+@mock.patch("soliplex.cli.audit.ollama.REST_API")
+def test__missing_ollama_models_responsive_all_ok(
+    rest_api_cls,
+    the_installation,
+):
+    the_installation._all_provider_info = {
+        "ollama": {"http://a.example.com": {"llama3"}},
+    }
+
+    instance = mock.Mock()
+    instance.get_available_models.return_value = {
+        "models": [{"name": "llama3"}],
+    }
+    rest_api_cls.return_value = instance
+
+    found = cli_audit._missing_ollama_models(
+        the_installation,
+        check_responsive=True,
+    )
+
+    assert found == {}
+    instance.chat_completion.assert_called_once_with("llama3")
+
+
+@mock.patch("soliplex.cli.audit.ollama.REST_API")
+def test__missing_ollama_models_skips_responsiveness_by_default(
+    rest_api_cls,
+    the_installation,
+):
+    the_installation._all_provider_info = {
+        "ollama": {"http://a.example.com": {"llama3"}},
+    }
+
+    instance = mock.Mock()
+    instance.get_available_models.return_value = {
+        "models": [{"name": "llama3"}],
+    }
+    rest_api_cls.return_value = instance
+
+    found = cli_audit._missing_ollama_models(the_installation)
+
+    assert found == {}
+    instance.chat_completion.assert_not_called()
+
+
 # _audit_ollama_section: ui only
 # audit_ollama: command

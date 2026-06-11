@@ -1186,6 +1186,13 @@ endpoint) and compare it against the set of model names the
 installation requires for that URL. Models named by the installation
 but absent from the server are reported as needing to be pulled.
 
+By default this confirms only that a model is *installed*. Pass
+`-r` / `--check-responsive` to additionally send each installed model a
+minimal chat-completion request (to the same OpenAI-compatible
+`/v1/chat/completions` endpoint the application uses) and flag any model
+that fails to answer. This is slower — it contacts every installed
+model — and is therefore opt-in.
+
 ```bash
 soliplex-cli audit [OPTIONS] ollama [INSTALLATION_CONFIG_PATH]
 ```
@@ -1198,6 +1205,13 @@ See [Group Options](#group-options) for the available `[OPTIONS]`.
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
+
+#### Options
+
+- `-r` / `--check-responsive` — also confirm each installed model
+  answers a minimal chat-completion request. Only models that are both
+  required and installed are probed; missing models are reported as
+  missing, not unresponsive.
 
 #### Output
 
@@ -1216,6 +1230,15 @@ points to the `ollama pull` command:
   Run 'soliplex-cli ollama pull' to pull missing models.
 ```
 
+With `--check-responsive`, any installed model that fails to answer is
+listed under an `UNRESPONSIVE:` line, with the per-model error indented
+below it:
+
+```text
+  UNRESPONSIVE: mistral
+    - mistral: ('Connection refused',)
+```
+
 If the installation references no Ollama URLs, a single
 `No Ollama URLs referenced by the installation.` line is printed and
 the command exits cleanly.
@@ -1223,9 +1246,11 @@ the command exits cleanly.
 #### Exit Status
 
 - `0` — every required Ollama model is available on its server (or the
-  installation references no Ollama URLs).
+  installation references no Ollama URLs), and — under
+  `--check-responsive` — every installed model answered.
 - `1` — at least one server is unreachable, **or** at least one
-  required model is missing from a reachable server.
+  required model is missing from a reachable server, **or** — under
+  `--check-responsive` — at least one installed model failed to answer.
 
 When the group's `-q` / `--quiet` flag is in effect, a `1` exit is
 accompanied by a single JSON document on stdout under the `ollama` key:
@@ -1233,14 +1258,19 @@ accompanied by a single JSON document on stdout under the `ollama` key:
 ```json
 {
   "ollama": {
-    "http://a.example.com": {"missing_models": ["mistral", "phi3"]},
+    "http://a.example.com": {
+      "missing_models": ["phi3"],
+      "unresponsive_models": {"mistral": "('Connection refused',)"}
+    },
     "http://b.example.com": {"unreachable": "('Connection refused',)"}
   }
 }
 ```
 
 A URL appears under `ollama` only when something went wrong on it;
-reachable servers with no missing models are omitted from the JSON.
+reachable servers with no missing or unresponsive models are omitted
+from the JSON. The `unresponsive_models` key is present only when
+`--check-responsive` was requested.
 
 #### Examples
 
@@ -1248,6 +1278,12 @@ Audit Ollama availability for an installation:
 
 ```bash
 soliplex-cli audit ollama example/installation.yaml
+```
+
+Also verify that each installed model actually responds:
+
+```bash
+soliplex-cli audit ollama --check-responsive example/installation.yaml
 ```
 
 Drive the audit from automation, capturing missing-models JSON:
