@@ -31,6 +31,7 @@ dependencies = [
     "itsdangerous",
     "jsonpatch",
     "python-jsonpath",  # RFC 9535 query support
+    "python-multipart >= 0.0.31",  # Multiple CVEs
     "jwcrypto",
     "logfire[fastapi]",
     "pydantic-ai-slim[google] >= 1.100, < 2.0",
