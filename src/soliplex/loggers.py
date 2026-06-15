@@ -79,6 +79,9 @@ ROOM_UNKNOWN_ROOM_ID = "unknown room id: %s"
 ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available: %s"
 ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id: %s"
 
+STATS_GET_ROOMS_STATS = "get rooms stats"
+STATS_GET_ROOM_STATS = "get room stats"
+
 
 class LogWrapper(logging.LoggerAdapter):
     """Context wrapper for capturing extra logging values"""

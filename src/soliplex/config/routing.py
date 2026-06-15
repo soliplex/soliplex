@@ -192,6 +192,7 @@ _DEFAULT_ROUTER_NAMES = {
     "log_ingest": "soliplex.views.log_ingest.router",
     "quizzes": "soliplex.views.quizzes.router",
     "rooms": "soliplex.views.rooms.router",
+    "stats": "soliplex.views.stats.router",
 }
 
 
