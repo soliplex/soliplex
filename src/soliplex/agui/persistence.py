@@ -25,6 +25,29 @@ class NoFeedbackFound(ValueError):
         super().__init__(f"No feed back found for run: {run_id}")
 
 
+def _as_utc(value: datetime.datetime) -> datetime.datetime:
+    """Re-tag a naive SQLite-read timestamp as UTC.
+
+    The backend writes UTC, but SQLite stores no timezone and SQLAlchemy
+    returns naive datetimes on read. Without re-tagging, FastAPI would
+    serialize the value with no offset and clients would parse it as
+    local time.
+    """
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=datetime.UTC)
+    return value
+
+
+# A run's activity time is its finish, or -- while unfinished -- its
+# start; the latest such time across the selected runs.
+_LAST_ACTIVITY = sqla_sql.func.max(
+    sqla_sql.func.coalesce(
+        agui_schema.Run.finished,
+        agui_schema.Run.created,
+    )
+)
+
+
 class ThreadStorage(agui_package.ThreadStorage):
     def __init__(self, session: sqla_asyncio.AsyncSession):
         self._session = session
@@ -113,6 +136,37 @@ class ThreadStorage(agui_package.ThreadStorage):
             )
 
         return result
+
+    async def get_room_last_activity(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+    ) -> datetime.datetime | None:
+        async with self.session as session:
+            query = (
+                sqla_sql.select(_LAST_ACTIVITY)
+                .join(agui_schema.Run.thread)
+                .where(agui_schema.Thread.user_name == user_name)
+                .where(agui_schema.Thread.room_id == room_id)
+            )
+            result = await session.scalar(query)
+        return _as_utc(result) if result is not None else None
+
+    async def get_rooms_last_activity(
+        self,
+        *,
+        user_name: str,
+    ) -> dict[str, datetime.datetime]:
+        async with self.session as session:
+            query = (
+                sqla_sql.select(agui_schema.Thread.room_id, _LAST_ACTIVITY)
+                .join(agui_schema.Run.thread)
+                .where(agui_schema.Thread.user_name == user_name)
+                .group_by(agui_schema.Thread.room_id)
+            )
+            rows = (await session.execute(query)).all()
+        return {room_id: _as_utc(activity) for room_id, activity in rows}
 
     async def new_thread(
         self,
