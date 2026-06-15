@@ -324,6 +324,12 @@ class Room(pydantic.BaseModel):
 ConfiguredRooms = dict[str, Room]
 
 
+class RoomStats(pydantic.BaseModel):
+    room_id: str = KW_ONLY
+    # None means the user has no runs in the room.
+    last_activity: pydantic.AwareDatetime | None = KW_ONLY_NONE
+
+
 class Completion(pydantic.BaseModel):
     id: str
     name: str

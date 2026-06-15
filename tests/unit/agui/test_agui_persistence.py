@@ -16,8 +16,14 @@ FeedbackReviewStatus = agui_package.FeedbackReviewStatus
 NOW = datetime.datetime.now(datetime.UTC)
 
 ROOM_ID = "test-room"
+ROOM_ID_2 = "test-room-2"
 USER_NAME = "phreddy"
 EMAIL = "phreddy@example.com"
+OTHER_USER_NAME = "wylma"
+OTHER_EMAIL = "wylma@example.com"
+T_OLD = datetime.datetime(2026, 1, 1, 10, 0, tzinfo=datetime.UTC)
+T_MID = datetime.datetime(2026, 1, 1, 11, 0, tzinfo=datetime.UTC)
+T_NEW = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.UTC)
 REVIEWER_USER_NAME = "bharney"
 REVIEWER_EMAIL = "bharney@example.com"
 RESOLVER_USER_NAME = "wylma"
@@ -64,6 +70,47 @@ async def the_async_session(the_async_engine):
     session = sqla_asyncio.AsyncSession(bind=the_async_engine)
     yield session
     await session.close()
+
+
+async def _add_run(
+    ts,
+    session,
+    *,
+    user_name,
+    email,
+    room_id,
+    created,
+    finished=None,
+    thread_id=None,
+):
+    """Create a run with explicit 'created'/'finished' timestamps.
+
+    A new thread is created (with its initial run) unless 'thread_id' is
+    given, in which case the run is added to that thread. Returns the
+    thread_id so callers can stack more runs onto the same thread.
+    """
+    if thread_id is None:
+        thread = await ts.new_thread(
+            user_name=user_name,
+            email=email,
+            room_id=room_id,
+        )
+        thread_id = await thread.awaitable_attrs.thread_id
+        await session.commit()
+        (run,) = await thread.list_runs()
+    else:
+        run = await ts.new_run(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+        )
+        await session.commit()
+
+    run.created = created
+    run.finished = finished
+    await session.commit()
+
+    return thread_id
 
 
 @pytest.mark.asyncio
@@ -1191,3 +1238,201 @@ async def test_threadstorage_finish_run(
 
     finished = await run.awaitable_attrs.finished
     assert finished == NOW.replace(tzinfo=None)
+
+
+def test_as_utc_naive_tags_utc():
+    naive = datetime.datetime(2026, 1, 1, 12, 0)
+    assert agui_persistence._as_utc(naive) == T_NEW
+
+
+def test_as_utc_already_aware_unchanged():
+    assert agui_persistence._as_utc(T_NEW) is T_NEW
+
+
+@pytest.mark.asyncio
+async def test_get_room_last_activity_empty(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    result = await ts.get_room_last_activity(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_room_last_activity_coalesce_and_max(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    # A finished run whose 'finished' (T_NEW) is later than a newer
+    # unfinished run's 'created' (T_MID): max(coalesce) must be T_NEW.
+    thread_id = await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_OLD,
+        finished=T_NEW,
+    )
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_MID,
+        finished=None,
+        thread_id=thread_id,
+    )
+
+    result = await ts.get_room_last_activity(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+    )
+
+    assert result == T_NEW
+    assert result.tzinfo is not None
+
+
+@pytest.mark.asyncio
+async def test_get_room_last_activity_across_threads_uses_created(
+    the_async_session,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    # Two separate threads in the same room: the room-wide max must
+    # aggregate across threads, and coalesce must fall back to the
+    # unfinished run's 'created' (T_NEW) over the finished run (T_MID).
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_OLD,
+        finished=T_MID,
+    )
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_NEW,
+        finished=None,
+    )
+
+    result = await ts.get_room_last_activity(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+    )
+
+    assert result == T_NEW
+
+
+@pytest.mark.asyncio
+async def test_get_room_last_activity_user_scoping(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_OLD,
+    )
+    # Another user's later run in the same room must not leak in.
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=OTHER_USER_NAME,
+        email=OTHER_EMAIL,
+        room_id=ROOM_ID,
+        created=T_NEW,
+    )
+
+    result = await ts.get_room_last_activity(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+    )
+
+    assert result == T_OLD
+
+
+@pytest.mark.asyncio
+async def test_get_room_last_activity_room_scoping(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_OLD,
+    )
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID_2,
+        created=T_NEW,
+    )
+
+    result = await ts.get_room_last_activity(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+    )
+
+    assert result == T_OLD
+
+
+@pytest.mark.asyncio
+async def test_get_rooms_last_activity_empty(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    result = await ts.get_rooms_last_activity(user_name=USER_NAME)
+
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_get_rooms_last_activity_grouping_and_scoping(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    # ROOM_ID: coalesce picks 'finished' (T_MID) over 'created' (T_OLD).
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_OLD,
+        finished=T_MID,
+    )
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID_2,
+        created=T_NEW,
+    )
+    # Another user's run must not appear in this user's map.
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=OTHER_USER_NAME,
+        email=OTHER_EMAIL,
+        room_id=ROOM_ID,
+        created=T_NEW,
+    )
+
+    result = await ts.get_rooms_last_activity(user_name=USER_NAME)
+
+    assert result == {ROOM_ID: T_MID, ROOM_ID_2: T_NEW}
+    assert all(v.tzinfo is not None for v in result.values())
