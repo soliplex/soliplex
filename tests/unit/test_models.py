@@ -1567,3 +1567,12 @@ def test_aclentry_accepts_single_discriminator(kwargs):
     entry = models.ACLEntry(**kwargs)
 
     assert entry == models.ACLEntry(**kwargs)
+
+
+def test_roomstats_rejects_naive_last_activity():
+    # last_activity must stay tz-aware so it serializes with an offset;
+    # a naive value would be parsed as local time by clients.
+    naive = datetime.datetime(2026, 1, 1, 12, 0)
+
+    with pytest.raises(pydantic.ValidationError):
+        models.RoomStats(room_id="test-room", last_activity=naive)

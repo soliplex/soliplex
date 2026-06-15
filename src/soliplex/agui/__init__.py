@@ -261,6 +261,33 @@ class ThreadStorage(abc.ABC):
         """
 
     @abc.abstractmethod
+    async def get_room_last_activity(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+    ) -> datetime.datetime | None:
+        """Return the user's latest run activity in a room, or None.
+
+        Activity is the latest, across the user's runs in the room, of
+        each run's finish time or -- if it has not finished -- its
+        creation time. None when the user has no runs there.
+        """
+
+    @abc.abstractmethod
+    async def get_rooms_last_activity(
+        self,
+        *,
+        user_name: str,
+    ) -> dict[str, datetime.datetime]:
+        """Return the user's latest run activity for each of their rooms.
+
+        Keyed by room_id; each value is that room's latest activity as
+        in 'get_room_last_activity' (never None). Rooms in which the
+        user has no runs are omitted.
+        """
+
+    @abc.abstractmethod
     async def new_thread(
         self,
         *,
