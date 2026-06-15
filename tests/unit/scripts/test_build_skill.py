@@ -238,6 +238,8 @@ def test_main_delegates_to_build_skill(monkeypatch, capsys, tmp_path):
         src=bs.SKILLS_DIR,
         dist=dist.resolve(),
         commit="feedface",
+        version=None,
+        generated=None,
         validate=True,
         generator=bs._add_references_and_map,
     )
@@ -257,7 +259,32 @@ def test_main_no_validate_and_explicit_commit(monkeypatch, tmp_path):
         src=bs.SKILLS_DIR,
         dist=dist.resolve(),
         commit="abc1234",
+        version=None,
+        generated=None,
         validate=False,
+        generator=bs._add_references_and_map,
+    )
+
+
+def test_main_forwards_version_and_date(monkeypatch, tmp_path):
+    dist = tmp_path / "dist"
+    build_skill = mock.Mock(return_value=dist / "soliplex-docs")
+    monkeypatch.setattr(bs.build, "build_skill", build_skill)
+    monkeypatch.setattr(bs.build, "git_head_commit", lambda repo: "feedface")
+
+    rc = bs.main(
+        ["--out", str(dist), "--version", "v1.2.3", "--date", "2026-06-14"]
+    )
+
+    assert rc == 0
+    build_skill.assert_called_once_with(
+        "soliplex-docs",
+        src=bs.SKILLS_DIR,
+        dist=dist.resolve(),
+        commit="feedface",
+        version="v1.2.3",
+        generated="2026-06-14",
+        validate=True,
         generator=bs._add_references_and_map,
     )
 

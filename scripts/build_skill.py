@@ -205,6 +205,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Source commit to stamp into SKILL.md (default: git HEAD).",
     )
     parser.add_argument(
+        "--version",
+        help="Published version to stamp into SKILL.md (omit for rolling "
+        "builds).",
+    )
+    parser.add_argument(
+        "--date",
+        help="Build date (ISO YYYY-MM-DD) to stamp as 'generated' (default: "
+        "today).",
+    )
+    parser.add_argument(
         "--no-validate",
         action="store_true",
         help="Skip agent-skills validation of the assembled skill.",
@@ -218,6 +228,8 @@ def main(argv: list[str] | None = None) -> int:
             src=SKILLS_DIR,
             dist=args.out.resolve(),
             commit=commit,
+            version=args.version,
+            generated=args.date,
             validate=not args.no_validate,
             generator=_add_references_and_map,
         )

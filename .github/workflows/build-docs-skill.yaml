@@ -61,10 +61,18 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --group dev
 
+      # Stamp the same UTC date into SKILL.md (--date) and version.json
+      # (GEN_DATE) so the skill and its manifest agree.
+      - name: Compute build date
+        run: echo "GEN_DATE=$(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
+
+      # On a software release, stamp the released tag as the skill version;
+      # rolling builds omit --version.
       - name: Build docs skill
         run: >
           uv run --group dev python scripts/build_skill.py
-          --out dist --commit ${{ github.sha }}
+          --out dist --commit ${{ github.sha }} --date "$GEN_DATE"
+          ${{ github.event_name == 'release' && format('--version {0}', github.event.release.tag_name) || '' }}
 
       - name: Package docs skill
         run: |
@@ -75,7 +83,6 @@ jobs:
         run: |
           {
             echo "SHORT_SHA=${GITHUB_SHA::7}"
-            echo "GEN_DATE=$(date -u +%Y-%m-%d)"
             echo "ROLLING_TAG=docs-$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
             echo "SHA256=$(sha256sum "$ASSET_TARBALL" | cut -d' ' -f1)"
           } >> "$GITHUB_ENV"
