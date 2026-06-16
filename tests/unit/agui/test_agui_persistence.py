@@ -1436,3 +1436,78 @@ async def test_get_rooms_last_activity_grouping_and_scoping(the_async_session):
 
     assert result == {ROOM_ID: T_MID, ROOM_ID_2: T_NEW}
     assert all(v.tzinfo is not None for v in result.values())
+
+
+@pytest.mark.asyncio
+async def test_get_threads_last_activity_empty(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    result = await ts.get_threads_last_activity(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+    )
+
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_get_threads_last_activity_grouping_and_scoping(
+    the_async_session,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    # Thread A: two runs; coalesce/max picks the later 'finished' (T_MID)
+    # over either 'created' (T_OLD).
+    thread_a = await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_OLD,
+        finished=T_MID,
+    )
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_OLD,
+        thread_id=thread_a,
+    )
+    # Thread B: a single, newer run in the same room.
+    thread_b = await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+        created=T_NEW,
+    )
+    # A thread in another room is scoped out.
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID_2,
+        created=T_NEW,
+    )
+    # Another user's thread in ROOM_ID must not appear.
+    await _add_run(
+        ts,
+        the_async_session,
+        user_name=OTHER_USER_NAME,
+        email=OTHER_EMAIL,
+        room_id=ROOM_ID,
+        created=T_NEW,
+    )
+
+    result = await ts.get_threads_last_activity(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+    )
+
+    assert result == {thread_a: T_MID, thread_b: T_NEW}
+    assert all(v.tzinfo is not None for v in result.values())
