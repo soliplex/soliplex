@@ -3306,7 +3306,7 @@ wheels = [
 
 [[package]]
 name = "soliplex"
-version = "0.67.6"
+version = "0.67.7"
 source = { editable = "." }
 dependencies = [
     { name = "ag-ui-protocol" },
