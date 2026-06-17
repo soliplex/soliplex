@@ -825,12 +825,18 @@ class AGUI_Thread(pydantic.BaseModel):
     created: datetime.datetime | None = KW_ONLY_NONE
     metadata: AGUI_ThreadMetadata | None = KW_ONLY_NONE
 
+    # Latest run activity in the thread (finish, or start while unfinished),
+    # or None when it has no runs. Distinct from 'created' (the thread's
+    # birth); lets clients mark threads with unseen activity.
+    last_activity: pydantic.AwareDatetime | None = KW_ONLY_NONE
+
     @classmethod
     def from_thread(
         cls,
         a_thread: agui_package.Thread,
         a_thread_meta: AGUI_ThreadMetadata,
         a_thread_runs: AGUI_Runs = None,
+        a_thread_last_activity: datetime.datetime | None = None,
     ):
         return cls(
             room_id=a_thread.room_id,
@@ -838,6 +844,7 @@ class AGUI_Thread(pydantic.BaseModel):
             created=a_thread.created,
             metadata=a_thread_meta,
             runs=a_thread_runs,
+            last_activity=a_thread_last_activity,
         )
 
 

@@ -168,6 +168,23 @@ class ThreadStorage(agui_package.ThreadStorage):
             rows = (await session.execute(query)).all()
         return {room_id: _as_utc(activity) for room_id, activity in rows}
 
+    async def get_threads_last_activity(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+    ) -> dict[str, datetime.datetime]:
+        async with self.session as session:
+            query = (
+                sqla_sql.select(agui_schema.Thread.thread_id, _LAST_ACTIVITY)
+                .join(agui_schema.Run.thread)
+                .where(agui_schema.Thread.user_name == user_name)
+                .where(agui_schema.Thread.room_id == room_id)
+                .group_by(agui_schema.Thread.thread_id)
+            )
+            rows = (await session.execute(query)).all()
+        return {thread_id: _as_utc(activity) for thread_id, activity in rows}
+
     async def new_thread(
         self,
         *,
