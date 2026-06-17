@@ -304,6 +304,9 @@ async def test_get_room_agui_only(
         )
 
     the_threads.list_user_threads.return_value = [test_thread]
+    the_threads.get_threads_last_activity.return_value = {
+        TEST_THREAD_ID_STR: NOW,
+    }
 
     found = await agui_views.get_room_agui(
         room_id=TEST_ROOM_ID,
@@ -319,6 +322,7 @@ async def test_get_room_agui_only(
     assert m_thread.room_id == TEST_ROOM_ID
     assert m_thread.thread_id == TEST_THREAD_ID_UUID
     assert m_thread.runs is None
+    assert m_thread.last_activity == NOW
 
     if w_thread_meta:
         assert m_thread.metadata.name == TEST_THREAD_NAME
@@ -326,6 +330,10 @@ async def test_get_room_agui_only(
         assert m_thread.metadata is None
 
     the_threads.list_user_threads.assert_called_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+    )
+    the_threads.get_threads_last_activity.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
     )

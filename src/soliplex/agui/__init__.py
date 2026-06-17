@@ -288,6 +288,20 @@ class ThreadStorage(abc.ABC):
         """
 
     @abc.abstractmethod
+    async def get_threads_last_activity(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+    ) -> dict[str, datetime.datetime]:
+        """Return the user's latest run activity for each thread in a room.
+
+        Keyed by thread_id (the AG-UI protocol id); each value is that
+        thread's latest activity as in 'get_room_last_activity' (never
+        None). Threads in which the user has no runs are omitted.
+        """
+
+    @abc.abstractmethod
     async def new_thread(
         self,
         *,
