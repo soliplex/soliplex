@@ -1,6 +1,7 @@
 """Soliplex authentication views"""
 
 import dataclasses
+import json
 from urllib import parse as urlparse
 
 import fastapi
@@ -137,6 +138,19 @@ async def get_auth_system(
     return_to = request.query_params.get("return_to", "/")
 
     components = urlparse.urlparse(return_to)
+
+    # An ABSOLUTE return_to (scheme://host) signals an interactive web client
+    # that opened login in a popup. For those, hand the tokens back via
+    # window.opener.postMessage instead of a redirect: reading a cross-origin
+    # popup's location.href from the opener is not portable (real Firefox severs
+    # that handle once the popup navigates to the IdP), so the klangk plugin
+    # listens for a message instead. Relative return_to (legacy / server
+    # clients) keeps the 307 redirect unchanged.
+    is_interactive = bool(components.scheme and components.netloc)
+    opener_origin = (
+        f"{components.scheme}://{components.netloc}" if is_interactive else ""
+    )
+
     qs = urlparse.urlencode(
         dict(
             token=access_token,
@@ -154,6 +168,15 @@ async def get_auth_system(
             components.fragment,
         )
     )
+
+    if is_interactive:
+        return _auth_complete_html(
+            opener_origin,
+            return_to,
+            access_token,
+            refresh_token,
+            expires_in,
+        )
 
     return responses.RedirectResponse(return_to)
 
@@ -175,3 +198,69 @@ async def get_user_info(
 
     the_logger.debug(loggers.AUTHN_GET_USER_INFO)
     return models.UserProfile.from_user_claims(the_user_claims)
+
+
+def _auth_complete_html(
+    opener_origin: str,
+    fallback_url: str,
+    access_token: str,
+    refresh_token: str,
+    expires_in: object,
+) -> responses.HTMLResponse:
+    """Render a handshake page for interactive (popup) logins.
+
+    postMessages ``{type: 'soliplex-auth', token, refresh_token, expires_in}``
+    to ``window.opener`` (restricted to *opener_origin*) and closes the popup.
+    If there is no opener (e.g. the page was opened directly rather than via
+    ``window.open``), falls back to a JS redirect to *fallback_url* —
+    preserving the redirect destination for that case.
+
+    This exists because reading a cross-origin popup's ``location.href`` from
+    the opener is not portable across browsers (Firefox severs the handle once
+    the popup navigates to the IdP), so the popup instead pushes the tokens
+    out via ``postMessage``, which is explicitly designed for cross-window
+    messaging.
+    """
+    payload = json.dumps(
+        {
+            "type": "soliplex-auth",
+            "token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": str(expires_in),
+        }
+    )
+    # Escape for an inline <script> context so a token can never break out via
+    # </script>, and JS-string-escape the single-quoted literals.
+    payload = payload.replace("<", "\\u003c").replace(">", "\\u003e")
+
+    def _js_str(value: str) -> str:
+        return (
+            str(value)
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("<", "\\u003c")
+        )
+
+    html = (
+        "<!doctype html>\n"
+        "<html><head><meta charset=\"utf-8\">"
+        "<title>Soliplex sign-in</title></head><body>"
+        "<p id=\"m\" style=\"font-family:sans-serif;text-align:center;"
+        "margin-top:2em\">Signing you in\u2026</p>\n"
+        "<script>\n"
+        "(function () {\n"
+        "  var opener = window.opener;\n"
+        "  if (opener && !opener.closed) {\n"
+        "    try { opener.postMessage(" + payload + ", '"
+        + _js_str(opener_origin) + "'); } catch (e) {}\n"
+        "    setTimeout(function () { try { window.close(); } catch (e) {} }, 200);\n"
+        "    document.getElementById('m').textContent =\n"
+        "      'Signed in. You can close this window.';\n"
+        "  } else {\n"
+        "    window.location.replace('" + _js_str(fallback_url) + "');\n"
+        "  }\n"
+        "})();\n"
+        "</script></body></html>"
+    )
+    return responses.HTMLResponse(html)

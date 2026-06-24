@@ -271,6 +271,65 @@ async def test_get_auth_system(
 
 
 @pytest.mark.anyio
+@mock.patch("soliplex.authn.get_oauth")
+@mock.patch("soliplex.authn.authenticate")
+async def test_get_auth_system_interactive_returns_postmessage_html(
+    auth_fn,
+    get_oauth,
+):
+    """An ABSOLUTE return_to (popup/interactive web client) returns an HTML
+    handshake page that postMessages the tokens to window.opener, instead of
+    a 307 redirect. Reading a cross-origin popup's location.href from the
+    opener is not portable (Firefox severs the handle), so the popup pushes
+    the tokens out via postMessage."""
+    system = "test_oauth_appname"
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+
+    oidc = get_oauth.return_value.create_client.return_value
+    oidc.authorize_access_token = mock.AsyncMock(
+        return_value={
+            "access_token": "TOKEN",
+            "refresh_token": "RTOKEN",
+            "expires_in": "EXPIRES_IN",
+        }
+    )
+    auth_fn.return_value = {"name": "x", "email": "x@example.com"}
+
+    return_to = "https://demo.toughserv.com/klangk/health"
+    request = fastapi.Request(
+        scope={
+            "type": "http",
+            "query_string": urllib_parse.urlencode({"return_to": return_to}),
+            "session": {},
+        }
+    )
+
+    response = await authn_views.get_auth_system(
+        request=request,
+        system=system,
+        the_installation=the_installation,
+        the_unauth_logger=the_unauth_logger,
+    )
+
+    # Interactive clients get the HTML handshake, not a redirect.
+    assert isinstance(response, responses.HTMLResponse)
+    assert response.status_code == 200
+    body = response.body.decode()
+    # postMessages the tokens, restricted to the opener's origin, and the
+    # payload carries the type tag + the three token fields.
+    assert "opener.postMessage(" in body
+    assert "'https://demo.toughserv.com'" in body
+    assert '"soliplex-auth"' in body
+    assert '"token": "TOKEN"' in body
+    assert '"refresh_token": "RTOKEN"' in body
+    assert '"expires_in": "EXPIRES_IN"' in body
+    # Falls back to a redirect only when there is no opener.
+    assert "window.location.replace(" in body
+
+
+@pytest.mark.anyio
 async def test_get_auth_system_with_hash_routing():
     """Test that authn callback handles hash-based routing correctly."""
 
