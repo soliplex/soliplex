@@ -7,6 +7,13 @@
 
 id: "soliplex-conf-minimal"
 
+# Human-readable identity shown to clients in place of the raw server
+# address. Both are optional; omit them and the
+# `GET /api/v1/installation/identity` endpoint responds 404, so clients
+# fall back to displaying the address.
+server_name: "Soliplex Minimal"
+server_description: "A minimal Soliplex demo that runs without any API key environment variables."
+
 #==========================================================================
 # Meta-configuration
 #==========================================================================

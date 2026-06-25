@@ -63,6 +63,8 @@ INST_GET_INSTALLATION_VERSIONS = "get installation versions"
 INST_SUBPROCESS_PIP = "subprocess pip failed"
 INST_GET_INSTALLATION_PROVIDERS = "get installation providers"
 INST_GET_INSTALLATION_GIT_METADATA = "get installation git metadata"
+INST_GET_INSTALLATION_IDENTITY = "get installation identity"
+INST_NO_INSTALLATION_IDENTITY = "installation identity not configured"
 
 LOG_INGEST_INGEST_LOGS = "ingest logs"
 LOG_INGEST_PAYLOAD_TOO_BIG = "payload too big"

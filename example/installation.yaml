@@ -5,6 +5,17 @@
 id: "soliplex-conf-default"
 
 #==========================================================================
+# Server identity
+#==========================================================================
+# Human-readable name and description surfaced to clients via the public
+# `GET /api/v1/installation/identity` endpoint, shown in place of the raw
+# server address. Both are optional: omit them and the endpoint responds
+# 404, so clients fall back to displaying the address.
+#==========================================================================
+# server_name: "Soliplex Full Demo"
+# server_description: "A full-featured Soliplex instance; requires provider API key environment variables."
+
+#==========================================================================
 # Meta-configuration
 #==========================================================================
 # See: https://soliplex.github.io/soliplex/config/meta/

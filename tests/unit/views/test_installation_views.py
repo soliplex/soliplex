@@ -293,3 +293,54 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
     bound_logger.debug.assert_called_once_with(
         loggers.INST_GET_INSTALLATION_GIT_METADATA,
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "server_name,server_description",
+    [
+        ("Demo Server", "A friendly demo instance"),
+        ("Demo Server", None),
+        (None, "A friendly demo instance"),
+    ],
+)
+async def test_get_installation_identity(server_name, server_description):
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    i_config.id = "soliplex-conf-minimal"
+    i_config.server_name = server_name
+    i_config.server_description = server_description
+    the_installation = installation.Installation(i_config)
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+
+    found = await installation_views.get_installation_identity(
+        the_installation=the_installation,
+        the_unauth_logger=the_unauth_logger,
+    )
+
+    assert isinstance(found, models.ServerInfo)
+    assert found.installation_id == "soliplex-conf-minimal"
+    assert found.name == server_name
+    assert found.description == server_description
+    the_unauth_logger.debug.assert_called_once_with(
+        loggers.INST_GET_INSTALLATION_IDENTITY,
+    )
+
+
+@pytest.mark.anyio
+async def test_get_installation_identity_unconfigured_returns_404():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    i_config.server_name = None
+    i_config.server_description = None
+    the_installation = installation.Installation(i_config)
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await installation_views.get_installation_identity(
+            the_installation=the_installation,
+            the_unauth_logger=the_unauth_logger,
+        )
+
+    assert exc.value.status_code == 404
+    the_unauth_logger.debug.assert_called_once_with(
+        loggers.INST_NO_INSTALLATION_IDENTITY,
+    )
