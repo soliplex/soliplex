@@ -50,7 +50,6 @@ async def get_room_authz(
 
     room_policy = await the_authz_policy.get_room_policy(
         room_id=room_id,
-        user_token=the_user_claims,
     )
 
     return room_policy
@@ -81,7 +80,6 @@ async def post_room_authz(
     await the_authz_policy.update_room_policy(
         room_id=room_id,
         room_policy=room_policy,
-        user_token=the_user_claims,
     )
 
     return fastapi.Response(status_code=204)
@@ -110,7 +108,6 @@ async def delete_room_authz(
 
     await the_authz_policy.delete_room_policy(
         room_id=room_id,
-        user_token=the_user_claims,
     )
 
     return fastapi.Response(status_code=204)
@@ -141,7 +138,6 @@ async def get_installation_authz(
     room_policies = {
         room_id: await the_authz_policy.get_room_policy(
             room_id=room_id,
-            user_token=the_user_claims,
         )
         for room_id in await the_installation.get_room_configs(
             user=the_user_claims,

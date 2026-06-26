@@ -282,39 +282,11 @@ async def test_authorizationpolicy_filter_room_ids(the_async_session):
 
 
 @pytest.mark.asyncio
-async def test_authorizationpolicy_room_policy_crud_not_admin(
-    the_async_session,
-):
-    ap = authz_persistence.AuthorizationPolicy(the_async_session)
-
-    with pytest.raises(authz_persistence.NotAdminUser):
-        await ap.get_room_policy(ROOM_ID, USER_TOKEN)
-
-    acl_entry_model = models.ACLEntry(
-        allow_deny=authz_package.AllowDeny.ALLOW,
-        everyone=True,
-    )
-    policy_model = models.RoomPolicy(
-        room_id=ROOM_ID,
-        acl_entries=[acl_entry_model],
-    )
-
-    with pytest.raises(authz_persistence.NotAdminUser):
-        await ap.update_room_policy(ROOM_ID, policy_model, USER_TOKEN)
-
-    with pytest.raises(authz_persistence.NotAdminUser):
-        await ap.delete_room_policy(ROOM_ID, USER_TOKEN)
-
-
-@pytest.mark.asyncio
 async def test_authorizationpolicy_room_policy_crud(the_async_session):
     ap = authz_persistence.AuthorizationPolicy(the_async_session)
 
-    await ap.add_admin_user(email=EMAIL)
-    await the_async_session.commit()
-
     # No policy -> public room
-    policy = await ap.get_room_policy(ROOM_ID, USER_TOKEN)
+    policy = await ap.get_room_policy(ROOM_ID)
     assert policy is None
 
     acl_entry_model = models.ACLEntry(
@@ -325,10 +297,10 @@ async def test_authorizationpolicy_room_policy_crud(the_async_session):
         room_id=ROOM_ID,
         acl_entries=[acl_entry_model],
     )
-    await ap.update_room_policy(ROOM_ID, policy_model, USER_TOKEN)
+    await ap.update_room_policy(ROOM_ID, policy_model)
     await the_async_session.commit()
 
-    after = await ap.get_room_policy(ROOM_ID, USER_TOKEN)
+    after = await ap.get_room_policy(ROOM_ID)
     assert after == policy_model
     await the_async_session.commit()
 
@@ -339,19 +311,19 @@ async def test_authorizationpolicy_room_policy_crud(the_async_session):
     new_policy_model = policy_model.model_copy(
         update={"acl_entries": [new_acl_entry_model]},
     )
-    await ap.update_room_policy(ROOM_ID, new_policy_model, USER_TOKEN)
+    await ap.update_room_policy(ROOM_ID, new_policy_model)
     await the_async_session.commit()
 
-    policy = await ap.get_room_policy(ROOM_ID, USER_TOKEN)
+    policy = await ap.get_room_policy(ROOM_ID)
     assert policy == new_policy_model
     await the_async_session.commit()
 
-    await ap.delete_room_policy(ROOM_ID, USER_TOKEN)
+    await ap.delete_room_policy(ROOM_ID)
     await the_async_session.commit()
 
-    gone = await ap.get_room_policy(ROOM_ID, USER_TOKEN)
+    gone = await ap.get_room_policy(ROOM_ID)
     assert gone is None
     await the_async_session.commit()
 
-    await ap.delete_room_policy(ROOM_ID, USER_TOKEN)
+    await ap.delete_room_policy(ROOM_ID)
     await the_async_session.commit()

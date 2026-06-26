@@ -26,12 +26,6 @@ class AdminUserExists(ValueError):
         )
 
 
-class NotAdminUser(ValueError):
-    def __init__(self, email):
-        self.email = email
-        super().__init__(f"Non-admin user, email: {email}")
-
-
 async def _find_admin_user_by_json_path(
     json_path: str,
     session,
@@ -207,13 +201,9 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
     async def get_room_policy(
         self,
         room_id: str,
-        user_token: authz_package.UserToken,
     ) -> models.RoomPolicy | None:
         """Return the authorization policy for the room"""
         async with self.session as session:
-            if not await _user_is_admin(user_token, session):
-                raise NotAdminUser(user_token["email"])
-
             policy = await _find_room_policy(room_id, session)
 
         if policy is not None:
@@ -226,13 +216,9 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
         self,
         room_id: str,
         room_policy: models.RoomPolicy,
-        user_token: authz_package.UserToken,
     ) -> None:
         """Update the authorization policy for the room"""
         async with self.session as session:
-            if not await _user_is_admin(user_token, session):
-                raise NotAdminUser(user_token["email"])
-
             policy = await _find_room_policy(room_id, session)
 
             if policy is not None:
@@ -251,13 +237,9 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
     async def delete_room_policy(
         self,
         room_id: str,
-        user_token: authz_package.UserToken,
     ) -> None:
         """Delete any existing authorization policy for the room"""
         async with self.session as session:
-            if not await _user_is_admin(user_token, session):
-                raise NotAdminUser(user_token["email"])
-
             policy = await _find_room_policy(room_id, session)
 
             if policy is not None:
