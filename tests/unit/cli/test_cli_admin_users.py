@@ -56,44 +56,6 @@ def test__admin_users_callback(
 
 
 @pytest.mark.parametrize(
-    "w_exists",
-    [
-        # No existing admin: the insert may proceed.
-        False,
-        # Existing admin: reject to avoid a uniqueness-constraint blowup.
-        True,
-    ],
-)
-@mock.patch("soliplex.cli.admin_users.the_console")
-def test__check_existing_admin(the_console, w_exists):
-    json_path = authz_package.token_field_json_path(
-        "email", "alice@example.com"
-    )
-    existing = mock.Mock() if w_exists else None
-
-    session = mock.Mock()
-    session.query.return_value.where.return_value.first.return_value = existing
-
-    if not w_exists:
-        cli_admin_users._check_existing_admin(session, json_path)
-
-        the_console.rule.assert_not_called()
-        the_console.print.assert_not_called()
-        return
-
-    with pytest.raises(typer.Exit) as excinfo:
-        cli_admin_users._check_existing_admin(session, json_path)
-
-    (return_code,) = excinfo.value.args
-    assert return_code == 1
-
-    the_console.rule.assert_called_once_with(
-        "email=alice@example.com is already an admin",
-    )
-    the_console.print.assert_called_once_with("Nothing to do.")
-
-
-@pytest.mark.parametrize(
     "w_email, w_pref, w_jp",
     [
         # Exactly one set: each branch in turn.
@@ -140,7 +102,9 @@ def test__check_admin_discriminator_rejects_other_arities(
 @mock.patch("soliplex.cli.admin_users.cli_util.get_installation")
 def test__check_admin_user_args(get_installation, _check_ram_dburi):
     the_installation = get_installation.return_value
-    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
+    the_installation.authorization_dburi_async = (
+        "sqlite+aiosqlite:///fake.sqlite"
+    )
 
     found = cli_admin_users._check_admin_user_args(
         mock.sentinel.installation_path,
@@ -151,13 +115,13 @@ def test__check_admin_user_args(get_installation, _check_ram_dburi):
     )
 
     assert found == (
-        "sqlite:///fake.sqlite",
+        "sqlite+aiosqlite:///fake.sqlite",
         '$[?$.email == "alice@example.com"]',
     )
 
     get_installation.assert_called_once_with(mock.sentinel.installation_path)
     _check_ram_dburi.assert_called_once_with(
-        "sqlite:///fake.sqlite",
+        "sqlite+aiosqlite:///fake.sqlite",
         "admin-users add",
     )
 
@@ -168,7 +132,9 @@ def test__check_admin_user_args_allow_invalid_json_path(
     get_installation, _check_ram_dburi
 ):
     the_installation = get_installation.return_value
-    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
+    the_installation.authorization_dburi_async = (
+        "sqlite+aiosqlite:///fake.sqlite"
+    )
 
     bogus = "$[?stale_filter_func($.email)]"
 
@@ -181,7 +147,7 @@ def test__check_admin_user_args_allow_invalid_json_path(
         allow_invalid_json_path=True,
     )
 
-    assert found == ("sqlite:///fake.sqlite", bogus)
+    assert found == ("sqlite+aiosqlite:///fake.sqlite", bogus)
 
 
 @pytest.mark.parametrize(
@@ -237,15 +203,15 @@ def test__dump(
     exp_human,
 ):
     ctx.obj = w_obj
-    session = mock.Mock()
+    discriminators = ['$[?$.role == "admin"]']
 
-    cli_admin_users._dump(ctx, session)
+    cli_admin_users._dump(ctx, discriminators)
 
     if exp_human:
-        _human_dump_admin_users.assert_called_once_with(session)
+        _human_dump_admin_users.assert_called_once_with(discriminators)
         _dump_admin_users.assert_not_called()
     else:
-        _dump_admin_users.assert_called_once_with(session)
+        _dump_admin_users.assert_called_once_with(discriminators)
         _human_dump_admin_users.assert_not_called()
 
 
@@ -308,21 +274,13 @@ def test__admin_users_as_jsonable_empty():
 
 
 def test__admin_users_as_jsonable_populated():
-    rows = [
-        mock.Mock(
-            json_path=authz_package.token_field_json_path(
-                "email", "alice@example.com"
-            )
-        ),
-        mock.Mock(
-            json_path=authz_package.token_field_json_path(
-                "preferred_username", "bob"
-            )
-        ),
-        mock.Mock(json_path="$[?stale_filter_func($.email)]"),
+    json_paths = [
+        authz_package.token_field_json_path("email", "alice@example.com"),
+        authz_package.token_field_json_path("preferred_username", "bob"),
+        "$[?stale_filter_func($.email)]",
     ]
 
-    found = cli_admin_users._admin_users_as_jsonable(rows)
+    found = cli_admin_users._admin_users_as_jsonable(json_paths)
 
     assert found == {
         "admin_users": [
@@ -346,15 +304,11 @@ def test__admin_users_as_jsonable_populated():
 
 
 def test__admin_users_as_yaml_round_trips():
-    rows = [
-        mock.Mock(
-            json_path=authz_package.token_field_json_path(
-                "email", "alice@example.com"
-            )
-        ),
+    json_paths = [
+        authz_package.token_field_json_path("email", "alice@example.com"),
     ]
 
-    yaml_text = cli_admin_users._admin_users_as_yaml(rows)
+    yaml_text = cli_admin_users._admin_users_as_yaml(json_paths)
 
     assert yaml.safe_load(yaml_text) == {
         "admin_users": [

@@ -92,6 +92,10 @@ def test_get_installation(
             config_installation.SYNC_MEMORY_ENGINE_URL,
             pytest.raises(typer.Exit),
         ),
+        (
+            config_installation.ASYNC_MEMORY_ENGINE_URL,
+            pytest.raises(typer.Exit),
+        ),
     ],
 )
 @mock.patch("soliplex.cli.cli_util.the_console")
@@ -109,6 +113,21 @@ def test__check_ram_dburi(the_console, dburi, expectation):
         the_console.print.assert_called_once_with(
             "'test-command' is a no-op with a RAM-based database",
         )
+
+
+@pytest.mark.anyio
+async def test__authz_policy(tmp_path):
+    db_path = tmp_path / "authz.sqlite"
+    dburi = f"sqlite+aiosqlite:///{db_path}"
+    json_path = authz_package.token_field_json_path(
+        "email", "alice@example.com"
+    )
+
+    async with cli_util._authz_policy(dburi) as policy:
+        await policy.add_admin_user_discriminator(json_path)
+        found = await policy.list_admin_user_discriminators()
+
+    assert found == [json_path]
 
 
 SUMMARY = "'--a', '--b', or '--c'"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import pathlib
 import sys
@@ -9,7 +10,7 @@ import typer
 import yaml
 
 from soliplex import authz as authz_package
-from soliplex.authz import schema as authz_schema
+from soliplex.authz import persistence as authz_persistence
 from soliplex.cli import cli_util
 from soliplex.cli import types
 
@@ -125,24 +126,23 @@ def _admin_user_as_jsonable(json_path: str) -> dict:
     }
 
 
-def _admin_users_as_jsonable(admin_users) -> dict:
-    """Render an iterable of AdminUser rows as a JSON-serializable dict.
+def _admin_users_as_jsonable(json_paths) -> dict:
+    """Render an iterable of admin 'json_path' values as a jsonable dict.
 
-    Wraps the per-row dicts in a top-level 'admin_users' key, matching
-    the shape used by 'admin-users list' (but with each row as a
+    Wraps the per-entry dicts in a top-level 'admin_users' key, matching
+    the shape used by 'admin-users list' (but with each entry as a
     structured dict rather than a bare string).
     """
     return {
         "admin_users": [
-            _admin_user_as_jsonable(admin_user.json_path)
-            for admin_user in admin_users
+            _admin_user_as_jsonable(json_path) for json_path in json_paths
         ],
     }
 
 
-def _admin_users_as_yaml(admin_users) -> str:
-    """Render an iterable of AdminUser rows as a YAML document."""
-    to_dump = _admin_users_as_jsonable(admin_users)
+def _admin_users_as_yaml(json_paths) -> str:
+    """Render an iterable of admin 'json_path' values as a YAML document."""
+    to_dump = _admin_users_as_jsonable(json_paths)
     return yaml.safe_dump(to_dump, sort_keys=False, default_flow_style=False)
 
 
@@ -188,31 +188,6 @@ def _admin_users_from_jsonable(data) -> list[str]:
     ]
 
 
-def _check_existing_admin(session, json_path):
-    """Reject 'admin-users add' for a JSONPath that is already an admin.
-
-    Inserting a second row for the same query would violate the
-    'AdminUser.json_path' uniqueness constraint; rather than surface
-    that as an opaque IntegrityError traceback (exit code depending on
-    the backend), report it cleanly and exit non-zero.
-    """
-    existing = (
-        session.query(
-            authz_schema.AdminUser,
-        )
-        .where(
-            authz_schema.AdminUser.json_path == json_path,
-        )
-        .first()
-    )
-    if existing is None:
-        return
-
-    the_console.rule(f"{_describe_admin(json_path)} is already an admin")
-    the_console.print("Nothing to do.")
-    raise typer.Exit(1)
-
-
 def _check_admin_user_args(
     installation_path: pathlib.Path,
     admin_user_email: str | None,
@@ -249,28 +224,20 @@ def _check_admin_user_args(
         allow_invalid=allow_invalid_json_path,
     )
 
-    dburi = the_installation.authorization_dburi_sync
+    dburi = the_installation.authorization_dburi_async
     cli_util._check_ram_dburi(dburi, command)
 
     return dburi, resolved
 
 
-def _dump(ctx, session):
+def _dump(ctx, json_paths):
     if ctx.obj and ctx.obj.get("verbose"):
-        _human_dump_admin_users(session)
+        _human_dump_admin_users(json_paths)
     else:
-        _dump_admin_users(session)
+        _dump_admin_users(json_paths)
 
 
-def _human_dump_admin_users(session):  # pragma NO COVER UI ONLY
-    with session:
-        json_paths = [
-            admin_user.json_path
-            for admin_user in session.query(
-                authz_schema.AdminUser,
-            )
-        ]
-
+def _human_dump_admin_users(json_paths):  # pragma NO COVER UI ONLY
     the_console.rule("Admin users")
 
     if not json_paths:
@@ -282,15 +249,39 @@ def _human_dump_admin_users(session):  # pragma NO COVER UI ONLY
         the_console.print(f"  {index}. {_describe_admin(json_path)}")
 
 
-def _dump_admin_users(session):  # pragma NO COVER UI ONLY
-    with session:
-        admin_users = [
-            _admin_display(admin_user.json_path)
-            for admin_user in session.query(
-                authz_schema.AdminUser,
-            )
-        ]
+def _dump_admin_users(json_paths):  # pragma NO COVER UI ONLY
+    admin_users = [_admin_display(json_path) for json_path in json_paths]
     print(json.dumps({"admin_users": admin_users}))
+
+
+async def _list_discriminators(dburi):
+    async with cli_util._authz_policy(dburi) as policy:
+        return await policy.list_admin_user_discriminators()
+
+
+async def _clear_discriminators(dburi):
+    async with cli_util._authz_policy(dburi) as policy:
+        await policy.clear_admin_user_discriminators()
+        return await policy.list_admin_user_discriminators()
+
+
+async def _add_discriminator(dburi, json_path):
+    async with cli_util._authz_policy(dburi) as policy:
+        await policy.add_admin_user_discriminator(json_path)
+        return await policy.list_admin_user_discriminators()
+
+
+async def _remove_discriminator(dburi, json_path):
+    async with cli_util._authz_policy(dburi) as policy:
+        await policy.remove_admin_user_discriminator(json_path)
+        return await policy.list_admin_user_discriminators()
+
+
+async def _replace_discriminators(dburi, json_paths):
+    async with cli_util._authz_policy(dburi) as policy:
+        await policy.clear_admin_user_discriminators()
+        for json_path in json_paths:
+            await policy.add_admin_user_discriminator(json_path)
 
 
 @app.command("list")
@@ -300,12 +291,12 @@ def list_admin_users(
 ):
     """Show admin users defined in the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_sync
+    dburi = the_installation.authorization_dburi_async
 
     cli_util._check_ram_dburi(dburi, "admin-users list")
 
-    with cli_util._authz_session(dburi) as session:
-        _dump(ctx, session)
+    discriminators = asyncio.run(_list_discriminators(dburi))
+    _dump(ctx, discriminators)
 
 
 @app.command("clear")
@@ -315,17 +306,12 @@ def clear_admin_users(
 ):
     """Clear admin users from the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_sync
+    dburi = the_installation.authorization_dburi_async
 
     cli_util._check_ram_dburi(dburi, "admin-users clear")
 
-    with cli_util._authz_session(dburi) as session:
-        with session:
-            for admin_user in session.query(authz_schema.AdminUser):
-                session.delete(admin_user)
-            session.commit()
-
-        _dump(ctx, session)
+    discriminators = asyncio.run(_clear_discriminators(dburi))
+    _dump(ctx, discriminators)
 
 
 @app.command("add")
@@ -373,14 +359,14 @@ def add_admin_user(
         "admin-users add",
     )
 
-    with cli_util._authz_session(dburi) as session:
-        with session:
-            _check_existing_admin(session, resolved)
-            admin_user = authz_schema.AdminUser(json_path=resolved)
-            session.add(admin_user)
-            session.commit()
+    try:
+        discriminators = asyncio.run(_add_discriminator(dburi, resolved))
+    except authz_persistence.AdminUserExists:
+        the_console.rule(f"{_describe_admin(resolved)} is already an admin")
+        the_console.print("Nothing to do.")
+        raise typer.Exit(1) from None
 
-        _dump(ctx, session)
+    _dump(ctx, discriminators)
 
 
 @app.command("delete")
@@ -440,29 +426,14 @@ def delete_admin_user(
         allow_invalid_json_path=allow_invalid_json_path,
     )
 
-    with cli_util._authz_session(dburi) as session:
-        with session:
-            existing = (
-                session.query(
-                    authz_schema.AdminUser,
-                )
-                .where(
-                    authz_schema.AdminUser.json_path == resolved,
-                )
-                .first()
-            )
+    try:
+        discriminators = asyncio.run(_remove_discriminator(dburi, resolved))
+    except authz_persistence.NoSuchAdminUser:
+        the_console.rule(f"{_describe_admin(resolved)} is not an admin")
+        the_console.print("Nothing to do.")
+        raise typer.Exit(1) from None
 
-            if existing is None:
-                the_console.rule(
-                    f"{_describe_admin(resolved)} is not an admin"
-                )
-                the_console.print("Nothing to do.")
-                raise typer.Exit(1)
-
-            session.delete(existing)
-            session.commit()
-
-        _dump(ctx, session)
+    _dump(ctx, discriminators)
 
 
 @app.command("as-yaml")
@@ -491,14 +462,12 @@ def admin_users_as_yaml(
     (they round-trip via 'from-yaml').
     """
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_sync
+    dburi = the_installation.authorization_dburi_async
 
     cli_util._check_ram_dburi(dburi, "admin-users as-yaml")
 
-    with cli_util._authz_session(dburi) as session:
-        with session:
-            admin_users = session.query(authz_schema.AdminUser).all()
-            yaml_text = _admin_users_as_yaml(admin_users)
+    discriminators = asyncio.run(_list_discriminators(dburi))
+    yaml_text = _admin_users_as_yaml(discriminators)
 
     if output is not None:
         output.write_text(yaml_text)
@@ -532,7 +501,7 @@ def admin_users_from_yaml(
     removes every admin entry.
     """
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_sync
+    dburi = the_installation.authorization_dburi_async
 
     cli_util._check_ram_dburi(dburi, "admin-users from-yaml")
 
@@ -543,12 +512,4 @@ def admin_users_from_yaml(
 
     json_paths = _admin_users_from_jsonable(yaml.safe_load(yaml_text))
 
-    with cli_util._authz_session(dburi) as session:
-        with session:
-            for admin_user in session.query(authz_schema.AdminUser):
-                session.delete(admin_user)
-            session.commit()
-
-            for json_path in json_paths:
-                session.add(authz_schema.AdminUser(json_path=json_path))
-            session.commit()
+    asyncio.run(_replace_discriminators(dburi, json_paths))
