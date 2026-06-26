@@ -16,7 +16,11 @@ import subprocess
 import sys
 
 import pytest
+import sqlalchemy
 import yaml
+
+from soliplex import authz as authz_package
+from soliplex.authz import schema as authz_schema
 
 # 'tests/functional/test_cli_smoketest.py' -> parents[2] is the repo root.
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -32,7 +36,15 @@ _AUTHZ_DBURI_RE = re.compile(
 _OLLAMA_ENV_RE = re.compile(r'^  - "OLLAMA_BASE_URL"$', re.MULTILINE)
 
 ALICE = "alice@example.com"
+BOB = "bob"
 ROLE_JP = '$[?$.role == "admin"]'
+# A valid JSONPath used only to satisfy the 'ACLEntry' write-time validator
+# when seeding a row that is then corrupted (below) to an uncompilable query.
+SEED_ACL_JP = '$[?$.preferred_username == "seed-marker"]'
+# An uncompilable query (the filter function is unregistered) carrying a
+# distinctive marker, so 'audit room-authz' surfaces it -- and only it.
+STALE_ACL_JP = "$[?stale_filter_func($.preferred_username)]"
+STALE_ACL_MARKER = "stale_filter_func"
 # A room configured in 'example/minimal.yaml' whose agent needs no LLM, so
 # loading the installation for a 'room-authz' command requires no provider.
 ROOM = "faux"
@@ -62,6 +74,18 @@ def scratch_installation(tmp_path):
     config_path.write_text(text)
 
     return config_path
+
+
+@pytest.fixture
+def authz_db_path(tmp_path):
+    """The scratch authz sqlite file that 'scratch_installation' points at.
+
+    Shares the per-test 'tmp_path', so it resolves to the same file the
+    repointed 'authorization_dburi' uses -- letting a test seed rows the
+    CLI cannot create on its own (e.g. an ACL entry whose stored
+    'json_path' no longer compiles).
+    """
+    return tmp_path / "authz.sqlite"
 
 
 def _run(config_path, group, subcommand, *rest, input_text=None):
@@ -94,6 +118,11 @@ def _room(config_path, subcommand, *rest, input_text=None):
     )
 
 
+def _audit(config_path, subcommand, *rest):
+    """Run an 'audit' subcommand via the real CLI binary."""
+    return _run(config_path, "audit", subcommand, *rest)
+
+
 def _listed(result):
     """Parse the JSON 'admin_users' dump from the last line of stdout."""
     last = [line for line in result.stdout.splitlines() if line.strip()][-1]
@@ -104,6 +133,43 @@ def _policy(result):
     """Parse the JSON room-policy dump from the last line of stdout."""
     last = [line for line in result.stdout.splitlines() if line.strip()][-1]
     return json.loads(last)
+
+
+def _seed_stale_acl_entry(db_path, room_id):
+    """Give 'room_id' an ACL entry whose stored 'json_path' no longer compiles.
+
+    The CLI cannot create such a row ('add-acl-entry' compile-validates
+    its query), so seed a valid entry through the ORM -- satisfying the
+    write-time validator -- then overwrite its 'json_path' with a raw
+    UPDATE that bypasses the validator, mirroring the persistence-layer
+    test. This is the scenario 'audit' must tolerate via the unchecked
+    'list_room_policies' read.
+    """
+    session = authz_schema.get_session(
+        engine_url=f"sqlite:///{db_path}",
+        init_schema=True,
+    )
+    with session:
+        policy = session.scalars(
+            sqlalchemy.select(authz_schema.RoomPolicy).where(
+                authz_schema.RoomPolicy.room_id == room_id
+            )
+        ).one()
+        entry = authz_schema.ACLEntry(
+            allow_deny=authz_package.AllowDeny.DENY,
+            json_path=SEED_ACL_JP,
+        )
+        entry.room_policy = policy
+        session.add(entry)
+        session.commit()
+        session.execute(
+            sqlalchemy.text(
+                "UPDATE room_acl_entries SET json_path = :stale "
+                "WHERE json_path = :seed"
+            ),
+            {"stale": STALE_ACL_JP, "seed": SEED_ACL_JP},
+        )
+        session.commit()
 
 
 def test_admin_users_smoketest(scratch_installation):
@@ -209,3 +275,43 @@ def test_room_authz_smoketest(scratch_installation):
     recreated = _room(scratch_installation, "make-private", ROOM)
     assert recreated.returncode == 0, recreated.stderr
     assert _policy(recreated)["acl_entries"] == []
+
+
+def test_audit_smoketest(scratch_installation, authz_db_path):
+    # Seed admin + room-policy state through the mutation commands, then
+    # confirm the 'audit' subcommands -- which now read the authz database
+    # through 'AuthorizationPolicy' rather than a direct sync session --
+    # reflect it via the real binary. This is deliberately a single
+    # multi-step sequence (a smoke test), not a set of one-act unit tests.
+    seeded_admin = _cli(scratch_installation, "add", ALICE)
+    assert seeded_admin.returncode == 0, seeded_admin.stderr
+
+    seeded_private = _room(scratch_installation, "make-private", ROOM)
+    assert seeded_private.returncode == 0, seeded_private.stderr
+
+    # A valid ACL entry for 'bob': it grants access, but being valid the
+    # audit never prints its discriminator.
+    granted_bob = _room(
+        scratch_installation,
+        "add-acl-entry",
+        ROOM,
+        "--allow",
+        "--preferred-username",
+        BOB,
+    )
+    assert granted_bob.returncode == 0, granted_bob.stderr
+
+    # ... and one whose stored 'json_path' no longer compiles -- the only
+    # kind 'audit room-authz' surfaces by its query string.
+    _seed_stale_acl_entry(authz_db_path, ROOM)
+
+    audited_admins = _audit(scratch_installation, "admin-users")
+    assert audited_admins.returncode == 0, audited_admins.stderr
+    assert ALICE in audited_admins.stdout
+
+    # The uncompilable entry is an audit finding (non-zero exit) and its
+    # query is printed; the valid 'bob' entry stays silent.
+    audited_rooms = _audit(scratch_installation, "room-authz")
+    assert audited_rooms.returncode == 1, audited_rooms.stdout
+    assert STALE_ACL_MARKER in audited_rooms.stdout
+    assert BOB not in audited_rooms.stdout
