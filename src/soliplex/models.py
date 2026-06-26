@@ -857,7 +857,7 @@ class AGUI_Threads(pydantic.BaseModel):
 # ----------------------------------------------------------------------------
 
 
-class ACLEntry(pydantic.BaseModel):
+class ACLEntryUnchecked(pydantic.BaseModel):
     allow_deny: authz_package.AllowDeny = authz_package.AllowDeny.DENY
     everyone: bool = False
     authenticated: bool = False
@@ -865,6 +865,8 @@ class ACLEntry(pydantic.BaseModel):
     email: str | None = None
     json_path: str | None = None
 
+
+class ACLEntry(ACLEntryUnchecked):
     @pydantic.field_validator("json_path")
     @classmethod
     def _check_json_path(cls, value: str | None) -> str | None:
@@ -888,9 +890,13 @@ class ACLEntry(pydantic.BaseModel):
         return self
 
 
-class RoomPolicy(pydantic.BaseModel):
+class RoomPolicyUnchecked(pydantic.BaseModel):
     room_id: str
     default_allow_deny: authz_package.AllowDeny = authz_package.AllowDeny.DENY
+    acl_entries: list[ACLEntryUnchecked] = pydantic.Field(default_factory=list)
+
+
+class RoomPolicy(RoomPolicyUnchecked):
     acl_entries: list[ACLEntry] = pydantic.Field(default_factory=list)
 
 
