@@ -76,7 +76,7 @@ ROOM_GET_ROOM_DOCUMENTS = "get room documents"
 ROOM_GET_CHUNK_VISUALIZATION = "get chunk_visualization"
 ROOM_GET_SEARCH = "get search"
 ROOM_UNKNOWN_ROOM_ID = "unknown room id"
-ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available: %s"
+ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available"
 ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id"
 
 STATS_GET_ROOMS_STATS = "get rooms stats"
