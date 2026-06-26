@@ -50,10 +50,9 @@ async def get_the_user_claims(
             the_installation=the_installation,
             token=token,
         )
-    except fastapi.HTTPException as exc:
-        the_unauth_logger.error(  # noqa TRY400
+    except fastapi.HTTPException:
+        the_unauth_logger.exception(
             loggers.AUTHN_GET_USER_CLAIMS_FAILED,
-            exc.detail,
         )
         raise
 
