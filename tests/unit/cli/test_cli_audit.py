@@ -11,8 +11,8 @@ import yaml
 
 from soliplex import authz as authz_package
 from soliplex import installation
+from soliplex import models
 from soliplex import secrets
-from soliplex.authz import schema as authz_schema
 from soliplex.cli import audit as cli_audit
 from soliplex.config import installation as config_installation
 from soliplex.config import quizzes as config_quizzes
@@ -677,6 +677,58 @@ def test__invalid_room_rag_dbs(
 # audit_rooms: command
 
 
+@pytest.mark.anyio
+@mock.patch("soliplex.cli.audit.cli_util._authz_policy")
+async def test__list_room_policies(authz_policy):
+    # The helper is a pass-through; the return value emulates the
+    # 'models.RoomPolicyUnchecked' shape 'list_room_policies' yields.
+    policies = [
+        {
+            "room_id": "faux",
+            "default_allow_deny": authz_package.AllowDeny.DENY,
+            "acl_entries": [
+                {
+                    "allow_deny": authz_package.AllowDeny.ALLOW,
+                    "everyone": False,
+                    "authenticated": False,
+                    "preferred_username": None,
+                    "email": "alice@example.com",
+                    "json_path": None,
+                },
+            ],
+        },
+    ]
+    policy = mock.AsyncMock()
+    policy.list_room_policies.return_value = policies
+    authz_policy.return_value.__aenter__.return_value = policy
+
+    found = await cli_audit._list_room_policies("dburi")
+
+    assert found == policies
+    authz_policy.assert_called_once_with("dburi")
+    policy.list_room_policies.assert_awaited_once_with()
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.cli.audit.cli_util._authz_policy")
+async def test__list_admin_discriminators(authz_policy):
+    # The helper is a pass-through; 'list_admin_user_discriminators'
+    # yields the stored 'AdminUser.json_path' query strings.
+    discriminators = [
+        '$[?$.email == "alice@example.com"]',
+        '$[?$.role == "admin"]',
+    ]
+    policy = mock.AsyncMock()
+    policy.list_admin_user_discriminators.return_value = discriminators
+    authz_policy.return_value.__aenter__.return_value = policy
+
+    found = await cli_audit._list_admin_discriminators("dburi")
+
+    assert found == discriminators
+    authz_policy.assert_called_once_with("dburi")
+    policy.list_admin_user_discriminators.assert_awaited_once_with()
+
+
 @pytest.mark.parametrize(
     "is_ram, configured_rooms, policy_specs, exp_groups",
     [
@@ -748,9 +800,9 @@ def test__invalid_room_rag_dbs(
         ),
     ],
 )
-@mock.patch("soliplex.cli.audit.authz_schema.get_session")
+@mock.patch("soliplex.cli.audit._list_room_policies")
 def test__room_authz_groups(
-    get_session,
+    list_room_policies,
     the_installation,
     is_ram,
     configured_rooms,
@@ -762,39 +814,33 @@ def test__room_authz_groups(
     }
 
     if is_ram:
-        the_installation._config.authorization_dburi_sync = (
-            config_installation.SYNC_MEMORY_ENGINE_URL
+        the_installation._config.authorization_dburi_async = (
+            config_installation.ASYNC_MEMORY_ENGINE_URL
         )
     else:
-        the_installation._config.authorization_dburi_sync = "sqlite:///x.db"
-
-        policy_rows = []
-        for room_id, allow_deny in policy_specs:
-            row = mock.Mock()
-            row.room_id = room_id
-            row.default_allow_deny = (
-                authz_package.AllowDeny.ALLOW
-                if allow_deny == "ALLOW"
-                else authz_package.AllowDeny.DENY
+        the_installation._config.authorization_dburi_async = (
+            "sqlite+aiosqlite:///x.db"
+        )
+        list_room_policies.return_value = [
+            models.RoomPolicyUnchecked(
+                room_id=room_id,
+                default_allow_deny=(
+                    authz_package.AllowDeny.ALLOW
+                    if allow_deny == "ALLOW"
+                    else authz_package.AllowDeny.DENY
+                ),
             )
-            policy_rows.append(row)
-
-        session = mock.MagicMock()
-        session.query.return_value = policy_rows
-        get_session.return_value = session
+            for room_id, allow_deny in policy_specs
+        ]
 
     found = cli_audit._room_authz_groups(the_installation)
 
     assert found == exp_groups
 
     if is_ram:
-        get_session.assert_not_called()
+        list_room_policies.assert_not_called()
     else:
-        get_session.assert_called_once_with(
-            engine_url="sqlite:///x.db",
-            init_schema=True,
-        )
-        session.query.assert_called_once_with(authz_schema.RoomPolicy)
+        list_room_policies.assert_called_once_with("sqlite+aiosqlite:///x.db")
 
 
 @pytest.mark.parametrize(
@@ -841,31 +887,35 @@ def test__room_authz_groups(
         ),
     ],
 )
-@mock.patch("soliplex.cli.audit.authz_schema.get_session")
+@mock.patch("soliplex.cli.audit._list_room_policies")
 def test__invalid_acl_json_paths(
-    get_session,
+    list_room_policies,
     the_installation,
     is_ram,
     policy_specs,
     exp_invalid,
 ):
     if is_ram:
-        the_installation._config.authorization_dburi_sync = (
-            config_installation.SYNC_MEMORY_ENGINE_URL
+        the_installation._config.authorization_dburi_async = (
+            config_installation.ASYNC_MEMORY_ENGINE_URL
         )
     else:
-        the_installation._config.authorization_dburi_sync = "sqlite:///x.db"
-
-        policy_rows = []
-        for room_id, json_paths in policy_specs:
-            policy = mock.Mock()
-            policy.room_id = room_id
-            policy.acl_entries = [mock.Mock(json_path=jp) for jp in json_paths]
-            policy_rows.append(policy)
-
-        session = mock.MagicMock()
-        session.query.return_value = policy_rows
-        get_session.return_value = session
+        the_installation._config.authorization_dburi_async = (
+            "sqlite+aiosqlite:///x.db"
+        )
+        list_room_policies.return_value = [
+            models.RoomPolicyUnchecked(
+                room_id=room_id,
+                acl_entries=[
+                    models.ACLEntryUnchecked(
+                        allow_deny=authz_package.AllowDeny.DENY,
+                        json_path=jp,
+                    )
+                    for jp in json_paths
+                ],
+            )
+            for room_id, json_paths in policy_specs
+        ]
 
     found = cli_audit._invalid_acl_json_paths(the_installation)
 
@@ -877,12 +927,9 @@ def test__invalid_acl_json_paths(
     assert normalized == exp_invalid
 
     if is_ram:
-        get_session.assert_not_called()
+        list_room_policies.assert_not_called()
     else:
-        get_session.assert_called_once_with(
-            engine_url="sqlite:///x.db",
-            init_schema=True,
-        )
+        list_room_policies.assert_called_once_with("sqlite+aiosqlite:///x.db")
 
 
 # _audit_room_authz_section: ui only
@@ -910,34 +957,30 @@ def test__invalid_acl_json_paths(
         ),
     ],
 )
-@mock.patch("soliplex.cli.audit.authz_schema.get_session")
+@mock.patch("soliplex.cli.audit._list_admin_discriminators")
 def test__admin_user_json_paths(
-    get_session, the_installation, is_ram, json_paths, exp
+    list_admin_discriminators, the_installation, is_ram, json_paths, exp
 ):
     if is_ram:
-        the_installation._config.authorization_dburi_sync = (
-            config_installation.SYNC_MEMORY_ENGINE_URL
+        the_installation._config.authorization_dburi_async = (
+            config_installation.ASYNC_MEMORY_ENGINE_URL
         )
     else:
-        the_installation._config.authorization_dburi_sync = "sqlite:///x.db"
-
-        rows = [mock.Mock(json_path=jp) for jp in json_paths]
-        session = mock.MagicMock()
-        session.query.return_value = rows
-        get_session.return_value = session
+        the_installation._config.authorization_dburi_async = (
+            "sqlite+aiosqlite:///x.db"
+        )
+        list_admin_discriminators.return_value = json_paths
 
     found = cli_audit._admin_user_json_paths(the_installation)
 
     assert found == exp
 
     if is_ram:
-        get_session.assert_not_called()
+        list_admin_discriminators.assert_not_called()
     else:
-        get_session.assert_called_once_with(
-            engine_url="sqlite:///x.db",
-            init_schema=True,
+        list_admin_discriminators.assert_called_once_with(
+            "sqlite+aiosqlite:///x.db"
         )
-        session.query.assert_called_once_with(authz_schema.AdminUser)
 
 
 @pytest.mark.parametrize(
@@ -971,24 +1014,21 @@ def test__admin_user_json_paths(
         ),
     ],
 )
-@mock.patch("soliplex.cli.audit.authz_schema.get_session")
+@mock.patch("soliplex.cli.audit._admin_user_json_paths")
 def test__invalid_admin_user_json_paths(
-    get_session,
+    admin_user_json_paths,
     the_installation,
     json_paths,
     exp_invalid,
 ):
-    the_installation._config.authorization_dburi_sync = "sqlite:///x.db"
-
-    rows = [mock.Mock(json_path=jp) for jp in json_paths]
-    session = mock.MagicMock()
-    session.query.return_value = rows
-    get_session.return_value = session
+    admin_user_json_paths.return_value = json_paths
 
     found = cli_audit._invalid_admin_user_json_paths(the_installation)
 
     normalized = [(jp, "<error>") for (jp, _err) in found]
     assert normalized == exp_invalid
+
+    admin_user_json_paths.assert_called_once_with(the_installation)
 
 
 # _audit_admin_users_section: ui only

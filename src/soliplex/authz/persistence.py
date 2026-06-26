@@ -239,6 +239,23 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
 
         return None
 
+    async def list_room_policies(
+        self,
+    ) -> list[models.RoomPolicyUnchecked]:
+        """List every stored room policy as an unchecked model.
+
+        The analogue of 'get_room_policy_unchecked' over the whole
+        table: each policy (and its ACL entries) is returned as the
+        unchecked model, so a stored 'json_path' that no longer compiles
+        is surfaced rather than raising -- exactly what an audit needs.
+        """
+        query = sqla_sql.select(authz_schema.RoomPolicy)
+        async with self.session as session:
+            policies = list(await session.scalars(query))
+            for policy in policies:
+                await policy.awaitable_attrs.acl_entries
+            return [policy.as_unchecked_model for policy in policies]
+
     async def update_room_policy(
         self,
         room_id: str,

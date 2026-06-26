@@ -17,7 +17,6 @@ from soliplex import installation
 from soliplex import models
 from soliplex import ollama
 from soliplex import secrets
-from soliplex.authz import schema as authz_schema
 from soliplex.cli import cli_util
 from soliplex.cli import types
 from soliplex.config import agui as config_agui
@@ -558,12 +557,22 @@ def _invalid_completions(
     return errors
 
 
+async def _list_room_policies(dburi):
+    async with cli_util._authz_policy(dburi) as policy:
+        return await policy.list_room_policies()
+
+
+async def _list_admin_discriminators(dburi):
+    async with cli_util._authz_policy(dburi) as policy:
+        return await policy.list_admin_user_discriminators()
+
+
 def _room_authz_groups(the_installation):
     """Bucket configured rooms by authorization state; collect stale rows."""
     configured = sorted(the_installation._config.room_configs)
-    dburi = the_installation.authorization_dburi_sync
+    dburi = the_installation.authorization_dburi_async
 
-    if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
+    if dburi in cli_util._RAM_DBURIS:
         return {
             "default": list(configured),
             "public": [],
@@ -571,12 +580,10 @@ def _room_authz_groups(the_installation):
             "stale": [],
         }
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-    with session:
-        policies = {
-            p.room_id: p.default_allow_deny
-            for p in session.query(authz_schema.RoomPolicy)
-        }
+    policies = {
+        policy.room_id: policy.default_allow_deny
+        for policy in asyncio.run(_list_room_policies(dburi))
+    }
 
     configured_set = set(configured)
     default, public, private = [], [], []
@@ -601,34 +608,32 @@ def _room_authz_groups(the_installation):
 def _invalid_acl_json_paths(the_installation) -> dict:
     """Collect ACL entries whose stored 'json_path' fails to validate.
 
-    Reads each 'ACLEntry' row directly from the authz database
-    (bypassing 'policy.as_model', which would itself fail on invalid
-    entries) and re-validates 'json_path' against the currently-loaded
-    JSONPath environment. Typically an entry lands here when it was
-    authored under a meta-config that registered filter functions
-    which are no longer present.
+    Reads every room policy via 'AuthorizationPolicy.list_room_policies'
+    -- which returns the unchecked models, tolerating entries that would
+    fail 'policy.as_model' -- and re-validates each surfaced 'json_path'
+    against the currently-loaded JSONPath environment. Typically an
+    entry lands here when it was authored under a meta-config that
+    registered filter functions which are no longer present.
 
     Returns a dict mapping 'room_id' to a list of '(json_path, error)'
     pairs. A RAM-based authz DB has no persisted rows and returns '{}'.
     """
-    dburi = the_installation.authorization_dburi_sync
+    dburi = the_installation.authorization_dburi_async
 
-    if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
+    if dburi in cli_util._RAM_DBURIS:
         return {}
 
     invalid: dict = {}
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-    with session:
-        for policy in session.query(authz_schema.RoomPolicy):
-            for entry in policy.acl_entries:
-                if entry.json_path is None:
-                    continue
-                try:
-                    authz_package.validate_json_path(entry.json_path)
-                except authz_package.InvalidJSONPath as exc:
-                    invalid.setdefault(policy.room_id, []).append(
-                        (entry.json_path, str(exc)),
-                    )
+    for policy in asyncio.run(_list_room_policies(dburi)):
+        for entry in policy.acl_entries:
+            if entry.json_path is None:
+                continue
+            try:
+                authz_package.validate_json_path(entry.json_path)
+            except authz_package.InvalidJSONPath as exc:
+                invalid.setdefault(policy.room_id, []).append(
+                    (entry.json_path, str(exc)),
+                )
     return invalid
 
 
@@ -696,20 +701,17 @@ def _audit_room_authz_section(
 def _admin_user_json_paths(the_installation) -> list[str]:
     """Return every stored 'AdminUser.json_path', in insertion order.
 
-    Returns an empty list when the authz DB is RAM-based (no persisted
-    rows can exist).
+    Reads them via
+    'AuthorizationPolicy.list_admin_user_discriminators'. Returns an
+    empty list when the authz DB is RAM-based (no persisted rows can
+    exist).
     """
-    dburi = the_installation.authorization_dburi_sync
+    dburi = the_installation.authorization_dburi_async
 
-    if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
+    if dburi in cli_util._RAM_DBURIS:
         return []
 
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-    with session:
-        return [
-            admin_user.json_path
-            for admin_user in session.query(authz_schema.AdminUser)
-        ]
+    return asyncio.run(_list_admin_discriminators(dburi))
 
 
 def _invalid_admin_user_json_paths(

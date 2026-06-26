@@ -286,6 +286,19 @@ class AuthorizationPolicy(abc.ABC):
         """Return the room policy, tolerating non-compiling 'json_path's."""
 
     @abc.abstractmethod
+    async def list_room_policies(
+        self,
+    ) -> list[models.RoomPolicyUnchecked]:  # noqa: F821
+        """List every stored room policy as an unchecked model.
+
+        Each policy is returned as the unchecked model -- the analogue
+        of 'get_room_policy_unchecked' over the whole table -- so a
+        stored ACL entry whose 'json_path' no longer compiles is
+        surfaced rather than raising, exactly what an audit needs. The
+        order is unspecified.
+        """
+
+    @abc.abstractmethod
     async def clear_room_acl(self, room_id: str) -> None:
         """Remove all ACL entries from the room's policy.
 

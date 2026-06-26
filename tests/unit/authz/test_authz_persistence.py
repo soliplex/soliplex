@@ -399,6 +399,52 @@ async def test_get_room_policy_unchecked_tolerates_stale_json_path(
 
 
 @pytest.mark.asyncio
+async def test_list_room_policies_empty(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    found = await ap.list_room_policies()
+
+    assert found == []
+
+
+@pytest.mark.asyncio
+async def test_list_room_policies(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    the_async_session.add(
+        authz_schema.RoomPolicy(room_id="alpha", default_allow_deny=ALLOW)
+    )
+    the_async_session.add(
+        authz_schema.RoomPolicy(room_id="beta", default_allow_deny=DENY)
+    )
+    await the_async_session.commit()
+
+    found = await ap.list_room_policies()
+
+    assert all(
+        isinstance(policy, models.RoomPolicyUnchecked) for policy in found
+    )
+    assert {policy.room_id: policy.default_allow_deny for policy in found} == {
+        "alpha": ALLOW,
+        "beta": DENY,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_room_policies_tolerates_stale_json_path(
+    the_async_session,
+):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_stale_entry(the_async_session)
+
+    found = await ap.list_room_policies()
+
+    assert len(found) == 1
+    assert [entry.json_path for entry in found[0].acl_entries] == [
+        STALE_JSON_PATH
+    ]
+
+
+@pytest.mark.asyncio
 async def test_update_room_policy_room_id_is_authoritative(the_async_session):
     ap = authz_persistence.AuthorizationPolicy(the_async_session)
     policy_model = models.RoomPolicy(
