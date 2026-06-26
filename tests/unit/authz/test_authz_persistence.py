@@ -70,7 +70,7 @@ async def test_add_admin_user_discriminator_already_exists(the_async_session):
     the_async_session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
     await the_async_session.commit()
 
-    with pytest.raises(authz_persistence.AdminUserExists):
+    with pytest.raises(authz_package.AdminUserExists):
         await ap.add_admin_user_discriminator(ROLE_JSON_PATH)
 
 
@@ -90,7 +90,7 @@ async def test_remove_admin_user_discriminator(the_async_session):
 async def test_remove_admin_user_discriminator_absent(the_async_session):
     ap = authz_persistence.AuthorizationPolicy(the_async_session)
 
-    with pytest.raises(authz_persistence.NoSuchAdminUser):
+    with pytest.raises(authz_package.NoSuchAdminUser):
         await ap.remove_admin_user_discriminator(ROLE_JSON_PATH)
 
 
@@ -161,7 +161,7 @@ async def test_authorizationpolicy_crud_admin_user(the_async_session):
     assert found == [JSON_PATH]
     await the_async_session.commit()
 
-    with pytest.raises(authz_persistence.AdminUserExists):
+    with pytest.raises(authz_package.AdminUserExists):
         await ap.add_admin_user(email=EMAIL)
 
     no_dupe = await authz_persistence._find_admin_user_by_json_path(
@@ -187,7 +187,7 @@ async def test_authorizationpolicy_crud_admin_user(the_async_session):
     assert found == []
     await the_async_session.commit()
 
-    with pytest.raises(authz_persistence.NoSuchAdminUser):
+    with pytest.raises(authz_package.NoSuchAdminUser):
         await ap.remove_admin_user(email=EMAIL)
 
 
@@ -327,3 +327,304 @@ async def test_authorizationpolicy_room_policy_crud(the_async_session):
 
     await ap.delete_room_policy(ROOM_ID)
     await the_async_session.commit()
+
+
+ALLOW = authz_package.AllowDeny.ALLOW
+DENY = authz_package.AllowDeny.DENY
+STALE_JSON_PATH = "$[?stale_filter_func($.email)]"
+
+
+def _orm_entry(
+    allow_deny, *, everyone=False, authenticated=False, json_path=None
+):
+    return authz_schema.ACLEntry(
+        allow_deny=allow_deny,
+        everyone=everyone,
+        authenticated=authenticated,
+        json_path=json_path,
+    )
+
+
+async def _seed_policy(session, *, default=DENY, entries=()):
+    policy = authz_schema.RoomPolicy(
+        room_id=ROOM_ID, default_allow_deny=default
+    )
+    session.add(policy)
+    for entry in entries:
+        entry.room_policy = policy
+        session.add(entry)
+    await session.commit()
+    return policy
+
+
+async def _seed_stale_entry(session, *, allow_deny=ALLOW):
+    await _seed_policy(
+        session,
+        default=DENY,
+        entries=[_orm_entry(allow_deny, json_path=JSON_PATH)],
+    )
+    await session.execute(
+        sqla_sql.text(
+            "UPDATE room_acl_entries SET json_path = :stale "
+            "WHERE json_path = :placeholder"
+        ),
+        {"stale": STALE_JSON_PATH, "placeholder": JSON_PATH},
+    )
+    await session.commit()
+    session.expire_all()
+
+
+@pytest.mark.asyncio
+async def test_get_room_policy_unchecked_absent(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    found = await ap.get_room_policy_unchecked(ROOM_ID)
+
+    assert found is None
+
+
+@pytest.mark.asyncio
+async def test_get_room_policy_unchecked_tolerates_stale_json_path(
+    the_async_session,
+):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_stale_entry(the_async_session)
+
+    found = await ap.get_room_policy_unchecked(ROOM_ID)
+
+    assert isinstance(found, models.RoomPolicyUnchecked)
+    assert [entry.json_path for entry in found.acl_entries] == [
+        STALE_JSON_PATH
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_room_policy_room_id_is_authoritative(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    policy_model = models.RoomPolicy(
+        room_id="some-other-room",
+        acl_entries=[models.ACLEntry(allow_deny=ALLOW, everyone=True)],
+    )
+
+    await ap.update_room_policy(ROOM_ID, policy_model)
+    await the_async_session.commit()
+
+    stored = await ap.get_room_policy(ROOM_ID)
+    assert stored is not None
+    assert stored.room_id == ROOM_ID
+    assert await ap.get_room_policy("some-other-room") is None
+
+
+@pytest.mark.asyncio
+async def test_clear_room_acl(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_policy(
+        the_async_session,
+        default=DENY,
+        entries=[
+            _orm_entry(ALLOW, everyone=True),
+            _orm_entry(DENY, authenticated=True),
+        ],
+    )
+
+    await ap.clear_room_acl(ROOM_ID)
+    await the_async_session.commit()
+
+    after = await ap.get_room_policy(ROOM_ID)
+    assert after.acl_entries == []
+    assert after.default_allow_deny == DENY
+
+
+@pytest.mark.asyncio
+async def test_clear_room_acl_no_policy(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    await ap.clear_room_acl(ROOM_ID)
+
+    assert await ap.get_room_policy(ROOM_ID) is None
+
+
+@pytest.mark.asyncio
+async def test_add_acl_entry_to_policy(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_policy(the_async_session, default=DENY, entries=[])
+
+    await ap.add_acl_entry(
+        ROOM_ID, models.ACLEntry(allow_deny=ALLOW, everyone=True)
+    )
+    await the_async_session.commit()
+
+    after = await ap.get_room_policy(ROOM_ID)
+    assert [(e.allow_deny, e.everyone) for e in after.acl_entries] == [
+        (ALLOW, True)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_add_acl_entry_no_policy_raises(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    with pytest.raises(authz_package.NoSuchRoomPolicy):
+        await ap.add_acl_entry(
+            ROOM_ID, models.ACLEntry(allow_deny=ALLOW, everyone=True)
+        )
+
+
+@pytest.mark.parametrize(
+    "discriminator_kwargs",
+    [
+        {"everyone": True},
+        {"authenticated": True},
+        {"json_path": ROLE_JSON_PATH},
+    ],
+)
+@pytest.mark.asyncio
+async def test_add_acl_entry_replaces_same_discriminator(
+    the_async_session, discriminator_kwargs
+):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_policy(
+        the_async_session,
+        default=DENY,
+        entries=[_orm_entry(ALLOW, **discriminator_kwargs)],
+    )
+
+    await ap.add_acl_entry(
+        ROOM_ID, models.ACLEntry(allow_deny=DENY, **discriminator_kwargs)
+    )
+    await the_async_session.commit()
+
+    after = await ap.get_room_policy(ROOM_ID)
+    assert len(after.acl_entries) == 1
+    assert after.acl_entries[0].allow_deny == DENY
+
+
+@pytest.mark.asyncio
+async def test_add_acl_entry_keeps_other_discriminator(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_policy(
+        the_async_session,
+        default=DENY,
+        entries=[_orm_entry(ALLOW, everyone=True)],
+    )
+
+    await ap.add_acl_entry(
+        ROOM_ID, models.ACLEntry(allow_deny=DENY, json_path=ROLE_JSON_PATH)
+    )
+    await the_async_session.commit()
+
+    after = await ap.get_room_policy(ROOM_ID)
+    assert len(after.acl_entries) == 2
+
+
+@pytest.mark.parametrize(
+    "seed_kwargs, remove_kwargs",
+    [
+        ({"everyone": True}, {"everyone": True}),
+        ({"authenticated": True}, {"authenticated": True}),
+        ({"json_path": ROLE_JSON_PATH}, {"json_path": ROLE_JSON_PATH}),
+        (
+            {
+                "json_path": authz_package.token_field_json_path(
+                    "preferred_username", "phreddy"
+                )
+            },
+            {"preferred_username": "phreddy"},
+        ),
+        ({"json_path": JSON_PATH}, {"email": EMAIL}),
+    ],
+)
+@pytest.mark.asyncio
+async def test_remove_acl_entry_matches_discriminator(
+    the_async_session, seed_kwargs, remove_kwargs
+):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_policy(
+        the_async_session,
+        default=DENY,
+        entries=[_orm_entry(ALLOW, **seed_kwargs)],
+    )
+
+    await ap.remove_acl_entry(
+        ROOM_ID, models.ACLEntryUnchecked(allow_deny=ALLOW, **remove_kwargs)
+    )
+    await the_async_session.commit()
+
+    after = await ap.get_room_policy(ROOM_ID)
+    assert after.acl_entries == []
+
+
+@pytest.mark.asyncio
+async def test_remove_acl_entry_no_match_raises(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_policy(
+        the_async_session,
+        default=DENY,
+        entries=[
+            _orm_entry(ALLOW, everyone=True),
+            _orm_entry(DENY, json_path=ROLE_JSON_PATH),
+        ],
+    )
+
+    with pytest.raises(authz_package.NoSuchACLEntry):
+        await ap.remove_acl_entry(
+            ROOM_ID,
+            models.ACLEntryUnchecked(
+                allow_deny=ALLOW, json_path=ROLE_JSON_PATH
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_remove_acl_entry_no_policy_raises(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    with pytest.raises(authz_package.NoSuchRoomPolicy):
+        await ap.remove_acl_entry(
+            ROOM_ID, models.ACLEntryUnchecked(allow_deny=ALLOW, everyone=True)
+        )
+
+
+@pytest.mark.asyncio
+async def test_remove_acl_entry_stale_json_path(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_stale_entry(the_async_session, allow_deny=ALLOW)
+
+    await ap.remove_acl_entry(
+        ROOM_ID,
+        models.ACLEntryUnchecked(allow_deny=ALLOW, json_path=STALE_JSON_PATH),
+    )
+    await the_async_session.commit()
+
+    after = await ap.get_room_policy(ROOM_ID)
+    assert after.acl_entries == []
+
+
+@pytest.mark.asyncio
+async def test_set_room_default_creates_when_missing(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    await ap.set_room_default(ROOM_ID, ALLOW)
+    await the_async_session.commit()
+
+    after = await ap.get_room_policy(ROOM_ID)
+    assert after is not None
+    assert after.default_allow_deny == ALLOW
+    assert after.acl_entries == []
+
+
+@pytest.mark.asyncio
+async def test_set_room_default_updates_existing(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_policy(
+        the_async_session,
+        default=DENY,
+        entries=[_orm_entry(ALLOW, everyone=True)],
+    )
+
+    await ap.set_room_default(ROOM_ID, ALLOW)
+    await the_async_session.commit()
+
+    after = await ap.get_room_policy(ROOM_ID)
+    assert after.default_allow_deny == ALLOW
+    assert len(after.acl_entries) == 1
