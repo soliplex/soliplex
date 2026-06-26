@@ -416,6 +416,28 @@ async def test_update_room_policy_room_id_is_authoritative(the_async_session):
 
 
 @pytest.mark.asyncio
+async def test_delete_room_policy_removes_acl_entries(the_async_session):
+    # Regression: the delete must cascade to the ACL entries. The async
+    # SQLite engine does not enforce the DB-level 'ON DELETE CASCADE', so
+    # an orphaned row would survive and -- via SQLite primary-key reuse --
+    # re-attach to the next policy created for the same room.
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    await _seed_policy(
+        the_async_session,
+        default=DENY,
+        entries=[_orm_entry(ALLOW, everyone=True)],
+    )
+
+    await ap.delete_room_policy(ROOM_ID)
+    await the_async_session.commit()
+
+    remaining = (
+        await the_async_session.scalars(sqla_sql.select(authz_schema.ACLEntry))
+    ).all()
+    assert remaining == []
+
+
+@pytest.mark.asyncio
 async def test_clear_room_acl(the_async_session):
     ap = authz_persistence.AuthorizationPolicy(the_async_session)
     await _seed_policy(

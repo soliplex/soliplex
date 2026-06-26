@@ -275,6 +275,14 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
             policy = await _find_room_policy(room_id, session)
 
             if policy is not None:
+                # Load the ACL entries so the ORM 'delete' cascade removes
+                # them along with the policy. Without this they are only
+                # cleaned up by the DB-level 'ON DELETE CASCADE', which the
+                # async SQLite engine does not enforce -- leaving orphans
+                # that SQLite's primary-key reuse can re-attach to the next
+                # policy created for the same room.
+                await policy.awaitable_attrs.acl_entries
+
                 async with session.begin_nested():
                     await session.delete(policy)
 

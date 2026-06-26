@@ -52,37 +52,23 @@ def _check_ram_dburi(dburi: str, command: str):
         raise typer.Exit(1)
 
 
-@contextlib.contextmanager
-def _authz_session(dburi):
-    """Yield a sync authz session, disposing its engine on exit.
-
-    'authz_schema.get_session' builds a fresh engine (and connection
-    pool) per call. Disposing it when the caller finishes -- on both the
-    success and 'typer.Exit' paths -- closes the underlying SQLite
-    connection deterministically instead of leaking it until garbage
-    collection.
-    """
-    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
-    try:
-        yield session
-    finally:
-        session.get_bind().dispose()
-
-
 @contextlib.asynccontextmanager
 async def _authz_policy(dburi):
     """Yield an async 'AuthorizationPolicy', disposing its engine on exit.
 
-    The async analogue of '_authz_session': builds a fresh async engine
-    (creating the schema if needed) bound to a one-shot 'AuthorizationPolicy',
-    and disposes the engine on exit so the underlying SQLite connection is
-    released deterministically.
+    Builds a fresh async engine per call via
+    'installation._create_async_engine' -- the same factory the app's
+    lifespan uses -- so the CLI inherits its file-based-SQLite tuning,
+    notably 'PRAGMA foreign_keys=ON' (which enables the 'ON DELETE
+    CASCADE' behind room policy / ACL deletes). The schema is created if
+    needed, and the engine is disposed on exit -- on both the success and
+    'typer.Exit' paths -- so the underlying SQLite connection is released
+    deterministically instead of leaking it until garbage collection.
     """
-    engine = await authz_schema.get_async_engine(
-        engine_url=dburi,
-        init_schema=True,
-    )
+    engine = installation._create_async_engine(dburi)
     try:
+        async with engine.begin() as connection:
+            await connection.run_sync(authz_schema.Base.metadata.create_all)
         async with sqla_asyncio.AsyncSession(bind=engine) as session:
             yield authz_persistence.AuthorizationPolicy(session)
     finally:

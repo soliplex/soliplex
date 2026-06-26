@@ -116,75 +116,32 @@ def test__check_room_id(
 
 
 @pytest.mark.parametrize(
-    "w_attrs, exp_text",
+    "w_kwargs, exp_text",
     [
         # 'everyone' wins outright.
-        (
-            {
-                "everyone": True,
-                "authenticated": False,
-                "json_path": None,
-            },
-            "everyone",
-        ),
+        ({"everyone": True}, "everyone"),
         # ... even when other discriminators are also set.
         (
-            {
-                "everyone": True,
-                "authenticated": True,
-                "json_path": "$.foo",
-            },
+            {"everyone": True, "authenticated": True, "json_path": "$.foo"},
             "everyone",
         ),
         # 'authenticated' is the second priority.
-        (
-            {
-                "everyone": False,
-                "authenticated": True,
-                "json_path": None,
-            },
-            "authenticated",
-        ),
+        ({"authenticated": True}, "authenticated"),
+        # A 'preferred_username' entry (the model surfaces it directly).
+        ({"preferred_username": "alice"}, "preferred_username=alice"),
+        # An 'email' entry.
+        ({"email": "alice@example.com"}, "email=alice@example.com"),
         # A general-purpose query is shown verbatim.
         (
-            {
-                "everyone": False,
-                "authenticated": False,
-                "json_path": "$[?match($.foo, 'b.*z')]",
-            },
+            {"json_path": "$[?match($.foo, 'b.*z')]"},
             "json_path=$[?match($.foo, 'b.*z')]",
         ),
-        # A converted 'preferred_username' query is humanized back.
-        (
-            {
-                "everyone": False,
-                "authenticated": False,
-                "json_path": '$[?$.preferred_username == "alice"]',
-            },
-            "preferred_username=alice",
-        ),
-        # A converted 'email' query is humanized back.
-        (
-            {
-                "everyone": False,
-                "authenticated": False,
-                "json_path": '$[?$.email == "alice@example.com"]',
-            },
-            "email=alice@example.com",
-        ),
         # No discriminator set is treated as invalid (defensive).
-        (
-            {
-                "everyone": False,
-                "authenticated": False,
-                "json_path": None,
-            },
-            "(invalid: no discriminator set)",
-        ),
+        ({}, "(invalid: no discriminator set)"),
     ],
 )
-def test__describe_discriminator(w_attrs, exp_text):
-    entry = mock.Mock(**w_attrs)
+def test__describe_discriminator(w_kwargs, exp_text):
+    entry = models.ACLEntryUnchecked(**w_kwargs)
 
     found = cli_room_authz._describe_discriminator(entry)
 
@@ -214,15 +171,15 @@ def test__dump(
     exp_human,
 ):
     ctx.obj = w_obj
-    session = mock.Mock()
+    policy = mock.Mock()
 
-    cli_room_authz._dump(ctx, session, "room-1")
+    cli_room_authz._dump(ctx, "room-1", policy)
 
     if exp_human:
-        _human_dump_room_policy.assert_called_once_with(session, "room-1")
+        _human_dump_room_policy.assert_called_once_with("room-1", policy)
         _dump_room_policy.assert_not_called()
     else:
-        _dump_room_policy.assert_called_once_with(session, "room-1")
+        _dump_room_policy.assert_called_once_with(policy)
         _human_dump_room_policy.assert_not_called()
 
 
@@ -231,12 +188,16 @@ def _mock_acl_entry(
     allow_deny=authz_package.AllowDeny.DENY,
     everyone=False,
     authenticated=False,
+    preferred_username=None,
+    email=None,
     json_path=None,
 ):
-    return mock.Mock(
+    return models.ACLEntryUnchecked(
         allow_deny=allow_deny,
         everyone=everyone,
         authenticated=authenticated,
+        preferred_username=preferred_username,
+        email=email,
         json_path=json_path,
     )
 
@@ -271,11 +232,11 @@ def _mock_acl_entry(
                 "json_path": None,
             },
         ),
-        # Stored canonical 'preferred_username' query -> surfaced back.
+        # A 'preferred_username' entry (the model surfaces it directly).
         (
             {
                 "allow_deny": authz_package.AllowDeny.ALLOW,
-                "json_path": '$[?$.preferred_username == "alice"]',
+                "preferred_username": "alice",
             },
             {
                 "allow_deny": "ALLOW",
@@ -286,11 +247,11 @@ def _mock_acl_entry(
                 "json_path": None,
             },
         ),
-        # Stored canonical 'email' query -> surfaced back.
+        # An 'email' entry.
         (
             {
                 "allow_deny": authz_package.AllowDeny.ALLOW,
-                "json_path": '$[?$.email == "alice@example.com"]',
+                "email": "alice@example.com",
             },
             {
                 "allow_deny": "ALLOW",
@@ -301,7 +262,7 @@ def _mock_acl_entry(
                 "json_path": None,
             },
         ),
-        # General-purpose JSONPath: surface as 'json_path' verbatim.
+        # General-purpose JSONPath: passed through verbatim.
         (
             {
                 "allow_deny": authz_package.AllowDeny.DENY,
@@ -316,22 +277,8 @@ def _mock_acl_entry(
                 "json_path": "$[?match($.foo, 'b.*z')]",
             },
         ),
-        # Canonical-form-but-for-some-other-field: surface as 'json_path'.
-        (
-            {
-                "allow_deny": authz_package.AllowDeny.ALLOW,
-                "json_path": '$[?$.sub == "abc"]',
-            },
-            {
-                "allow_deny": "ALLOW",
-                "everyone": False,
-                "authenticated": False,
-                "preferred_username": None,
-                "email": None,
-                "json_path": '$[?$.sub == "abc"]',
-            },
-        ),
-        # Invalid stored 'json_path': dumped verbatim, no validation.
+        # A stored 'json_path' that no longer compiles: passed through
+        # (the unchecked model carries it without validation).
         (
             {
                 "allow_deny": authz_package.AllowDeny.DENY,
@@ -361,7 +308,7 @@ def test__room_policy_as_jsonable_none():
 
 
 def test__room_policy_as_jsonable_empty():
-    policy = mock.Mock(
+    policy = models.RoomPolicyUnchecked(
         room_id="chat",
         default_allow_deny=authz_package.AllowDeny.DENY,
         acl_entries=[],
@@ -378,14 +325,14 @@ def test__room_policy_as_jsonable_empty():
 
 def test__room_policy_as_jsonable_populated_w_invalid_json_path():
     # The middle entry's 'json_path' would fail compilation today;
-    # dumping must still succeed.
-    policy = mock.Mock(
+    # dumping must still succeed (the unchecked model carries it).
+    policy = models.RoomPolicyUnchecked(
         room_id="chat",
         default_allow_deny=authz_package.AllowDeny.ALLOW,
         acl_entries=[
             _mock_acl_entry(
                 allow_deny=authz_package.AllowDeny.ALLOW,
-                json_path='$[?$.email == "alice@example.com"]',
+                email="alice@example.com",
             ),
             _mock_acl_entry(
                 allow_deny=authz_package.AllowDeny.DENY,
@@ -437,13 +384,13 @@ def test__room_policy_as_yaml_none():
 
 
 def test__room_policy_as_yaml_populated():
-    policy = mock.Mock(
+    policy = models.RoomPolicyUnchecked(
         room_id="chat",
         default_allow_deny=authz_package.AllowDeny.ALLOW,
         acl_entries=[
             _mock_acl_entry(
                 allow_deny=authz_package.AllowDeny.ALLOW,
-                json_path='$[?$.email == "alice@example.com"]',
+                email="alice@example.com",
             ),
         ],
     )
@@ -598,7 +545,7 @@ def test__resolve_allow_deny_mutex_violation(
 def test__check_acl_entry_args(get_installation, _check_ram_dburi):
     the_installation = get_installation.return_value
     the_installation._config.room_configs = {"chat": mock.Mock()}
-    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
+    the_installation.authorization_dburi_async = "sqlite:///fake.sqlite"
 
     found = cli_room_authz._check_acl_entry_args(
         mock.sentinel.installation_path,
@@ -634,7 +581,7 @@ def test__check_acl_entry_args_allow_invalid_json_path(
 ):
     the_installation = get_installation.return_value
     the_installation._config.room_configs = {"chat": mock.Mock()}
-    the_installation.authorization_dburi_sync = "sqlite:///fake.sqlite"
+    the_installation.authorization_dburi_async = "sqlite:///fake.sqlite"
 
     bogus = "$[?stale_filter_func($.email)]"
 
@@ -665,11 +612,10 @@ def test__check_acl_entry_args_allow_invalid_json_path(
 # These drive the actual 'room-authz' subcommands through a Typer
 # 'CliRunner' against a throwaway copy of 'example/minimal.yaml' backed by
 # a scratch authorization database (see the 'scratch_installation' and
-# 'cli_runner' fixtures in 'tests/unit/cli/conftest.py'). Every active
-# command body is now exercised here rather than coverage-excluded; the
-# two '_*_dump_room_policy' helpers stay '# pragma NO COVER UI ONLY', and
-# the deprecated/hidden 'add-user' / 'clear' commands keep their
-# '# pragma NO COVER command'.
+# 'cli_runner' fixtures in 'tests/unit/cli/conftest.py'). Every command
+# body -- including the deprecated/hidden 'add-user' / 'clear' commands --
+# is now exercised here rather than coverage-excluded; only the two
+# '_*_dump_room_policy' helpers stay '# pragma NO COVER UI ONLY'.
 # ---------------------------------------------------------------------------
 
 ALLOW = authz_package.AllowDeny.ALLOW
@@ -1377,3 +1323,99 @@ def test_from_yaml_null_without_room_id_errors(
     )
 
     assert result.exit_code == 1
+
+
+# -- deprecated: add-user / clear -------------------------------------------
+
+
+def test_add_user_creates_policy_when_missing(
+    scratch_installation,
+    cli_runner,
+):
+    # No policy yet: 'add-user' creates an empty DENY policy, then adds an
+    # ALLOW entry for the email.
+    with pytest.warns(DeprecationWarning, match="Deprecated"):
+        result = _invoke(
+            cli_runner,
+            scratch_installation,
+            "add-user",
+            "chat",
+            ALICE_EMAIL,
+        )
+
+    assert result.exit_code == 0
+    assert _read_policy(scratch_installation, "chat") == {
+        "default": DENY,
+        "entries": {(ALLOW, False, False, ALICE_EMAIL_JP)},
+    }
+
+
+def test_add_user_existing_policy_preserves_default(
+    scratch_installation,
+    cli_runner,
+):
+    # An existing policy's default is left intact; the new ALLOW entry is
+    # added alongside the existing (different-discriminator) entry.
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        ALLOW,
+        [_entry(DENY, everyone=True)],
+    )
+
+    with pytest.warns(DeprecationWarning, match="Deprecated"):
+        result = _invoke(
+            cli_runner,
+            scratch_installation,
+            "add-user",
+            "chat",
+            ALICE_EMAIL,
+        )
+
+    assert result.exit_code == 0
+    assert _read_policy(scratch_installation, "chat") == {
+        "default": ALLOW,
+        "entries": {
+            (DENY, True, False, None),
+            (ALLOW, False, False, ALICE_EMAIL_JP),
+        },
+    }
+
+
+def test_clear_removes_policy(scratch_installation, cli_runner):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [_entry(ALLOW, everyone=True)],
+    )
+
+    with pytest.warns(DeprecationWarning, match="Deprecated"):
+        result = _invoke(cli_runner, scratch_installation, "clear", "chat")
+
+    assert result.exit_code == 0
+    assert _read_policy(scratch_installation, "chat") is None
+
+
+def test_clear_make_room_private(scratch_installation, cli_runner):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        ALLOW,
+        [_entry(ALLOW, everyone=True)],
+    )
+
+    with pytest.warns(DeprecationWarning, match="Deprecated"):
+        result = _invoke(
+            cli_runner,
+            scratch_installation,
+            "clear",
+            "chat",
+            "--make-room-private",
+        )
+
+    assert result.exit_code == 0
+    assert _read_policy(scratch_installation, "chat") == {
+        "default": DENY,
+        "entries": set(),
+    }
