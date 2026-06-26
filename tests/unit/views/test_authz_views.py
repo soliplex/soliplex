@@ -86,7 +86,6 @@ async def test_get_room_authz(w_policy, w_admin_access):
 
         the_authz_policy.get_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
-            user_token=THE_USER_CLAIMS,
         )
 
     the_authz_logger.debug.assert_called_once_with(
@@ -147,7 +146,6 @@ async def test_post_room_authz(w_existing, w_admin_access):
         the_authz_policy.update_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
             room_policy=NEW_ROOM_POLICY,
-            user_token=THE_USER_CLAIMS,
         )
 
     the_authz_logger.debug.assert_called_once_with(
@@ -205,7 +203,6 @@ async def test_delete_room_authz(w_existing, w_admin_access):
 
         the_authz_policy.delete_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
-            user_token=THE_USER_CLAIMS,
         )
 
     the_authz_logger.debug.assert_called_once_with(
@@ -282,7 +279,6 @@ async def test_get_installation_authz(
 
         the_authz_policy.get_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
-            user_token=THE_USER_CLAIMS,
         )
         the_authz_policy.list_admin_user_discriminators.assert_awaited_once_with()
         the_installation.get_room_configs.assert_awaited_once_with(
