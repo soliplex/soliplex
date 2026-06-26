@@ -66,7 +66,7 @@ LOG_INGEST_PAYLOAD_TOO_BIG = "payload too big"
 QUIZ_GET_QUIZ = "get quiz"
 QUIZ_UNKNOWN_QUIZ_ID = "unknown quiz id"
 QUIZ_POST_QUIZ_QUESTION = "post quiz question"
-QUIZ_UNKNOWN_QUESTION_UUID = "unknown question UUID: %s"
+QUIZ_UNKNOWN_QUESTION_UUID = "unknown question UUID"
 
 ROOM_GET_ROOMS = "get rooms"
 ROOM_GET_ROOM = "get room"

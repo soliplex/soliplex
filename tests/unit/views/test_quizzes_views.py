@@ -215,7 +215,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
                 assert exc.value.status_code == 404
                 the_logger.exception.assert_called_once_with(
                     loggers.QUIZ_UNKNOWN_QUESTION_UUID,
-                    QA_QUESTION_UUID,
+                    question_uuid=QA_QUESTION_UUID,
                 )
 
             else:  # hit

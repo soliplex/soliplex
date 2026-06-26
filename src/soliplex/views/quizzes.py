@@ -98,8 +98,11 @@ async def post_quiz_question(
     try:
         return await quizzes.check_answer(quiz, question_uuid, answer.text)
     except quizzes.QuestionNotFound:
-        the_logger.exception(loggers.QUIZ_UNKNOWN_QUESTION_UUID, question_uuid)
+        the_logger.exception(
+            loggers.QUIZ_UNKNOWN_QUESTION_UUID,
+            question_uuid=question_uuid,
+        )
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.QUIZ_UNKNOWN_QUESTION_UUID % question_uuid,
+            detail=f"{loggers.QUIZ_UNKNOWN_QUESTION_UUID}: {question_uuid}",
         ) from None
