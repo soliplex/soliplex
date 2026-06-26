@@ -136,7 +136,7 @@ async def get_installation_authz(
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         ) from None
 
-    admin_user_emails = await the_authz_policy.list_admin_users()
+    discriminators = await the_authz_policy.list_admin_user_discriminators()
 
     room_policies = {
         room_id: await the_authz_policy.get_room_policy(
@@ -151,7 +151,7 @@ async def get_installation_authz(
     }
 
     return models.InstallationAuthorization(
-        admin_user_emails=admin_user_emails,
+        admin_user_discriminators=discriminators,
         room_policies={
             room_id: room_policy if room_policy is not None else None
             for room_id, room_policy in room_policies.items()

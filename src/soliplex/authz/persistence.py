@@ -13,15 +13,17 @@ from soliplex.authz import schema as authz_schema
 
 
 class NoSuchAdminUser(ValueError):
-    def __init__(self, email):
-        self.email = email
-        super().__init__(f"No admin user exists with email: {email}")
+    def __init__(self, json_path):
+        self.json_path = json_path
+        super().__init__(f"No admin user exists with json_path: {json_path}")
 
 
 class AdminUserExists(ValueError):
-    def __init__(self, email):
-        self.email = email
-        super().__init__(f"Admin user already exists with email: {email}")
+    def __init__(self, json_path):
+        self.json_path = json_path
+        super().__init__(
+            f"Admin user already exists with json_path: {json_path}"
+        )
 
 
 class NotAdminUser(ValueError):
@@ -73,48 +75,79 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
         async with self._session.begin():
             yield self._session
 
-    async def list_admin_users(self) -> list[str]:
-        """List admin users in the admin users table.
+    async def list_admin_user_discriminators(self) -> list[str]:
+        """List JSONPath discriminators which identify admin users.
 
-        An email-keyed admin (stored as '$[?$.email == "..."]') is
-        surfaced as its email; an admin created with a non-email
-        JSONPath query is surfaced as the raw query string.
+        Discriminators may be tied to individuals (e.g., via their
+        email addresses), or to claims which identify groups or
+        roles attached to the user.
         """
         query = sqla_sql.select(authz_schema.AdminUser)
         async with self.session as session:
-            result = []
-            for admin_user in await session.scalars(query):
-                parsed = authz_package.parse_token_field_json_path(
-                    admin_user.json_path
-                )
-                if parsed is not None and parsed[0] == "email":
-                    result.append(parsed[1])
-                else:
-                    result.append(admin_user.json_path)
-            return result
+            return [
+                admin_user.json_path
+                for admin_user in await session.scalars(query)
+            ]
 
-    async def add_admin_user(self, email: str):
-        """Add a user to the admin users table, keyed by email."""
-        json_path = authz_package.token_field_json_path("email", email)
+    async def add_admin_user_discriminator(self, json_path: str):
+        """Add a user discriminator to the admin users table.
+
+        Discriminators may be tied to individuals (e.g., via their
+        email addresses), or to claims which identify groups or
+        roles attached to the user.
+        """
         async with self.session as session:
             user = await _find_admin_user_by_json_path(json_path, session)
 
             if user is not None:
-                raise AdminUserExists(email=email)
+                raise AdminUserExists(json_path=json_path)
 
             user = authz_schema.AdminUser(json_path=json_path)
             session.add(user)
 
-    async def remove_admin_user(self, email: str):
-        """Remove a user from the admin users table, keyed by email."""
-        json_path = authz_package.token_field_json_path("email", email)
+    async def remove_admin_user_discriminator(self, json_path: str):
+        """Remove a user discriminator from the admin users table.
+
+        Discriminators may be tied to individuals (e.g., via their
+        email addresses), or to claims which identify groups or
+        roles attached to the user.
+        """
         async with self.session as session:
             user = await _find_admin_user_by_json_path(json_path, session)
 
             if user is None:
-                raise NoSuchAdminUser(email=email)
+                raise NoSuchAdminUser(json_path=json_path)
 
             await session.delete(user)
+
+    async def clear_admin_user_discriminators(self):
+        """Remove all admin user discriminators from the admin users table."""
+        query = sqla_sql.select(authz_schema.AdminUser)
+        async with self.session as session:
+            for admin_user in await session.scalars(query):
+                await session.delete(admin_user)
+
+    async def list_admin_users(self) -> list[str]:
+        """Deprecated alias for 'list_admin_user_discriminators'."""
+        return await self.list_admin_user_discriminators()
+
+    async def add_admin_user(self, email: str):
+        """Deprecated alias for 'add_admin_user_discriminator'.
+
+        Translates 'email' to the equivalent JSONPath expression,
+        '$[?$.email == "..."]', then delegates.
+        """
+        json_path = authz_package.token_field_json_path("email", email)
+        await self.add_admin_user_discriminator(json_path)
+
+    async def remove_admin_user(self, email: str):
+        """Deprecated alias for 'remove_admin_user_discriminator'.
+
+        Translates 'email' to the equivalent JSONPath expression,
+        '$[?$.email == "..."]', then delegates.
+        """
+        json_path = authz_package.token_field_json_path("email", email)
+        await self.remove_admin_user_discriminator(json_path)
 
     async def check_admin_access(
         self,

@@ -898,7 +898,7 @@ RoomPolicyMap = dict[str, RoomPolicy | None]
 
 
 class InstallationAuthorization(pydantic.BaseModel):
-    admin_user_emails: list[str] = pydantic.Field(default_factory=list)
+    admin_user_discriminators: list[str] = pydantic.Field(default_factory=list)
     room_policies: RoomPolicyMap = pydantic.Field(default_factory=dict)
 
 
