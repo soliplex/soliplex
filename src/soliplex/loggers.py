@@ -86,6 +86,11 @@ STATS_GET_ROOM_STATS = "get room stats"
 class LogWrapper(logging.LoggerAdapter):
     """Context wrapper for capturing extra logging values"""
 
+    # Keyword arguments the stdlib logging machinery consumes itself; any
+    # other keyword passed to a log call is a structured field destined for
+    # the record's 'extra' rather than the logger.
+    _LOG_KWARGS = frozenset({"exc_info", "stack_info", "stacklevel", "extra"})
+
     def __init__(self, logger_name, the_installation, **extra):
         self.logger_name = logger_name
         self.installation = the_installation
@@ -94,6 +99,25 @@ class LogWrapper(logging.LoggerAdapter):
             super().__init__(logger, extra=extra, merge_extra=True)
         except TypeError:  # pragma: NO COVER Python < 3.13
             super().__init__(logger, extra=extra)
+
+    def process(self, msg, kwargs):
+        """Fold caller-supplied keyword fields into the record's 'extra'.
+
+        A plain 'LoggerAdapter' forwards unrecognized keyword arguments
+        straight to 'Logger._log', which rejects them. Capturing them here
+        instead lets call sites pass structured audit fields by keyword --
+        'the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=...)'
+        attaches 'room_id' to the record rather than crashing. The adapter's
+        own bound extras form the base; explicit 'extra=' and keyword fields
+        layer over them (matching the 'merge_extra=True' ctor semantics).
+        """
+        fields = {
+            key: kwargs.pop(key)
+            for key in list(kwargs)
+            if key not in self._LOG_KWARGS
+        }
+        kwargs["extra"] = {**self.extra, **kwargs.get("extra", {}), **fields}
+        return msg, kwargs
 
     def bind(self, logger_name=None, **extra) -> LogWrapper:
         if logger_name is None:
