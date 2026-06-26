@@ -33,6 +33,9 @@ _OLLAMA_ENV_RE = re.compile(r'^  - "OLLAMA_BASE_URL"$', re.MULTILINE)
 
 ALICE = "alice@example.com"
 ROLE_JP = '$[?$.role == "admin"]'
+# A room configured in 'example/minimal.yaml' whose agent needs no LLM, so
+# loading the installation for a 'room-authz' command requires no provider.
+ROOM = "faux"
 
 
 @pytest.fixture
@@ -61,20 +64,33 @@ def scratch_installation(tmp_path):
     return config_path
 
 
-def _cli(config_path, subcommand, *rest):
-    """Run 'admin-users <subcommand> <config> ...' via the real CLI binary."""
+def _run(config_path, group, subcommand, *rest, input_text=None):
+    """Run '<group> <subcommand> <config> ...' via the real CLI binary."""
     return subprocess.run(
         [
             sys.executable,
             "-m",
             "soliplex.cli.main",
-            "admin-users",
+            group,
             subcommand,
             str(config_path),
             *rest,
         ],
         capture_output=True,
         text=True,
+        input=input_text,
+    )
+
+
+def _cli(config_path, subcommand, *rest):
+    """Run an 'admin-users' subcommand via the real CLI binary."""
+    return _run(config_path, "admin-users", subcommand, *rest)
+
+
+def _room(config_path, subcommand, *rest, input_text=None):
+    """Run a 'room-authz' subcommand via the real CLI binary."""
+    return _run(
+        config_path, "room-authz", subcommand, *rest, input_text=input_text
     )
 
 
@@ -82,6 +98,12 @@ def _listed(result):
     """Parse the JSON 'admin_users' dump from the last line of stdout."""
     last = [line for line in result.stdout.splitlines() if line.strip()][-1]
     return json.loads(last)["admin_users"]
+
+
+def _policy(result):
+    """Parse the JSON room-policy dump from the last line of stdout."""
+    last = [line for line in result.stdout.splitlines() if line.strip()][-1]
+    return json.loads(last)
 
 
 def test_admin_users_smoketest(scratch_installation):
@@ -121,3 +143,69 @@ def test_admin_users_smoketest(scratch_installation):
     deleted = _cli(scratch_installation, "delete", ALICE)
     assert deleted.returncode == 0, deleted.stderr
     assert _listed(deleted) == [ROLE_JP]
+
+
+def test_room_authz_smoketest(scratch_installation):
+    # A faithful end-to-end run of the 'room-authz' subcommands against the
+    # real binary, ending with a delete-then-recreate that proves the async
+    # engine's 'PRAGMA foreign_keys=ON' cascades ACL rows (so no orphan
+    # re-attaches to the new policy via SQLite primary-key reuse). This is
+    # deliberately a single multi-step sequence (a smoke test), not a set of
+    # one-act unit tests.
+    private = _room(scratch_installation, "make-private", ROOM)
+    assert private.returncode == 0, private.stderr
+    assert _policy(private) == {
+        "room_id": ROOM,
+        "default_allow_deny": "DENY",
+        "acl_entries": [],
+    }
+
+    added = _room(
+        scratch_installation,
+        "add-acl-entry",
+        ROOM,
+        "--allow",
+        "--email",
+        ALICE,
+    )
+    assert added.returncode == 0, added.stderr
+    assert _policy(added)["acl_entries"] == [
+        {
+            "allow_deny": "ALLOW",
+            "everyone": False,
+            "authenticated": False,
+            "preferred_username": None,
+            "email": ALICE,
+            "json_path": None,
+        },
+    ]
+
+    shown = _room(scratch_installation, "show", ROOM)
+    assert shown.returncode == 0, shown.stderr
+    assert _policy(shown)["acl_entries"][0]["email"] == ALICE
+
+    dumped = _room(scratch_installation, "as-yaml", ROOM)
+    assert dumped.returncode == 0, dumped.stderr
+    assert yaml.safe_load(dumped.stdout)["acl_entries"][0]["email"] == ALICE
+
+    missing = _room(
+        scratch_installation,
+        "delete-acl-entry",
+        ROOM,
+        "--allow",
+        "--email",
+        "nobody@example.com",
+    )
+    assert missing.returncode == 1
+    assert "No matching ACL entry" in missing.stdout
+
+    # Drop the whole policy (with its ALLOW entry) via a 'null' from-yaml ...
+    dropped = _room(
+        scratch_installation, "from-yaml", ROOM, input_text="null\n"
+    )
+    assert dropped.returncode == 0, dropped.stderr
+
+    # ... then recreate it: the ALLOW entry must not resurface.
+    recreated = _room(scratch_installation, "make-private", ROOM)
+    assert recreated.returncode == 0, recreated.stderr
+    assert _policy(recreated)["acl_entries"] == []

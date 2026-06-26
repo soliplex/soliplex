@@ -1,7 +1,9 @@
 import datetime
 from unittest import mock
 
+import pydantic
 import pytest
+import sqlalchemy
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
@@ -144,6 +146,43 @@ def test_roompolicy_from_model(model_kwargs):
         assert f_entry.as_model == e_entry
 
 
+def test_roompolicy_as_unchecked_model(the_session):
+    policy = authz_schema.RoomPolicy(
+        room_id=ROOM_ID,
+        default_allow_deny=authz_package.AllowDeny.ALLOW,
+    )
+    authz_schema.ACLEntry(
+        room_policy=policy,
+        allow_deny=authz_package.AllowDeny.DENY,
+        everyone=True,
+    )
+    authz_schema.ACLEntry(
+        room_policy=policy,
+        allow_deny=authz_package.AllowDeny.ALLOW,
+        json_path=JSON_PATH,
+    )
+    the_session.add(policy)
+    the_session.commit()
+
+    unchecked = policy.as_unchecked_model
+
+    assert unchecked.room_id == ROOM_ID
+    assert unchecked.default_allow_deny == authz_package.AllowDeny.ALLOW
+    assert len(unchecked.acl_entries) == 2
+    assert (
+        models.ACLEntryUnchecked(
+            allow_deny=authz_package.AllowDeny.DENY, everyone=True
+        )
+        in unchecked.acl_entries
+    )
+    assert (
+        models.ACLEntryUnchecked(
+            allow_deny=authz_package.AllowDeny.ALLOW, email=EMAIL
+        )
+        in unchecked.acl_entries
+    )
+
+
 @pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
 @pytest.mark.parametrize(
     "default_allow_deny",
@@ -256,6 +295,93 @@ def test_aclentry_from_model(the_session, the_room_policy, model_kwargs):
     the_session.commit()
 
     assert found.as_model == model
+
+
+STALE_JSON_PATH = "$[?stale_filter_func($.email)]"
+
+
+def _seed_stale_aclentry(the_session, the_room_policy):
+    """Plant an ACL entry whose stored 'json_path' no longer compiles.
+
+    The ORM's 'json_path' validator rejects a non-compiling query on
+    insert, so seed a valid placeholder query, then rewrite it to the
+    non-compiling value with a raw UPDATE (which skips '@validates') and
+    refresh the instance from the row.
+    """
+    entry = authz_schema.ACLEntry(
+        room_policy=the_room_policy,
+        allow_deny=authz_package.AllowDeny.ALLOW,
+        json_path=JSON_PATH,
+    )
+    the_session.add(the_room_policy)
+    the_session.add(entry)
+    the_session.commit()
+    the_session.execute(
+        sqlalchemy.text(
+            "UPDATE room_acl_entries SET json_path = :stale "
+            "WHERE json_path = :placeholder"
+        ),
+        {"stale": STALE_JSON_PATH, "placeholder": JSON_PATH},
+    )
+    the_session.commit()
+    the_session.refresh(entry)
+    return entry
+
+
+def test_aclentry_as_model_rejects_stale_json_path(
+    the_session, the_room_policy
+):
+    entry = _seed_stale_aclentry(the_session, the_room_policy)
+
+    with pytest.raises(pydantic.ValidationError):
+        _ = entry.as_model
+
+
+@pytest.mark.parametrize(
+    "model_kwargs",
+    [
+        {"everyone": True, "allow_deny": authz_package.AllowDeny.DENY},
+        {"authenticated": True, "allow_deny": authz_package.AllowDeny.ALLOW},
+        {
+            "preferred_username": "phreddy",
+            "allow_deny": authz_package.AllowDeny.ALLOW,
+        },
+        {
+            "email": "phreddy@example.com",
+            "allow_deny": authz_package.AllowDeny.ALLOW,
+        },
+        {
+            "json_path": "$[?match($.foo, 'b.*z')]",
+            "allow_deny": authz_package.AllowDeny.ALLOW,
+        },
+    ],
+)
+def test_aclentry_as_unchecked_model(
+    the_session, the_room_policy, model_kwargs
+):
+    found = authz_schema.ACLEntry.from_model(
+        models.ACLEntry(**(ACL_ENTRY_DEFAULTS | model_kwargs))
+    )
+    found.room_policy = the_room_policy
+    the_session.add(the_room_policy)
+    the_session.add(found)
+    the_session.commit()
+
+    unchecked = found.as_unchecked_model
+
+    assert unchecked == models.ACLEntryUnchecked(
+        **(ACL_ENTRY_DEFAULTS | model_kwargs)
+    )
+
+
+def test_aclentry_as_unchecked_model_tolerates_stale_json_path(
+    the_session, the_room_policy
+):
+    entry = _seed_stale_aclentry(the_session, the_room_policy)
+
+    unchecked = entry.as_unchecked_model
+
+    assert unchecked.json_path == STALE_JSON_PATH
 
 
 @pytest.mark.parametrize(

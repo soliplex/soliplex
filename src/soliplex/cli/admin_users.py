@@ -10,7 +10,6 @@ import typer
 import yaml
 
 from soliplex import authz as authz_package
-from soliplex.authz import persistence as authz_persistence
 from soliplex.cli import cli_util
 from soliplex.cli import types
 
@@ -361,7 +360,7 @@ def add_admin_user(
 
     try:
         discriminators = asyncio.run(_add_discriminator(dburi, resolved))
-    except authz_persistence.AdminUserExists:
+    except authz_package.AdminUserExists:
         the_console.rule(f"{_describe_admin(resolved)} is already an admin")
         the_console.print("Nothing to do.")
         raise typer.Exit(1) from None
@@ -428,7 +427,7 @@ def delete_admin_user(
 
     try:
         discriminators = asyncio.run(_remove_discriminator(dburi, resolved))
-    except authz_persistence.NoSuchAdminUser:
+    except authz_package.NoSuchAdminUser:
         the_console.rule(f"{_describe_admin(resolved)} is not an admin")
         the_console.print("Nothing to do.")
         raise typer.Exit(1) from None

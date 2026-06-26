@@ -140,6 +140,19 @@ class RoomPolicy(Base):
             acl_entries=acl_entries,
         )
 
+    @property
+    def as_unchecked_model(self) -> models.RoomPolicyUnchecked:
+        # Like 'as_model' but builds the unchecked model, so a stored ACL
+        # entry whose 'json_path' no longer compiles does not raise.
+        acl_entries = [
+            acl_entry.as_unchecked_model for acl_entry in self.acl_entries
+        ]
+        return models.RoomPolicyUnchecked(
+            room_id=self.room_id,
+            default_allow_deny=self.default_allow_deny,
+            acl_entries=acl_entries,
+        )
+
     def check_token(
         self,
         user_token: authz_package.UserToken | None,
@@ -213,8 +226,7 @@ class ACLEntry(Base):
             json_path=json_path,
         )
 
-    @property
-    def as_model(self) -> models.ACLEntry:
+    def _model_kwargs(self) -> dict[str, str]:
         # Surface a stored 'preferred_username' / 'email' query back as
         # the matching public model field; leave general-purpose
         # queries as 'json_path'.
@@ -228,11 +240,26 @@ class ACLEntry(Base):
                 kwargs[parsed[0]] = parsed[1]
             else:
                 kwargs["json_path"] = self.json_path
+        return kwargs
+
+    @property
+    def as_model(self) -> models.ACLEntry:
         return models.ACLEntry(
             allow_deny=self.allow_deny,
             everyone=self.everyone,
             authenticated=self.authenticated,
-            **kwargs,
+            **self._model_kwargs(),
+        )
+
+    @property
+    def as_unchecked_model(self) -> models.ACLEntryUnchecked:
+        # Like 'as_model' but builds the unchecked model, so a stored
+        # 'json_path' that no longer compiles does not raise.
+        return models.ACLEntryUnchecked(
+            allow_deny=self.allow_deny,
+            everyone=self.everyone,
+            authenticated=self.authenticated,
+            **self._model_kwargs(),
         )
 
     def check_token(

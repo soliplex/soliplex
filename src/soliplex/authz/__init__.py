@@ -85,6 +85,40 @@ class ExactlyOneDiscriminator(ValueError):
         )
 
 
+class NoSuchAdminUser(ValueError):
+    """Raised when no admin user matches a given JSONPath discriminator."""
+
+    def __init__(self, json_path):
+        self.json_path = json_path
+        super().__init__(f"No admin user exists with json_path: {json_path}")
+
+
+class AdminUserExists(ValueError):
+    """Raised when an admin user already exists for a discriminator."""
+
+    def __init__(self, json_path):
+        self.json_path = json_path
+        super().__init__(
+            f"Admin user already exists with json_path: {json_path}"
+        )
+
+
+class NoSuchRoomPolicy(ValueError):
+    """Raised when no authorization policy exists for a room."""
+
+    def __init__(self, room_id):
+        self.room_id = room_id
+        super().__init__(f"No policy exists for room: {room_id}")
+
+
+class NoSuchACLEntry(ValueError):
+    """Raised when no stored ACL entry matches a room operation."""
+
+    def __init__(self, room_id):
+        self.room_id = room_id
+        super().__init__(f"No matching ACL entry in room: {room_id}")
+
+
 def validate_json_path(value: str | None) -> str | None:
     """Validate a JSONPath query string.
 
@@ -243,6 +277,46 @@ class AuthorizationPolicy(abc.ABC):
         room_id: str,
     ) -> None:
         """Delete the authorization policy for the room"""
+
+    @abc.abstractmethod
+    async def get_room_policy_unchecked(
+        self,
+        room_id: str,
+    ) -> models.RoomPolicyUnchecked | None:  # noqa: F821
+        """Return the room policy, tolerating non-compiling 'json_path's."""
+
+    @abc.abstractmethod
+    async def clear_room_acl(self, room_id: str) -> None:
+        """Remove all ACL entries from the room's policy.
+
+        The policy row and its 'default_allow_deny' are preserved.
+        """
+
+    @abc.abstractmethod
+    async def add_acl_entry(
+        self,
+        room_id: str,
+        entry: models.ACLEntry,  # noqa: F821
+    ) -> None:
+        """Add an ACL entry to the room's policy, replacing any entry with
+        the same discriminator."""
+
+    @abc.abstractmethod
+    async def remove_acl_entry(
+        self,
+        room_id: str,
+        entry: models.ACLEntryUnchecked,  # noqa: F821
+    ) -> None:
+        """Remove the matching ACL entry from the room's policy."""
+
+    @abc.abstractmethod
+    async def set_room_default(
+        self,
+        room_id: str,
+        allow_deny: AllowDeny,
+    ) -> None:
+        """Set the room policy's 'default_allow_deny', creating an empty
+        policy if none exists."""
 
 
 async def get_the_authz_policy(
