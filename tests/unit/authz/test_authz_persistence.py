@@ -1,6 +1,8 @@
+import datetime
 from unittest import mock
 
 import pytest
+from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import authz as authz_package
@@ -10,6 +12,8 @@ from soliplex.authz import schema as authz_schema
 
 EMAIL = "phreddy@example.com"
 JSON_PATH = authz_package.token_field_json_path("email", EMAIL)
+ROLE_JSON_PATH = '$[?$.role == "admin"]'
+INVALID_JSON_PATH = "$[?@.role"  # unbalanced -- does not compile
 USER_TOKEN = {
     "email": EMAIL,
 }
@@ -39,7 +43,106 @@ async def test_authorizationpolicy_session(faux_sqlaa_session):
 
 
 @pytest.mark.asyncio
+async def test_list_admin_user_discriminators(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    the_async_session.add(authz_schema.AdminUser(json_path=JSON_PATH))
+    the_async_session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
+    await the_async_session.commit()
+
+    found = await ap.list_admin_user_discriminators()
+
+    assert found == [JSON_PATH, ROLE_JSON_PATH]
+
+
+@pytest.mark.asyncio
+async def test_add_admin_user_discriminator(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    await ap.add_admin_user_discriminator(ROLE_JSON_PATH)
+
+    found = await ap.list_admin_user_discriminators()
+    assert found == [ROLE_JSON_PATH]
+
+
+@pytest.mark.asyncio
+async def test_add_admin_user_discriminator_already_exists(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    the_async_session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
+    await the_async_session.commit()
+
+    with pytest.raises(authz_persistence.AdminUserExists):
+        await ap.add_admin_user_discriminator(ROLE_JSON_PATH)
+
+
+@pytest.mark.asyncio
+async def test_remove_admin_user_discriminator(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    the_async_session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
+    await the_async_session.commit()
+
+    await ap.remove_admin_user_discriminator(ROLE_JSON_PATH)
+
+    found = await ap.list_admin_user_discriminators()
+    assert found == []
+
+
+@pytest.mark.asyncio
+async def test_remove_admin_user_discriminator_absent(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    with pytest.raises(authz_persistence.NoSuchAdminUser):
+        await ap.remove_admin_user_discriminator(ROLE_JSON_PATH)
+
+
+@pytest.mark.asyncio
+async def test_remove_admin_user_discriminator_invalid_json_path(
+    the_async_session,
+):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    # Seed via a core INSERT so the stored value bypasses the ORM
+    # '@validates' hook -- mimicking an entry whose 'json_path' no
+    # longer compiles (e.g. a removed meta-config filter function).
+    await the_async_session.execute(
+        sqla_sql.insert(authz_schema.AdminUser.__table__).values(
+            json_path=INVALID_JSON_PATH,
+            created=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        )
+    )
+    await the_async_session.commit()
+
+    await ap.remove_admin_user_discriminator(INVALID_JSON_PATH)
+
+    found = await ap.list_admin_user_discriminators()
+    assert found == []
+
+
+@pytest.mark.asyncio
+async def test_clear_admin_user_discriminators(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+    the_async_session.add(authz_schema.AdminUser(json_path=JSON_PATH))
+    the_async_session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
+    await the_async_session.commit()
+
+    await ap.clear_admin_user_discriminators()
+
+    found = await ap.list_admin_user_discriminators()
+    assert found == []
+
+
+@pytest.mark.asyncio
+async def test_clear_admin_user_discriminators_empty(the_async_session):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    await ap.clear_admin_user_discriminators()
+
+    found = await ap.list_admin_user_discriminators()
+    assert found == []
+
+
+@pytest.mark.asyncio
 async def test_authorizationpolicy_crud_admin_user(the_async_session):
+    # The deprecated 'email'-keyed aliases delegate to the
+    # '*_discriminator' methods, storing the canonical email JSONPath.
     ap = authz_persistence.AuthorizationPolicy(the_async_session)
 
     found = await ap.list_admin_users()
@@ -55,7 +158,7 @@ async def test_authorizationpolicy_crud_admin_user(the_async_session):
     await the_async_session.commit()
 
     found = await ap.list_admin_users()
-    assert found == [EMAIL]
+    assert found == [JSON_PATH]
     await the_async_session.commit()
 
     with pytest.raises(authz_persistence.AdminUserExists):
@@ -69,7 +172,7 @@ async def test_authorizationpolicy_crud_admin_user(the_async_session):
     await the_async_session.commit()
 
     found = await ap.list_admin_users()
-    assert found == [EMAIL]
+    assert found == [JSON_PATH]
     await the_async_session.commit()
 
     await ap.remove_admin_user(email=EMAIL)

@@ -10,6 +10,8 @@ from soliplex import models
 from soliplex.views import authz as authz_views
 
 ADMIN_EMAIL = "admin@example.com"
+ADMIN_EMAIL_JSON_PATH = f'$[?$.email == "{ADMIN_EMAIL}"]'
+ADMIN_OTHER_JSON_PATH = '$[?$.group == "test.admin.group"]'
 THE_USER_CLAIMS = {"email": ADMIN_EMAIL}
 
 ROOM_ID = "test_room"
@@ -217,27 +219,30 @@ async def test_delete_room_authz(w_existing, w_admin_access):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_admin_access", [False, True])
-@pytest.mark.parametrize("w_admin_user", [None, ADMIN_EMAIL])
+@pytest.mark.parametrize(
+    "w_admin_user_discrims",
+    [
+        [],
+        [ADMIN_EMAIL_JSON_PATH],
+        [ADMIN_OTHER_JSON_PATH],
+        [ADMIN_EMAIL_JSON_PATH, ADMIN_OTHER_JSON_PATH],
+    ],
+)
 @pytest.mark.parametrize("w_room_policy", [None, ROOM_POLICY])
 async def test_get_installation_authz(
     w_room_policy,
-    w_admin_user,
+    w_admin_user_discrims,
     w_admin_access,
 ):
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = {ROOM_ID: object()}
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
-    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
-
-    if w_admin_user is not None:
-        exp_admin_emails = [ADMIN_EMAIL]
-    else:
-        exp_admin_emails = []
-
-    the_authz_policy.list_admin_users.return_value = exp_admin_emails
-
     the_authz_policy.get_room_policy.return_value = w_room_policy
+    the_authz_policy.list_admin_user_discriminators.return_value = (
+        w_admin_user_discrims
+    )
+    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
 
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -256,11 +261,11 @@ async def test_get_installation_authz(
         )
 
         the_authz_policy.get_room_policy.assert_not_awaited()
-        the_authz_policy.list_admin_users.assert_not_awaited()
+        the_authz_policy.list_admin_user_discriminators.assert_not_awaited()
 
     else:
         expected = models.InstallationAuthorization(
-            admin_user_emails=exp_admin_emails,
+            admin_user_discriminators=w_admin_user_discrims,
             room_policies={
                 ROOM_ID: w_room_policy,
             },
@@ -279,7 +284,7 @@ async def test_get_installation_authz(
             room_id=ROOM_ID,
             user_token=THE_USER_CLAIMS,
         )
-        the_authz_policy.list_admin_users.assert_awaited_once_with()
+        the_authz_policy.list_admin_user_discriminators.assert_awaited_once_with()
         the_installation.get_room_configs.assert_awaited_once_with(
             user=THE_USER_CLAIMS,
             the_authz_policy=the_authz_policy,

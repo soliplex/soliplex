@@ -148,20 +148,55 @@ class AuthorizationPolicy(abc.ABC):
     """Protocol for checking / managing authorization policies"""
 
     @abc.abstractmethod
-    async def list_admin_users(self) -> list[str]:
-        """List admin users in the admin users table.
+    async def list_admin_user_discriminators(self) -> list[str]:
+        """List JSONPath discriminators which identify admin users.
 
-        Email-keyed admins surface as their email; admins keyed by a
-        non-email JSONPath query surface as the raw query string.
+        Discriminators may be tied to individuals (e.g., via their
+        email addresses), or to claims which identify groups or
+        roles attached to the user.
         """
 
     @abc.abstractmethod
+    async def add_admin_user_discriminator(self, json_path: str):
+        """Add a user discriminator to the admin users table.
+
+        Discriminators may be tied to individuals (e.g., via their
+        email addresses), or to claims which identify groups or
+        roles attached to the user.
+        """
+
+    @abc.abstractmethod
+    async def remove_admin_user_discriminator(self, json_path: str):
+        """Remove a user discriminator from the admin users table.
+
+        Discriminators may be tied to individuals (e.g., via their
+        email addresses), or to claims which identify groups or
+        roles attached to the user.
+        """
+
+    @abc.abstractmethod
+    async def clear_admin_user_discriminators(self):
+        """Remove all admin user discriminators from the admin users table."""
+
+    @abc.abstractmethod
+    async def list_admin_users(self) -> list[str]:
+        """Deprecated alias for 'list_admin_user_discriminators'."""
+
+    @abc.abstractmethod
     async def add_admin_user(self, email: str):
-        """Add a user to the admin users table."""
+        """Deprecated alias for 'add_admin_user_discriminator'.
+
+        Translates 'email' to the equivalent JSONPath expression,
+        '$[?$.email == "..."]', then delegates.
+        """
 
     @abc.abstractmethod
     async def remove_admin_user(self, email: str):
-        """Remove a user from the admin users table."""
+        """Deprecated alias for 'remove_admin_user_discriminator'.
+
+        Translates 'email' to the equivalent JSONPath expression,
+        '$[?$.email == "..."]', then delegates.
+        """
 
     @abc.abstractmethod
     async def check_admin_access(self, user_token: UserToken) -> bool:
