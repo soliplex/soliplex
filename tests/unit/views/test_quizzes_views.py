@@ -108,7 +108,7 @@ async def test_get_quiz(test_quiz, w_miss):
             assert exc.value.status_code == 404
             the_logger.exception.assert_called_once_with(
                 loggers.QUIZ_UNKNOWN_QUIZ_ID,
-                TEST_QUIZ_ID,
+                quiz_id=TEST_QUIZ_ID,
             )
 
         else:
@@ -186,7 +186,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
             assert exc.value.status_code == 404
             the_logger.exception.assert_called_once_with(
                 loggers.QUIZ_UNKNOWN_QUIZ_ID,
-                TEST_QUIZ_ID,
+                quiz_id=TEST_QUIZ_ID,
             )
 
             ca.assert_not_called()

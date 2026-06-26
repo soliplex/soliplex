@@ -47,10 +47,10 @@ async def get_quiz(
     try:
         quiz = room_config.quiz_map[quiz_id]
     except KeyError:
-        the_logger.exception(loggers.QUIZ_UNKNOWN_QUIZ_ID, quiz_id)
+        the_logger.exception(loggers.QUIZ_UNKNOWN_QUIZ_ID, quiz_id=quiz_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.QUIZ_UNKNOWN_QUIZ_ID % quiz_id,
+            detail=f"{loggers.QUIZ_UNKNOWN_QUIZ_ID}: {quiz_id}",
         ) from None
 
     return models.Quiz.from_config(quiz)
@@ -89,10 +89,10 @@ async def post_quiz_question(
     try:
         quiz = room_config.quiz_map[quiz_id]
     except KeyError:
-        the_logger.exception(loggers.QUIZ_UNKNOWN_QUIZ_ID, quiz_id)
+        the_logger.exception(loggers.QUIZ_UNKNOWN_QUIZ_ID, quiz_id=quiz_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.QUIZ_UNKNOWN_QUIZ_ID % quiz_id,
+            detail=f"{loggers.QUIZ_UNKNOWN_QUIZ_ID}: {quiz_id}",
         ) from None
 
     try:
