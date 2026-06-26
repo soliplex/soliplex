@@ -565,10 +565,10 @@ async def test_get_chunk_visualization(
 
             assert exc.value.status_code == 404
             assert exc.value.detail == (
-                loggers.ROOM_UNKNOWN_CHUNK_ID % CHUNK_ID
+                f"{loggers.ROOM_UNKNOWN_CHUNK_ID}: {CHUNK_ID}"
             )
             the_logger.error.assert_called_once_with(
-                loggers.ROOM_UNKNOWN_CHUNK_ID, CHUNK_ID
+                loggers.ROOM_UNKNOWN_CHUNK_ID, chunk_id=CHUNK_ID
             )
 
         elif w_chunk_index is None:
@@ -584,10 +584,10 @@ async def test_get_chunk_visualization(
 
             assert exc.value.status_code == 404
             assert exc.value.detail == (
-                loggers.ROOM_UNKNOWN_CHUNK_ID % CHUNK_ID
+                f"{loggers.ROOM_UNKNOWN_CHUNK_ID}: {CHUNK_ID}"
             )
             the_logger.error.assert_called_once_with(
-                loggers.ROOM_UNKNOWN_CHUNK_ID, CHUNK_ID
+                loggers.ROOM_UNKNOWN_CHUNK_ID, chunk_id=CHUNK_ID
             )
 
         elif not w_image:
@@ -603,10 +603,10 @@ async def test_get_chunk_visualization(
 
             assert exc.value.status_code == 404
             assert exc.value.detail == (
-                loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE % CHUNK_ID
+                f"{loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE}: {CHUNK_ID}"
             )
             the_logger.error.assert_called_once_with(
-                loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE, CHUNK_ID
+                loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE, chunk_id=CHUNK_ID
             )
 
         else:

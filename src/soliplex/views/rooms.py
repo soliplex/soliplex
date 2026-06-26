@@ -261,20 +261,23 @@ async def get_chunk_visualization(
                 break  # first hit wins
 
     else:
-        the_logger.error(loggers.ROOM_UNKNOWN_CHUNK_ID, chunk_id)
+        the_logger.error(loggers.ROOM_UNKNOWN_CHUNK_ID, chunk_id=chunk_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_CHUNK_ID % chunk_id,
+            detail=f"{loggers.ROOM_UNKNOWN_CHUNK_ID}: {chunk_id}",
         ) from None
 
     # Convert PIL images to base64
     base64_images = []
 
     if not images:
-        the_logger.error(loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE, chunk_id)
+        the_logger.error(
+            loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE,
+            chunk_id=chunk_id,
+        )
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE % chunk_id,
+            detail=f"{loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE}: {chunk_id}",
         ) from None
 
     for img in images:
