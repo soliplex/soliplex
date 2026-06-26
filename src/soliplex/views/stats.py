@@ -83,10 +83,10 @@ async def get_room_stats(
     except KeyError:
         # An authz denial is logged by 'get_room_config'; a genuinely
         # missing room is not, so log the lookup failure here either way.
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
     user_name = the_user_claims.get("preferred_username", "<unknown>")
