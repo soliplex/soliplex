@@ -5,9 +5,11 @@ import pathlib
 
 import typer
 from rich import console
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import authz as authz_package
 from soliplex import installation
+from soliplex.authz import persistence as authz_persistence
 from soliplex.authz import schema as authz_schema
 from soliplex.config import installation as config_installation
 
@@ -32,8 +34,19 @@ def get_installation(
     return installation.Installation(i_config)
 
 
+# Both the sync ('sqlite://') and async ('sqlite+aiosqlite://') in-memory
+# URLs spell a throwaway database; a CLI mutation against either is a no-op
+# once the process exits, so commands reject them up front.
+_RAM_DBURIS = frozenset(
+    {
+        config_installation.SYNC_MEMORY_ENGINE_URL,
+        config_installation.ASYNC_MEMORY_ENGINE_URL,
+    }
+)
+
+
 def _check_ram_dburi(dburi: str, command: str):
-    if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
+    if dburi in _RAM_DBURIS:
         the_console.rule("Authorization DB is RAM-based")
         the_console.print(f"'{command}' is a no-op with a RAM-based database")
         raise typer.Exit(1)
@@ -54,6 +67,26 @@ def _authz_session(dburi):
         yield session
     finally:
         session.get_bind().dispose()
+
+
+@contextlib.asynccontextmanager
+async def _authz_policy(dburi):
+    """Yield an async 'AuthorizationPolicy', disposing its engine on exit.
+
+    The async analogue of '_authz_session': builds a fresh async engine
+    (creating the schema if needed) bound to a one-shot 'AuthorizationPolicy',
+    and disposes the engine on exit so the underlying SQLite connection is
+    released deterministically.
+    """
+    engine = await authz_schema.get_async_engine(
+        engine_url=dburi,
+        init_schema=True,
+    )
+    try:
+        async with sqla_asyncio.AsyncSession(bind=engine) as session:
+            yield authz_persistence.AuthorizationPolicy(session)
+    finally:
+        await engine.dispose()
 
 
 def _check_exactly_one_discriminator(
