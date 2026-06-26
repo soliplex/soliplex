@@ -38,10 +38,10 @@ async def get_quiz(
     except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
     try:
@@ -80,10 +80,10 @@ async def post_quiz_question(
     except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
     try:

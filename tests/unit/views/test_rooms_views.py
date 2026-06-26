@@ -122,10 +122,12 @@ async def test_get_room(fc, room_configs):
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        assert exc.value.detail == (
+            f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {ROOM_ID}"
+        )
         the_logger.exception.assert_called_once_with(
             loggers.ROOM_UNKNOWN_ROOM_ID,
-            ROOM_ID,
+            room_id=ROOM_ID,
         )
 
     else:
@@ -184,9 +186,12 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        assert exc.value.detail == (
+            f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {ROOM_ID}"
+        )
         the_logger.exception.assert_called_once_with(
-            loggers.ROOM_UNKNOWN_ROOM_ID, ROOM_ID
+            loggers.ROOM_UNKNOWN_ROOM_ID,
+            room_id=ROOM_ID,
         )
     else:
         if w_image:
@@ -252,10 +257,12 @@ async def test_get_room_mcp_token(gust, w_error):
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        assert exc.value.detail == (
+            f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {ROOM_ID}"
+        )
         the_logger.exception.assert_called_once_with(
             loggers.ROOM_UNKNOWN_ROOM_ID,
-            ROOM_ID,
+            room_id=ROOM_ID,
         )
 
     else:
@@ -374,10 +381,12 @@ async def test_get_room_documents(
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        assert exc.value.detail == (
+            f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {ROOM_ID}"
+        )
         the_logger.exception.assert_called_once_with(
             loggers.ROOM_UNKNOWN_ROOM_ID,
-            ROOM_ID,
+            room_id=ROOM_ID,
         )
     else:
         room_config = room_configs[ROOM_ID]
@@ -528,10 +537,12 @@ async def test_get_chunk_visualization(
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        assert exc.value.detail == (
+            f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {ROOM_ID}"
+        )
         the_logger.exception.assert_called_once_with(
             loggers.ROOM_UNKNOWN_ROOM_ID,
-            ROOM_ID,
+            room_id=ROOM_ID,
         )
 
     else:
@@ -713,10 +724,12 @@ async def test_get_search(
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        assert exc.value.detail == (
+            f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {ROOM_ID}"
+        )
         the_logger.exception.assert_called_once_with(
             loggers.ROOM_UNKNOWN_ROOM_ID,
-            ROOM_ID,
+            room_id=ROOM_ID,
         )
 
     else:

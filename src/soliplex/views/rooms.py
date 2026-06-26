@@ -73,10 +73,10 @@ async def get_room(
     except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
     return models.Room.from_config(room_config)
@@ -107,10 +107,10 @@ async def get_room_bg_image(
     except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
     logo_image = room_config.get_logo_image()
@@ -146,10 +146,10 @@ async def get_room_mcp_token(
     except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
     secret = the_installation.get_secret("URL_SAFE_TOKEN_SECRET")
@@ -183,10 +183,10 @@ async def get_room_documents(
     except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
     document_set = {}
@@ -240,10 +240,10 @@ async def get_chunk_visualization(
     except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
     images = None
@@ -315,10 +315,10 @@ async def get_search(
     except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
     aggregate_hits = []
