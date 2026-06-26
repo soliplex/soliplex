@@ -41,7 +41,7 @@ AUTHN_GET_LOGIN_SYSTEM = "get login system"
 AUTHN_GET_AUTH_SYSTEM = "get auth system"
 AUTHN_GET_USER_INFO = "get user info"
 AUTHN_GET_USER_CLAIMS = "get user claims"
-AUTHN_GET_USER_CLAIMS_FAILED = "get user claims failed: %s"
+AUTHN_GET_USER_CLAIMS_FAILED = "get user claims failed"
 
 AUTHZ_LOGGER_NAME = "soliplex.authz"
 AUTHZ_FILTERING_ROOMS = "filtering rooms for user"
@@ -64,9 +64,9 @@ LOG_INGEST_INGEST_LOGS = "ingest logs"
 LOG_INGEST_PAYLOAD_TOO_BIG = "payload too big"
 
 QUIZ_GET_QUIZ = "get quiz"
-QUIZ_UNKNOWN_QUIZ_ID = "unknown quiz id: %s"
+QUIZ_UNKNOWN_QUIZ_ID = "unknown quiz id"
 QUIZ_POST_QUIZ_QUESTION = "post quiz question"
-QUIZ_UNKNOWN_QUESTION_UUID = "unknown question UUID: %s"
+QUIZ_UNKNOWN_QUESTION_UUID = "unknown question UUID"
 
 ROOM_GET_ROOMS = "get rooms"
 ROOM_GET_ROOM = "get room"
@@ -75,9 +75,9 @@ ROOM_GET_ROOM_MCP_TOKEN = "get room mcp token"
 ROOM_GET_ROOM_DOCUMENTS = "get room documents"
 ROOM_GET_CHUNK_VISUALIZATION = "get chunk_visualization"
 ROOM_GET_SEARCH = "get search"
-ROOM_UNKNOWN_ROOM_ID = "unknown room id: %s"
-ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available: %s"
-ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id: %s"
+ROOM_UNKNOWN_ROOM_ID = "unknown room id"
+ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available"
+ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id"
 
 STATS_GET_ROOMS_STATS = "get rooms stats"
 STATS_GET_ROOM_STATS = "get room stats"
@@ -85,6 +85,11 @@ STATS_GET_ROOM_STATS = "get room stats"
 
 class LogWrapper(logging.LoggerAdapter):
     """Context wrapper for capturing extra logging values"""
+
+    # Keyword arguments the stdlib logging machinery consumes itself; any
+    # other keyword passed to a log call is a structured field destined for
+    # the record's 'extra' rather than the logger.
+    _LOG_KWARGS = frozenset({"exc_info", "stack_info", "stacklevel", "extra"})
 
     def __init__(self, logger_name, the_installation, **extra):
         self.logger_name = logger_name
@@ -94,6 +99,25 @@ class LogWrapper(logging.LoggerAdapter):
             super().__init__(logger, extra=extra, merge_extra=True)
         except TypeError:  # pragma: NO COVER Python < 3.13
             super().__init__(logger, extra=extra)
+
+    def process(self, msg, kwargs):
+        """Fold caller-supplied keyword fields into the record's 'extra'.
+
+        A plain 'LoggerAdapter' forwards unrecognized keyword arguments
+        straight to 'Logger._log', which rejects them. Capturing them here
+        instead lets call sites pass structured audit fields by keyword --
+        'the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=...)'
+        attaches 'room_id' to the record rather than crashing. The adapter's
+        own bound extras form the base; explicit 'extra=' and keyword fields
+        layer over them (matching the 'merge_extra=True' ctor semantics).
+        """
+        fields = {
+            key: kwargs.pop(key)
+            for key in list(kwargs)
+            if key not in self._LOG_KWARGS
+        }
+        kwargs["extra"] = {**self.extra, **kwargs.get("extra", {}), **fields}
+        return msg, kwargs
 
     def bind(self, logger_name=None, **extra) -> LogWrapper:
         if logger_name is None:

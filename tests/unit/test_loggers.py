@@ -48,6 +48,68 @@ def test_logwrapper_bind(lgl, w_new_name, the_installation, w_extra):
     lgl.assert_called_once_with(exp_name)
 
 
+@pytest.fixture
+def capturing_logger():
+    """A real logger whose emitted records are captured in a list.
+
+    Exercises 'LogWrapper' against the genuine stdlib logging machinery
+    (not a mock), so a keyword argument that the adapter fails to consume
+    -- and would otherwise blow up in 'Logger._log' -- is caught here.
+    """
+    records = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    logger = logging.getLogger("soliplex.test.capture")
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+    try:
+        yield logger.name, records
+    finally:
+        logger.removeHandler(handler)
+
+
+def test_logwrapper_process_merges_extras_and_fields(the_installation):
+    wrapper = loggers.LogWrapper(LOGGER_NAME, the_installation, actor="alice")
+
+    msg, kwargs = wrapper.process(
+        "unknown room id",
+        {"extra": {"reason": "audit"}, "room_id": "faux", "exc_info": True},
+    )
+
+    assert msg == "unknown room id"
+    assert kwargs == {
+        "exc_info": True,
+        "extra": {"actor": "alice", "reason": "audit", "room_id": "faux"},
+    }
+
+
+def test_logwrapper_keyword_field_reaches_record(
+    the_installation, capturing_logger
+):
+    logger_name, records = capturing_logger
+    wrapper = loggers.LogWrapper(logger_name, the_installation)
+
+    wrapper.error(loggers.ROOM_UNKNOWN_ROOM_ID, room_id="faux")
+
+    assert records[-1].getMessage() == loggers.ROOM_UNKNOWN_ROOM_ID
+    assert records[-1].room_id == "faux"
+
+
+def test_logwrapper_exception_keeps_exc_info_with_fields(
+    the_installation, capturing_logger
+):
+    logger_name, records = capturing_logger
+    wrapper = loggers.LogWrapper(logger_name, the_installation)
+
+    try:
+        {}["boom"]
+    except KeyError:
+        wrapper.exception(loggers.QUIZ_UNKNOWN_QUIZ_ID, quiz_id="q1")
+
+    assert records[-1].quiz_id == "q1"
+    assert records[-1].exc_info is not None
+
+
 @pytest.mark.parametrize(
     "w_levels, expectation",
     [

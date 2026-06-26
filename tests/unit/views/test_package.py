@@ -102,9 +102,8 @@ async def test_get_the_user_claims(auth_fn, the_installation, code, msg):
     else:
         assert expected.value.status_code == code
         assert expected.value.detail == msg
-        the_unauth_logger.error.assert_called_once_with(
+        the_unauth_logger.exception.assert_called_once_with(
             loggers.AUTHN_GET_USER_CLAIMS_FAILED,
-            msg,
         )
 
     auth_fn.assert_called_once_with(

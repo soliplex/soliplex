@@ -197,6 +197,10 @@ async def test_get_room_stats_unknown_room(the_threads, the_logger):
         )
 
     the_threads.get_room_last_activity.assert_not_called()
+    the_logger.exception.assert_called_once_with(
+        loggers.ROOM_UNKNOWN_ROOM_ID,
+        room_id=ROOM_ID,
+    )
 
 
 @pytest.fixture
