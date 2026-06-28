@@ -1116,10 +1116,11 @@ wheels = [
 
 [[package]]
 name = "haiku-rag-slim"
-version = "0.59.0"
+version = "0.63.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docling-core" },
+    { name = "fastmcp" },
     { name = "haiku-skills" },
     { name = "httpx" },
     { name = "jinja2" },
@@ -1127,19 +1128,20 @@ dependencies = [
     { name = "lancedb" },
     { name = "pathspec" },
     { name = "pydantic" },
-    { name = "pydantic-ai-slim", extra = ["ag-ui", "fastmcp", "logfire", "openai"] },
+    { name = "pydantic-ai-slim", extra = ["ag-ui", "logfire", "openai"] },
     { name = "pydantic-monty" },
     { name = "pypdfium2" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "rich" },
+    { name = "textual-image" },
     { name = "typer" },
     { name = "watchfiles" },
     { name = "zstandard", marker = "python_full_version < '3.14'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c7/9d/fc8039b8a4509b85e33096a7f1e8ae8b9e29ac294c533f813a1ae0ad28c2/haiku_rag_slim-0.59.0.tar.gz", hash = "sha256:8f1ec146e6430c38a6e6c36b13cf0fad7aac3ad83c273ca8aca026ee4c9520e8", size = 205564, upload-time = "2026-06-16T13:50:19.729Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/37/9b/160d115f8f3a5ce816314ab64cf711e82386da4c96610c13661c1aba5e69/haiku_rag_slim-0.63.0.tar.gz", hash = "sha256:f5b980e63a6bfc4289774ce201c4a4b72cfeb031eda56de2f6372e6922f6c162", size = 225767, upload-time = "2026-06-28T07:58:10.754Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3a/dd/dd3b0cfc325a66fde9bb18071d290f7f6bcac9ae3dfc62f4eecef494f65d/haiku_rag_slim-0.59.0-py3-none-any.whl", hash = "sha256:d3b520630999a65638864daf9c3723a225d81405f45ba9f1d6f69c458cdc2c30", size = 281691, upload-time = "2026-06-16T13:50:18.397Z" },
+    { url = "https://files.pythonhosted.org/packages/19/bb/b390109aa26f117daa8d32150dd8210fff1248636bbba6474318e78734b6/haiku_rag_slim-0.63.0-py3-none-any.whl", hash = "sha256:fcd047c7421545cc384b3db33b24630362b728aa630f40811c06d36f79b4a480", size = 304573, upload-time = "2026-06-28T07:58:09.466Z" },
 ]
 
 [[package]]
@@ -2624,9 +2626,6 @@ ag-ui = [
     { name = "ag-ui-protocol" },
     { name = "starlette" },
 ]
-fastmcp = [
-    { name = "fastmcp" },
-]
 google = [
     { name = "google-genai" },
 ]
@@ -3448,7 +3447,7 @@ requires-dist = [
     { name = "fastapi" },
     { name = "fastmcp", specifier = ">=3.3.0,<3.4" },
     { name = "greenlet" },
-    { name = "haiku-rag-slim", specifier = ">=0.59.0,<0.60" },
+    { name = "haiku-rag-slim", specifier = ">=0.63.0,<0.64" },
     { name = "haiku-skills", specifier = ">=0.17.2,<0.18" },
     { name = "idna", specifier = ">=3.15" },
     { name = "itsdangerous" },
@@ -3655,6 +3654,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e8/fd/dc3160123af550838d50a4fa7f62e357d7ad2fc9b4220ead9160661bcd1b/textual_fspicker-1.0.0.tar.gz", hash = "sha256:462608dbe6a14edff679fc6116addcf288f4a79f8e4fffd240f9ce2caaf9e655", size = 16517, upload-time = "2026-02-18T20:02:16.547Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/92/2f/bf13ae8a1f17186a122968c7ba0f18716d63d2fa67a9e6f905a20067c022/textual_fspicker-1.0.0-py3-none-any.whl", hash = "sha256:71c80258f8885a67abf85d68b42ac8defc8226281481717af722346cbc3e0305", size = 24932, upload-time = "2026-02-18T20:02:15.492Z" },
+]
+
+[[package]]
+name = "textual-image"
+version = "0.13.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pillow" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/10/77/b2128ced69556bfbb8e1c19d8f013e621cf12531eaba4e9b09e1cfa81e37/textual_image-0.13.2.tar.gz", hash = "sha256:8ca0cee2bfcd7734de5b16a1936da226b77b745e28830d9cf2bc202cb70e43ee", size = 2185178, upload-time = "2026-05-30T21:42:33.563Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/36/be/60aafd7263a6daa8cc4017e8bd4452c85b63ccd82a64f02636ca46e073b7/textual_image-0.13.2-py3-none-any.whl", hash = "sha256:41635f545ce2d0b3544763a2d10f25ada7f64c51acef77483b80fbfcf7ab22ee", size = 118469, upload-time = "2026-05-30T21:42:31.964Z" },
 ]
 
 [[package]]
