@@ -10,7 +10,7 @@ import warnings
 import typer
 import yaml
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import models
 from soliplex.cli import cli_util
 from soliplex.cli import types
@@ -101,7 +101,7 @@ def _human_dump_room_policy(room_id, policy):  # pragma NO COVER UI ONLY
         )
         return
 
-    if policy.default_allow_deny == authz_package.AllowDeny.DENY:
+    if policy.default_allow_deny == authz.AllowDeny.DENY:
         the_console.print(
             "Default: DENY (private -- denies callers that don't "
             "match an ALLOW entry).",
@@ -138,7 +138,7 @@ def _acl_entry_as_jsonable(entry) -> dict:
     """JSON-serializable view of an ACL entry.
 
     'entry' is a 'models.ACLEntryUnchecked' (as returned by
-    'AuthorizationPolicy.get_room_policy_unchecked'), which already
+    'RoomAuthorizationPolicy.get_room_policy_unchecked'), which already
     surfaces the canonical 'preferred_username' / 'email' query as the
     matching shortcut field and tolerates a stored 'json_path' that no
     longer compiles. 'AllowDeny' is emitted as its member name.
@@ -192,11 +192,11 @@ def _room_policy_from_jsonable(data) -> models.RoomPolicy | None:
     acl_entries = []
     for entry in data.get("acl_entries", ()):
         entry = dict(entry)
-        entry["allow_deny"] = authz_package.AllowDeny[entry["allow_deny"]]
+        entry["allow_deny"] = authz.AllowDeny[entry["allow_deny"]]
         acl_entries.append(models.ACLEntry(**entry))
     return models.RoomPolicy(
         room_id=data["room_id"],
-        default_allow_deny=authz_package.AllowDeny[data["default_allow_deny"]],
+        default_allow_deny=authz.AllowDeny[data["default_allow_deny"]],
         acl_entries=acl_entries,
     )
 
@@ -216,40 +216,40 @@ def _effective_room_id(room_id, model) -> str | None:
 
 
 async def _get_policy(dburi, room_id):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         return await policy.get_room_policy_unchecked(room_id)
 
 
 async def _update_policy(dburi, room_id, model):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         await policy.update_room_policy(room_id, model)
 
 
 async def _delete_policy(dburi, room_id):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         await policy.delete_room_policy(room_id)
 
 
 async def _set_default(dburi, room_id, allow_deny):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         await policy.set_room_default(room_id, allow_deny)
         return await policy.get_room_policy_unchecked(room_id)
 
 
 async def _clear_acl(dburi, room_id):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         await policy.clear_room_acl(room_id)
         return await policy.get_room_policy_unchecked(room_id)
 
 
 async def _add_acl_entry(dburi, room_id, entry):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         await policy.add_acl_entry(room_id, entry)
         return await policy.get_room_policy_unchecked(room_id)
 
 
 async def _remove_acl_entry(dburi, room_id, entry):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         await policy.remove_acl_entry(room_id, entry)
         return await policy.get_room_policy_unchecked(room_id)
 
@@ -434,9 +434,9 @@ def make_room_private(
 
     if policy is None:
         policy = asyncio.run(
-            _set_default(dburi, room_id, authz_package.AllowDeny.DENY)
+            _set_default(dburi, room_id, authz.AllowDeny.DENY)
         )
-    elif policy.default_allow_deny == authz_package.AllowDeny.ALLOW:
+    elif policy.default_allow_deny == authz.AllowDeny.ALLOW:
         if not update:
             the_console.rule(
                 "Room policy already exists with default ALLOW",
@@ -448,7 +448,7 @@ def make_room_private(
             )
             raise typer.Exit(1)
         policy = asyncio.run(
-            _set_default(dburi, room_id, authz_package.AllowDeny.DENY)
+            _set_default(dburi, room_id, authz.AllowDeny.DENY)
         )
 
     _dump(ctx, room_id, policy)
@@ -493,7 +493,7 @@ def make_room_public(
     policy = asyncio.run(_get_policy(dburi, room_id))
 
     if policy is not None and (
-        policy.default_allow_deny == authz_package.AllowDeny.DENY
+        policy.default_allow_deny == authz.AllowDeny.DENY
     ):
         if not update:
             the_console.rule(
@@ -506,7 +506,7 @@ def make_room_public(
             )
             raise typer.Exit(1)
         policy = asyncio.run(
-            _set_default(dburi, room_id, authz_package.AllowDeny.ALLOW)
+            _set_default(dburi, room_id, authz.AllowDeny.ALLOW)
         )
 
     _dump(ctx, room_id, policy)
@@ -538,7 +538,7 @@ def clear_room_acl(
     _dump(ctx, room_id, policy)
 
 
-def _resolve_allow_deny(allow: bool, deny: bool) -> authz_package.AllowDeny:
+def _resolve_allow_deny(allow: bool, deny: bool) -> authz.AllowDeny:
     """Return the AllowDeny implied by --allow / --deny.
 
     Raises 'typer.Exit(1)' when both or neither flag is supplied.
@@ -555,8 +555,8 @@ def _resolve_allow_deny(allow: bool, deny: bool) -> authz_package.AllowDeny:
         raise typer.Exit(1)
 
     if allow:
-        return authz_package.AllowDeny.ALLOW
-    return authz_package.AllowDeny.DENY
+        return authz.AllowDeny.ALLOW
+    return authz.AllowDeny.DENY
 
 
 _ACL_ENTRY_DISCRIMINATORS_SUMMARY = (
@@ -577,7 +577,7 @@ def _check_acl_entry_args(
     email: str | None,
     command: str,
     allow_invalid_json_path: bool = False,
-) -> tuple[str, authz_package.AllowDeny, str | None]:
+) -> tuple[str, authz.AllowDeny, str | None]:
     """Run the validation prolog shared by add/delete-acl-entry.
 
     Loads the installation, checks the room id is configured, validates
@@ -705,7 +705,7 @@ def add_acl_entry(
 
     try:
         policy = asyncio.run(_add_acl_entry(dburi, room_id, entry))
-    except authz_package.NoSuchRoomPolicy:
+    except authz.NoSuchRoomPolicy:
         the_console.rule(f"No policy exists for room '{room_id}'")
         the_console.print(
             f"Run 'room-authz make-private' or "
@@ -806,13 +806,13 @@ def delete_acl_entry(
 
     try:
         policy = asyncio.run(_remove_acl_entry(dburi, room_id, entry))
-    except authz_package.NoSuchRoomPolicy:
+    except authz.NoSuchRoomPolicy:
         the_console.rule(f"No policy exists for room '{room_id}'")
         the_console.print(
             f"Room '{room_id}' has no RoomPolicy; nothing to delete.",
         )
         raise typer.Exit(1) from None
-    except authz_package.NoSuchACLEntry:
+    except authz.NoSuchACLEntry:
         the_console.rule("No matching ACL entry found")
         the_console.print(
             f"Room '{room_id}' has no ACL entry matching the "
@@ -831,11 +831,9 @@ Deprecated: to be removed after `v0.71'.  Use 'add-acl-entry' instead.
 
 
 async def _add_user(dburi, room_id, entry):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         if await policy.get_room_policy_unchecked(room_id) is None:
-            await policy.set_room_default(
-                room_id, authz_package.AllowDeny.DENY
-            )
+            await policy.set_room_default(room_id, authz.AllowDeny.DENY)
         await policy.add_acl_entry(room_id, entry)
         return await policy.get_room_policy_unchecked(room_id)
 
@@ -858,9 +856,9 @@ def add_room_user(
 
     cli_util._check_ram_dburi(dburi, "room-authz add-user")
 
-    json_path = authz_package.token_field_json_path("email", user_email)
+    json_path = authz.token_field_json_path("email", user_email)
     entry = models.ACLEntry(
-        allow_deny=authz_package.AllowDeny.ALLOW,
+        allow_deny=authz.AllowDeny.ALLOW,
         json_path=json_path,
     )
 
@@ -875,12 +873,10 @@ Use 'clear' plus either 'make-public' or 'make-private' instead.
 
 
 async def _clear(dburi, room_id, make_room_private):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         await policy.delete_room_policy(room_id)
         if make_room_private:
-            await policy.set_room_default(
-                room_id, authz_package.AllowDeny.DENY
-            )
+            await policy.set_room_default(room_id, authz.AllowDeny.DENY)
         return await policy.get_room_policy_unchecked(room_id)
 
 

@@ -7,7 +7,7 @@ import sqlalchemy
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import models
 from soliplex import util
 from soliplex.authz import schema as authz_schema
@@ -16,7 +16,7 @@ from soliplex.config import installation as config_installation
 NOW = datetime.datetime.now(datetime.UTC)
 
 EMAIL = "phreddy@example.com"
-JSON_PATH = authz_package.token_field_json_path("email", EMAIL)
+JSON_PATH = authz.token_field_json_path("email", EMAIL)
 
 ROOM_ID = "test-room"
 
@@ -26,12 +26,12 @@ ACL_ENTRY_DEFAULTS = {
     "preferred_username": None,
     "email": None,
     "json_path": None,
-    "allow_deny": authz_package.AllowDeny.DENY,
+    "allow_deny": authz.AllowDeny.DENY,
 }
 
 ROOM_POLICY_DEFAULTS = {
     "room_id": ROOM_ID,
-    "default_allow_deny": authz_package.AllowDeny.DENY,
+    "default_allow_deny": authz.AllowDeny.DENY,
     "acl_entries": [],
 }
 
@@ -54,7 +54,7 @@ def test_adminuser_ctor(the_session):
 
 
 def test_adminuser_ctor_invalid_json_path():
-    with pytest.raises(authz_package.InvalidJSONPath):
+    with pytest.raises(authz.InvalidJSONPath):
         authz_schema.AdminUser(json_path="$[?(bogus")
 
 
@@ -85,18 +85,18 @@ def test_roompolicy_ctor(the_session):
     the_session.add(policy)
     the_session.commit()
 
-    assert policy.default_allow_deny == authz_package.AllowDeny.DENY
+    assert policy.default_allow_deny == authz.AllowDeny.DENY
 
 
 @pytest.mark.parametrize(
     "model_kwargs",
     [
         {},
-        {"default_allow_deny": authz_package.AllowDeny.ALLOW},
+        {"default_allow_deny": authz.AllowDeny.ALLOW},
         {
             "acl_entries_kwargs": [
                 {
-                    "allow_deny": authz_package.AllowDeny.ALLOW,
+                    "allow_deny": authz.AllowDeny.ALLOW,
                     "authenticated": True,
                 },
             ],
@@ -104,11 +104,11 @@ def test_roompolicy_ctor(the_session):
         {
             "acl_entries_kwargs": [
                 {
-                    "allow_deny": authz_package.AllowDeny.ALLOW,
+                    "allow_deny": authz.AllowDeny.ALLOW,
                     "email": "phreddy@example.com",
                 },
                 {
-                    "allow_deny": authz_package.AllowDeny.DENY,
+                    "allow_deny": authz.AllowDeny.DENY,
                     "everyone": True,
                 },
             ],
@@ -116,7 +116,7 @@ def test_roompolicy_ctor(the_session):
         {
             "acl_entries_kwargs": [
                 {
-                    "allow_deny": authz_package.AllowDeny.ALLOW,
+                    "allow_deny": authz.AllowDeny.ALLOW,
                     "json_path": "$[?match($.foo, 'b.*z')]",
                 },
             ],
@@ -149,16 +149,16 @@ def test_roompolicy_from_model(model_kwargs):
 def test_roompolicy_as_unchecked_model(the_session):
     policy = authz_schema.RoomPolicy(
         room_id=ROOM_ID,
-        default_allow_deny=authz_package.AllowDeny.ALLOW,
+        default_allow_deny=authz.AllowDeny.ALLOW,
     )
     authz_schema.ACLEntry(
         room_policy=policy,
-        allow_deny=authz_package.AllowDeny.DENY,
+        allow_deny=authz.AllowDeny.DENY,
         everyone=True,
     )
     authz_schema.ACLEntry(
         room_policy=policy,
-        allow_deny=authz_package.AllowDeny.ALLOW,
+        allow_deny=authz.AllowDeny.ALLOW,
         json_path=JSON_PATH,
     )
     the_session.add(policy)
@@ -167,18 +167,16 @@ def test_roompolicy_as_unchecked_model(the_session):
     unchecked = policy.as_unchecked_model
 
     assert unchecked.room_id == ROOM_ID
-    assert unchecked.default_allow_deny == authz_package.AllowDeny.ALLOW
+    assert unchecked.default_allow_deny == authz.AllowDeny.ALLOW
     assert len(unchecked.acl_entries) == 2
     assert (
         models.ACLEntryUnchecked(
-            allow_deny=authz_package.AllowDeny.DENY, everyone=True
+            allow_deny=authz.AllowDeny.DENY, everyone=True
         )
         in unchecked.acl_entries
     )
     assert (
-        models.ACLEntryUnchecked(
-            allow_deny=authz_package.AllowDeny.ALLOW, email=EMAIL
-        )
+        models.ACLEntryUnchecked(allow_deny=authz.AllowDeny.ALLOW, email=EMAIL)
         in unchecked.acl_entries
     )
 
@@ -187,8 +185,8 @@ def test_roompolicy_as_unchecked_model(the_session):
 @pytest.mark.parametrize(
     "default_allow_deny",
     [
-        authz_package.AllowDeny.ALLOW,
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
     ],
 )
 def test_roompolicy_check_token_w_empty(default_allow_deny, token):
@@ -206,8 +204,8 @@ def test_roompolicy_check_token_w_empty(default_allow_deny, token):
 @pytest.mark.parametrize(
     "default_allow_deny",
     [
-        authz_package.AllowDeny.ALLOW,
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
     ],
 )
 def test_roompolicy_check_token_w_acl_miss(default_allow_deny, token):
@@ -217,7 +215,7 @@ def test_roompolicy_check_token_w_acl_miss(default_allow_deny, token):
     )
     _entry = authz_schema.ACLEntry(
         room_policy=policy,
-        allow_deny=authz_package.AllowDeny.ALLOW,
+        allow_deny=authz.AllowDeny.ALLOW,
     )
 
     found = policy.check_token(token)
@@ -229,8 +227,8 @@ def test_roompolicy_check_token_w_acl_miss(default_allow_deny, token):
 @pytest.mark.parametrize(
     "default_allow_deny",
     [
-        authz_package.AllowDeny.ALLOW,
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
     ],
 )
 def test_roompolicy_check_token_w_acl_hit(default_allow_deny, token):
@@ -240,28 +238,28 @@ def test_roompolicy_check_token_w_acl_hit(default_allow_deny, token):
     )
     _entry = authz_schema.ACLEntry(
         room_policy=policy,
-        allow_deny=authz_package.AllowDeny.ALLOW,
+        allow_deny=authz.AllowDeny.ALLOW,
         everyone=True,
     )
 
     found = policy.check_token(token)
 
-    assert found == authz_package.AllowDeny.ALLOW
+    assert found == authz.AllowDeny.ALLOW
 
 
 @pytest.fixture
 def the_room_policy():
     return authz_schema.RoomPolicy(
         room_id=ROOM_ID,
-        default_allow_deny=authz_package.AllowDeny.DENY,
+        default_allow_deny=authz.AllowDeny.DENY,
     )
 
 
 def test_aclentry_rejects_invalid_jsonpath(the_room_policy):
-    with pytest.raises(authz_package.InvalidJSONPath):
+    with pytest.raises(authz.InvalidJSONPath):
         authz_schema.ACLEntry(
             room_policy=the_room_policy,
-            allow_deny=authz_package.AllowDeny.ALLOW,
+            allow_deny=authz.AllowDeny.ALLOW,
             json_path="not a path",
         )
 
@@ -269,19 +267,19 @@ def test_aclentry_rejects_invalid_jsonpath(the_room_policy):
 @pytest.mark.parametrize(
     "model_kwargs",
     [
-        {"everyone": True, "allow_deny": authz_package.AllowDeny.DENY},
-        {"authenticated": True, "allow_deny": authz_package.AllowDeny.ALLOW},
+        {"everyone": True, "allow_deny": authz.AllowDeny.DENY},
+        {"authenticated": True, "allow_deny": authz.AllowDeny.ALLOW},
         {
             "preferred_username": "phreddy",
-            "allow_deny": authz_package.AllowDeny.ALLOW,
+            "allow_deny": authz.AllowDeny.ALLOW,
         },
         {
             "email": "phreddy@example.com",
-            "allow_deny": authz_package.AllowDeny.ALLOW,
+            "allow_deny": authz.AllowDeny.ALLOW,
         },
         {
             "json_path": "$[?match($.foo, 'b.*z')]",
-            "allow_deny": authz_package.AllowDeny.ALLOW,
+            "allow_deny": authz.AllowDeny.ALLOW,
         },
     ],
 )
@@ -310,7 +308,7 @@ def _seed_stale_aclentry(the_session, the_room_policy):
     """
     entry = authz_schema.ACLEntry(
         room_policy=the_room_policy,
-        allow_deny=authz_package.AllowDeny.ALLOW,
+        allow_deny=authz.AllowDeny.ALLOW,
         json_path=JSON_PATH,
     )
     the_session.add(the_room_policy)
@@ -340,19 +338,19 @@ def test_aclentry_as_model_rejects_stale_json_path(
 @pytest.mark.parametrize(
     "model_kwargs",
     [
-        {"everyone": True, "allow_deny": authz_package.AllowDeny.DENY},
-        {"authenticated": True, "allow_deny": authz_package.AllowDeny.ALLOW},
+        {"everyone": True, "allow_deny": authz.AllowDeny.DENY},
+        {"authenticated": True, "allow_deny": authz.AllowDeny.ALLOW},
         {
             "preferred_username": "phreddy",
-            "allow_deny": authz_package.AllowDeny.ALLOW,
+            "allow_deny": authz.AllowDeny.ALLOW,
         },
         {
             "email": "phreddy@example.com",
-            "allow_deny": authz_package.AllowDeny.ALLOW,
+            "allow_deny": authz.AllowDeny.ALLOW,
         },
         {
             "json_path": "$[?match($.foo, 'b.*z')]",
-            "allow_deny": authz_package.AllowDeny.ALLOW,
+            "allow_deny": authz.AllowDeny.ALLOW,
         },
     ],
 )
@@ -396,13 +394,13 @@ def test_aclentry_flush_requires_exactly_one_discriminator(
 ):
     entry = authz_schema.ACLEntry(
         room_policy=the_room_policy,
-        allow_deny=authz_package.AllowDeny.ALLOW,
+        allow_deny=authz.AllowDeny.ALLOW,
         **kwargs,
     )
     the_session.add(the_room_policy)
     the_session.add(entry)
 
-    with pytest.raises(authz_package.ExactlyOneDiscriminator):
+    with pytest.raises(authz.ExactlyOneDiscriminator):
         the_session.commit()
 
 
@@ -410,8 +408,8 @@ def test_aclentry_flush_requires_exactly_one_discriminator(
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_package.AllowDeny.ALLOW,
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_wo_discrim(the_room_policy, allow_deny, token):
@@ -429,8 +427,8 @@ def test_aclentry_check_token_wo_discrim(the_room_policy, allow_deny, token):
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_package.AllowDeny.ALLOW,
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_w_everyone(the_room_policy, allow_deny, token):
@@ -456,8 +454,8 @@ def test_aclentry_check_token_w_everyone(the_room_policy, allow_deny, token):
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_package.AllowDeny.ALLOW,
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_w_authenticated(
@@ -493,8 +491,8 @@ def test_aclentry_check_token_w_authenticated(
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_package.AllowDeny.ALLOW,
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_w_jsonpath(
@@ -529,8 +527,8 @@ def test_aclentry_check_token_w_jsonpath(
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_package.AllowDeny.ALLOW,
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_w_preferred_username(
@@ -564,8 +562,8 @@ def test_aclentry_check_token_w_preferred_username(
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_package.AllowDeny.ALLOW,
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_w_email(

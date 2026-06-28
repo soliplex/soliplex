@@ -12,7 +12,7 @@ from haiku.rag.skills import rag as hr_skills_rag
 from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
@@ -1525,7 +1525,7 @@ def test_aclentry_rejects_invalid_jsonpath():
     causes = [
         err.get("ctx", {}).get("error") for err in exc_info.value.errors()
     ]
-    assert any(isinstance(c, authz_package.InvalidJSONPath) for c in causes)
+    assert any(isinstance(c, authz.InvalidJSONPath) for c in causes)
 
 
 @pytest.mark.parametrize(
@@ -1548,9 +1548,7 @@ def test_aclentry_requires_exactly_one_discriminator(kwargs):
     causes = [
         err.get("ctx", {}).get("error") for err in exc_info.value.errors()
     ]
-    assert any(
-        isinstance(c, authz_package.ExactlyOneDiscriminator) for c in causes
-    )
+    assert any(isinstance(c, authz.ExactlyOneDiscriminator) for c in causes)
 
 
 @pytest.mark.parametrize(

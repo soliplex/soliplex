@@ -7,7 +7,7 @@ import typer
 from rich import console
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex.authz import persistence as authz_persistence
 from soliplex.authz import schema as authz_schema
@@ -53,8 +53,8 @@ def _check_ram_dburi(dburi: str, command: str):
 
 
 @contextlib.asynccontextmanager
-async def _authz_policy(dburi):
-    """Yield an async 'AuthorizationPolicy', disposing its engine on exit.
+async def _authz_session(dburi):
+    """Yield an async session over the authz DB, disposing its engine.
 
     Builds a fresh async engine per call via
     'installation._create_async_engine' -- the same factory the app's
@@ -70,9 +70,23 @@ async def _authz_policy(dburi):
         async with engine.begin() as connection:
             await connection.run_sync(authz_schema.Base.metadata.create_all)
         async with sqla_asyncio.AsyncSession(bind=engine) as session:
-            yield authz_persistence.AuthorizationPolicy(session)
+            yield session
     finally:
         await engine.dispose()
+
+
+@contextlib.asynccontextmanager
+async def _admin_user_policy(dburi):
+    """Yield an async 'AdminUserPolicy' (see '_authz_session')."""
+    async with _authz_session(dburi) as session:
+        yield authz_persistence.AdminUserPolicy(session)
+
+
+@contextlib.asynccontextmanager
+async def _room_authz_policy(dburi):
+    """Yield an async 'RoomAuthorizationPolicy' (see '_authz_session')."""
+    async with _authz_session(dburi) as session:
+        yield authz_persistence.RoomAuthorizationPolicy(session)
 
 
 def _check_exactly_one_discriminator(
@@ -110,7 +124,7 @@ def _resolve_json_path(
 
     Collapses the OIDC 'preferred_username' / 'email' claim shortcuts
     into the canonical 'authz.token_field_json_path' form, then
-    validates the result via 'authz_package.validate_json_path'.
+    validates the result via 'authz.validate_json_path'.
 
     The loaded installation is taken as a required positional argument
     -- its presence at the call site enforces the ordering constraint
@@ -127,18 +141,18 @@ def _resolve_json_path(
     Raises 'typer.Exit(1)' when 'validate_json_path' rejects the result.
     """
     if preferred_username is not None:
-        json_path = authz_package.token_field_json_path(
+        json_path = authz.token_field_json_path(
             "preferred_username", preferred_username
         )
     elif email is not None:
-        json_path = authz_package.token_field_json_path("email", email)
+        json_path = authz.token_field_json_path("email", email)
 
     if json_path is None or allow_invalid:
         return json_path
 
     try:
-        authz_package.validate_json_path(json_path)
-    except authz_package.InvalidJSONPath as exc:
+        authz.validate_json_path(json_path)
+    except authz.InvalidJSONPath as exc:
         the_console.rule("Invalid JSONPath")
         the_console.print(str(exc))
         raise typer.Exit(1) from exc

@@ -17,7 +17,7 @@ from sqlalchemy.pool import NullPool
 
 from soliplex import agents
 from soliplex import agui as agui_package
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import loggers
 from soliplex import mcp_server
 from soliplex import secrets
@@ -270,7 +270,7 @@ class Installation:
         self,
         *,
         user: dict,
-        the_authz_policy: authz_package.AuthorizationPolicy = None,
+        the_room_authz: authz.RoomAuthorizationPolicy = None,
         the_logger: loggers.LogWrapper = None,
     ) -> config_rooms.RoomConfigMap:
         """Return room configs available to the user"""
@@ -285,9 +285,9 @@ class Installation:
 
         configs = self._config.room_configs
 
-        if the_authz_policy is not None:
+        if the_room_authz is not None:
             logger.debug(loggers.AUTHZ_FILTERING_ROOMS)
-            allowed = await the_authz_policy.filter_room_ids(
+            allowed = await the_room_authz.filter_room_ids(
                 configs.keys(),
                 user_token=user,
             )
@@ -307,7 +307,7 @@ class Installation:
         *,
         room_id: str,
         user: dict,
-        the_authz_policy: authz_package.AuthorizationPolicy = None,
+        the_room_authz: authz.RoomAuthorizationPolicy = None,
         the_logger: loggers.LogWrapper = None,
     ) -> config_rooms.RoomConfig:
         """Return a room configs IFF available to the user"""
@@ -320,8 +320,8 @@ class Installation:
         else:
             logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME, user=user)
 
-        if the_authz_policy is not None:
-            if not await the_authz_policy.check_room_access(
+        if the_room_authz is not None:
+            if not await the_room_authz.check_room_access(
                 room_id=room_id,
                 user_token=user,
             ):
@@ -370,13 +370,13 @@ class Installation:
         *,
         room_id: str,
         user: dict,
-        the_authz_policy: authz_package.AuthorizationPolicy = None,
+        the_room_authz: authz.RoomAuthorizationPolicy = None,
         the_logger: loggers.LogWrapper = None,
     ) -> pydantic_ai.Agent:
         room_config = await self.get_room_config(
             room_id=room_id,
             user=user,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
         mcpcts_configs = room_config.mcp_client_toolset_configs
@@ -412,14 +412,14 @@ class Installation:
         room_id: str,
         user: dict,
         the_threads: agui_package.ThreadStorage = None,
-        the_authz_policy: authz_package.AuthorizationPolicy = None,
+        the_room_authz: authz.RoomAuthorizationPolicy = None,
         run_agent_input: agui_core.RunAgentInput = None,
         the_logger: loggers.LogWrapper = None,
     ) -> pydantic_ai.Agent:
         room_config = await self.get_room_config(
             room_id=room_id,
             user=user,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
 
@@ -522,7 +522,7 @@ def apply_logfire_configuration(
 
 
 def add_user_as_admin(connection, *, email):
-    json_path = authz_package.token_field_json_path("email", email)
+    json_path = authz.token_field_json_path("email", email)
     insert_stmt = sqla_sql.insert(authz_schema.AdminUser).values(
         json_path=json_path,
     )

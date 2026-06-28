@@ -7,7 +7,7 @@ import fastapi
 import pytest
 
 from soliplex import agui as agui_package
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -125,9 +125,7 @@ async def test_get_uploads_room_only(
     else:
         the_installation.rooms_upload_path = None
 
-    the_authz_policy = mock.create_autospec(
-        authz_package.AuthorizationPolicy,
-    )
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
@@ -135,7 +133,7 @@ async def test_get_uploads_room_only(
             request=request,
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -215,9 +213,7 @@ async def test_get_uploads_room_filename(
     else:
         the_installation.rooms_upload_path = None
 
-    the_authz_policy = mock.create_autospec(
-        authz_package.AuthorizationPolicy,
-    )
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
@@ -225,7 +221,7 @@ async def test_get_uploads_room_filename(
             room_id=TEST_ROOM_ID,
             filename=TEST_FILENAME,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -281,10 +277,9 @@ async def test_post_uploads_room(
     else:
         the_installation.rooms_upload_path = None
 
-    the_authz_policy = mock.create_autospec(
-        authz_package.AuthorizationPolicy,
-    )
-    the_authz_policy.check_admin_access.return_value = w_admin_access
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
 
@@ -294,7 +289,8 @@ async def test_post_uploads_room(
                 room_id=TEST_ROOM_ID,
                 upload_file=upload_file,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
                 the_authz_logger=the_authz_logger,
@@ -313,7 +309,8 @@ async def test_post_uploads_room(
                 room_id=TEST_ROOM_ID,
                 upload_file=upload_file,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
                 the_authz_logger=the_authz_logger,
@@ -400,9 +397,7 @@ async def test_get_uploads_room_thread_only(
     else:
         the_installation.threads_upload_path = None
 
-    the_authz_policy = mock.create_autospec(
-        authz_package.AuthorizationPolicy,
-    )
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
@@ -411,7 +406,7 @@ async def test_get_uploads_room_thread_only(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -492,9 +487,7 @@ async def test_get_uploads_room_thread_filename(
     else:
         the_installation.threads_upload_path = None
 
-    the_authz_policy = mock.create_autospec(
-        authz_package.AuthorizationPolicy,
-    )
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
@@ -503,7 +496,7 @@ async def test_get_uploads_room_thread_filename(
             thread_id=TEST_THREAD_ID,
             filename=TEST_FILENAME,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -568,9 +561,7 @@ async def test_post_uploads_room_thread(
     else:
         the_installation.threads_upload_path = None
 
-    the_authz_policy = mock.create_autospec(
-        authz_package.AuthorizationPolicy,
-    )
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
     the_threads.get_thread.side_effect = tsgt_side_effect
 
@@ -581,7 +572,7 @@ async def test_post_uploads_room_thread(
             upload_file=upload_file,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -684,9 +675,7 @@ async def test_get_workdirs_room_thread_run_only(
     else:
         the_installation.sandbox_workdirs_path = None
 
-    the_authz_policy = mock.create_autospec(
-        authz_package.AuthorizationPolicy,
-    )
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
@@ -696,7 +685,7 @@ async def test_get_workdirs_room_thread_run_only(
             thread_id=TEST_THREAD_ID,
             run_id=TEST_RUN_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -783,9 +772,7 @@ async def test_get_workdirs_room_thread_run_filename(
     else:
         the_installation.sandbox_workdirs_path = None
 
-    the_authz_policy = mock.create_autospec(
-        authz_package.AuthorizationPolicy,
-    )
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
@@ -795,7 +782,7 @@ async def test_get_workdirs_room_thread_run_filename(
             run_id=TEST_RUN_ID,
             filename=TEST_FILENAME,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )

@@ -4,7 +4,7 @@ import dataclasses
 import pathlib
 import typing
 
-from soliplex import authz as authz_package
+from soliplex import authz
 
 from . import _utils
 from . import agents as config_agents
@@ -309,9 +309,7 @@ class InstallationConfigMeta:
 
         self.jsonpath_functions = list(self.jsonpath_functions)
         for jf_meta in self.jsonpath_functions:
-            authz_package.register_jsonpath_function(
-                jf_meta.name, jf_meta.func
-            )
+            authz.register_jsonpath_function(jf_meta.name, jf_meta.func)
 
     @property
     def as_yaml(self) -> dict:
@@ -381,9 +379,7 @@ class InstallationConfigMeta:
             for kind, r_func in secret_getter_registry.items()
         ]
 
-        jsonpath_function_registry = (
-            authz_package.registered_jsonpath_functions()
-        )
+        jsonpath_function_registry = authz.registered_jsonpath_functions()
         jsonpath_function_entries = [
             {"name": name, "func": _utils._dotted_name(func)}
             for name, func in jsonpath_function_registry.items()

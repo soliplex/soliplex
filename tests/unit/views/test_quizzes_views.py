@@ -3,7 +3,7 @@ from unittest import mock
 import fastapi
 import pytest
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -67,7 +67,7 @@ def test_quiz(qa_question, mc_question):
 @pytest.mark.parametrize("w_miss", [None, "room", "quiz"])
 async def test_get_quiz(test_quiz, w_miss):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_miss == "room":
@@ -78,7 +78,7 @@ async def test_get_quiz(test_quiz, w_miss):
                 room_id=TEST_ROOM_ID,
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -100,7 +100,7 @@ async def test_get_quiz(test_quiz, w_miss):
                     room_id=TEST_ROOM_ID,
                     quiz_id=TEST_QUIZ_ID,
                     the_installation=the_installation,
-                    the_authz_policy=the_authz_policy,
+                    the_room_authz=the_room_authz,
                     the_user_claims=THE_USER_CLAIMS,
                     the_logger=the_logger,
                 )
@@ -118,7 +118,7 @@ async def test_get_quiz(test_quiz, w_miss):
                 room_id=TEST_ROOM_ID,
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -129,7 +129,7 @@ async def test_get_quiz(test_quiz, w_miss):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(loggers.QUIZ_GET_QUIZ)
@@ -140,7 +140,7 @@ async def test_get_quiz(test_quiz, w_miss):
 @mock.patch("soliplex.quizzes.check_answer")
 async def test_post_quiz_question(ca, test_quiz, w_miss):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
     answer = models.QuizAnswer(text="Answer")
 
@@ -154,7 +154,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
                 question_uuid=QA_QUESTION_UUID,
                 answer=answer,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -178,7 +178,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
                     question_uuid=QA_QUESTION_UUID,
                     answer=answer,
                     the_installation=the_installation,
-                    the_authz_policy=the_authz_policy,
+                    the_room_authz=the_room_authz,
                     the_user_claims=THE_USER_CLAIMS,
                     the_logger=the_logger,
                 )
@@ -207,7 +207,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
                         question_uuid=QA_QUESTION_UUID,
                         answer=answer,
                         the_installation=the_installation,
-                        the_authz_policy=the_authz_policy,
+                        the_room_authz=the_room_authz,
                         the_user_claims=THE_USER_CLAIMS,
                         the_logger=the_logger,
                     )
@@ -225,7 +225,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
                     question_uuid=QA_QUESTION_UUID,
                     answer=answer,
                     the_installation=the_installation,
-                    the_authz_policy=the_authz_policy,
+                    the_room_authz=the_room_authz,
                     the_user_claims=THE_USER_CLAIMS,
                     the_logger=the_logger,
                 )
@@ -241,7 +241,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(loggers.QUIZ_POST_QUIZ_QUESTION)

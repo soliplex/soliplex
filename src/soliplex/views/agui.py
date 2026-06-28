@@ -16,7 +16,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
 from soliplex import authn
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -33,7 +33,7 @@ router = fastapi.APIRouter(tags=["rooms"])
 
 depend_the_installation = installation.depend_the_installation
 depend_the_threads = agui_package.depend_the_threads
-depend_the_authz = authz_package.depend_the_authz_policy
+depend_the_room_authz = authz.depend_the_room_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
 
@@ -42,7 +42,7 @@ async def _check_user_in_room(
     *,
     room_id: str,
     the_installation: installation.Installation,
-    the_authz_policy: authz_package.AuthorizationPolicy,
+    the_room_authz: authz.RoomAuthorizationPolicy,
     the_user_claims: authn.UserClaims,
     the_logger: loggers.LogWrapper,
 ) -> config_rooms.RoomConfig:
@@ -56,7 +56,7 @@ async def _check_user_in_room(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:
@@ -73,7 +73,7 @@ async def _check_user_room_agent(
     *,
     room_id: str,
     the_installation: installation.Installation,
-    the_authz_policy: authz_package.AuthorizationPolicy,
+    the_room_authz: authz.RoomAuthorizationPolicy,
     the_user_claims: authn.UserClaims,
     the_logger: loggers.LogWrapper,
 ) -> tuple[models.UserProfile, pydantic_ai.Agent]:
@@ -87,7 +87,7 @@ async def _check_user_room_agent(
         agent = await the_installation.get_agent_for_room(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:
@@ -106,7 +106,7 @@ async def get_room_agui(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Threads:
@@ -117,7 +117,7 @@ async def get_room_agui(
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -163,7 +163,7 @@ async def get_room_agui_thread_id(
     thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Thread:
@@ -175,7 +175,7 @@ async def get_room_agui_thread_id(
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -223,7 +223,7 @@ async def get_room_agui_thread_id_run_id(
     run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Run:
@@ -236,7 +236,7 @@ async def get_room_agui_thread_id_run_id(
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -273,7 +273,7 @@ async def post_room_agui(
     new_thread_request: models.AGUI_NewThreadRequest,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Thread:
@@ -288,7 +288,7 @@ async def post_room_agui(
     room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -360,7 +360,7 @@ async def post_room_agui_thread_id(
     new_run_request: models.AGUI_NewRunRequest,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Run:
@@ -372,7 +372,7 @@ async def post_room_agui_thread_id(
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -427,7 +427,7 @@ async def post_room_agui_thread_id_meta(
     new_metadata: models.AGUI_ThreadMetadata,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
@@ -444,7 +444,7 @@ async def post_room_agui_thread_id_meta(
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -479,7 +479,7 @@ async def delete_room_agui_thread_id(
     thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
@@ -491,7 +491,7 @@ async def delete_room_agui_thread_id(
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -792,7 +792,7 @@ async def post_room_agui_thread_id_run_id(
     run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> responses.StreamingResponse:
@@ -821,7 +821,7 @@ async def post_room_agui_thread_id_run_id(
         await _check_user_in_room(
             room_id=room_id,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=the_user_claims,
             the_logger=the_logger,
         )
@@ -832,7 +832,7 @@ async def post_room_agui_thread_id_run_id(
                 await the_installation.get_agent_for_room(
                     room_id=room_id,
                     user=the_user_claims,
-                    the_authz_policy=the_authz_policy,
+                    the_room_authz=the_room_authz,
                     the_logger=the_logger,
                 )
             ),
@@ -871,7 +871,7 @@ async def post_room_agui_thread_id_run_id(
     user, agent = await _check_user_room_agent(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -981,7 +981,7 @@ async def post_room_agui_thread_id_run_id_meta(
     new_metadata: models.AGUI_RunMetadata,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
@@ -999,7 +999,7 @@ async def post_room_agui_thread_id_run_id_meta(
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -1038,7 +1038,7 @@ async def get_room_agui_thread_id_run_id_feedback(
     run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_RunFeedback | None:
@@ -1051,7 +1051,7 @@ async def get_room_agui_thread_id_run_id_feedback(
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -1087,7 +1087,7 @@ async def post_room_agui_thread_id_run_id_feedback(
     new_feedback: models.AGUI_RunFeedback,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
@@ -1103,7 +1103,7 @@ async def post_room_agui_thread_id_run_id_feedback(
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -1133,7 +1133,7 @@ async def post_agui_recent_feedback(
     query_terms: models.AGUI_FeedbackQueryTerms,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> list[models.AGUI_RunFeedback]:
@@ -1160,7 +1160,7 @@ async def post_agui_recent_room_feedback(
     query_terms: models.AGUI_FeedbackQueryTerms,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> list[models.AGUI_RunFeedback]:
@@ -1188,7 +1188,7 @@ async def post_agui_recent_user_feedback(
     query_terms: models.AGUI_FeedbackQueryTerms,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> list[models.AGUI_RunFeedback]:
@@ -1215,7 +1215,7 @@ async def post_agui_review_recent_feedback(
     review: models.AGUI_RunFeedbackReview,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_RunFeedbackHistoryEntry:
@@ -1242,7 +1242,7 @@ async def post_agui_resolve_recent_feedback(
     resolution: models.AGUI_RunFeedbackReview,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_RunFeedbackHistoryEntry:

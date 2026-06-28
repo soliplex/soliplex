@@ -6,7 +6,7 @@ from unittest import mock
 import pytest
 import typer
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex.cli import cli_util
 from soliplex.config import installation as config_installation
@@ -116,18 +116,28 @@ def test__check_ram_dburi(the_console, dburi, expectation):
 
 
 @pytest.mark.anyio
-async def test__authz_policy(tmp_path):
+async def test__admin_user_policy(tmp_path):
     db_path = tmp_path / "authz.sqlite"
     dburi = f"sqlite+aiosqlite:///{db_path}"
-    json_path = authz_package.token_field_json_path(
-        "email", "alice@example.com"
-    )
+    json_path = authz.token_field_json_path("email", "alice@example.com")
 
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._admin_user_policy(dburi) as policy:
         await policy.add_admin_user_discriminator(json_path)
         found = await policy.list_admin_user_discriminators()
 
     assert found == [json_path]
+
+
+@pytest.mark.anyio
+async def test__room_authz_policy(tmp_path):
+    db_path = tmp_path / "authz.sqlite"
+    dburi = f"sqlite+aiosqlite:///{db_path}"
+
+    async with cli_util._room_authz_policy(dburi) as policy:
+        await policy.set_room_default("faux", authz.AllowDeny.DENY)
+        found = await policy.list_room_policies()
+
+    assert [p.room_id for p in found] == ["faux"]
 
 
 SUMMARY = "'--a', '--b', or '--c'"
@@ -276,10 +286,10 @@ def test__resolve_json_path_w_meta_config_filter_function(
 
     # Sanity check: without the registration, the bare query fails to
     # compile (and would fall through to 'typer.Exit(1)').
-    with pytest.raises(authz_package.InvalidJSONPath):
-        authz_package.validate_json_path(json_path)
+    with pytest.raises(authz.InvalidJSONPath):
+        authz.validate_json_path(json_path)
 
-    authz_package.register_jsonpath_function("filter_func", filter_func)
+    authz.register_jsonpath_function("filter_func", filter_func)
 
     found = cli_util._resolve_json_path(
         mock.sentinel.the_installation,

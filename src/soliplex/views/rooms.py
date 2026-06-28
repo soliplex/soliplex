@@ -7,7 +7,7 @@ from haiku.rag import client as hr_client
 from haiku.rag.store.models import chunk as hr_chunk
 
 from soliplex import authn
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import mcp_auth
@@ -18,7 +18,7 @@ from soliplex import views
 router = fastapi.APIRouter(tags=["rooms"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_authz = authz_package.depend_the_authz_policy
+depend_the_room_authz = authz.depend_the_room_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
 
@@ -27,7 +27,7 @@ depend_the_logger = views.depend_the_logger
 @router.get("/v1/rooms", summary="Get available rooms")
 async def get_rooms(
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.ConfiguredRooms:
@@ -36,7 +36,7 @@ async def get_rooms(
 
     room_configs = await the_installation.get_room_configs(
         user=the_user_claims,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
 
@@ -56,7 +56,7 @@ async def get_rooms(
 async def get_room(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.Room:
@@ -67,7 +67,7 @@ async def get_room(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:
@@ -90,7 +90,7 @@ async def get_room(
 async def get_room_bg_image(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
@@ -101,7 +101,7 @@ async def get_room_bg_image(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:
@@ -129,7 +129,7 @@ async def get_room_bg_image(
 async def get_room_mcp_token(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.MCPToken:
@@ -140,7 +140,7 @@ async def get_room_mcp_token(
         _room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:
@@ -166,7 +166,7 @@ async def get_room_mcp_token(
 async def get_room_documents(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.RoomRAGDocuments:
@@ -177,7 +177,7 @@ async def get_room_documents(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:
@@ -223,7 +223,7 @@ async def get_chunk_visualization(
     room_id: str,
     chunk_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.ChunkVisualization:
@@ -234,7 +234,7 @@ async def get_chunk_visualization(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:
@@ -301,7 +301,7 @@ async def get_search(
     room_id: str,
     search_type: hr_chunk.SearchType = "hybrid",
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.SearchResults:
@@ -312,7 +312,7 @@ async def get_search(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:

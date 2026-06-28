@@ -12,7 +12,7 @@ from ag_ui import core as agui_core
 from sqlalchemy import exc as sqla_exc
 
 from soliplex import agui as agui_package
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -211,7 +211,7 @@ def raises_httpexc(*, match, code) -> pytest.raises:
 )
 async def test__check_user_in_room(w_miss, expectation):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_miss:
@@ -221,7 +221,7 @@ async def test__check_user_in_room(w_miss, expectation):
         room_config = await agui_views._check_user_in_room(
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -232,7 +232,7 @@ async def test__check_user_in_room(w_miss, expectation):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
 
@@ -247,7 +247,7 @@ async def test__check_user_in_room(w_miss, expectation):
 )
 async def test__check_user_room_agent(w_miss, expectation):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_miss:
@@ -257,7 +257,7 @@ async def test__check_user_room_agent(w_miss, expectation):
         found = await agui_views._check_user_room_agent(
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -270,7 +270,7 @@ async def test__check_user_room_agent(w_miss, expectation):
     the_installation.get_agent_for_room.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
 
@@ -288,7 +288,7 @@ async def test_get_room_agui_only(
     cuir.return_value = room_config
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_thread_meta:
@@ -312,7 +312,7 @@ async def test_get_room_agui_only(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_threads=the_threads,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -341,7 +341,7 @@ async def test_get_room_agui_only(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -423,7 +423,7 @@ async def test_get_room_agui_thread_id_only(
         test_run.parent_run_id = None
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if tsgt_side_effect is not None:
@@ -437,7 +437,7 @@ async def test_get_room_agui_thread_id_only(
             thread_id=TEST_THREAD_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -473,7 +473,7 @@ async def test_get_room_agui_thread_id_only(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -557,7 +557,7 @@ async def test_get_room_agui_thread_id_run_id(
     )
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if tsgr_side_effect is not None:
@@ -572,7 +572,7 @@ async def test_get_room_agui_thread_id_run_id(
             run_id=TEST_RUN_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -603,7 +603,7 @@ async def test_get_room_agui_thread_id_run_id(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -665,7 +665,7 @@ async def test_post_room_agui_only(
         new_thread_request = models.AGUI_NewThreadRequest()
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     the_threads.new_thread.return_value = test_thread
@@ -688,7 +688,7 @@ async def test_post_room_agui_only(
         new_thread_request=new_thread_request,
         the_installation=the_installation,
         the_threads=the_threads,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -721,7 +721,7 @@ async def test_post_room_agui_only(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -798,7 +798,7 @@ async def test_post_room_agui_thread_id_only(
     new_run_request = models.AGUI_NewRunRequest.model_validate(nrr)
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
@@ -808,7 +808,7 @@ async def test_post_room_agui_thread_id_only(
             new_run_request=new_run_request,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -836,7 +836,7 @@ async def test_post_room_agui_thread_id_only(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -880,7 +880,7 @@ async def test_post_room_agui_thread_id_meta(
         r_meta = models.AGUI_ThreadMetadata()
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     the_threads.update_thread_metadata.side_effect = tsutm_side_effect
@@ -892,7 +892,7 @@ async def test_post_room_agui_thread_id_meta(
             new_metadata=r_meta,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -910,7 +910,7 @@ async def test_post_room_agui_thread_id_meta(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -940,7 +940,7 @@ async def test_delete_room_agui_thread_id(
     cuir.return_value = room_config
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     the_threads.delete_thread.side_effect = tsdr_side_effect
@@ -951,7 +951,7 @@ async def test_delete_room_agui_thread_id(
             thread_id=TEST_THREAD_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -970,7 +970,7 @@ async def test_delete_room_agui_thread_id(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -1505,7 +1505,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_agent_for_room.return_value = agent
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     exp_deps = the_installation.get_agent_deps_for_room.return_value
@@ -1533,7 +1533,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             run_id=TEST_RUN_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -1626,7 +1626,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         cura.assert_called_once_with(
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -1662,9 +1662,7 @@ async def test_post_room_agui_reconnect(
     the_installation.get_agent_for_room = mock.AsyncMock(
         return_value=agent,
     )
-    the_authz_policy = mock.create_autospec(
-        authz_package.AuthorizationPolicy,
-    )
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     aga.from_request = mock.AsyncMock()
@@ -1688,7 +1686,7 @@ async def test_post_room_agui_reconnect(
         run_id=TEST_RUN_ID_UUID,
         the_installation=the_installation,
         the_threads=the_threads,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -1729,7 +1727,7 @@ async def test_post_room_agui_reconnect(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -1771,7 +1769,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
         r_meta = models.AGUI_RunMetadata()
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     the_threads.update_run_metadata.side_effect = tsurm_side_effect
@@ -1784,7 +1782,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
             new_metadata=r_meta,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -1803,7 +1801,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -1834,7 +1832,7 @@ async def test_get_room_agui_thread_id_run_id_feedback(
     cuir.return_value = room_config
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if tsgrf_side_effect is None:
@@ -1853,7 +1851,7 @@ async def test_get_room_agui_thread_id_run_id_feedback(
             run_id=TEST_RUN_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -1870,7 +1868,7 @@ async def test_get_room_agui_thread_id_run_id_feedback(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -1905,7 +1903,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     )
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     the_threads.save_run_feedback.side_effect = tssrf_side_effect
@@ -1918,7 +1916,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
             new_feedback=r_feedback,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -1938,7 +1936,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -1971,7 +1969,7 @@ async def test_post_agui_recent_feedback(
     )
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     tslrrf = the_threads.list_recent_run_feedback = mock.AsyncMock()
@@ -1992,7 +1990,7 @@ async def test_post_agui_recent_feedback(
             query_terms=query_terms,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -2035,7 +2033,7 @@ async def test_post_agui_recent_room_feedback(
     )
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     tslrrf = the_threads.list_recent_run_feedback = mock.AsyncMock()
@@ -2057,7 +2055,7 @@ async def test_post_agui_recent_room_feedback(
             query_terms=query_terms,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -2101,7 +2099,7 @@ async def test_post_agui_recent_user_feedback(
     )
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     tslrrf = the_threads.list_recent_run_feedback = mock.AsyncMock()
@@ -2123,7 +2121,7 @@ async def test_post_agui_recent_user_feedback(
             query_terms=query_terms,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -2162,7 +2160,7 @@ async def test_post_agui_review_recent_feedback(
     since_kw,
 ):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     review_payload = models.AGUI_RunFeedbackReview(
@@ -2195,7 +2193,7 @@ async def test_post_agui_review_recent_feedback(
             review=review_payload,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -2236,7 +2234,7 @@ async def test_post_agui_resolve_recent_feedback(
     since_kw,
 ):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     resolution_payload = models.AGUI_RunFeedbackReview(
@@ -2269,7 +2267,7 @@ async def test_post_agui_resolve_recent_feedback(
             resolution=resolution_payload,
             the_installation=the_installation,
             the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )

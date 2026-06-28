@@ -9,7 +9,7 @@ from sqlalchemy import schema as sqla_schema
 from sqlalchemy.ext import asyncio as sqla_asyncio
 from sqlalchemy.sql import sqltypes as sqla_sqltypes
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import models
 from soliplex import util
 from soliplex.config import installation as config_installation
@@ -72,17 +72,15 @@ class AdminUser(Base):
 
     @sqla_orm.validates("json_path")
     def _check_json_path(self, _key, value):
-        return authz_package.validate_json_path(value)
+        return authz.validate_json_path(value)
 
     def check_token(
         self,
-        user_token: authz_package.UserToken | None,
+        user_token: authz.UserToken | None,
     ) -> bool:
         """Does 'user_token' match our JSONPath query?"""
         token = user_token or {}
-        match = authz_package.the_jsonpath_environment.match(
-            self.json_path, token
-        )
+        match = authz.the_jsonpath_environment.match(self.json_path, token)
         return match is not None
 
 
@@ -109,8 +107,8 @@ class RoomPolicy(Base):
         default=_timestamp,
     )
 
-    default_allow_deny: Mapped[authz_package.AllowDeny] = mapped_column(
-        default=authz_package.AllowDeny.DENY,
+    default_allow_deny: Mapped[authz.AllowDeny] = mapped_column(
+        default=authz.AllowDeny.DENY,
     )
 
     acl_entries: Mapped[list[ACLEntry]] = relationship(
@@ -155,8 +153,8 @@ class RoomPolicy(Base):
 
     def check_token(
         self,
-        user_token: authz_package.UserToken | None,
-    ) -> authz_package.AllowDeny:
+        user_token: authz.UserToken | None,
+    ) -> authz.AllowDeny:
         """Check the supplied token against our ACL entries
 
         If one of them returns non-None, return that value.
@@ -191,7 +189,7 @@ class ACLEntry(Base):
         default=_timestamp,
     )
 
-    allow_deny: Mapped[authz_package.AllowDeny]
+    allow_deny: Mapped[authz.AllowDeny]
 
     # Discriminators
     everyone: Mapped[bool] = mapped_column(default=False)
@@ -200,7 +198,7 @@ class ACLEntry(Base):
 
     @sqla_orm.validates("json_path")
     def _check_json_path(self, _key, value):
-        return authz_package.validate_json_path(value)
+        return authz.validate_json_path(value)
 
     @classmethod
     def from_model(cls, model: models.ACLEntry):
@@ -210,13 +208,11 @@ class ACLEntry(Base):
         # public model's validator guarantees exactly one discriminator,
         # so no shadowing is possible here.
         if model.preferred_username is not None:
-            json_path = authz_package.token_field_json_path(
+            json_path = authz.token_field_json_path(
                 "preferred_username", model.preferred_username
             )
         elif model.email is not None:
-            json_path = authz_package.token_field_json_path(
-                "email", model.email
-            )
+            json_path = authz.token_field_json_path("email", model.email)
         else:
             json_path = model.json_path
         return cls(
@@ -232,7 +228,7 @@ class ACLEntry(Base):
         # queries as 'json_path'.
         kwargs: dict[str, str] = {}
         if self.json_path is not None:
-            parsed = authz_package.parse_token_field_json_path(self.json_path)
+            parsed = authz.parse_token_field_json_path(self.json_path)
             if parsed is not None and parsed[0] in (
                 "preferred_username",
                 "email",
@@ -264,8 +260,8 @@ class ACLEntry(Base):
 
     def check_token(
         self,
-        user_token: authz_package.UserToken | None,
-    ) -> authz_package.AllowDeny | None:
+        user_token: authz.UserToken | None,
+    ) -> authz.AllowDeny | None:
         """Check the supplied token against our discriminators
 
         If 'user_token' matches one of our discriminators, return our flag
@@ -282,7 +278,7 @@ class ACLEntry(Base):
         token = user_token or {}
 
         if self.json_path is not None:
-            jp_match = authz_package.the_jsonpath_environment.match(
+            jp_match = authz.the_jsonpath_environment.match(
                 self.json_path, token
             )
             if jp_match is not None:
@@ -301,7 +297,7 @@ class ACLEntry(Base):
             if is_set
         ]
         if len(active) != 1:
-            raise authz_package.ExactlyOneDiscriminator(active)
+            raise authz.ExactlyOneDiscriminator(active)
 
 
 @sqlalchemy.event.listens_for(ACLEntry, "before_insert")

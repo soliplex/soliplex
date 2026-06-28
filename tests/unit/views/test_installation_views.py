@@ -31,8 +31,8 @@ async def test_get_installation(fc, w_admin_access):
 
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
-    the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
-    the_authz_policy.check_admin_access.return_value = w_admin_access
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
 
@@ -40,7 +40,7 @@ async def test_get_installation(fc, w_admin_access):
         with pytest.raises(fastapi.HTTPException) as exc:
             await installation_views.get_installation(
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -54,7 +54,7 @@ async def test_get_installation(fc, w_admin_access):
     else:
         found = await installation_views.get_installation(
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -63,7 +63,7 @@ async def test_get_installation(fc, w_admin_access):
 
         fc.assert_called_once_with(i_config)
 
-    the_authz_policy.check_admin_access.assert_awaited_once_with(
+    the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS
     )
 
@@ -74,8 +74,8 @@ async def test_get_installation_versions_w_error(sp):
     sp.check_output.side_effect = ValueError("testing")
 
     the_installation = object()
-    the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
-    the_authz_policy.check_admin_access.return_value = True
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = True
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
 
@@ -85,14 +85,14 @@ async def test_get_installation_versions_w_error(sp):
     with pytest.raises(fastapi.HTTPException, check=_check) as exc:
         await installation_views.get_installation_versions(
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
 
     assert exc.value.detail == loggers.INST_SUBPROCESS_PIP
 
-    the_authz_policy.check_admin_access.assert_awaited_once_with(
+    the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
     )
 
@@ -124,8 +124,8 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
     sp.check_output.return_value = json.dumps(pip_manifest).encode("utf8")
 
     the_installation = object()
-    the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
-    the_authz_policy.check_admin_access.return_value = w_admin_access
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
 
@@ -133,7 +133,7 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
         with pytest.raises(fastapi.HTTPException) as exc:
             await installation_views.get_installation_versions(
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -147,14 +147,14 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
     else:
         found = await installation_views.get_installation_versions(
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
 
         assert found == expected
 
-    the_authz_policy.check_admin_access.assert_awaited_once_with(
+    the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
     )
 
@@ -174,8 +174,8 @@ async def test_get_installation_providers(w_admin_access):
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.all_provider_info = PROVIDER_INFO
-    the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
-    the_authz_policy.check_admin_access.return_value = w_admin_access
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
 
@@ -183,7 +183,7 @@ async def test_get_installation_providers(w_admin_access):
         with pytest.raises(fastapi.HTTPException) as exc:
             await installation_views.get_installation_providers(
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -197,14 +197,14 @@ async def test_get_installation_providers(w_admin_access):
     else:
         found = await installation_views.get_installation_providers(
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
 
         assert found == PROVIDER_INFO
 
-    the_authz_policy.check_admin_access.assert_awaited_once_with(
+    the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
     )
 
@@ -223,8 +223,8 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
     gm.git_tag = GIT_TAG
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
-    the_authz_policy.check_admin_access.return_value = w_admin_access
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
 
@@ -232,7 +232,7 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
         with pytest.raises(fastapi.HTTPException) as exc:
             await installation_views.get_installation_git_metadata(
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -246,7 +246,7 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
     else:
         found = await installation_views.get_installation_git_metadata(
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
