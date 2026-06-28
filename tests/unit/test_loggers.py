@@ -8,6 +8,12 @@ from soliplex import installation
 from soliplex import loggers
 
 LOGGER_NAME = "test-logger"
+CLAIMS = {"email": "phreddy@example.com"}
+SCOPE_LIFETIME = loggers.AuditLogScopes.PROCESS_LIFETIME
+SCOPE_ROOM_AUTHZ = loggers.AuditLogScopes.ROOM_AUTHZ
+SCOPE_ADMIN_USERS = loggers.AuditLogScopes.ADMIN_USERS
+SCOPE_INSTALLATION_CONFIG = loggers.AuditLogScopes.INSTALLATION_CONFIG
+SCOPE_RAG_ACCESS = loggers.AuditLogScopes.RAG_ACCESS
 
 
 @pytest.fixture
@@ -159,3 +165,514 @@ def test_updatelevels_filter(w_level, exp_level):
     found = update_levels.filter(record)
 
     assert found.levelno == exp_level
+
+
+@pytest.mark.parametrize("scope", loggers.AuditLogScopes)
+def test_auditlogwrapper_ctor(scope):
+    found = loggers.AuditLogWrapper(scope=scope)
+
+    assert found.name == loggers.SOLIPLEX_AUDIT_LOGGER_NAME
+    assert found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA] == scope
+
+
+@pytest.fixture
+def audit_records():
+    """Capture records emitted to the 'soliplex-audit' logger in a list."""
+    records = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    logger = logging.getLogger(loggers.SOLIPLEX_AUDIT_LOGGER_NAME)
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
+
+
+def _assert_audit_record(record, *, message, levelno, outcome, scope, fields):
+    """Shared assertions for a single emitted audit record."""
+    assert record.getMessage() == message
+    assert record.levelno == levelno
+    assert record.outcome == outcome
+    assert record.__dict__[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA] == scope
+    for key, value in fields.items():
+        assert getattr(record, key) == value
+
+
+# --- ProcessLifetimeAuditLog ----------------------------------------------
+
+
+def test_processlifetimeauditlog_ctor():
+    found = loggers.ProcessLifetimeAuditLog()
+
+    assert found.name == loggers.SOLIPLEX_AUDIT_LOGGER_NAME
+    scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
+    assert scope == SCOPE_LIFETIME
+
+
+def test_server_starting(audit_records):
+    wrapper = loggers.ProcessLifetimeAuditLog()
+
+    wrapper.server_starting()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SERVER_STARTING,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_LIFETIME,
+        fields={},
+    )
+
+
+def test_server_started(audit_records):
+    wrapper = loggers.ProcessLifetimeAuditLog()
+
+    wrapper.server_started()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SERVER_STARTED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_LIFETIME,
+        fields={},
+    )
+
+
+def test_server_stopping(audit_records):
+    wrapper = loggers.ProcessLifetimeAuditLog()
+
+    wrapper.server_stopping()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SERVER_STOPPING,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_LIFETIME,
+        fields={},
+    )
+
+
+# --- RoomAuthzAuditLog ----------------------------------------------------
+
+
+@pytest.mark.parametrize("w_claims", [{}, CLAIMS])
+def test_roomauthzauditlog_ctor(w_claims):
+    found = loggers.RoomAuthzAuditLog(claims=w_claims)
+
+    assert found.name == loggers.SOLIPLEX_AUDIT_LOGGER_NAME
+    scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
+    assert scope == SCOPE_ROOM_AUTHZ
+    assert found.extra["claims"] == w_claims
+
+
+def test_room_policy_read(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.room_policy_read("r1")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_POLICY_READ,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS, "room_id": "r1"},
+    )
+
+
+def test_room_policies_listed(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.room_policies_listed()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_POLICIES_LISTED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS},
+    )
+
+
+def test_room_policy_updated(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.room_policy_updated("r1")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_POLICY_UPDATED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS, "room_id": "r1"},
+    )
+
+
+def test_room_policy_update_failed(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.room_policy_update_failed("r1", "boom")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_POLICY_UPDATED,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS, "room_id": "r1", "reason": "boom"},
+    )
+
+
+def test_room_default_set(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.room_default_set("r1", "DENY")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_DEFAULT_SET,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS, "room_id": "r1", "allow_deny": "DENY"},
+    )
+
+
+def test_room_policy_deleted(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.room_policy_deleted("r1")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_POLICY_DELETED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS, "room_id": "r1"},
+    )
+
+
+def test_room_policy_delete_failed(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.room_policy_delete_failed("r1", "boom")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_POLICY_DELETED,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS, "room_id": "r1", "reason": "boom"},
+    )
+
+
+def test_acl_entry_added(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.acl_entry_added("r1", "alice")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_ACL_ENTRY_ADDED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS, "room_id": "r1", "entry": "alice"},
+    )
+
+
+def test_acl_entry_add_failed(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.acl_entry_add_failed("r1", "alice", "dup")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_ACL_ENTRY_ADDED,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "r1",
+            "entry": "alice",
+            "reason": "dup",
+        },
+    )
+
+
+def test_acl_entry_removed(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.acl_entry_removed("r1", "alice")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_ACL_ENTRY_REMOVED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS, "room_id": "r1", "entry": "alice"},
+    )
+
+
+def test_acl_entry_remove_failed(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.acl_entry_remove_failed("r1", "alice", "miss")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_ACL_ENTRY_REMOVED,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "r1",
+            "entry": "alice",
+            "reason": "miss",
+        },
+    )
+
+
+def test_acl_cleared(audit_records):
+    wrapper = loggers.RoomAuthzAuditLog(claims=CLAIMS)
+
+    wrapper.acl_cleared("r1")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_ACL_CLEARED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_AUTHZ,
+        fields={"claims": CLAIMS, "room_id": "r1"},
+    )
+
+
+# --- AdminUsersAuditLog ---------------------------------------------------
+
+
+@pytest.mark.parametrize("w_claims", [{}, CLAIMS])
+def test_adminusersauditlog_ctor(w_claims):
+    found = loggers.AdminUsersAuditLog(claims=w_claims)
+
+    assert found.name == loggers.SOLIPLEX_AUDIT_LOGGER_NAME
+    scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
+    assert scope == SCOPE_ADMIN_USERS
+    assert found.extra["claims"] == w_claims
+
+
+def test_admin_access_allowed(audit_records):
+    wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
+
+    wrapper.admin_access_allowed()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ADMIN_ACCESS,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ADMIN_USERS,
+        fields={"claims": CLAIMS},
+    )
+
+
+def test_admin_access_denied(audit_records):
+    wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
+
+    wrapper.admin_access_denied()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ADMIN_ACCESS,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_DENIED,
+        scope=SCOPE_ADMIN_USERS,
+        fields={"claims": CLAIMS},
+    )
+
+
+def test_admin_users_listed(audit_records):
+    wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
+
+    wrapper.admin_users_listed()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ADMIN_USERS_LISTED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ADMIN_USERS,
+        fields={"claims": CLAIMS},
+    )
+
+
+def test_admin_user_added(audit_records):
+    wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
+
+    wrapper.admin_user_added("alice")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ADMIN_USER_ADDED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ADMIN_USERS,
+        fields={"claims": CLAIMS, "discriminator": "alice"},
+    )
+
+
+def test_admin_user_add_failed(audit_records):
+    wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
+
+    wrapper.admin_user_add_failed("alice", "dup")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ADMIN_USER_ADDED,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_ADMIN_USERS,
+        fields={"claims": CLAIMS, "discriminator": "alice", "reason": "dup"},
+    )
+
+
+def test_admin_user_removed(audit_records):
+    wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
+
+    wrapper.admin_user_removed("alice")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ADMIN_USER_REMOVED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ADMIN_USERS,
+        fields={"claims": CLAIMS, "discriminator": "alice"},
+    )
+
+
+def test_admin_user_remove_failed(audit_records):
+    wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
+
+    wrapper.admin_user_remove_failed("alice", "miss")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ADMIN_USER_REMOVED,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_ADMIN_USERS,
+        fields={"claims": CLAIMS, "discriminator": "alice", "reason": "miss"},
+    )
+
+
+def test_admin_users_cleared(audit_records):
+    wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
+
+    wrapper.admin_users_cleared()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ADMIN_USERS_CLEARED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ADMIN_USERS,
+        fields={"claims": CLAIMS},
+    )
+
+
+# --- InstallationConfigAuditLog -------------------------------------------
+
+
+@pytest.mark.parametrize("w_claims", [{}, CLAIMS])
+def test_installationconfigauditlog_ctor(w_claims):
+    found = loggers.InstallationConfigAuditLog(claims=w_claims)
+
+    assert found.name == loggers.SOLIPLEX_AUDIT_LOGGER_NAME
+    scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
+    assert scope == SCOPE_INSTALLATION_CONFIG
+    assert found.extra["claims"] == w_claims
+
+
+def test_installation_read(audit_records):
+    wrapper = loggers.InstallationConfigAuditLog(claims=CLAIMS)
+
+    wrapper.installation_read()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_INSTALLATION_READ,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_INSTALLATION_CONFIG,
+        fields={"claims": CLAIMS},
+    )
+
+
+def test_installation_versions_read(audit_records):
+    wrapper = loggers.InstallationConfigAuditLog(claims=CLAIMS)
+
+    wrapper.installation_versions_read()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_INSTALLATION_VERSIONS_READ,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_INSTALLATION_CONFIG,
+        fields={"claims": CLAIMS},
+    )
+
+
+def test_installation_providers_read(audit_records):
+    wrapper = loggers.InstallationConfigAuditLog(claims=CLAIMS)
+
+    wrapper.installation_providers_read()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_INSTALLATION_PROVIDERS_READ,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_INSTALLATION_CONFIG,
+        fields={"claims": CLAIMS},
+    )
+
+
+def test_installation_git_metadata_read(audit_records):
+    wrapper = loggers.InstallationConfigAuditLog(claims=CLAIMS)
+
+    wrapper.installation_git_metadata_read()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_INSTALLATION_GIT_METADATA_READ,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_INSTALLATION_CONFIG,
+        fields={"claims": CLAIMS},
+    )
+
+
+# --- RAGAccessAuditLog ---------------------------------------------------
+
+
+@pytest.mark.parametrize("w_claims", [{}, CLAIMS])
+def test_ragaccessauditlog_ctor(w_claims):
+    found = loggers.RAGAccessAuditLog(claims=w_claims)
+
+    assert found.name == loggers.SOLIPLEX_AUDIT_LOGGER_NAME
+    scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
+    assert scope == SCOPE_RAG_ACCESS
+    assert found.extra["claims"] == w_claims

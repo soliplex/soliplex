@@ -575,6 +575,10 @@ async def lifespan(
 
     apply_logfire_configuration(app, the_installation, disable_logfire_console)
 
+    # Logging is now configured, so the audit log reaches its handlers.
+    audit_log = loggers.ProcessLifetimeAuditLog()
+    audit_log.server_starting()
+
     agui_engine = _create_async_engine(
         the_installation.thread_persistence_dburi_async,
         json_serializer=util.serialize_sqla_json,
@@ -633,7 +637,11 @@ async def lifespan(
             await stack.enter_async_context(mcp_lifespan)
             app.mount(f"/mcp/{mcp_name}", mcp_app, name=f"mcp_{mcp_name}")
 
+        audit_log.server_started()
+
         yield context
+
+        audit_log.server_stopping()
 
     await agui_engine.dispose()
     await authz_engine.dispose()

@@ -6,11 +6,13 @@ Implements 'authz.AdminUserPolicy' and 'authz.RoomAuthorizationPolicy'.
 from __future__ import annotations
 
 import contextlib
+import typing
 
 from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import authz
+from soliplex import loggers
 from soliplex import models
 from soliplex.authz import schema as authz_schema
 
@@ -83,6 +85,14 @@ class _SessionPolicy:
 
 
 class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
+    def __init__(
+        self,
+        session: sqla_asyncio.AsyncSession,
+        claims: dict[str, typing.Any],
+    ):
+        super().__init__(session)
+        self._audit = loggers.AdminUsersAuditLog(claims=claims)
+
     async def list_admin_user_discriminators(self) -> list[str]:
         """List JSONPath discriminators which identify admin users.
 
@@ -92,10 +102,12 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
         """
         query = sqla_sql.select(authz_schema.AdminUser)
         async with self.session as session:
-            return [
+            discriminators = [
                 admin_user.json_path
                 for admin_user in await session.scalars(query)
             ]
+        self._audit.admin_users_listed()
+        return discriminators
 
     async def add_admin_user_discriminator(self, json_path: str):
         """Add a user discriminator to the admin users table.
@@ -108,10 +120,13 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
             user = await _find_admin_user_by_json_path(json_path, session)
 
             if user is not None:
-                raise authz.AdminUserExists(json_path=json_path)
+                exc = authz.AdminUserExists(json_path=json_path)
+                self._audit.admin_user_add_failed(json_path, reason=str(exc))
+                raise exc
 
             user = authz_schema.AdminUser(json_path=json_path)
             session.add(user)
+        self._audit.admin_user_added(json_path)
 
     async def remove_admin_user_discriminator(self, json_path: str):
         """Remove a user discriminator from the admin users table.
@@ -124,9 +139,14 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
             user = await _find_admin_user_by_json_path(json_path, session)
 
             if user is None:
-                raise authz.NoSuchAdminUser(json_path=json_path)
+                exc = authz.NoSuchAdminUser(json_path=json_path)
+                self._audit.admin_user_remove_failed(
+                    json_path, reason=str(exc)
+                )
+                raise exc
 
             await session.delete(user)
+        self._audit.admin_user_removed(json_path)
 
     async def clear_admin_user_discriminators(self):
         """Remove all admin user discriminators from the admin users table."""
@@ -134,6 +154,7 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
         async with self.session as session:
             for admin_user in await session.scalars(query):
                 await session.delete(admin_user)
+        self._audit.admin_users_cleared()
 
     async def list_admin_users(self) -> list[str]:
         """Deprecated alias for 'list_admin_user_discriminators'."""
@@ -163,10 +184,23 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
     ) -> bool:
         """Is the user represented by 'user_token' an admin user?"""
         async with self.session as session:
-            return await _user_is_admin(user_token, session)
+            is_admin = await _user_is_admin(user_token, session)
+        if is_admin:
+            self._audit.admin_access_allowed()
+        else:
+            self._audit.admin_access_denied()
+        return is_admin
 
 
 class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
+    def __init__(
+        self,
+        session: sqla_asyncio.AsyncSession,
+        claims: dict[str, typing.Any],
+    ):
+        super().__init__(session)
+        self._audit = loggers.RoomAuthzAuditLog(claims=claims)
+
     async def check_room_access(
         self,
         room_id: str,
@@ -224,9 +258,11 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
 
             if policy is not None:
                 await policy.awaitable_attrs.acl_entries
-                return policy.as_model
-
-        return None
+                result = policy.as_model
+            else:
+                result = None
+        self._audit.room_policy_read(room_id)
+        return result
 
     async def get_room_policy_unchecked(
         self,
@@ -244,9 +280,11 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
 
             if policy is not None:
                 await policy.awaitable_attrs.acl_entries
-                return policy.as_unchecked_model
-
-        return None
+                result = policy.as_unchecked_model
+            else:
+                result = None
+        self._audit.room_policy_read(room_id)
+        return result
 
     async def list_room_policies(
         self,
@@ -263,7 +301,9 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             policies = list(await session.scalars(query))
             for policy in policies:
                 await policy.awaitable_attrs.acl_entries
-            return [policy.as_unchecked_model for policy in policies]
+            result = [policy.as_unchecked_model for policy in policies]
+        self._audit.room_policies_listed()
+        return result
 
     async def update_room_policy(
         self,
@@ -290,6 +330,7 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             async with session.begin_nested():
                 session.add(new_policy)
 
+        self._audit.room_policy_updated(room_id)
         return None
 
     async def delete_room_policy(
@@ -312,6 +353,8 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
                 async with session.begin_nested():
                     await session.delete(policy)
 
+        self._audit.room_policy_deleted(room_id)
+
     async def clear_room_acl(self, room_id: str) -> None:
         """Remove all ACL entries from the room's policy.
 
@@ -325,6 +368,7 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
                 await policy.awaitable_attrs.acl_entries
                 for acl_entry in list(policy.acl_entries):
                     await session.delete(acl_entry)
+        self._audit.acl_cleared(room_id)
 
     async def add_acl_entry(
         self,
@@ -343,7 +387,11 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             policy = await _find_room_policy(room_id, session)
 
             if policy is None:
-                raise authz.NoSuchRoomPolicy(room_id=room_id)
+                exc = authz.NoSuchRoomPolicy(room_id=room_id)
+                self._audit.acl_entry_add_failed(
+                    room_id, entry, reason=str(exc)
+                )
+                raise exc
 
             await policy.awaitable_attrs.acl_entries
             for existing in list(policy.acl_entries):
@@ -359,6 +407,7 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
 
             new_acl.room_policy = policy
             session.add(new_acl)
+        self._audit.acl_entry_added(room_id, entry)
 
     async def remove_acl_entry(
         self,
@@ -380,7 +429,11 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             policy = await _find_room_policy(room_id, session)
 
             if policy is None:
-                raise authz.NoSuchRoomPolicy(room_id=room_id)
+                exc = authz.NoSuchRoomPolicy(room_id=room_id)
+                self._audit.acl_entry_remove_failed(
+                    room_id, entry, reason=str(exc)
+                )
+                raise exc
 
             await policy.awaitable_attrs.acl_entries
             matches = [
@@ -398,10 +451,15 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             ]
 
             if not matches:
-                raise authz.NoSuchACLEntry(room_id=room_id)
+                exc = authz.NoSuchACLEntry(room_id=room_id)
+                self._audit.acl_entry_remove_failed(
+                    room_id, entry, reason=str(exc)
+                )
+                raise exc
 
             for existing in matches:
                 await session.delete(existing)
+        self._audit.acl_entry_removed(room_id, entry)
 
     async def set_room_default(
         self,
@@ -425,3 +483,4 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
                 )
             else:
                 policy.default_allow_deny = allow_deny
+        self._audit.room_default_set(room_id, allow_deny)

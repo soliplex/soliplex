@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import contextlib
+import getpass
+import os
 import pathlib
 
 import typer
@@ -75,18 +77,34 @@ async def _authz_session(dburi):
         await engine.dispose()
 
 
+def _audit_claims() -> dict[str, str]:
+    """Audit-log actor claims for CLI operations.
+
+    The CLI has no OIDC principal, so the actor is the operator running
+    'soliplex-cli': 'SOLIPLEX_AUDIT_ACTOR' if set, else the OS login name.
+    The policy objects fold these claims into every audit record they emit,
+    so CLI and REST mutations land in the same durable audit log.
+    """
+    return {
+        "source": "cli",
+        "actor": os.environ.get("SOLIPLEX_AUDIT_ACTOR", getpass.getuser()),
+    }
+
+
 @contextlib.asynccontextmanager
 async def _admin_user_policy(dburi):
     """Yield an async 'AdminUserPolicy' (see '_authz_session')."""
     async with _authz_session(dburi) as session:
-        yield authz_persistence.AdminUserPolicy(session)
+        yield authz_persistence.AdminUserPolicy(session, _audit_claims())
 
 
 @contextlib.asynccontextmanager
 async def _room_authz_policy(dburi):
     """Yield an async 'RoomAuthorizationPolicy' (see '_authz_session')."""
     async with _authz_session(dburi) as session:
-        yield authz_persistence.RoomAuthorizationPolicy(session)
+        yield authz_persistence.RoomAuthorizationPolicy(
+            session, _audit_claims()
+        )
 
 
 def _check_exactly_one_discriminator(

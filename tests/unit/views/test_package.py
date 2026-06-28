@@ -140,6 +140,56 @@ async def test_get_the_logger(the_installation, w_claims, w_claims_map):
 
 
 @pytest.mark.anyio
+@mock.patch("soliplex.authz.persistence.AdminUserPolicy")
+@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
+async def test_get_the_admin_user_policy(as_klass, ap_klass):
+    engine = object()
+    request = fastapi.Request(scope={"type": "http"})
+    request.state.authorization_engine = engine
+
+    counter = 0
+
+    async for policy in views.get_the_admin_user_policy(
+        request, THE_USER_CLAIMS
+    ):
+        assert policy is ap_klass.return_value
+        counter += 1
+
+    assert counter == 1
+
+    ap_klass.assert_called_once_with(
+        as_klass.return_value.__aenter__.return_value,
+        THE_USER_CLAIMS,
+    )
+    as_klass.assert_called_once_with(bind=engine)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.authz.persistence.RoomAuthorizationPolicy")
+@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
+async def test_get_the_room_authz_policy(as_klass, rap_klass):
+    engine = object()
+    request = fastapi.Request(scope={"type": "http"})
+    request.state.authorization_engine = engine
+
+    counter = 0
+
+    async for policy in views.get_the_room_authz_policy(
+        request, THE_USER_CLAIMS
+    ):
+        assert policy is rap_klass.return_value
+        counter += 1
+
+    assert counter == 1
+
+    rap_klass.assert_called_once_with(
+        as_klass.return_value.__aenter__.return_value,
+        THE_USER_CLAIMS,
+    )
+    as_klass.assert_called_once_with(bind=engine)
+
+
+@pytest.mark.anyio
 async def test_health_check():
     response = await views.health_check()
 

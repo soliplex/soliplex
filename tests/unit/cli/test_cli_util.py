@@ -140,6 +140,23 @@ async def test__room_authz_policy(tmp_path):
     assert [p.room_id for p in found] == ["faux"]
 
 
+def test__audit_claims_uses_env_actor(monkeypatch):
+    monkeypatch.setenv("SOLIPLEX_AUDIT_ACTOR", "ops@example.com")
+
+    claims = cli_util._audit_claims()
+
+    assert claims == {"source": "cli", "actor": "ops@example.com"}
+
+
+def test__audit_claims_falls_back_to_os_user(monkeypatch):
+    monkeypatch.delenv("SOLIPLEX_AUDIT_ACTOR", raising=False)
+    monkeypatch.setattr(cli_util.getpass, "getuser", lambda: "phreddy")
+
+    claims = cli_util._audit_claims()
+
+    assert claims == {"source": "cli", "actor": "phreddy"}
+
+
 SUMMARY = "'--a', '--b', or '--c'"
 
 

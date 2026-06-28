@@ -6,9 +6,7 @@ import json
 import re
 import typing
 
-import fastapi
 import jsonpath
-from sqlalchemy.ext import asyncio as sqla_asyncio
 
 # Avoid circular import when only used for typing
 # from soliplex import models
@@ -334,27 +332,3 @@ class RoomAuthorizationPolicy(abc.ABC):
     ) -> None:
         """Set the room policy's 'default_allow_deny', creating an empty
         policy if none exists."""
-
-
-async def get_the_admin_user_policy(
-    request: fastapi.Request,
-) -> AdminUserPolicy:
-    from . import persistence
-
-    engine = request.state.authorization_engine
-    async with sqla_asyncio.AsyncSession(bind=engine) as session:
-        yield persistence.AdminUserPolicy(session)
-
-
-async def get_the_room_authz_policy(
-    request: fastapi.Request,
-) -> RoomAuthorizationPolicy:
-    from . import persistence
-
-    engine = request.state.authorization_engine
-    async with sqla_asyncio.AsyncSession(bind=engine) as session:
-        yield persistence.RoomAuthorizationPolicy(session)
-
-
-depend_the_admin_user_policy = fastapi.Depends(get_the_admin_user_policy)
-depend_the_room_authz_policy = fastapi.Depends(get_the_room_authz_policy)
