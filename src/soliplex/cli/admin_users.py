@@ -9,7 +9,7 @@ import typing
 import typer
 import yaml
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex.cli import cli_util
 from soliplex.cli import types
 
@@ -82,7 +82,7 @@ def _check_admin_discriminator(
 
 def _describe_admin(json_path) -> str:
     """Human-friendly descriptor for an admin entry's JSONPath."""
-    parsed = authz_package.parse_token_field_json_path(json_path)
+    parsed = authz.parse_token_field_json_path(json_path)
     if parsed is not None:
         field, value = parsed
         return f"{field}={value}"
@@ -94,7 +94,7 @@ def _admin_display(json_path) -> str:
 
     Email-keyed admins show their email; others show the raw query.
     """
-    parsed = authz_package.parse_token_field_json_path(json_path)
+    parsed = authz.parse_token_field_json_path(json_path)
     if parsed is not None and parsed[0] == "email":
         return parsed[1]
     return json_path
@@ -111,7 +111,7 @@ def _admin_user_as_jsonable(json_path: str) -> dict:
     preferred_username = None
     email = None
     other_json_path = None
-    parsed = authz_package.parse_token_field_json_path(json_path)
+    parsed = authz.parse_token_field_json_path(json_path)
     if parsed is not None and parsed[0] == "preferred_username":
         preferred_username = parsed[1]
     elif parsed is not None and parsed[0] == "email":
@@ -166,9 +166,9 @@ def _admin_user_from_jsonable(entry: dict) -> str:
         "'email', 'preferred_username', or 'json_path'",
     )
     if email is not None:
-        return authz_package.token_field_json_path("email", email)
+        return authz.token_field_json_path("email", email)
     if preferred_username is not None:
-        return authz_package.token_field_json_path(
+        return authz.token_field_json_path(
             "preferred_username", preferred_username
         )
     return json_path
@@ -254,30 +254,30 @@ def _dump_admin_users(json_paths):  # pragma NO COVER UI ONLY
 
 
 async def _list_discriminators(dburi):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._admin_user_policy(dburi) as policy:
         return await policy.list_admin_user_discriminators()
 
 
 async def _clear_discriminators(dburi):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._admin_user_policy(dburi) as policy:
         await policy.clear_admin_user_discriminators()
         return await policy.list_admin_user_discriminators()
 
 
 async def _add_discriminator(dburi, json_path):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._admin_user_policy(dburi) as policy:
         await policy.add_admin_user_discriminator(json_path)
         return await policy.list_admin_user_discriminators()
 
 
 async def _remove_discriminator(dburi, json_path):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._admin_user_policy(dburi) as policy:
         await policy.remove_admin_user_discriminator(json_path)
         return await policy.list_admin_user_discriminators()
 
 
 async def _replace_discriminators(dburi, json_paths):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._admin_user_policy(dburi) as policy:
         await policy.clear_admin_user_discriminators()
         for json_path in json_paths:
             await policy.add_admin_user_discriminator(json_path)
@@ -360,7 +360,7 @@ def add_admin_user(
 
     try:
         discriminators = asyncio.run(_add_discriminator(dburi, resolved))
-    except authz_package.AdminUserExists:
+    except authz.AdminUserExists:
         the_console.rule(f"{_describe_admin(resolved)} is already an admin")
         the_console.print("Nothing to do.")
         raise typer.Exit(1) from None
@@ -427,7 +427,7 @@ def delete_admin_user(
 
     try:
         discriminators = asyncio.run(_remove_discriminator(dburi, resolved))
-    except authz_package.NoSuchAdminUser:
+    except authz.NoSuchAdminUser:
         the_console.rule(f"{_describe_admin(resolved)} is not an admin")
         the_console.print("Nothing to do.")
         raise typer.Exit(1) from None

@@ -7,7 +7,7 @@ import sqlalchemy
 import typer
 import yaml
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import models
 from soliplex.authz import schema as authz_schema
@@ -185,7 +185,7 @@ def test__dump(
 
 def _mock_acl_entry(
     *,
-    allow_deny=authz_package.AllowDeny.DENY,
+    allow_deny=authz.AllowDeny.DENY,
     everyone=False,
     authenticated=False,
     preferred_username=None,
@@ -207,7 +207,7 @@ def _mock_acl_entry(
     [
         # 'everyone' entry: no discriminator fields beyond the flag.
         (
-            {"allow_deny": authz_package.AllowDeny.ALLOW, "everyone": True},
+            {"allow_deny": authz.AllowDeny.ALLOW, "everyone": True},
             {
                 "allow_deny": "ALLOW",
                 "everyone": True,
@@ -220,7 +220,7 @@ def _mock_acl_entry(
         # 'authenticated' entry.
         (
             {
-                "allow_deny": authz_package.AllowDeny.DENY,
+                "allow_deny": authz.AllowDeny.DENY,
                 "authenticated": True,
             },
             {
@@ -235,7 +235,7 @@ def _mock_acl_entry(
         # A 'preferred_username' entry (the model surfaces it directly).
         (
             {
-                "allow_deny": authz_package.AllowDeny.ALLOW,
+                "allow_deny": authz.AllowDeny.ALLOW,
                 "preferred_username": "alice",
             },
             {
@@ -250,7 +250,7 @@ def _mock_acl_entry(
         # An 'email' entry.
         (
             {
-                "allow_deny": authz_package.AllowDeny.ALLOW,
+                "allow_deny": authz.AllowDeny.ALLOW,
                 "email": "alice@example.com",
             },
             {
@@ -265,7 +265,7 @@ def _mock_acl_entry(
         # General-purpose JSONPath: passed through verbatim.
         (
             {
-                "allow_deny": authz_package.AllowDeny.DENY,
+                "allow_deny": authz.AllowDeny.DENY,
                 "json_path": "$[?match($.foo, 'b.*z')]",
             },
             {
@@ -281,7 +281,7 @@ def _mock_acl_entry(
         # (the unchecked model carries it without validation).
         (
             {
-                "allow_deny": authz_package.AllowDeny.DENY,
+                "allow_deny": authz.AllowDeny.DENY,
                 "json_path": "$[?stale_filter_func($.email)]",
             },
             {
@@ -310,7 +310,7 @@ def test__room_policy_as_jsonable_none():
 def test__room_policy_as_jsonable_empty():
     policy = models.RoomPolicyUnchecked(
         room_id="chat",
-        default_allow_deny=authz_package.AllowDeny.DENY,
+        default_allow_deny=authz.AllowDeny.DENY,
         acl_entries=[],
     )
 
@@ -328,18 +328,18 @@ def test__room_policy_as_jsonable_populated_w_invalid_json_path():
     # dumping must still succeed (the unchecked model carries it).
     policy = models.RoomPolicyUnchecked(
         room_id="chat",
-        default_allow_deny=authz_package.AllowDeny.ALLOW,
+        default_allow_deny=authz.AllowDeny.ALLOW,
         acl_entries=[
             _mock_acl_entry(
-                allow_deny=authz_package.AllowDeny.ALLOW,
+                allow_deny=authz.AllowDeny.ALLOW,
                 email="alice@example.com",
             ),
             _mock_acl_entry(
-                allow_deny=authz_package.AllowDeny.DENY,
+                allow_deny=authz.AllowDeny.DENY,
                 json_path="$[?stale_filter_func($.email)]",
             ),
             _mock_acl_entry(
-                allow_deny=authz_package.AllowDeny.DENY,
+                allow_deny=authz.AllowDeny.DENY,
                 everyone=True,
             ),
         ],
@@ -386,10 +386,10 @@ def test__room_policy_as_yaml_none():
 def test__room_policy_as_yaml_populated():
     policy = models.RoomPolicyUnchecked(
         room_id="chat",
-        default_allow_deny=authz_package.AllowDeny.ALLOW,
+        default_allow_deny=authz.AllowDeny.ALLOW,
         acl_entries=[
             _mock_acl_entry(
-                allow_deny=authz_package.AllowDeny.ALLOW,
+                allow_deny=authz.AllowDeny.ALLOW,
                 email="alice@example.com",
             ),
         ],
@@ -427,7 +427,7 @@ def test__room_policy_as_yaml_populated():
             },
             models.RoomPolicy(
                 room_id="chat",
-                default_allow_deny=authz_package.AllowDeny.DENY,
+                default_allow_deny=authz.AllowDeny.DENY,
                 acl_entries=[],
             ),
         ),
@@ -458,14 +458,14 @@ def test__room_policy_as_yaml_populated():
             },
             models.RoomPolicy(
                 room_id="chat",
-                default_allow_deny=authz_package.AllowDeny.ALLOW,
+                default_allow_deny=authz.AllowDeny.ALLOW,
                 acl_entries=[
                     models.ACLEntry(
-                        allow_deny=authz_package.AllowDeny.ALLOW,
+                        allow_deny=authz.AllowDeny.ALLOW,
                         email="alice@example.com",
                     ),
                     models.ACLEntry(
-                        allow_deny=authz_package.AllowDeny.DENY,
+                        allow_deny=authz.AllowDeny.DENY,
                         everyone=True,
                     ),
                 ],
@@ -500,8 +500,8 @@ def test__effective_room_id(room_id, model, expected):
 @pytest.mark.parametrize(
     "w_allow, w_deny, exp_allow_deny",
     [
-        (True, False, authz_package.AllowDeny.ALLOW),
-        (False, True, authz_package.AllowDeny.DENY),
+        (True, False, authz.AllowDeny.ALLOW),
+        (False, True, authz.AllowDeny.DENY),
     ],
 )
 def test__resolve_allow_deny_returns_enum(w_allow, w_deny, exp_allow_deny):
@@ -562,7 +562,7 @@ def test__check_acl_entry_args(get_installation, _check_ram_dburi):
 
     assert found == (
         "sqlite:///fake.sqlite",
-        authz_package.AllowDeny.ALLOW,
+        authz.AllowDeny.ALLOW,
         '$[?$.preferred_username == "alice"]',
     )
 
@@ -601,7 +601,7 @@ def test__check_acl_entry_args_allow_invalid_json_path(
 
     assert found == (
         "sqlite:///fake.sqlite",
-        authz_package.AllowDeny.DENY,
+        authz.AllowDeny.DENY,
         bogus,
     )
 
@@ -618,11 +618,11 @@ def test__check_acl_entry_args_allow_invalid_json_path(
 # '_*_dump_room_policy' helpers stay '# pragma NO COVER UI ONLY'.
 # ---------------------------------------------------------------------------
 
-ALLOW = authz_package.AllowDeny.ALLOW
-DENY = authz_package.AllowDeny.DENY
+ALLOW = authz.AllowDeny.ALLOW
+DENY = authz.AllowDeny.DENY
 
 ALICE_EMAIL = "alice@example.com"
-ALICE_EMAIL_JP = authz_package.token_field_json_path("email", ALICE_EMAIL)
+ALICE_EMAIL_JP = authz.token_field_json_path("email", ALICE_EMAIL)
 # A stored query that no longer compiles (e.g. it referenced a meta-config
 # filter function that has since been removed).
 STALE_JP = "$[?stale_filter_func($.email)]"

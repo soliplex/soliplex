@@ -5,7 +5,7 @@ import fastapi
 import pytest
 from haiku.rag.store.models import chunk as hr_chunk
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -68,12 +68,12 @@ def room_configs(request):
 async def test_get_rooms(fc, room_configs):
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = room_configs
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     found = await rooms_views.get_rooms(
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
@@ -90,7 +90,7 @@ async def test_get_rooms(fc, room_configs):
 
     the_installation.get_room_configs.assert_awaited_once_with(
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOMS)
@@ -108,7 +108,7 @@ async def test_get_room(fc, room_configs):
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if ROOM_ID not in room_configs:
@@ -116,7 +116,7 @@ async def test_get_room(fc, room_configs):
             await rooms_views.get_room(
                 ROOM_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -134,7 +134,7 @@ async def test_get_room(fc, room_configs):
         found = await rooms_views.get_room(
             ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -145,7 +145,7 @@ async def test_get_room(fc, room_configs):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM)
@@ -166,7 +166,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if ROOM_ID in room_configs:
@@ -180,7 +180,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
             await rooms_views.get_room_bg_image(
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -198,7 +198,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
             found = await rooms_views.get_room_bg_image(
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -209,7 +209,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
                 await rooms_views.get_room_bg_image(
                     room_id=ROOM_ID,
                     the_installation=the_installation,
-                    the_authz_policy=the_authz_policy,
+                    the_room_authz=the_room_authz,
                     the_user_claims=THE_USER_CLAIMS,
                     the_logger=the_logger,
                 )
@@ -223,7 +223,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM_BG_IMAGE)
@@ -238,7 +238,7 @@ async def test_get_room_mcp_token(gust, w_error):
     MCP_TOKEN = gust.return_value = "DEADBEEF"
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_error:
@@ -251,7 +251,7 @@ async def test_get_room_mcp_token(gust, w_error):
             await rooms_views.get_room_mcp_token(
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -269,7 +269,7 @@ async def test_get_room_mcp_token(gust, w_error):
         found = await rooms_views.get_room_mcp_token(
             room_id=ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -292,7 +292,7 @@ async def test_get_room_mcp_token(gust, w_error):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM_MCP_TOKEN)
@@ -367,7 +367,7 @@ async def test_get_room_documents(
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if ROOM_ID not in room_configs:
@@ -375,7 +375,7 @@ async def test_get_room_documents(
             await rooms_views.get_room_documents(
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -406,7 +406,7 @@ async def test_get_room_documents(
         found = await rooms_views.get_room_documents(
             room_id=ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
@@ -428,7 +428,7 @@ async def test_get_room_documents(
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM_DOCUMENTS)
@@ -504,7 +504,7 @@ async def test_get_chunk_visualization(
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if ROOM_ID in room_configs:
@@ -531,7 +531,7 @@ async def test_get_chunk_visualization(
                 room_id=ROOM_ID,
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -558,7 +558,7 @@ async def test_get_chunk_visualization(
                     room_id=ROOM_ID,
                     chunk_id=CHUNK_ID,
                     the_installation=the_installation,
-                    the_authz_policy=the_authz_policy,
+                    the_room_authz=the_room_authz,
                     the_user_claims=THE_USER_CLAIMS,
                     the_logger=the_logger,
                 )
@@ -577,7 +577,7 @@ async def test_get_chunk_visualization(
                     room_id=ROOM_ID,
                     chunk_id=CHUNK_ID,
                     the_installation=the_installation,
-                    the_authz_policy=the_authz_policy,
+                    the_room_authz=the_room_authz,
                     the_user_claims=THE_USER_CLAIMS,
                     the_logger=the_logger,
                 )
@@ -596,7 +596,7 @@ async def test_get_chunk_visualization(
                     room_id=ROOM_ID,
                     chunk_id=CHUNK_ID,
                     the_installation=the_installation,
-                    the_authz_policy=the_authz_policy,
+                    the_room_authz=the_room_authz,
                     the_user_claims=THE_USER_CLAIMS,
                     the_logger=the_logger,
                 )
@@ -614,7 +614,7 @@ async def test_get_chunk_visualization(
                 room_id=ROOM_ID,
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -634,7 +634,7 @@ async def test_get_chunk_visualization(
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(
@@ -708,7 +708,7 @@ async def test_get_search(
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if ROOM_ID not in room_configs:
@@ -718,7 +718,7 @@ async def test_get_search(
                 room_id=ROOM_ID,
                 **search_type_kw,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -748,7 +748,7 @@ async def test_get_search(
             search_type=SEARCH_TYPE,
             room_id=ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )

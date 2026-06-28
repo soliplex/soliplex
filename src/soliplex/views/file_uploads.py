@@ -6,7 +6,7 @@ from fastapi import responses
 
 from soliplex import agui as agui_package
 from soliplex import authn as authn_package
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -19,7 +19,8 @@ router = fastapi.APIRouter(tags=["uploads"])
 
 depend_the_installation = installation.depend_the_installation
 depend_the_threads = agui_package.depend_the_threads
-depend_the_authz = authz_package.depend_the_authz_policy
+depend_the_admin_users = authz.depend_the_admin_user_policy
+depend_the_room_authz = authz.depend_the_room_authz_policy
 depend_the_user_claims = views_package.depend_the_user_claims
 depend_the_logger = views_package.depend_the_logger
 depend_the_authz_logger = soliplex_views_authz.depend_the_authz_logger
@@ -33,7 +34,7 @@ async def get_uploads_room(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.RoomUploads:
@@ -43,7 +44,7 @@ async def get_uploads_room(
     _room_config = await soliplex_views_agui._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -93,7 +94,7 @@ async def get_uploads_room_filename(
     room_id: str,
     filename: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
@@ -103,7 +104,7 @@ async def get_uploads_room_filename(
     _room_config = await soliplex_views_agui._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -144,7 +145,8 @@ async def post_uploads_room(
     upload_file: fastapi.UploadFile,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
     the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
@@ -157,7 +159,7 @@ async def post_uploads_room(
     the_logger.debug(loggers.UPLOADS_POST_ROOM)
     the_authz_logger.debug(loggers.UPLOADS_POST_ROOM)
 
-    if not await the_authz_policy.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(the_user_claims):
         the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
@@ -167,7 +169,7 @@ async def post_uploads_room(
     _room_config = await soliplex_views_agui._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -198,7 +200,7 @@ async def get_uploads_room_thread(
     room_id: str,
     thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.RoomUploads:
@@ -210,7 +212,7 @@ async def get_uploads_room_thread(
     _room_config = await soliplex_views_agui._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -263,7 +265,7 @@ async def get_uploads_room_thread_filename(
     thread_id: pydantic.UUID4,
     filename: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
@@ -275,7 +277,7 @@ async def get_uploads_room_thread_filename(
     _room_config = await soliplex_views_agui._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -317,7 +319,7 @@ async def post_uploads_room_thread(
     upload_file: fastapi.UploadFile,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
@@ -334,7 +336,7 @@ async def post_uploads_room_thread(
     _room_config = await soliplex_views_agui._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -378,7 +380,7 @@ async def get_workdirs_room_thread_run(
     thread_id: pydantic.UUID4,
     run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.RunWorkdirFiles:
@@ -391,7 +393,7 @@ async def get_workdirs_room_thread_run(
     _room_config = await soliplex_views_agui._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
@@ -448,7 +450,7 @@ async def get_workdirs_room_thread_run_filename(
     run_id: pydantic.UUID4,
     filename: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
@@ -461,7 +463,7 @@ async def get_workdirs_room_thread_run_filename(
     _room_config = await soliplex_views_agui._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )

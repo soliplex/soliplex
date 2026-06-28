@@ -5,7 +5,7 @@ import fastapi
 import pytest
 from fastapi import testclient
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import views as views_package
@@ -45,7 +45,7 @@ def app(the_installation):
         }
 
     async def _authz():
-        return mock.create_autospec(authz_package.AuthorizationPolicy)
+        return mock.create_autospec(authz.RoomAuthorizationPolicy)
 
     async def _logger():
         return mock.create_autospec(loggers.LogWrapper)
@@ -55,7 +55,7 @@ def app(the_installation):
 
     app.dependency_overrides[installation.get_the_installation] = _inst
     app.dependency_overrides[views_package.get_the_user_claims] = _user_claims
-    app.dependency_overrides[authz_package.get_the_authz_policy] = _authz
+    app.dependency_overrides[authz.get_the_room_authz_policy] = _authz
     app.dependency_overrides[views_package.get_the_logger] = _logger
     return app
 

@@ -11,7 +11,7 @@ from haiku.rag.store.models import chunk as hr_chunk
 from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
@@ -858,7 +858,7 @@ class AGUI_Threads(pydantic.BaseModel):
 
 
 class ACLEntryUnchecked(pydantic.BaseModel):
-    allow_deny: authz_package.AllowDeny = authz_package.AllowDeny.DENY
+    allow_deny: authz.AllowDeny = authz.AllowDeny.DENY
     everyone: bool = False
     authenticated: bool = False
     preferred_username: str | None = None
@@ -870,7 +870,7 @@ class ACLEntry(ACLEntryUnchecked):
     @pydantic.field_validator("json_path")
     @classmethod
     def _check_json_path(cls, value: str | None) -> str | None:
-        return authz_package.validate_json_path(value)
+        return authz.validate_json_path(value)
 
     @pydantic.model_validator(mode="after")
     def _check_exactly_one_discriminator(self) -> ACLEntry:
@@ -886,13 +886,13 @@ class ACLEntry(ACLEntryUnchecked):
             if is_set
         ]
         if len(active) != 1:
-            raise authz_package.ExactlyOneDiscriminator(active)
+            raise authz.ExactlyOneDiscriminator(active)
         return self
 
 
 class RoomPolicyUnchecked(pydantic.BaseModel):
     room_id: str
-    default_allow_deny: authz_package.AllowDeny = authz_package.AllowDeny.DENY
+    default_allow_deny: authz.AllowDeny = authz.AllowDeny.DENY
     acl_entries: list[ACLEntryUnchecked] = pydantic.Field(default_factory=list)
 
 

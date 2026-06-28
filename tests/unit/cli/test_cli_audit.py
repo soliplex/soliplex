@@ -9,7 +9,7 @@ import requests
 import typer
 import yaml
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import models
 from soliplex import secrets
@@ -678,17 +678,17 @@ def test__invalid_room_rag_dbs(
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.cli.audit.cli_util._authz_policy")
+@mock.patch("soliplex.cli.audit.cli_util._room_authz_policy")
 async def test__list_room_policies(authz_policy):
     # The helper is a pass-through; the return value emulates the
     # 'models.RoomPolicyUnchecked' shape 'list_room_policies' yields.
     policies = [
         {
             "room_id": "faux",
-            "default_allow_deny": authz_package.AllowDeny.DENY,
+            "default_allow_deny": authz.AllowDeny.DENY,
             "acl_entries": [
                 {
-                    "allow_deny": authz_package.AllowDeny.ALLOW,
+                    "allow_deny": authz.AllowDeny.ALLOW,
                     "everyone": False,
                     "authenticated": False,
                     "preferred_username": None,
@@ -710,7 +710,7 @@ async def test__list_room_policies(authz_policy):
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.cli.audit.cli_util._authz_policy")
+@mock.patch("soliplex.cli.audit.cli_util._admin_user_policy")
 async def test__list_admin_discriminators(authz_policy):
     # The helper is a pass-through; 'list_admin_user_discriminators'
     # yields the stored 'AdminUser.json_path' query strings.
@@ -825,9 +825,9 @@ def test__room_authz_groups(
             models.RoomPolicyUnchecked(
                 room_id=room_id,
                 default_allow_deny=(
-                    authz_package.AllowDeny.ALLOW
+                    authz.AllowDeny.ALLOW
                     if allow_deny == "ALLOW"
-                    else authz_package.AllowDeny.DENY
+                    else authz.AllowDeny.DENY
                 ),
             )
             for room_id, allow_deny in policy_specs
@@ -908,7 +908,7 @@ def test__invalid_acl_json_paths(
                 room_id=room_id,
                 acl_entries=[
                     models.ACLEntryUnchecked(
-                        allow_deny=authz_package.AllowDeny.DENY,
+                        allow_deny=authz.AllowDeny.DENY,
                         json_path=jp,
                     )
                     for jp in json_paths

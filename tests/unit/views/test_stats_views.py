@@ -7,7 +7,7 @@ import pytest
 from fastapi import testclient
 
 from soliplex import agui as agui_package
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -55,7 +55,7 @@ def _installation_with_rooms(*room_ids):
 @pytest.mark.anyio
 async def test_get_rooms_stats(the_threads, the_logger):
     the_installation = _installation_with_rooms(ROOM_ID, ROOM_ID_2)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_threads.get_rooms_last_activity.return_value = {
         ROOM_ID: T1,
         ROOM_ID_2: T2,
@@ -63,7 +63,7 @@ async def test_get_rooms_stats(the_threads, the_logger):
 
     found = await stats_views.get_rooms_stats(
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_threads=the_threads,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
@@ -78,7 +78,7 @@ async def test_get_rooms_stats(the_threads, the_logger):
     )
     the_installation.get_room_configs.assert_awaited_once_with(
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
 
@@ -88,7 +88,7 @@ async def test_get_rooms_stats_filters_inaccessible(the_threads, the_logger):
     # The user has activity in both rooms but currently only has access
     # to ROOM_ID; the de-authorized ROOM_ID_2 must drop out.
     the_installation = _installation_with_rooms(ROOM_ID)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_threads.get_rooms_last_activity.return_value = {
         ROOM_ID: T1,
         ROOM_ID_2: T2,
@@ -96,7 +96,7 @@ async def test_get_rooms_stats_filters_inaccessible(the_threads, the_logger):
 
     found = await stats_views.get_rooms_stats(
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_threads=the_threads,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
@@ -110,12 +110,12 @@ async def test_get_rooms_stats_filters_inaccessible(the_threads, the_logger):
 @pytest.mark.anyio
 async def test_get_rooms_stats_no_accessible_rooms(the_threads, the_logger):
     the_installation = _installation_with_rooms()
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_threads.get_rooms_last_activity.return_value = {}
 
     found = await stats_views.get_rooms_stats(
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_threads=the_threads,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
@@ -131,12 +131,12 @@ async def test_get_rooms_stats_includes_accessible_room_without_activity(
     # Every accessible room appears; one the user has no runs in carries a
     # null last_activity rather than being omitted.
     the_installation = _installation_with_rooms(ROOM_ID, ROOM_ID_2)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_threads.get_rooms_last_activity.return_value = {ROOM_ID: T1}
 
     found = await stats_views.get_rooms_stats(
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_threads=the_threads,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
@@ -152,13 +152,13 @@ async def test_get_rooms_stats_includes_accessible_room_without_activity(
 @pytest.mark.parametrize("last_activity", [T1, None])
 async def test_get_room_stats(the_threads, the_logger, last_activity):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_threads.get_room_last_activity.return_value = last_activity
 
     found = await stats_views.get_room_stats(
         room_id=ROOM_ID,
         the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_threads=the_threads,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
@@ -171,7 +171,7 @@ async def test_get_room_stats(the_threads, the_logger, last_activity):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
     the_threads.get_room_last_activity.assert_awaited_once_with(
@@ -183,14 +183,14 @@ async def test_get_room_stats(the_threads, the_logger, last_activity):
 @pytest.mark.anyio
 async def test_get_room_stats_unknown_room(the_threads, the_logger):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_installation.get_room_config.side_effect = KeyError("testing")
 
     with raises_httpexc(code=404, match="unknown room id"):
         await stats_views.get_room_stats(
             room_id=ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_threads=the_threads,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
@@ -216,7 +216,7 @@ def the_app(the_threads):
         return the_installation
 
     async def _authz():
-        return mock.create_autospec(authz_package.AuthorizationPolicy)
+        return mock.create_autospec(authz.RoomAuthorizationPolicy)
 
     async def _threads():
         return the_threads
@@ -228,7 +228,7 @@ def the_app(the_threads):
         return mock.create_autospec(loggers.LogWrapper)
 
     app.dependency_overrides[installation.get_the_installation] = _inst
-    app.dependency_overrides[authz_package.get_the_authz_policy] = _authz
+    app.dependency_overrides[authz.get_the_room_authz_policy] = _authz
     app.dependency_overrides[agui_package.get_the_threads] = _threads
     app.dependency_overrides[views_package.get_the_user_claims] = _user_claims
     app.dependency_overrides[views_package.get_the_logger] = _logger

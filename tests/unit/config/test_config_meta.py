@@ -8,7 +8,7 @@ import _test_features as agui_features
 import pytest
 import yaml
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import secrets
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
@@ -462,7 +462,7 @@ def test_installationconfigmeta_from_yaml(
             }
 
         if config_dict_meta and "jsonpath_functions" in config_dict_meta:
-            assert authz_package.registered_jsonpath_functions() == {
+            assert authz.registered_jsonpath_functions() == {
                 JSONPATH_FUNCTION_NAME: faux_jsonpath_func
             }
             assert (
@@ -557,7 +557,7 @@ def test_installationconfigmeta_as_yaml(
         )
 
     if w_jsonpath:
-        authz_package.register_jsonpath_function(
+        authz.register_jsonpath_function(
             JSONPATH_FUNCTION_NAME, faux_jsonpath_func
         )
         expected["jsonpath_functions"].append(
@@ -619,7 +619,7 @@ def test_installationconfigmeta_postinit_registers_jsonpath_functions(
     )
     config_meta.InstallationConfigMeta(jsonpath_functions=[jf_meta])
 
-    env = authz_package.the_jsonpath_environment
+    env = authz.the_jsonpath_environment
     assert (
         env.function_extensions[JSONPATH_FUNCTION_NAME] is faux_jsonpath_func
     )

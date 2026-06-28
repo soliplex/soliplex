@@ -178,8 +178,8 @@ class AllowDeny(enum.Enum):
     DENY = "deny"
 
 
-class AuthorizationPolicy(abc.ABC):
-    """Protocol for checking / managing authorization policies"""
+class AdminUserPolicy(abc.ABC):
+    """Protocol for checking / managing admin-user discriminators."""
 
     @abc.abstractmethod
     async def list_admin_user_discriminators(self) -> list[str]:
@@ -239,6 +239,10 @@ class AuthorizationPolicy(abc.ABC):
         Matches 'user_token' against each admin entry's JSONPath query;
         the user is an admin when any query matches.
         """
+
+
+class RoomAuthorizationPolicy(abc.ABC):
+    """Protocol for checking / managing room authorization policies."""
 
     @abc.abstractmethod
     async def check_room_access(
@@ -332,14 +336,25 @@ class AuthorizationPolicy(abc.ABC):
         policy if none exists."""
 
 
-async def get_the_authz_policy(
+async def get_the_admin_user_policy(
     request: fastapi.Request,
-) -> AuthorizationPolicy:
+) -> AdminUserPolicy:
     from . import persistence
 
     engine = request.state.authorization_engine
     async with sqla_asyncio.AsyncSession(bind=engine) as session:
-        yield persistence.AuthorizationPolicy(session)
+        yield persistence.AdminUserPolicy(session)
 
 
-depend_the_authz_policy = fastapi.Depends(get_the_authz_policy)
+async def get_the_room_authz_policy(
+    request: fastapi.Request,
+) -> RoomAuthorizationPolicy:
+    from . import persistence
+
+    engine = request.state.authorization_engine
+    async with sqla_asyncio.AsyncSession(bind=engine) as session:
+        yield persistence.RoomAuthorizationPolicy(session)
+
+
+depend_the_admin_user_policy = fastapi.Depends(get_the_admin_user_policy)
+depend_the_room_authz_policy = fastapi.Depends(get_the_room_authz_policy)

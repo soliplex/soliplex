@@ -7,7 +7,7 @@ import sqlalchemy
 import typer
 import yaml
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex.authz import schema as authz_schema
 from soliplex.cli import admin_users as cli_admin_users
 
@@ -155,15 +155,15 @@ def test__check_admin_user_args_allow_invalid_json_path(
     [
         # Email-shaped query: email descriptor, email display.
         (
-            authz_package.token_field_json_path("email", "alice@example.com"),
+            authz.token_field_json_path("email", "alice@example.com"),
             "email=alice@example.com",
             "alice@example.com",
         ),
         # preferred_username-shaped: field descriptor, raw query display.
         (
-            authz_package.token_field_json_path("preferred_username", "bob"),
+            authz.token_field_json_path("preferred_username", "bob"),
             "preferred_username=bob",
-            authz_package.token_field_json_path("preferred_username", "bob"),
+            authz.token_field_json_path("preferred_username", "bob"),
         ),
         # Other token-field query: field descriptor, raw query display.
         (
@@ -220,7 +220,7 @@ def test__dump(
     [
         # Stored email-shortcut: surfaced back as 'email'.
         (
-            authz_package.token_field_json_path("email", "alice@example.com"),
+            authz.token_field_json_path("email", "alice@example.com"),
             {
                 "preferred_username": None,
                 "email": "alice@example.com",
@@ -229,7 +229,7 @@ def test__dump(
         ),
         # Stored preferred_username-shortcut.
         (
-            authz_package.token_field_json_path("preferred_username", "bob"),
+            authz.token_field_json_path("preferred_username", "bob"),
             {
                 "preferred_username": "bob",
                 "email": None,
@@ -275,8 +275,8 @@ def test__admin_users_as_jsonable_empty():
 
 def test__admin_users_as_jsonable_populated():
     json_paths = [
-        authz_package.token_field_json_path("email", "alice@example.com"),
-        authz_package.token_field_json_path("preferred_username", "bob"),
+        authz.token_field_json_path("email", "alice@example.com"),
+        authz.token_field_json_path("preferred_username", "bob"),
         "$[?stale_filter_func($.email)]",
     ]
 
@@ -305,7 +305,7 @@ def test__admin_users_as_jsonable_populated():
 
 def test__admin_users_as_yaml_round_trips():
     json_paths = [
-        authz_package.token_field_json_path("email", "alice@example.com"),
+        authz.token_field_json_path("email", "alice@example.com"),
     ]
 
     yaml_text = cli_admin_users._admin_users_as_yaml(json_paths)
@@ -331,7 +331,7 @@ def test__admin_users_as_yaml_round_trips():
                 "email": "alice@example.com",
                 "json_path": None,
             },
-            authz_package.token_field_json_path("email", "alice@example.com"),
+            authz.token_field_json_path("email", "alice@example.com"),
         ),
         # 'preferred_username' shortcut -> canonical query.
         (
@@ -340,7 +340,7 @@ def test__admin_users_as_yaml_round_trips():
                 "email": None,
                 "json_path": None,
             },
-            authz_package.token_field_json_path("preferred_username", "bob"),
+            authz.token_field_json_path("preferred_username", "bob"),
         ),
         # Literal 'json_path' passes through unchanged.
         (
@@ -412,12 +412,8 @@ def test__admin_user_from_jsonable_rejects_invalid(the_console, w_entry):
                 ],
             },
             [
-                authz_package.token_field_json_path(
-                    "email", "alice@example.com"
-                ),
-                authz_package.token_field_json_path(
-                    "preferred_username", "bob"
-                ),
+                authz.token_field_json_path("email", "alice@example.com"),
+                authz.token_field_json_path("preferred_username", "bob"),
             ],
         ),
     ],
@@ -438,8 +434,8 @@ def test__admin_users_from_jsonable(w_data, exp):
 # ---------------------------------------------------------------------------
 
 ALICE_EMAIL = "alice@example.com"
-ALICE_EMAIL_JP = authz_package.token_field_json_path("email", ALICE_EMAIL)
-BOB_PU_JP = authz_package.token_field_json_path("preferred_username", "bob")
+ALICE_EMAIL_JP = authz.token_field_json_path("email", ALICE_EMAIL)
+BOB_PU_JP = authz.token_field_json_path("preferred_username", "bob")
 ROLE_JP = '$[?$.role == "admin"]'
 # A stored query that no longer compiles (e.g. it referenced a meta-config
 # filter function that has since been removed).

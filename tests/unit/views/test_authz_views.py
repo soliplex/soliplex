@@ -3,7 +3,7 @@ from unittest import mock
 import fastapi
 import pytest
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -17,15 +17,15 @@ THE_USER_CLAIMS = {"email": ADMIN_EMAIL}
 ROOM_ID = "test_room"
 ROOM_POLICY = models.RoomPolicy(
     room_id=ROOM_ID,
-    default_allow_deny=authz_package.AllowDeny.ALLOW,
+    default_allow_deny=authz.AllowDeny.ALLOW,
 )
 
 NEW_ROOM_POLICY = models.RoomPolicy(
     room_id=ROOM_ID,
-    default_allow_deny=authz_package.AllowDeny.DENY,
+    default_allow_deny=authz.AllowDeny.DENY,
     acl_entries=[
         models.ACLEntry(
-            allow_deny=authz_package.AllowDeny.ALLOW,
+            allow_deny=authz.AllowDeny.ALLOW,
             email="phreddy@example.com",
         ),
     ],
@@ -49,9 +49,10 @@ def test_get_the_authz_logger():
 @pytest.mark.parametrize("w_policy", [None, ROOM_POLICY])
 async def test_get_room_authz(w_policy, w_admin_access):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    the_authz_policy.check_admin_access.return_value = w_admin_access
-    the_authz_policy.get_room_policy.return_value = w_policy
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
+    the_room_authz.get_room_policy.return_value = w_policy
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
 
     if not w_admin_access:
@@ -59,7 +60,8 @@ async def test_get_room_authz(w_policy, w_admin_access):
             await authz_views.get_room_authz(
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_authz_logger=the_authz_logger,
             )
@@ -71,20 +73,21 @@ async def test_get_room_authz(w_policy, w_admin_access):
             loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
         )
 
-        the_authz_policy.get_room_policy.assert_not_awaited()
+        the_room_authz.get_room_policy.assert_not_awaited()
 
     else:
         found = await authz_views.get_room_authz(
             room_id=ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_admin_users=the_admin_users,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_authz_logger=the_authz_logger,
         )
 
         assert found == w_policy
 
-        the_authz_policy.get_room_policy.assert_awaited_once_with(
+        the_room_authz.get_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
         )
 
@@ -92,7 +95,7 @@ async def test_get_room_authz(w_policy, w_admin_access):
         loggers.AUTHZ_GET_ROOM_POLICY,
     )
 
-    the_authz_policy.check_admin_access.assert_awaited_once_with(
+    the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
     )
 
@@ -102,11 +105,12 @@ async def test_get_room_authz(w_policy, w_admin_access):
 @pytest.mark.parametrize("w_existing", [False, True])
 async def test_post_room_authz(w_existing, w_admin_access):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    the_authz_policy.check_admin_access.return_value = w_admin_access
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
 
     if w_existing:
-        the_authz_policy.get_room_policy.return_value = ROOM_POLICY
+        the_room_authz.get_room_policy.return_value = ROOM_POLICY
 
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
 
@@ -116,7 +120,8 @@ async def test_post_room_authz(w_existing, w_admin_access):
                 room_id=ROOM_ID,
                 room_policy=NEW_ROOM_POLICY,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_authz_logger=the_authz_logger,
             )
@@ -128,14 +133,15 @@ async def test_post_room_authz(w_existing, w_admin_access):
             loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         )
 
-        the_authz_policy.update_room_policy.assert_not_awaited()
+        the_room_authz.update_room_policy.assert_not_awaited()
 
     else:
         found = await authz_views.post_room_authz(
             room_id=ROOM_ID,
             room_policy=NEW_ROOM_POLICY,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_admin_users=the_admin_users,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_authz_logger=the_authz_logger,
         )
@@ -143,7 +149,7 @@ async def test_post_room_authz(w_existing, w_admin_access):
         assert isinstance(found, fastapi.Response)
         assert found.status_code == 204
 
-        the_authz_policy.update_room_policy.assert_awaited_once_with(
+        the_room_authz.update_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
             room_policy=NEW_ROOM_POLICY,
         )
@@ -152,7 +158,7 @@ async def test_post_room_authz(w_existing, w_admin_access):
         loggers.AUTHZ_POST_ROOM_POLICY,
     )
 
-    the_authz_policy.check_admin_access.assert_awaited_once_with(
+    the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
     )
 
@@ -162,11 +168,12 @@ async def test_post_room_authz(w_existing, w_admin_access):
 @pytest.mark.parametrize("w_existing", [False, True])
 async def test_delete_room_authz(w_existing, w_admin_access):
     the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    the_authz_policy.check_admin_access.return_value = w_admin_access
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
 
     if w_existing:
-        the_authz_policy.get_room_policy.return_value = ROOM_POLICY
+        the_room_authz.get_room_policy.return_value = ROOM_POLICY
 
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
 
@@ -175,7 +182,8 @@ async def test_delete_room_authz(w_existing, w_admin_access):
             await authz_views.delete_room_authz(
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_authz_logger=the_authz_logger,
             )
@@ -187,13 +195,14 @@ async def test_delete_room_authz(w_existing, w_admin_access):
             loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         )
 
-        the_authz_policy.delete_room_policy.assert_not_awaited()
+        the_room_authz.delete_room_policy.assert_not_awaited()
 
     else:
         found = await authz_views.delete_room_authz(
             room_id=ROOM_ID,
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_admin_users=the_admin_users,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_authz_logger=the_authz_logger,
         )
@@ -201,7 +210,7 @@ async def test_delete_room_authz(w_existing, w_admin_access):
         assert isinstance(found, fastapi.Response)
         assert found.status_code == 204
 
-        the_authz_policy.delete_room_policy.assert_awaited_once_with(
+        the_room_authz.delete_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
         )
 
@@ -209,7 +218,7 @@ async def test_delete_room_authz(w_existing, w_admin_access):
         loggers.AUTHZ_DELETE_ROOM_POLICY,
     )
 
-    the_authz_policy.check_admin_access.assert_awaited_once_with(
+    the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
     )
 
@@ -233,10 +242,11 @@ async def test_get_installation_authz(
 ):
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = {ROOM_ID: object()}
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    the_authz_policy.check_admin_access.return_value = w_admin_access
-    the_authz_policy.get_room_policy.return_value = w_room_policy
-    the_authz_policy.list_admin_user_discriminators.return_value = (
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
+    the_room_authz.get_room_policy.return_value = w_room_policy
+    the_admin_users.list_admin_user_discriminators.return_value = (
         w_admin_user_discrims
     )
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
@@ -245,7 +255,8 @@ async def test_get_installation_authz(
         with pytest.raises(fastapi.HTTPException) as exc:
             await authz_views.get_installation_authz(
                 the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
+                the_admin_users=the_admin_users,
+                the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_authz_logger=the_authz_logger,
             )
@@ -257,8 +268,8 @@ async def test_get_installation_authz(
             loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         )
 
-        the_authz_policy.get_room_policy.assert_not_awaited()
-        the_authz_policy.list_admin_user_discriminators.assert_not_awaited()
+        the_room_authz.get_room_policy.assert_not_awaited()
+        the_admin_users.list_admin_user_discriminators.assert_not_awaited()
 
     else:
         expected = models.InstallationAuthorization(
@@ -270,20 +281,21 @@ async def test_get_installation_authz(
 
         found = await authz_views.get_installation_authz(
             the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
+            the_admin_users=the_admin_users,
+            the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_authz_logger=the_authz_logger,
         )
 
         assert found == expected
 
-        the_authz_policy.get_room_policy.assert_awaited_once_with(
+        the_room_authz.get_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
         )
-        the_authz_policy.list_admin_user_discriminators.assert_awaited_once_with()
+        the_admin_users.list_admin_user_discriminators.assert_awaited_once_with()
         the_installation.get_room_configs.assert_awaited_once_with(
             user=THE_USER_CLAIMS,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_authz_logger,
         )
 
@@ -291,6 +303,6 @@ async def test_get_installation_authz(
         loggers.AUTHZ_GET_INSTALLATION_AUTHZ,
     )
 
-    the_authz_policy.check_admin_access.assert_awaited_once_with(
+    the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
     )

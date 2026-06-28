@@ -19,7 +19,7 @@ import pytest
 import sqlalchemy
 import yaml
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex.authz import schema as authz_schema
 
 # 'tests/functional/test_cli_smoketest.py' -> parents[2] is the repo root.
@@ -156,7 +156,7 @@ def _seed_stale_acl_entry(db_path, room_id):
             )
         ).one()
         entry = authz_schema.ACLEntry(
-            allow_deny=authz_package.AllowDeny.DENY,
+            allow_deny=authz.AllowDeny.DENY,
             json_path=SEED_ACL_JP,
         )
         entry.room_policy = policy
@@ -280,9 +280,10 @@ def test_room_authz_smoketest(scratch_installation):
 def test_audit_smoketest(scratch_installation, authz_db_path):
     # Seed admin + room-policy state through the mutation commands, then
     # confirm the 'audit' subcommands -- which now read the authz database
-    # through 'AuthorizationPolicy' rather than a direct sync session --
-    # reflect it via the real binary. This is deliberately a single
-    # multi-step sequence (a smoke test), not a set of one-act unit tests.
+    # through the 'AdminUserPolicy' / 'RoomAuthorizationPolicy' async
+    # policies rather than a direct sync session -- reflect it via the real
+    # binary. This is deliberately a single multi-step sequence (a smoke
+    # test), not a set of one-act unit tests.
     seeded_admin = _cli(scratch_installation, "add", ALICE)
     assert seeded_admin.returncode == 0, seeded_admin.stderr
 

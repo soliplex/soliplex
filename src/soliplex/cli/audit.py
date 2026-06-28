@@ -12,7 +12,7 @@ from haiku.rag import client as hr_client
 from skills_ref import validator as skill_validator
 from typer import core as typer_core
 
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import models
 from soliplex import ollama
@@ -558,12 +558,12 @@ def _invalid_completions(
 
 
 async def _list_room_policies(dburi):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(dburi) as policy:
         return await policy.list_room_policies()
 
 
 async def _list_admin_discriminators(dburi):
-    async with cli_util._authz_policy(dburi) as policy:
+    async with cli_util._admin_user_policy(dburi) as policy:
         return await policy.list_admin_user_discriminators()
 
 
@@ -590,7 +590,7 @@ def _room_authz_groups(the_installation):
     for room_id in configured:
         if room_id not in policies:
             default.append(room_id)
-        elif policies[room_id] == authz_package.AllowDeny.ALLOW:
+        elif policies[room_id] == authz.AllowDeny.ALLOW:
             public.append(room_id)
         else:
             private.append(room_id)
@@ -608,7 +608,7 @@ def _room_authz_groups(the_installation):
 def _invalid_acl_json_paths(the_installation) -> dict:
     """Collect ACL entries whose stored 'json_path' fails to validate.
 
-    Reads every room policy via 'AuthorizationPolicy.list_room_policies'
+    Reads every room policy via 'RoomAuthorizationPolicy.list_room_policies'
     -- which returns the unchecked models, tolerating entries that would
     fail 'policy.as_model' -- and re-validates each surfaced 'json_path'
     against the currently-loaded JSONPath environment. Typically an
@@ -629,8 +629,8 @@ def _invalid_acl_json_paths(the_installation) -> dict:
             if entry.json_path is None:
                 continue
             try:
-                authz_package.validate_json_path(entry.json_path)
-            except authz_package.InvalidJSONPath as exc:
+                authz.validate_json_path(entry.json_path)
+            except authz.InvalidJSONPath as exc:
                 invalid.setdefault(policy.room_id, []).append(
                     (entry.json_path, str(exc)),
                 )
@@ -702,7 +702,7 @@ def _admin_user_json_paths(the_installation) -> list[str]:
     """Return every stored 'AdminUser.json_path', in insertion order.
 
     Reads them via
-    'AuthorizationPolicy.list_admin_user_discriminators'. Returns an
+    'AdminUserPolicy.list_admin_user_discriminators'. Returns an
     empty list when the authz DB is RAM-based (no persisted rows can
     exist).
     """
@@ -729,8 +729,8 @@ def _invalid_admin_user_json_paths(
     invalid: list[tuple[str, str]] = []
     for json_path in _admin_user_json_paths(the_installation):
         try:
-            authz_package.validate_json_path(json_path)
-        except authz_package.InvalidJSONPath as exc:
+            authz.validate_json_path(json_path)
+        except authz.InvalidJSONPath as exc:
             invalid.append((json_path, str(exc)))
     return invalid
 
@@ -752,7 +752,7 @@ def _audit_admin_users_section(
     tc_print(f"Admin users ({len(json_paths)}):")
     if json_paths:
         for json_path in json_paths:
-            parsed = authz_package.parse_token_field_json_path(json_path)
+            parsed = authz.parse_token_field_json_path(json_path)
             if parsed is not None:
                 field, value = parsed
                 tc_print(f"  - {field}={value}")

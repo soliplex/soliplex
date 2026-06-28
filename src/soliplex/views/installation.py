@@ -15,7 +15,7 @@ from soliplex import views
 router = fastapi.APIRouter(tags=["installation"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_authz = authz.depend_the_authz_policy
+depend_the_admin_users = authz.depend_the_admin_user_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
 
@@ -24,7 +24,7 @@ depend_the_logger = views.depend_the_logger
 @router.get("/v1/installation")
 async def get_installation(
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.Installation:
@@ -32,7 +32,7 @@ async def get_installation(
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
     bound_logger.debug(loggers.INST_GET_INSTALLATION)
 
-    if not await the_authz_policy.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(the_user_claims):
         bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
@@ -46,7 +46,7 @@ async def get_installation(
 @router.get("/v1/installation/versions")
 async def get_installation_versions(
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.InstalledPackages:
@@ -54,7 +54,7 @@ async def get_installation_versions(
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
     bound_logger.debug(loggers.INST_GET_INSTALLATION_VERSIONS)
 
-    if not await the_authz_policy.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(the_user_claims):
         bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
@@ -86,7 +86,7 @@ async def get_installation_versions(
 @router.get("/v1/installation/providers")
 async def get_installation_providers(
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> installation.ProviderInfoMap:
@@ -94,7 +94,7 @@ async def get_installation_providers(
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
     bound_logger.debug(loggers.INST_GET_INSTALLATION_PROVIDERS)
 
-    if not await the_authz_policy.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(the_user_claims):
         bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
@@ -108,7 +108,7 @@ async def get_installation_providers(
 @router.get("/v1/installation/git_metadata")
 async def get_installation_git_metadata(
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.GitMetadata:
@@ -116,7 +116,7 @@ async def get_installation_git_metadata(
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
     bound_logger.debug(loggers.INST_GET_INSTALLATION_GIT_METADATA)
 
-    if not await the_authz_policy.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(the_user_claims):
         bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,

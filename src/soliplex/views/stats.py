@@ -2,7 +2,7 @@ import fastapi
 
 from soliplex import agui as agui_package
 from soliplex import authn
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -12,7 +12,7 @@ from soliplex import views
 router = fastapi.APIRouter(tags=["stats"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_authz = authz_package.depend_the_authz_policy
+depend_the_room_authz = authz.depend_the_room_authz_policy
 depend_the_threads = agui_package.depend_the_threads
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
@@ -22,7 +22,7 @@ depend_the_logger = views.depend_the_logger
 @router.get("/v1/stats/rooms")
 async def get_rooms_stats(
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -39,7 +39,7 @@ async def get_rooms_stats(
 
     room_configs = await the_installation.get_room_configs(
         user=the_user_claims,
-        the_authz_policy=the_authz_policy,
+        the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
 
@@ -61,7 +61,7 @@ async def get_rooms_stats(
 async def get_room_stats(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -77,7 +77,7 @@ async def get_room_stats(
         await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:

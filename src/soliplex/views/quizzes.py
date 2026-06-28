@@ -1,7 +1,7 @@
 import fastapi
 
 from soliplex import authn
-from soliplex import authz as authz_package
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -11,7 +11,7 @@ from soliplex import views
 router = fastapi.APIRouter(tags=["quizzes"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_authz = authz_package.depend_the_authz_policy
+depend_the_room_authz = authz.depend_the_room_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
 
@@ -21,7 +21,7 @@ async def get_quiz(
     room_id: str,
     quiz_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.Quiz:
@@ -32,7 +32,7 @@ async def get_quiz(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:
@@ -63,7 +63,7 @@ async def post_quiz_question(
     question_uuid: str,
     answer: models.QuizAnswer,
     the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.QuizQuestionResponse:
@@ -74,7 +74,7 @@ async def post_quiz_question(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
-            the_authz_policy=the_authz_policy,
+            the_room_authz=the_room_authz,
             the_logger=the_logger,
         )
     except KeyError:

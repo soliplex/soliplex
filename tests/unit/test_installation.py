@@ -639,7 +639,7 @@ class FauxRoomAuthz:
 def authz_kwargs(request):
     kw = {}
     if request.param is not None:
-        kw["the_authz_policy"] = FauxRoomAuthz(request.param)
+        kw["the_room_authz"] = FauxRoomAuthz(request.param)
     return kw
 
 
@@ -693,7 +693,7 @@ async def test_installation_get_room_configs(
         )
 
     if authz_kwargs:
-        allowed = authz_kwargs["the_authz_policy"].allowed
+        allowed = authz_kwargs["the_room_authz"].allowed
         exp_logger.debug.assert_called_once_with(
             loggers.AUTHZ_FILTERING_ROOMS,
         )
@@ -730,7 +730,7 @@ async def test_installation_get_room_config(
     the_installation = installation.Installation(i_config)
 
     if authz_kwargs:
-        allowed = authz_kwargs["the_authz_policy"].allowed
+        allowed = authz_kwargs["the_room_authz"].allowed
     else:
         allowed = True
 
@@ -944,7 +944,7 @@ async def test_installation_get_agent_for_room(
     i_config.room_configs = r_configs
 
     if authz_kwargs:
-        allowed = authz_kwargs["the_authz_policy"].allowed
+        allowed = authz_kwargs["the_room_authz"].allowed
     else:
         allowed = True
 
@@ -1102,7 +1102,7 @@ async def test_installation_get_agent_deps_for_room(
     i_config.room_configs = r_configs
 
     if authz_kwargs:
-        allowed = authz_kwargs["the_authz_policy"].allowed
+        allowed = authz_kwargs["the_room_authz"].allowed
     else:
         allowed = True
 

@@ -3,35 +3,33 @@ from unittest import mock
 import fastapi
 import pytest
 
-from soliplex import authz as authz_package
+from soliplex import authz
 
 
 def test_reservedjsonpathfunctionname_is_valueerror():
-    assert issubclass(authz_package.ReservedJSONPathFunctionName, ValueError)
+    assert issubclass(authz.ReservedJSONPathFunctionName, ValueError)
 
 
 def test_register_jsonpath_function(patched_jsonpath_functions):
     def is_admin(value):
         return value
 
-    authz_package.register_jsonpath_function("is_admin", is_admin)
+    authz.register_jsonpath_function("is_admin", is_admin)
 
-    env = authz_package.the_jsonpath_environment
+    env = authz.the_jsonpath_environment
     registered = env.function_extensions["is_admin"]
     assert registered is is_admin
     assert registered("ok") == "ok"
-    assert authz_package.registered_jsonpath_functions() == {
-        "is_admin": is_admin
-    }
+    assert authz.registered_jsonpath_functions() == {"is_admin": is_admin}
 
 
 def test_register_jsonpath_function_rejects_builtin(
     patched_jsonpath_functions,
 ):
-    builtin = next(iter(authz_package.BUILTIN_JSONPATH_FUNCTION_NAMES))
+    builtin = next(iter(authz.BUILTIN_JSONPATH_FUNCTION_NAMES))
 
-    with pytest.raises(authz_package.ReservedJSONPathFunctionName) as exc_info:
-        authz_package.register_jsonpath_function(builtin, lambda v: v)
+    with pytest.raises(authz.ReservedJSONPathFunctionName) as exc_info:
+        authz.register_jsonpath_function(builtin, lambda v: v)
 
     assert exc_info.value.name == builtin
 
@@ -39,15 +37,15 @@ def test_register_jsonpath_function_rejects_builtin(
 def test_registered_jsonpath_functions_excludes_builtins(
     patched_jsonpath_functions,
 ):
-    assert authz_package.registered_jsonpath_functions() == {}
+    assert authz.registered_jsonpath_functions() == {}
 
 
 def test_invalidjsonpath_is_valueerror():
-    assert issubclass(authz_package.InvalidJSONPath, ValueError)
+    assert issubclass(authz.InvalidJSONPath, ValueError)
 
 
 def test_validate_json_path_passes_none():
-    assert authz_package.validate_json_path(None) is None
+    assert authz.validate_json_path(None) is None
 
 
 @pytest.mark.parametrize(
@@ -60,7 +58,7 @@ def test_validate_json_path_passes_none():
     ],
 )
 def test_validate_json_path_accepts_valid(value):
-    assert authz_package.validate_json_path(value) == value
+    assert authz.validate_json_path(value) == value
 
 
 @pytest.mark.parametrize(
@@ -71,8 +69,8 @@ def test_validate_json_path_accepts_valid(value):
     ],
 )
 def test_validate_json_path_rejects_invalid(value):
-    with pytest.raises(authz_package.InvalidJSONPath) as exc_info:
-        authz_package.validate_json_path(value)
+    with pytest.raises(authz.InvalidJSONPath) as exc_info:
+        authz.validate_json_path(value)
 
     assert exc_info.value.value == value
     assert exc_info.value.__cause__ is not None
@@ -102,11 +100,11 @@ def test_validate_json_path_rejects_invalid(value):
     ],
 )
 def test_token_field_json_path(field, value, match_token, miss_token):
-    expr = authz_package.token_field_json_path(field, value)
+    expr = authz.token_field_json_path(field, value)
 
-    assert authz_package.validate_json_path(expr) == expr
+    assert authz.validate_json_path(expr) == expr
 
-    env = authz_package.the_jsonpath_environment
+    env = authz.the_jsonpath_environment
     assert env.match(expr, match_token) is not None
     assert env.match(expr, miss_token) is None
 
@@ -121,9 +119,9 @@ def test_token_field_json_path(field, value, match_token, miss_token):
     ],
 )
 def test_parse_token_field_json_path_roundtrip(field, value):
-    expr = authz_package.token_field_json_path(field, value)
+    expr = authz.token_field_json_path(field, value)
 
-    assert authz_package.parse_token_field_json_path(expr) == (field, value)
+    assert authz.parse_token_field_json_path(expr) == (field, value)
 
 
 @pytest.mark.parametrize(
@@ -138,21 +136,21 @@ def test_parse_token_field_json_path_roundtrip(field, value):
     ],
 )
 def test_parse_token_field_json_path_non_field_query(value):
-    assert authz_package.parse_token_field_json_path(value) is None
+    assert authz.parse_token_field_json_path(value) is None
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.authz.persistence.AuthorizationPolicy")
+@mock.patch("soliplex.authz.persistence.AdminUserPolicy")
 @mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_get_the_authz_policy(as_klass, ap_klass):
+async def test_get_the_admin_user_policy(as_klass, ap_klass):
     engine = object()
     request = fastapi.Request(scope={"type": "http"})
     request.state.authorization_engine = engine
 
     counter = 0
 
-    async for the_authz_policy in authz_package.get_the_authz_policy(request):
-        assert the_authz_policy is ap_klass.return_value
+    async for policy in authz.get_the_admin_user_policy(request):
+        assert policy is ap_klass.return_value
         counter += 1
 
     assert counter == 1
@@ -160,5 +158,26 @@ async def test_get_the_authz_policy(as_klass, ap_klass):
     ap_klass.assert_called_once_with(
         as_klass.return_value.__aenter__.return_value,
     )
+    as_klass.assert_called_once_with(bind=engine)
 
+
+@pytest.mark.anyio
+@mock.patch("soliplex.authz.persistence.RoomAuthorizationPolicy")
+@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
+async def test_get_the_room_authz_policy(as_klass, ap_klass):
+    engine = object()
+    request = fastapi.Request(scope={"type": "http"})
+    request.state.authorization_engine = engine
+
+    counter = 0
+
+    async for policy in authz.get_the_room_authz_policy(request):
+        assert policy is ap_klass.return_value
+        counter += 1
+
+    assert counter == 1
+
+    ap_klass.assert_called_once_with(
+        as_klass.return_value.__aenter__.return_value,
+    )
     as_klass.assert_called_once_with(bind=engine)
