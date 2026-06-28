@@ -1385,6 +1385,7 @@ def mcp_apps():
         (True, []),
     ],
 )
+@mock.patch("soliplex.loggers.ProcessLifetimeAuditLog")
 @mock.patch("soliplex.installation.add_no_auth_user_as_admin")
 @mock.patch("soliplex.installation.apply_logfire_configuration")
 @mock.patch("soliplex.secrets.resolve_secrets")
@@ -1400,6 +1401,7 @@ async def test_lifespan(
     srs,
     alc,
     anauaa,
+    plal_klass,
     mcp_apps,
     temp_dir,
     w_no_auth_mode,
@@ -1521,6 +1523,12 @@ root:
         url_safe_token_secret=URL_SAFE_TOKEN_SECRET_KEY,
         max_token_age_secs=7200,
     )
+
+    plal_klass.assert_called_once_with()
+    plal = plal_klass.return_value
+    plal.server_starting.assert_called_once_with()
+    plal.server_started.assert_called_once_with()
+    plal.server_stopping.assert_called_once_with()
 
 
 @pytest.mark.asyncio

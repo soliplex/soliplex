@@ -3,6 +3,7 @@ from __future__ import annotations
 import fastapi
 from fastapi import responses
 from fastapi import security
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import authn as authn_module
 from soliplex import installation as installation_module
@@ -80,6 +81,37 @@ async def get_the_logger(
 
 
 depend_the_logger = fastapi.Depends(get_the_logger)
+
+
+async def get_the_admin_user_policy(
+    request: fastapi.Request,
+    the_user_claims: authn_module.UserClaims = depend_the_user_claims,
+):
+    # Imported lazily: 'authz.persistence' pulls in 'authz', which imports
+    # nothing from 'views', but the lazy form mirrors the engine's other
+    # policy construction and keeps module import order robust.
+    from soliplex.authz import persistence
+
+    engine = request.state.authorization_engine
+    async with sqla_asyncio.AsyncSession(bind=engine) as session:
+        yield persistence.AdminUserPolicy(session, the_user_claims)
+
+
+depend_the_admin_user_policy = fastapi.Depends(get_the_admin_user_policy)
+
+
+async def get_the_room_authz_policy(
+    request: fastapi.Request,
+    the_user_claims: authn_module.UserClaims = depend_the_user_claims,
+):
+    from soliplex.authz import persistence
+
+    engine = request.state.authorization_engine
+    async with sqla_asyncio.AsyncSession(bind=engine) as session:
+        yield persistence.RoomAuthorizationPolicy(session, the_user_claims)
+
+
+depend_the_room_authz_policy = fastapi.Depends(get_the_room_authz_policy)
 
 
 #   'process_control' canary

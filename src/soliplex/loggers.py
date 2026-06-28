@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import enum
 import logging
+import typing
+
+# from soliplex import authn
 
 SOLIPLEX_LOGGER_NAME = "soliplex"
 
@@ -82,23 +86,52 @@ ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id"
 STATS_GET_ROOMS_STATS = "get rooms stats"
 STATS_GET_ROOM_STATS = "get room stats"
 
+SOLIPLEX_AUDIT_LOGGER_NAME = "soliplex-audit"
+SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA = "audit-scope"
+SOLIPLEX_AUDIT_LOGGER_OUTCOME_EXTRA = "outcome"
 
-class LogWrapper(logging.LoggerAdapter):
-    """Context wrapper for capturing extra logging values"""
+# Outcome values folded into every audit record's 'outcome' field, so a
+# reviewer can split successful operations from denied / failed ones.
+AUDIT_OUTCOME_SUCCESS = "success"
+AUDIT_OUTCOME_DENIED = "denied"
+AUDIT_OUTCOME_ERROR = "error"
+
+# admin-users audit events
+AUDIT_ADMIN_ACCESS = "admin access"
+AUDIT_ADMIN_USERS_LISTED = "admin users listed"
+AUDIT_ADMIN_USER_ADDED = "admin user added"
+AUDIT_ADMIN_USER_REMOVED = "admin user removed"
+AUDIT_ADMIN_USERS_CLEARED = "admin users cleared"
+
+# room-authz audit events
+AUDIT_ROOM_POLICY_READ = "room policy read"
+AUDIT_ROOM_POLICIES_LISTED = "room policies listed"
+AUDIT_ROOM_POLICY_UPDATED = "room policy updated"
+AUDIT_ROOM_POLICY_DELETED = "room policy deleted"
+AUDIT_ROOM_ACL_ENTRY_ADDED = "room acl entry added"
+AUDIT_ROOM_ACL_ENTRY_REMOVED = "room acl entry removed"
+AUDIT_ROOM_ACL_CLEARED = "room acl cleared"
+AUDIT_ROOM_DEFAULT_SET = "room default set"
+
+# installation-config audit events
+AUDIT_INSTALLATION_READ = "installation read"
+AUDIT_INSTALLATION_VERSIONS_READ = "installation versions read"
+AUDIT_INSTALLATION_PROVIDERS_READ = "installation providers read"
+AUDIT_INSTALLATION_GIT_METADATA_READ = "installation git metadata read"
+
+# server-lifecycle audit events
+AUDIT_SERVER_STARTING = "server starting"
+AUDIT_SERVER_STARTED = "server started"
+AUDIT_SERVER_STOPPING = "server stopping"
+
+
+class _StructuredFieldsAdapter(logging.LoggerAdapter):
+    """LoggerAdapter that folds caller keyword fields into 'extra'."""
 
     # Keyword arguments the stdlib logging machinery consumes itself; any
     # other keyword passed to a log call is a structured field destined for
     # the record's 'extra' rather than the logger.
     _LOG_KWARGS = frozenset({"exc_info", "stack_info", "stacklevel", "extra"})
-
-    def __init__(self, logger_name, the_installation, **extra):
-        self.logger_name = logger_name
-        self.installation = the_installation
-        logger = logging.getLogger(logger_name)
-        try:
-            super().__init__(logger, extra=extra, merge_extra=True)
-        except TypeError:  # pragma: NO COVER Python < 3.13
-            super().__init__(logger, extra=extra)
 
     def process(self, msg, kwargs):
         """Fold caller-supplied keyword fields into the record's 'extra'.
@@ -118,6 +151,19 @@ class LogWrapper(logging.LoggerAdapter):
         }
         kwargs["extra"] = {**self.extra, **kwargs.get("extra", {}), **fields}
         return msg, kwargs
+
+
+class LogWrapper(_StructuredFieldsAdapter):
+    """Context wrapper for capturing extra logging values"""
+
+    def __init__(self, logger_name, the_installation, **extra):
+        self.logger_name = logger_name
+        self.installation = the_installation
+        logger = logging.getLogger(logger_name)
+        try:
+            super().__init__(logger, extra=extra, merge_extra=True)
+        except TypeError:  # pragma: NO COVER Python < 3.13
+            super().__init__(logger, extra=extra)
 
     def bind(self, logger_name=None, **extra) -> LogWrapper:
         if logger_name is None:
@@ -194,3 +240,189 @@ class UpdateLevels(logging.Filter):
             log_record.levelname = logging.getLevelName(after)
 
         return log_record
+
+
+class AuditLogScopes(enum.StrEnum):
+    PROCESS_LIFETIME = "process-lifetime"
+    ROOM_AUTHZ = "room-authz"
+    ADMIN_USERS = "admin-users"
+    INSTALLATION_CONFIG = "installation-config"
+    RAG_ACCESS = "rag-access"
+
+
+class AuditLogWrapper(_StructuredFieldsAdapter):
+    """Context wrapper for capturing audit-related logging values.
+
+    Subclasses bind a fixed 'AuditLogScopes' and expose one named method per
+    auditable action (the API that "spells out required / optional values").
+    Each action records its 'outcome' so a reviewer can split successful
+    operations from denied (authorization refused) or failed (validation /
+    not-found) ones. Successes log at INFO; denials and failures at ERROR.
+    """
+
+    def __init__(self, *, scope: AuditLogScopes | None = None, **extra):
+        extra_w_scope = {
+            SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA: scope,
+        } | extra
+
+        logger = logging.getLogger(SOLIPLEX_AUDIT_LOGGER_NAME)
+        try:
+            super().__init__(logger, extra=extra_w_scope, merge_extra=True)
+        except TypeError:  # pragma: NO COVER Python < 3.13
+            super().__init__(logger, extra=extra_w_scope)
+
+    def _succeeded(self, message: str, **fields):
+        self.info(message, outcome=AUDIT_OUTCOME_SUCCESS, **fields)
+
+    def _denied(self, message: str, **fields):
+        self.error(message, outcome=AUDIT_OUTCOME_DENIED, **fields)
+
+    def _failed(self, message: str, **fields):
+        self.error(message, outcome=AUDIT_OUTCOME_ERROR, **fields)
+
+
+class ProcessLifetimeAuditLog(AuditLogWrapper):
+    def __init__(self, **extra):
+        super().__init__(scope=AuditLogScopes.PROCESS_LIFETIME, **extra)
+
+    def server_starting(self):
+        self._succeeded(AUDIT_SERVER_STARTING)
+
+    def server_started(self):
+        self._succeeded(AUDIT_SERVER_STARTED)
+
+    def server_stopping(self):
+        self._succeeded(AUDIT_SERVER_STOPPING)
+
+
+class RoomAuthzAuditLog(AuditLogWrapper):
+    def __init__(self, claims: dict[str, typing.Any], **extra):
+        extra_with_claims = {"claims": claims} | extra
+        super().__init__(scope=AuditLogScopes.ROOM_AUTHZ, **extra_with_claims)
+
+    # security-object reads
+    def room_policy_read(self, room_id: str):
+        self._succeeded(AUDIT_ROOM_POLICY_READ, room_id=room_id)
+
+    def room_policies_listed(self):
+        self._succeeded(AUDIT_ROOM_POLICIES_LISTED)
+
+    # policy modification
+    def room_policy_updated(self, room_id: str):
+        self._succeeded(AUDIT_ROOM_POLICY_UPDATED, room_id=room_id)
+
+    def room_policy_update_failed(self, room_id: str, reason: str):
+        self._failed(AUDIT_ROOM_POLICY_UPDATED, room_id=room_id, reason=reason)
+
+    def room_default_set(self, room_id: str, allow_deny: str):
+        self._succeeded(
+            AUDIT_ROOM_DEFAULT_SET, room_id=room_id, allow_deny=allow_deny
+        )
+
+    # policy / security-object deletion
+    def room_policy_deleted(self, room_id: str):
+        self._succeeded(AUDIT_ROOM_POLICY_DELETED, room_id=room_id)
+
+    def room_policy_delete_failed(self, room_id: str, reason: str):
+        self._failed(AUDIT_ROOM_POLICY_DELETED, room_id=room_id, reason=reason)
+
+    # room-access grant
+    def acl_entry_added(self, room_id: str, entry: str):
+        self._succeeded(
+            AUDIT_ROOM_ACL_ENTRY_ADDED, room_id=room_id, entry=entry
+        )
+
+    def acl_entry_add_failed(self, room_id: str, entry: str, reason: str):
+        self._failed(
+            AUDIT_ROOM_ACL_ENTRY_ADDED,
+            room_id=room_id,
+            entry=entry,
+            reason=reason,
+        )
+
+    # room-access revoke
+    def acl_entry_removed(self, room_id: str, entry: str):
+        self._succeeded(
+            AUDIT_ROOM_ACL_ENTRY_REMOVED, room_id=room_id, entry=entry
+        )
+
+    def acl_entry_remove_failed(self, room_id: str, entry: str, reason: str):
+        self._failed(
+            AUDIT_ROOM_ACL_ENTRY_REMOVED,
+            room_id=room_id,
+            entry=entry,
+            reason=reason,
+        )
+
+    def acl_cleared(self, room_id: str):
+        self._succeeded(AUDIT_ROOM_ACL_CLEARED, room_id=room_id)
+
+
+class AdminUsersAuditLog(AuditLogWrapper):
+    def __init__(self, claims: dict[str, typing.Any], **extra):
+        extra_with_claims = {"claims": claims} | extra
+        super().__init__(scope=AuditLogScopes.ADMIN_USERS, **extra_with_claims)
+
+    # privilege gate
+    def admin_access_allowed(self):
+        self._succeeded(AUDIT_ADMIN_ACCESS)
+
+    def admin_access_denied(self):
+        self._denied(AUDIT_ADMIN_ACCESS)
+
+    # security-object read
+    def admin_users_listed(self):
+        self._succeeded(AUDIT_ADMIN_USERS_LISTED)
+
+    # privilege grant
+    def admin_user_added(self, discriminator: str):
+        self._succeeded(AUDIT_ADMIN_USER_ADDED, discriminator=discriminator)
+
+    def admin_user_add_failed(self, discriminator: str, reason: str):
+        self._failed(
+            AUDIT_ADMIN_USER_ADDED, discriminator=discriminator, reason=reason
+        )
+
+    # privilege revoke
+    def admin_user_removed(self, discriminator: str):
+        self._succeeded(AUDIT_ADMIN_USER_REMOVED, discriminator=discriminator)
+
+    def admin_user_remove_failed(self, discriminator: str, reason: str):
+        self._failed(
+            AUDIT_ADMIN_USER_REMOVED,
+            discriminator=discriminator,
+            reason=reason,
+        )
+
+    def admin_users_cleared(self):
+        self._succeeded(AUDIT_ADMIN_USERS_CLEARED)
+
+
+class InstallationConfigAuditLog(AuditLogWrapper):
+    def __init__(self, claims: dict[str, typing.Any], **extra):
+        extra_with_claims = {"claims": claims} | extra
+        super().__init__(
+            scope=AuditLogScopes.INSTALLATION_CONFIG, **extra_with_claims
+        )
+
+    # privileged-config reads
+    def installation_read(self):
+        self._succeeded(AUDIT_INSTALLATION_READ)
+
+    def installation_versions_read(self):
+        self._succeeded(AUDIT_INSTALLATION_VERSIONS_READ)
+
+    def installation_providers_read(self):
+        self._succeeded(AUDIT_INSTALLATION_PROVIDERS_READ)
+
+    def installation_git_metadata_read(self):
+        self._succeeded(AUDIT_INSTALLATION_GIT_METADATA_READ)
+
+
+class RAGAccessAuditLog(AuditLogWrapper):
+    # Deferred (rag-access out of scope pending the haiku-rag approach); the
+    # scope and class exist so the audit vocabulary is complete, but no events
+    # are wired yet.
+    def __init__(self, claims: dict[str, typing.Any], **extra):
+        extra_with_claims = {"claims": claims} | extra
+        super().__init__(scope=AuditLogScopes.RAG_ACCESS, **extra_with_claims)

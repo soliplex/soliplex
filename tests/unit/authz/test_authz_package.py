@@ -1,6 +1,3 @@
-from unittest import mock
-
-import fastapi
 import pytest
 
 from soliplex import authz
@@ -137,47 +134,3 @@ def test_parse_token_field_json_path_roundtrip(field, value):
 )
 def test_parse_token_field_json_path_non_field_query(value):
     assert authz.parse_token_field_json_path(value) is None
-
-
-@pytest.mark.anyio
-@mock.patch("soliplex.authz.persistence.AdminUserPolicy")
-@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_get_the_admin_user_policy(as_klass, ap_klass):
-    engine = object()
-    request = fastapi.Request(scope={"type": "http"})
-    request.state.authorization_engine = engine
-
-    counter = 0
-
-    async for policy in authz.get_the_admin_user_policy(request):
-        assert policy is ap_klass.return_value
-        counter += 1
-
-    assert counter == 1
-
-    ap_klass.assert_called_once_with(
-        as_klass.return_value.__aenter__.return_value,
-    )
-    as_klass.assert_called_once_with(bind=engine)
-
-
-@pytest.mark.anyio
-@mock.patch("soliplex.authz.persistence.RoomAuthorizationPolicy")
-@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_get_the_room_authz_policy(as_klass, ap_klass):
-    engine = object()
-    request = fastapi.Request(scope={"type": "http"})
-    request.state.authorization_engine = engine
-
-    counter = 0
-
-    async for policy in authz.get_the_room_authz_policy(request):
-        assert policy is ap_klass.return_value
-        counter += 1
-
-    assert counter == 1
-
-    ap_klass.assert_called_once_with(
-        as_klass.return_value.__aenter__.return_value,
-    )
-    as_klass.assert_called_once_with(bind=engine)

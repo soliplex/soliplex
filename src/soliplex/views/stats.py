@@ -12,7 +12,7 @@ from soliplex import views
 router = fastapi.APIRouter(tags=["stats"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_room_authz = authz.depend_the_room_authz_policy
+depend_the_room_authz = views.depend_the_room_authz_policy
 depend_the_threads = agui_package.depend_the_threads
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger

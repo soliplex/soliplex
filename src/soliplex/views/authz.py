@@ -13,8 +13,8 @@ from soliplex import views
 router = fastapi.APIRouter(tags=["authorization"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_admin_users = authz.depend_the_admin_user_policy
-depend_the_room_authz = authz.depend_the_room_authz_policy
+depend_the_admin_users = views.depend_the_admin_user_policy
+depend_the_room_authz = views.depend_the_room_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
 

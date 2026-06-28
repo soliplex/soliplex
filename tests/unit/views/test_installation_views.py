@@ -23,6 +23,14 @@ GIT_TAG = "test-git-tag"
 THE_USER_CLAIMS = {"email": "admin@example.com"}
 
 
+@mock.patch("soliplex.views.installation.ConfigAuditLog")
+def test_get_the_config_audit_log(cal_klass):
+    found = installation_views.get_the_config_audit_log(THE_USER_CLAIMS)
+
+    assert found is cal_klass.return_value
+    cal_klass.assert_called_once_with(claims=THE_USER_CLAIMS)
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_admin_access", [False, True])
 @mock.patch("soliplex.models.Installation.from_config")
@@ -35,6 +43,7 @@ async def test_get_installation(fc, w_admin_access):
     the_admin_users.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
+    the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
 
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -43,6 +52,7 @@ async def test_get_installation(fc, w_admin_access):
                 the_admin_users=the_admin_users,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
+                the_audit=the_audit,
             )
 
         assert exc.value.status_code == 403
@@ -50,6 +60,7 @@ async def test_get_installation(fc, w_admin_access):
         bound_logger.error.assert_called_once_with(
             loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         )
+        the_audit.installation_read.assert_not_called()
 
     else:
         found = await installation_views.get_installation(
@@ -57,11 +68,13 @@ async def test_get_installation(fc, w_admin_access):
             the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
+            the_audit=the_audit,
         )
 
         assert found is fc.return_value
 
         fc.assert_called_once_with(i_config)
+        the_audit.installation_read.assert_called_once_with()
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS
@@ -78,6 +91,7 @@ async def test_get_installation_versions_w_error(sp):
     the_admin_users.check_admin_access.return_value = True
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
+    the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
 
     def _check(exc):
         return exc.status_code == 500
@@ -88,6 +102,7 @@ async def test_get_installation_versions_w_error(sp):
             the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
+            the_audit=the_audit,
         )
 
     assert exc.value.detail == loggers.INST_SUBPROCESS_PIP
@@ -96,6 +111,9 @@ async def test_get_installation_versions_w_error(sp):
         THE_USER_CLAIMS,
     )
 
+    # The read is audited once the admin gate passes, before the
+    # subprocess (which here fails with a 500).
+    the_audit.installation_versions_read.assert_called_once_with()
     bound_logger.exception.assert_called_once_with(
         loggers.INST_SUBPROCESS_PIP,
     )
@@ -128,6 +146,7 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
     the_admin_users.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
+    the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
 
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -136,6 +155,7 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
                 the_admin_users=the_admin_users,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
+                the_audit=the_audit,
             )
 
         assert exc.value.status_code == 403
@@ -143,6 +163,7 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
         bound_logger.error.assert_called_once_with(
             loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         )
+        the_audit.installation_versions_read.assert_not_called()
 
     else:
         found = await installation_views.get_installation_versions(
@@ -150,9 +171,11 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
             the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
+            the_audit=the_audit,
         )
 
         assert found == expected
+        the_audit.installation_versions_read.assert_called_once_with()
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
@@ -178,6 +201,7 @@ async def test_get_installation_providers(w_admin_access):
     the_admin_users.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
+    the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
 
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -186,6 +210,7 @@ async def test_get_installation_providers(w_admin_access):
                 the_admin_users=the_admin_users,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
+                the_audit=the_audit,
             )
 
         assert exc.value.status_code == 403
@@ -193,6 +218,7 @@ async def test_get_installation_providers(w_admin_access):
         bound_logger.error.assert_called_once_with(
             loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         )
+        the_audit.installation_providers_read.assert_not_called()
 
     else:
         found = await installation_views.get_installation_providers(
@@ -200,9 +226,11 @@ async def test_get_installation_providers(w_admin_access):
             the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
+            the_audit=the_audit,
         )
 
         assert found == PROVIDER_INFO
+        the_audit.installation_providers_read.assert_called_once_with()
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
@@ -227,6 +255,7 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
     the_admin_users.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
+    the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
 
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -235,6 +264,7 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
                 the_admin_users=the_admin_users,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
+                the_audit=the_audit,
             )
 
         assert exc.value.status_code == 403
@@ -242,6 +272,7 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
         bound_logger.error.assert_called_once_with(
             loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         )
+        the_audit.installation_git_metadata_read.assert_not_called()
 
     else:
         found = await installation_views.get_installation_git_metadata(
@@ -249,6 +280,7 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
             the_admin_users=the_admin_users,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
+            the_audit=the_audit,
         )
 
         assert found == models.GitMetadata(
@@ -256,6 +288,7 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
             git_branch=GIT_BRANCH,
             git_tag=GIT_TAG,
         )
+        the_audit.installation_git_metadata_read.assert_called_once_with()
 
     bound_logger.debug.assert_called_once_with(
         loggers.INST_GET_INSTALLATION_GIT_METADATA,

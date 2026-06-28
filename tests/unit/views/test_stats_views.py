@@ -11,7 +11,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
-from soliplex import views as views_package
+from soliplex import views
 from soliplex.views import stats as stats_views
 
 ROOM_ID = "test-room"
@@ -228,10 +228,10 @@ def the_app(the_threads):
         return mock.create_autospec(loggers.LogWrapper)
 
     app.dependency_overrides[installation.get_the_installation] = _inst
-    app.dependency_overrides[authz.get_the_room_authz_policy] = _authz
+    app.dependency_overrides[views.get_the_room_authz_policy] = _authz
     app.dependency_overrides[agui_package.get_the_threads] = _threads
-    app.dependency_overrides[views_package.get_the_user_claims] = _user_claims
-    app.dependency_overrides[views_package.get_the_logger] = _logger
+    app.dependency_overrides[views.get_the_user_claims] = _user_claims
+    app.dependency_overrides[views.get_the_logger] = _logger
     return app
 
 

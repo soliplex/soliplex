@@ -10,7 +10,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
-from soliplex import views as views_package
+from soliplex import views
 from soliplex.views import agui as soliplex_views_agui
 from soliplex.views import authz as soliplex_views_authz
 from soliplex.views import util as soliplex_views_util
@@ -19,10 +19,10 @@ router = fastapi.APIRouter(tags=["uploads"])
 
 depend_the_installation = installation.depend_the_installation
 depend_the_threads = agui_package.depend_the_threads
-depend_the_admin_users = authz.depend_the_admin_user_policy
-depend_the_room_authz = authz.depend_the_room_authz_policy
-depend_the_user_claims = views_package.depend_the_user_claims
-depend_the_logger = views_package.depend_the_logger
+depend_the_admin_users = views.depend_the_admin_user_policy
+depend_the_room_authz = views.depend_the_room_authz_policy
+depend_the_user_claims = views.depend_the_user_claims
+depend_the_logger = views.depend_the_logger
 depend_the_authz_logger = soliplex_views_authz.depend_the_authz_logger
 
 

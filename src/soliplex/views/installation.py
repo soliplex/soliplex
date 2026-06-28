@@ -15,9 +15,20 @@ from soliplex import views
 router = fastapi.APIRouter(tags=["installation"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_admin_users = authz.depend_the_admin_user_policy
+depend_the_admin_users = views.depend_the_admin_user_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
+
+ConfigAuditLog = loggers.InstallationConfigAuditLog
+
+
+def get_the_config_audit_log(
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+) -> ConfigAuditLog:
+    return ConfigAuditLog(claims=the_user_claims)
+
+
+depend_the_config_audit_log = fastapi.Depends(get_the_config_audit_log)
 
 
 @util.logfire_span("GET /v1/installation")
@@ -27,6 +38,7 @@ async def get_installation(
     the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
+    the_audit: ConfigAuditLog = depend_the_config_audit_log,
 ) -> models.Installation:
     """Return the installation's top-level configuration"""
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
@@ -39,6 +51,7 @@ async def get_installation(
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         ) from None
 
+    the_audit.installation_read()
     return models.Installation.from_config(the_installation._config)
 
 
@@ -49,6 +62,7 @@ async def get_installation_versions(
     the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
+    the_audit: ConfigAuditLog = depend_the_config_audit_log,
 ) -> models.InstalledPackages:
     """Return the installation's Python project versions manimest"""
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
@@ -61,6 +75,7 @@ async def get_installation_versions(
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         ) from None
 
+    the_audit.installation_versions_read()
     try:
         found = (
             subprocess.check_output(
@@ -89,6 +104,7 @@ async def get_installation_providers(
     the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
+    the_audit: ConfigAuditLog = depend_the_config_audit_log,
 ) -> installation.ProviderInfoMap:
     """Return the installation's LLM providers"""
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
@@ -101,6 +117,7 @@ async def get_installation_providers(
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         ) from None
 
+    the_audit.installation_providers_read()
     return the_installation.all_provider_info
 
 
@@ -111,6 +128,7 @@ async def get_installation_git_metadata(
     the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
+    the_audit: ConfigAuditLog = depend_the_config_audit_log,
 ) -> models.GitMetadata:
     """Return the installation's Git metadata"""
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
@@ -125,6 +143,7 @@ async def get_installation_git_metadata(
 
     git_metadata = util.GitMetadata(pathlib.Path.cwd())
 
+    the_audit.installation_git_metadata_read()
     return models.GitMetadata(
         git_hash=git_metadata.git_hash,
         git_branch=git_metadata.git_branch,
