@@ -303,12 +303,12 @@ async def test_get_room_mcp_token(gust, w_error):
     "w_hrc_kws",
     [
         [],
-        [{"source": "agent", "foo": "bar"}],
-        [{"source": "skill:test", "foo": "bar"}],
-        [{"source": "tool:test", "foo": "bar"}],
+        [{"source": "agent", "db_path": "/db/agent", "foo": "bar"}],
+        [{"source": "skill:test", "db_path": "/db/skill", "foo": "bar"}],
+        [{"source": "tool:test", "db_path": "/db/tool", "foo": "bar"}],
         [
-            {"source": "skill:test", "foo": "bar"},
-            {"source": "tool:test", "foo": "bar"},
+            {"source": "skill:test", "db_path": "/db/skill", "foo": "bar"},
+            {"source": "tool:test", "db_path": "/db/tool", "foo": "bar"},
         ],
     ],
 )
@@ -318,6 +318,7 @@ async def test_get_room_documents(
     w_hrc_kws,
     temp_dir,
     room_configs,
+    audit_records,
 ):
     ROOM_ID = "foo"
 
@@ -388,6 +389,7 @@ async def test_get_room_documents(
             loggers.ROOM_UNKNOWN_ROOM_ID,
             room_id=ROOM_ID,
         )
+        assert audit_records == []
     else:
         room_config = room_configs[ROOM_ID]
         room_config.list_haiku_rag_client_kw.return_value = w_hrc_kws
@@ -425,6 +427,22 @@ async def test_get_room_documents(
         else:
             hr_klass.assert_not_called()
 
+        rag_records = [
+            record
+            for record in audit_records
+            if record.__dict__.get(loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA)
+            == loggers.AuditLogScopes.RAG_ACCESS
+        ]
+        assert len(rag_records) == len(sources)
+        for record, kws, source in zip(
+            rag_records, w_hrc_kws, sources, strict=True
+        ):
+            assert record.action == loggers.AUDIT_RAG_ACTION_DOC_LIST
+            assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+            assert record.room_id == ROOM_ID
+            assert record.db_path == kws["db_path"]
+            assert record.result_refs == [documents[source].id]
+
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
@@ -434,6 +452,18 @@ async def test_get_room_documents(
     the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM_DOCUMENTS)
 
 
+def _sole_rag_record(audit_records):
+    """Return the single rag-access audit record, asserting there is one."""
+    rag_records = [
+        record
+        for record in audit_records
+        if record.__dict__.get(loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA)
+        == loggers.AuditLogScopes.RAG_ACCESS
+    ]
+    assert len(rag_records) == 1
+    return rag_records[0]
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_image", [False, True])
 @pytest.mark.parametrize("w_chunk_index", [None, 0, -1])
@@ -441,12 +471,12 @@ async def test_get_room_documents(
     "w_hrc_kws",
     [
         [],
-        [{"source": "agent", "foo": "bar"}],
-        [{"source": "skill:test", "foo": "bar"}],
-        [{"source": "tool:test", "foo": "bar"}],
+        [{"source": "agent", "db_path": "/db/agent", "foo": "bar"}],
+        [{"source": "skill:test", "db_path": "/db/skill", "foo": "bar"}],
+        [{"source": "tool:test", "db_path": "/db/tool", "foo": "bar"}],
         [
-            {"source": "skill:test", "foo": "bar"},
-            {"source": "tool:test", "foo": "bar"},
+            {"source": "skill:test", "db_path": "/db/skill", "foo": "bar"},
+            {"source": "tool:test", "db_path": "/db/tool", "foo": "bar"},
         ],
     ],
 )
@@ -460,6 +490,7 @@ async def test_get_chunk_visualization(
     w_image,
     temp_dir,
     room_configs,
+    audit_records,
 ):
     ROOM_ID = "foo"
     CHUNK_ID = "test-chunk-123"
@@ -544,6 +575,7 @@ async def test_get_chunk_visualization(
             loggers.ROOM_UNKNOWN_ROOM_ID,
             room_id=ROOM_ID,
         )
+        assert audit_records == []
 
     else:
         room_config = room_configs[ROOM_ID]
@@ -571,6 +603,14 @@ async def test_get_chunk_visualization(
                 loggers.ROOM_UNKNOWN_CHUNK_ID, chunk_id=CHUNK_ID
             )
 
+            record = _sole_rag_record(audit_records)
+            assert record.action == loggers.AUDIT_RAG_ACTION_CHUNK_VIZ
+            assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
+            assert record.room_id == ROOM_ID
+            assert record.db_path is None
+            assert record.selector == CHUNK_ID
+            assert record.reason == loggers.ROOM_UNKNOWN_CHUNK_ID
+
         elif w_chunk_index is None:
             with pytest.raises(fastapi.HTTPException) as exc:
                 await rooms_views.get_chunk_visualization(
@@ -589,6 +629,14 @@ async def test_get_chunk_visualization(
             the_logger.error.assert_called_once_with(
                 loggers.ROOM_UNKNOWN_CHUNK_ID, chunk_id=CHUNK_ID
             )
+
+            record = _sole_rag_record(audit_records)
+            assert record.action == loggers.AUDIT_RAG_ACTION_CHUNK_VIZ
+            assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
+            assert record.room_id == ROOM_ID
+            assert record.db_path is None
+            assert record.selector == CHUNK_ID
+            assert record.reason == loggers.ROOM_UNKNOWN_CHUNK_ID
 
         elif not w_image:
             with pytest.raises(fastapi.HTTPException) as exc:
@@ -609,6 +657,14 @@ async def test_get_chunk_visualization(
                 loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE, chunk_id=CHUNK_ID
             )
 
+            record = _sole_rag_record(audit_records)
+            assert record.action == loggers.AUDIT_RAG_ACTION_CHUNK_VIZ
+            assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
+            assert record.room_id == ROOM_ID
+            assert record.db_path == w_hrc_kws[w_chunk_index]["db_path"]
+            assert record.selector == CHUNK_ID
+            assert record.reason == loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE
+
         else:
             found = await rooms_views.get_chunk_visualization(
                 room_id=ROOM_ID,
@@ -626,6 +682,14 @@ async def test_get_chunk_visualization(
                 document_uri=DOCUMENT_URI,
                 images_base_64=PAGES_B64,
             )
+
+            record = _sole_rag_record(audit_records)
+            assert record.action == loggers.AUDIT_RAG_ACTION_CHUNK_VIZ
+            assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+            assert record.room_id == ROOM_ID
+            assert record.db_path == w_hrc_kws[w_chunk_index]["db_path"]
+            assert record.selector == CHUNK_ID
+            assert record.result_refs == [DOCUMENT_URI]
 
         room_config.list_haiku_rag_client_kw.assert_called_once_with(
             include_source=True,
@@ -648,12 +712,12 @@ async def test_get_chunk_visualization(
     "w_hrc_kws",
     [
         [],
-        [{"source": "agent", "foo": "bar"}],
-        [{"source": "skill:test", "foo": "bar"}],
-        [{"source": "tool:test", "foo": "bar"}],
+        [{"source": "agent", "db_path": "/db/agent", "foo": "bar"}],
+        [{"source": "skill:test", "db_path": "/db/skill", "foo": "bar"}],
+        [{"source": "tool:test", "db_path": "/db/tool", "foo": "bar"}],
         [
-            {"source": "skill:test", "foo": "bar"},
-            {"source": "tool:test", "foo": "bar"},
+            {"source": "skill:test", "db_path": "/db/skill", "foo": "bar"},
+            {"source": "tool:test", "db_path": "/db/tool", "foo": "bar"},
         ],
     ],
 )
@@ -664,6 +728,7 @@ async def test_get_search(
     w_search_type,
     temp_dir,
     room_configs,
+    audit_records,
 ):
     QUERY = "test query"
     SEARCH_TYPE = "hybrid"
@@ -731,6 +796,7 @@ async def test_get_search(
             loggers.ROOM_UNKNOWN_ROOM_ID,
             room_id=ROOM_ID,
         )
+        assert audit_records == []
 
     else:
         room_config = room_configs[ROOM_ID]
@@ -785,3 +851,20 @@ async def test_get_search(
                 query=QUERY,
                 search_type=exp_search_type,
             )
+
+        rag_records = [
+            record
+            for record in audit_records
+            if record.__dict__.get(loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA)
+            == loggers.AuditLogScopes.RAG_ACCESS
+        ]
+        assert len(rag_records) == len(sources)
+        for record, kws, exp_result in zip(
+            rag_records, w_hrc_kws, search_results, strict=True
+        ):
+            assert record.action == loggers.AUDIT_RAG_ACTION_SEARCH
+            assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+            assert record.room_id == ROOM_ID
+            assert record.db_path == kws["db_path"]
+            assert record.selector == QUERY
+            assert record.result_refs == [exp_result.chunk_id]

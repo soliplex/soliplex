@@ -175,21 +175,6 @@ def test_auditlogwrapper_ctor(scope):
     assert found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA] == scope
 
 
-@pytest.fixture
-def audit_records():
-    """Capture records emitted to the 'soliplex-audit' logger in a list."""
-    records = []
-    handler = logging.Handler()
-    handler.emit = records.append
-    logger = logging.getLogger(loggers.SOLIPLEX_AUDIT_LOGGER_NAME)
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
-    try:
-        yield records
-    finally:
-        logger.removeHandler(handler)
-
-
 def _assert_audit_record(record, *, message, levelno, outcome, scope, fields):
     """Shared assertions for a single emitted audit record."""
     assert record.getMessage() == message
@@ -696,5 +681,88 @@ def test_rag_retrieval(audit_records):
             "tool": "search",
             "selector": "what is x",
             "result_refs": ["c1", "c2"],
+        },
+    )
+
+
+def test_rag_search(audit_records):
+    wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
+
+    wrapper.search("db", "what is x", ["c1", "c2"])
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_RAG_ACCESS,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_RAG_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_RAG_ACTION_SEARCH,
+            "db_path": "db",
+            "selector": "what is x",
+            "result_refs": ["c1", "c2"],
+        },
+    )
+
+
+def test_rag_doc_list(audit_records):
+    wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
+
+    wrapper.doc_list("db", ["d1", "d2"])
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_RAG_ACCESS,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_RAG_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_RAG_ACTION_DOC_LIST,
+            "db_path": "db",
+            "result_refs": ["d1", "d2"],
+        },
+    )
+
+
+def test_rag_chunk_viz(audit_records):
+    wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
+
+    wrapper.chunk_viz("db", "chunk-uuid", ["doc://uri"])
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_RAG_ACCESS,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_RAG_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_RAG_ACTION_CHUNK_VIZ,
+            "db_path": "db",
+            "selector": "chunk-uuid",
+            "result_refs": ["doc://uri"],
+        },
+    )
+
+
+def test_rag_chunk_viz_failed(audit_records):
+    wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
+
+    wrapper.chunk_viz_failed(None, "chunk-uuid", "unknown chunk id")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_RAG_ACCESS,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_RAG_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_RAG_ACTION_CHUNK_VIZ,
+            "db_path": None,
+            "selector": "chunk-uuid",
+            "reason": "unknown chunk id",
         },
     )
