@@ -426,8 +426,14 @@ class RAGAccessAuditLog(AuditLogWrapper):
     # Records the knowledge-base accesses a skill makes while answering a
     # request. 'db_path' names the LanceDB the access targeted; 'selector' is
     # the query / document reference / chunk ids the access used; 'result_refs'
-    # are the identifiers returned (not their content). Reads that return
-    # nothing or whose tool errored are recorded as failures.
+    # are the identifiers returned (not their content), empty when the read
+    # matched nothing.
+    #
+    # On the run-mediated path Soliplex sees only the rendered tool result, not
+    # a tool-error signal, so every observed skill access is recorded via
+    # 'access' (outcome=success). 'access_failed' (outcome=error) is reserved
+    # for the direct helper endpoints (views.rooms), where the HTTP outcome
+    # authoritatively distinguishes a refused or absent access.
     def __init__(self, claims: dict[str, typing.Any], **extra):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(scope=AuditLogScopes.RAG_ACCESS, **extra_with_claims)
