@@ -131,9 +131,12 @@ AUDIT_RAG_ACCESS = "rag access"
 
 # rag-access 'action' values: the kind of protected-data read, carried as a
 # field so both access paths share one vocabulary. The run-mediated path
-# records 'rag-retrieval'; the direct helper endpoints (future) will add
-# 'search' / 'chunk-viz' / 'doc-list' alongside their own methods.
+# records 'rag-retrieval'; the direct helper endpoints record 'search' /
+# 'chunk-viz' / 'doc-list'.
 AUDIT_RAG_ACTION_RETRIEVAL = "rag-retrieval"
+AUDIT_RAG_ACTION_SEARCH = "search"
+AUDIT_RAG_ACTION_CHUNK_VIZ = "chunk-viz"
+AUDIT_RAG_ACTION_DOC_LIST = "doc-list"
 
 
 class _StructuredFieldsAdapter(logging.LoggerAdapter):
@@ -460,10 +463,9 @@ class RAGAccessAuditLog(AuditLogWrapper):
     the rendered tool result, not a tool-error signal, so every observed
     skill access is recorded as a success.
 
-    The direct helper endpoints for API endpoints (`views.rooms`) will add
-    their own action methods ('search' / 'chunk-viz' / 'doc-list') with
-    failure variants, where the HTTP outcome authoritatively distinguishes a
-    refused or absent access.
+    The direct helper API endpoints (`views.rooms`) have their own action
+    methods ('search' / 'chunk-viz' / 'doc-list') with failure variants, where
+    the HTTP outcome authoritatively distinguishes a refused or absent access.
 
     Room-level agent tool access will use the same action methods, but log
     failure variants based on exceptions raised.
@@ -494,4 +496,45 @@ class RAGAccessAuditLog(AuditLogWrapper):
             tool=tool,
             selector=selector,
             result_refs=result_refs,
+        )
+
+    def search(
+        self, db_path: str, selector: typing.Any, result_refs: typing.Any
+    ):
+        self._succeeded(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_SEARCH,
+            db_path=db_path,
+            selector=selector,
+            result_refs=result_refs,
+        )
+
+    def doc_list(self, db_path: str, result_refs: typing.Any):
+        self._succeeded(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_DOC_LIST,
+            db_path=db_path,
+            result_refs=result_refs,
+        )
+
+    def chunk_viz(
+        self, db_path: str, selector: typing.Any, result_refs: typing.Any
+    ):
+        self._succeeded(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_CHUNK_VIZ,
+            db_path=db_path,
+            selector=selector,
+            result_refs=result_refs,
+        )
+
+    def chunk_viz_failed(
+        self, db_path: str | None, selector: typing.Any, reason: str
+    ):
+        self._failed(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_CHUNK_VIZ,
+            db_path=db_path,
+            selector=selector,
+            reason=reason,
         )

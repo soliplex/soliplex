@@ -189,6 +189,7 @@ async def get_room_documents(
             detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
+    audit = loggers.RAGAccessAuditLog(claims=the_user_claims, room_id=room_id)
     document_set = {}
 
     for hr_client_kw in room_config.list_haiku_rag_client_kw(
@@ -196,9 +197,12 @@ async def get_room_documents(
     ):
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
+        db_path = str(hr_client_kw["db_path"])
 
         async with hr_client.HaikuRAG(**hr_client_kw) as rag:
             results = await rag.list_documents()
+
+        audit.doc_list(db_path, [document.id for document in results])
 
         for document in results:
             document_set[document.id] = models.RAGDocument(
@@ -246,12 +250,14 @@ async def get_chunk_visualization(
             detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
+    audit = loggers.RAGAccessAuditLog(claims=the_user_claims, room_id=room_id)
     images = None
     for hr_client_kw in room_config.list_haiku_rag_client_kw(
         include_source=True,
     ):
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
+        db_path = str(hr_client_kw["db_path"])
 
         async with hr_client.HaikuRAG(**hr_client_kw) as rag:
             chunk = await rag.chunk_repository.get_by_id(chunk_id)
@@ -262,6 +268,7 @@ async def get_chunk_visualization(
 
     else:
         the_logger.error(loggers.ROOM_UNKNOWN_CHUNK_ID, chunk_id=chunk_id)
+        audit.chunk_viz_failed(None, chunk_id, loggers.ROOM_UNKNOWN_CHUNK_ID)
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"{loggers.ROOM_UNKNOWN_CHUNK_ID}: {chunk_id}",
@@ -275,6 +282,9 @@ async def get_chunk_visualization(
             loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE,
             chunk_id=chunk_id,
         )
+        audit.chunk_viz_failed(
+            db_path, chunk_id, loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE
+        )
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"{loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE}: {chunk_id}",
@@ -285,6 +295,8 @@ async def get_chunk_visualization(
         img.save(buffer, format="PNG")
         buffer.seek(0)
         base64_images.append(base64.b64encode(buffer.read()).decode("utf-8"))
+
+    audit.chunk_viz(db_path, chunk_id, [chunk.document_uri])
 
     return models.ChunkVisualization(
         source=source,
@@ -324,6 +336,7 @@ async def get_search(
             detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
+    audit = loggers.RAGAccessAuditLog(claims=the_user_claims, room_id=room_id)
     aggregate_hits = []
 
     for hr_client_kw in room_config.list_haiku_rag_client_kw(
@@ -331,12 +344,15 @@ async def get_search(
     ):
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
+        db_path = str(hr_client_kw["db_path"])
 
         async with hr_client.HaikuRAG(**hr_client_kw) as rag:
             hits = await rag.search(
                 query=query,
                 search_type=search_type,
             )
+
+        audit.search(db_path, query, [hit.chunk_id for hit in hits])
 
         for hit in hits:
             aggregate_hits.append(

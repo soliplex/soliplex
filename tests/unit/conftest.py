@@ -1,3 +1,4 @@
+import logging
 import pathlib
 import tempfile
 from unittest import mock
@@ -6,6 +7,7 @@ import _test_features as agui_features
 import pytest
 
 from soliplex import authz
+from soliplex import loggers
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
@@ -40,6 +42,21 @@ def anyio_backend():
 def temp_dir() -> pathlib.Path:
     with tempfile.TemporaryDirectory() as td:
         yield pathlib.Path(td).resolve()
+
+
+@pytest.fixture
+def audit_records():
+    """Capture records emitted to the 'soliplex-audit' logger in a list."""
+    records = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    logger = logging.getLogger(loggers.SOLIPLEX_AUDIT_LOGGER_NAME)
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
 
 
 @pytest.fixture(params=[0, 1, 2])
