@@ -676,3 +676,45 @@ def test_ragaccessauditlog_ctor(w_claims):
     scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
     assert scope == SCOPE_RAG_ACCESS
     assert found.extra["claims"] == w_claims
+
+
+def test_rag_access(audit_records):
+    wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
+
+    wrapper.access("db", "search", "what is x", ["c1", "c2"])
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_RAG_ACCESS,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_RAG_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "db_path": "db",
+            "tool": "search",
+            "selector": "what is x",
+            "result_refs": ["c1", "c2"],
+        },
+    )
+
+
+def test_rag_access_failed(audit_records):
+    wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
+
+    wrapper.access_failed("db", "cite", ["c9"], "unresolved")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_RAG_ACCESS,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_RAG_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "db_path": "db",
+            "tool": "cite",
+            "selector": ["c9"],
+            "reason": "unresolved",
+        },
+    )

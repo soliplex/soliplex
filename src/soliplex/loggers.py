@@ -124,6 +124,9 @@ AUDIT_SERVER_STARTING = "server starting"
 AUDIT_SERVER_STARTED = "server started"
 AUDIT_SERVER_STOPPING = "server stopping"
 
+# rag-access audit events
+AUDIT_RAG_ACCESS = "rag access"
+
 
 class _StructuredFieldsAdapter(logging.LoggerAdapter):
     """LoggerAdapter that folds caller keyword fields into 'extra'."""
@@ -420,9 +423,37 @@ class InstallationConfigAuditLog(AuditLogWrapper):
 
 
 class RAGAccessAuditLog(AuditLogWrapper):
-    # Deferred (rag-access out of scope pending the haiku-rag approach); the
-    # scope and class exist so the audit vocabulary is complete, but no events
-    # are wired yet.
+    # Records the knowledge-base accesses a skill makes while answering a
+    # request. 'db_path' names the LanceDB the access targeted; 'selector' is
+    # the query / document reference / chunk ids the access used; 'result_refs'
+    # are the identifiers returned (not their content). Reads that return
+    # nothing or whose tool errored are recorded as failures.
     def __init__(self, claims: dict[str, typing.Any], **extra):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(scope=AuditLogScopes.RAG_ACCESS, **extra_with_claims)
+
+    def access(
+        self,
+        db_path: str,
+        tool: str,
+        selector: typing.Any,
+        result_refs: typing.Any,
+    ):
+        self._succeeded(
+            AUDIT_RAG_ACCESS,
+            db_path=db_path,
+            tool=tool,
+            selector=selector,
+            result_refs=result_refs,
+        )
+
+    def access_failed(
+        self, db_path: str, tool: str, selector: typing.Any, reason: str
+    ):
+        self._failed(
+            AUDIT_RAG_ACCESS,
+            db_path=db_path,
+            tool=tool,
+            selector=selector,
+            reason=reason,
+        )
