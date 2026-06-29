@@ -25,8 +25,8 @@ dependencies = [
     "fastmcp >= 3.3.0, < 3.4",
     "fakeredis != 2.35.0",  # brownbag
     "greenlet",
-    "haiku.rag-slim >= 0.63.0, < 0.64",
-    "haiku-skills >= 0.17.2, < 0.18",
+    "haiku.rag-slim >= 0.63.1, < 0.64",
+    "haiku-skills >= 0.18.0, < 0.19",
     "idna >= 3.15",
     "itsdangerous",
     "joserfc >= 1.6.7, < 1.7",  # CVE-2026-48990
