@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import contextlib
+import logging
+import pathlib
 from unittest import mock
 
 import pytest
@@ -8,6 +10,7 @@ import typer
 
 from soliplex import authz
 from soliplex import installation
+from soliplex import loggers
 from soliplex.cli import cli_util
 from soliplex.config import installation as config_installation
 
@@ -115,8 +118,86 @@ def test__check_ram_dburi(the_console, dburi, expectation):
         )
 
 
+@pytest.fixture
+def reset_cli_logging():
+    """Isolate the process-global state '_configure_cli_logging' touches.
+
+    Resets the "configure once" guard to False before the test (so the real
+    logic runs) and restores the 'soliplex-audit' logger's handlers /
+    propagate -- plus the guard -- afterward, so the mutation does not leak
+    into other tests.
+    """
+    audit_logger = logging.getLogger(loggers.SOLIPLEX_AUDIT_LOGGER_NAME)
+    saved_handlers = list(audit_logger.handlers)
+    saved_propagate = audit_logger.propagate
+    saved_flag = cli_util._CLI_LOGGING_CONFIGURED
+    cli_util._CLI_LOGGING_CONFIGURED = False
+    try:
+        yield
+    finally:
+        audit_logger.handlers[:] = saved_handlers
+        audit_logger.propagate = saved_propagate
+        cli_util._CLI_LOGGING_CONFIGURED = saved_flag
+
+
+@mock.patch("soliplex.cli.cli_util.logging_config")
+@mock.patch("soliplex.cli.cli_util.config_installation._load_config_yaml")
+def test__configure_cli_logging_applies_config(
+    load_config_yaml, logging_config, reset_cli_logging
+):
+    cli_log_config = pathlib.Path("/etc/soliplex/audit-logging.yaml")
+
+    cli_util._configure_cli_logging(cli_log_config)
+
+    load_config_yaml.assert_called_once_with(cli_log_config)
+    logging_config.dictConfig.assert_called_once_with(
+        load_config_yaml.return_value,
+    )
+    assert cli_util._CLI_LOGGING_CONFIGURED is True
+
+
+def test__configure_cli_logging_silences_audit(reset_cli_logging):
+    cli_util._configure_cli_logging(None)
+
+    audit_logger = logging.getLogger(loggers.SOLIPLEX_AUDIT_LOGGER_NAME)
+    assert [type(h) for h in audit_logger.handlers] == [logging.NullHandler]
+    assert audit_logger.propagate is False
+    assert cli_util._CLI_LOGGING_CONFIGURED is True
+
+
+@mock.patch("soliplex.cli.cli_util.logging_config")
+def test__configure_cli_logging_noop_when_already_configured(
+    logging_config, reset_cli_logging
+):
+    # The first caller wins; a later call (here passing 'None') must not
+    # re-silence a logger an earlier '--cli-log-config' already configured.
+    cli_util._CLI_LOGGING_CONFIGURED = True
+    audit_logger = logging.getLogger(loggers.SOLIPLEX_AUDIT_LOGGER_NAME)
+    saved_handlers = list(audit_logger.handlers)
+    saved_propagate = audit_logger.propagate
+
+    cli_util._configure_cli_logging(None)
+
+    logging_config.dictConfig.assert_not_called()
+    assert audit_logger.handlers == saved_handlers
+    assert audit_logger.propagate is saved_propagate
+
+
 @pytest.mark.anyio
-async def test__admin_user_policy(tmp_path):
+@mock.patch("soliplex.cli.cli_util._configure_cli_logging")
+async def test__authz_session_configures_logging(configure_logging, tmp_path):
+    db_path = tmp_path / "authz.sqlite"
+    dburi = f"sqlite+aiosqlite:///{db_path}"
+
+    async with cli_util._authz_session(dburi):
+        pass
+
+    configure_logging.assert_called_once_with()
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.cli.cli_util._configure_cli_logging")
+async def test__admin_user_policy(_configure_logging, tmp_path):
     db_path = tmp_path / "authz.sqlite"
     dburi = f"sqlite+aiosqlite:///{db_path}"
     json_path = authz.token_field_json_path("email", "alice@example.com")
@@ -129,7 +210,8 @@ async def test__admin_user_policy(tmp_path):
 
 
 @pytest.mark.anyio
-async def test__room_authz_policy(tmp_path):
+@mock.patch("soliplex.cli.cli_util._configure_cli_logging")
+async def test__room_authz_policy(_configure_logging, tmp_path):
     db_path = tmp_path / "authz.sqlite"
     dburi = f"sqlite+aiosqlite:///{db_path}"
 

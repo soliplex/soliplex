@@ -170,12 +170,38 @@ def test__auditgroup_parse_args(parse_args, ctx, w_args, exp_args):
 
 
 @pytest.mark.parametrize("w_quiet", [False, True])
-def test__audit_callback(ctx, w_quiet):
+@mock.patch("soliplex.cli.cli_util._configure_cli_logging")
+def test__audit_callback(configure_logging, ctx, w_quiet):
     w_quiet_kw = {"quiet": w_quiet}
 
-    cli_audit._audit_callback(ctx, **w_quiet_kw)
+    cli_audit._audit_callback(ctx, cli_log_config=None, **w_quiet_kw)
 
     assert ctx.obj["quiet"] == w_quiet
+    configure_logging.assert_called_once_with(None)
+
+
+@mock.patch("soliplex.cli.cli_util._configure_cli_logging")
+def test_cli_log_config_from_env(
+    configure_logging, scratch_installation, cli_runner, tmp_path
+):
+    # 'audit room-authz' (like 'audit admin-users') reads security objects
+    # through the authz policy, so it emits security-object-read audit
+    # records -- hence the group's '--cli-log-config' option, backed by
+    # 'SOLIPLEX_CLI_LOG_CONFIG' via Typer's 'envvar='. Verify the env value
+    # reaches the callback as a Path. Regression guard.
+    cfg = tmp_path / "audit-logging.yaml"
+    cfg.write_text("version: 1\n")
+
+    result = cli_runner.invoke(
+        cli_audit.app,
+        ["room-authz", str(scratch_installation.path)],
+        env={"SOLIPLEX_CLI_LOG_CONFIG": str(cfg)},
+    )
+
+    assert result.exit_code == 0
+    # The group callback (which runs first) forwards the env-derived Path;
+    # the '_authz_session' safety net then calls it again with no argument.
+    assert configure_logging.call_args_list[0] == mock.call(cfg)
 
 
 @pytest.mark.parametrize("w_errors", [False, True])

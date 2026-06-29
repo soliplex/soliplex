@@ -186,6 +186,10 @@ See `.env.example` for the full reference. Key variables:
 - `SOLIPLEX_URL_SAFE_TOKEN_SECRET` -- MCP token secret (auto-generated if
   unset)
 - `LOGFIRE_TOKEN` -- Pydantic Logfire token (optional)
+- `SOLIPLEX_CLI_LOG_CONFIG` -- path to a Python logging-config YAML enabling
+  audit logging for privileged CLI commands (also the `--cli-log-config`
+  group option on `admin-users` / `room-authz` / `audit`); unset means CLI
+  audit records are suppressed (see `docs/config/logging.md`)
 
 ## Documentation
 

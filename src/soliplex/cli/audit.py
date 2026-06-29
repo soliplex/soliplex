@@ -111,7 +111,9 @@ app = typer.Typer(
 def _audit_callback(
     ctx: typer.Context,
     quiet: bool = _QUIET_OPTION,
+    cli_log_config: pathlib.Path | None = cli_util.CLI_LOG_CONFIG_OPTION,
 ):
+    cli_util._configure_cli_logging(cli_log_config)
     ctx.obj = {"quiet": quiet}
 
 
