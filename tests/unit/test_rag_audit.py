@@ -126,6 +126,36 @@ def test_unrelated_activity_type_is_ignored():
     assert log.calls == []
 
 
+def test_unknown_skill_is_skipped():
+    log = _RecordingLog()
+    auditor = rag_audit.RagAccessAuditor(log, db_path_for=lambda skill: None)
+
+    auditor.handle(
+        _activity(
+            "skill_tool_call",
+            {
+                "skill": "not-a-rag-skill",
+                "tool_name": "search",
+                "tool_call_id": "t3",
+                "args": '{"query": "x"}',
+            },
+        )
+    )
+    auditor.handle(
+        _activity(
+            "skill_tool_result",
+            {
+                "skill": "not-a-rag-skill",
+                "tool_name": "search",
+                "tool_call_id": "t3",
+                "result": SEARCH_RESULT,
+            },
+        )
+    )
+
+    assert log.calls == []
+
+
 def test_orphan_result_is_ignored():
     log = _RecordingLog()
     auditor = _auditor(log)

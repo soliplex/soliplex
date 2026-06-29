@@ -1322,6 +1322,80 @@ async def test_drive_llm_stream_save_event_error(
 
 
 @pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.titles.maybe_generate_title")
+@mock.patch("soliplex.views.agui.finish_run")
+@mock.patch("soliplex.views.agui.save_single_event")
+@mock.patch("soliplex.views.agui.logfire")
+async def test_drive_llm_stream_audits_rag_access(logfire, sse, fr, mgt):
+    """A skill tool-call / result pair emits a rag-access audit record."""
+    import logging
+
+    records = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    audit_logger = logging.getLogger(loggers.SOLIPLEX_AUDIT_LOGGER_NAME)
+    audit_logger.setLevel(logging.DEBUG)
+    audit_logger.addHandler(handler)
+
+    def _activity(activity_type, content):
+        return agui_core.ActivitySnapshotEvent(
+            type=agui_core.EventType.ACTIVITY_SNAPSHOT,
+            message_id="m1",
+            activity_type=activity_type,
+            content=content,
+            replace=False,
+        )
+
+    async def event_iter():
+        yield _activity(
+            "skill_tool_call",
+            {
+                "skill": "rag",
+                "tool_name": "search",
+                "tool_call_id": "t1",
+                "args": '{"query": "x"}',
+            },
+        )
+        yield _activity(
+            "skill_tool_result",
+            {
+                "skill": "rag",
+                "tool_name": "search",
+                "tool_call_id": "t1",
+                "result": "[c1] [rank 1 of 1]\nContent:\nx",
+            },
+        )
+
+    try:
+        await agui_views.drive_llm_stream(
+            event_iter(),
+            sqla_engine=mock.AsyncMock(spec_set=()),
+            event_queue=asyncio.Queue(),
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+            claims={"email": "x@example.com"},
+            rag_db_paths={"rag": "/db.lancedb"},
+        )
+    finally:
+        audit_logger.removeHandler(handler)
+
+    scope_key = loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA
+    rag_records = [
+        record
+        for record in records
+        if record.__dict__.get(scope_key) == loggers.AuditLogScopes.RAG_ACCESS
+    ]
+    assert len(rag_records) == 1
+    record = rag_records[0]
+    assert record.db_path == "/db.lancedb"
+    assert record.tool == "search"
+    assert record.selector == {"query": "x"}
+    assert record.result_refs == ["c1"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("num_events", [0, 1, 10, 100])
 async def test_stream_llm_events(num_events):
     expected = [
@@ -1364,6 +1438,18 @@ def test_find_skill_toolset_returns_skill_toolset():
     agent = mock.MagicMock()
     agent.toolsets = [mock.MagicMock(), skill_ts]
     assert agui_views.find_skill_toolset(agent) is skill_ts
+
+
+def test__rag_db_paths_without_skills():
+    room_config = mock.Mock()
+    room_config.skills = None
+    assert agui_views._rag_db_paths(room_config) == {}
+
+
+def test__rag_db_paths_with_skills():
+    room_config = mock.Mock()
+    room_config.skills.rag_db_paths = {"rag": "/db.lancedb"}
+    assert agui_views._rag_db_paths(room_config) == {"rag": "/db.lancedb"}
 
 
 # -- init_agent_stream -------------------------------------------------
@@ -1580,6 +1666,11 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert ias_kwargs["run_id"] == TEST_RUN_ID_STR
         assert ias_kwargs["title_agent_config"] is exp_title_config
         assert ias_kwargs["messages"] is exp_adapter.run_input.messages
+        assert ias_kwargs["claims"] is THE_USER_CLAIMS
+        exp_room_config = the_installation.get_room_config.return_value
+        assert (
+            ias_kwargs["rag_db_paths"] is exp_room_config.skills.rag_db_paths
+        )
 
         # Verify run_stream_kwargs contains deps, conversation_id,
         # and on_complete

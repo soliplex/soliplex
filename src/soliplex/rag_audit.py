@@ -53,9 +53,12 @@ class RagAccessAuditor:
             captured = self._selectors.pop(content["tool_call_id"], None)
             if captured is None:
                 return
+            db_path = self._db_path_for(content["skill"])
+            if db_path is None:
+                return
             tool, selector = captured
             self._audit_log.access(
-                self._db_path_for(content["skill"]),
+                db_path,
                 tool,
                 selector,
                 _result_refs(content["result"]),
