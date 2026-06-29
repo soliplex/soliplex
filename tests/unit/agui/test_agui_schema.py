@@ -1,11 +1,13 @@
 from unittest import mock
 
 import pytest
+from ag_ui import core as agui_core
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import util
 from soliplex.agui import schema as agui_schema
+from soliplex.agui import util as agui_util
 from soliplex.config import installation as config_installation
 from tests.unit.agui import agui_constants
 
@@ -197,6 +199,51 @@ def test_runevent_from_agui_event(agui_event):
     assert found.type == agui_event.type
 
 
+def test_runevent_to_agui_model_fills_timestamp_from_created(the_session):
+    with the_session as session:
+        thread = agui_schema.Thread(room_id=ROOM_ID, user_name=USER_NAME)
+        session.add(thread)
+        session.commit()
+
+        run = agui_schema.Run(thread=thread)
+        session.add(run)
+        session.commit()
+
+        run_event = agui_schema.RunEvent.from_agui_model(
+            run,
+            agui_core.events.RawEvent(event={"k": "v"}),
+        )
+        session.add(run_event)
+        session.commit()
+
+        found = run_event.to_agui_model()
+
+        assert isinstance(found.timestamp, int)
+        assert found.timestamp == agui_util._epoch_ms(run_event.created)
+
+
+def test_runevent_to_agui_model_keeps_existing_timestamp(the_session):
+    with the_session as session:
+        thread = agui_schema.Thread(room_id=ROOM_ID, user_name=USER_NAME)
+        session.add(thread)
+        session.commit()
+
+        run = agui_schema.Run(thread=thread)
+        session.add(run)
+        session.commit()
+
+        run_event = agui_schema.RunEvent.from_agui_model(
+            run,
+            agui_core.events.RawEvent(event={"k": "v"}, timestamp=999),
+        )
+        session.add(run_event)
+        session.commit()
+
+        found = run_event.to_agui_model()
+
+        assert found.timestamp == 999
+
+
 @pytest.mark.parametrize(
     "email_kwargs, exp_email",
     [
@@ -335,7 +382,9 @@ async def test_run_events(the_session):
             await run.list_events(),
             strict=True,
         ):
-            assert db_event == agui_event
+            assert isinstance(db_event.timestamp, int)
+            stripped = db_event.model_copy(update={"timestamp": None})
+            assert stripped == agui_event
 
 
 @pytest.mark.parametrize("init_schema", [None, False, True])

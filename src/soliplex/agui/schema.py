@@ -382,6 +382,9 @@ class RunEvent(Base):
             rai = agui_core.RunAgentInput.model_validate(rai)
             event.run_agent_input = rai
 
+        if event.timestamp is None and self.created is not None:
+            event.timestamp = agui_util._epoch_ms(self.created)
+
         return event
 
     @property

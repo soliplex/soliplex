@@ -1107,7 +1107,8 @@ async def test_threadstorage_save_run_events(
         strict=True,
     ):
         assert found_event == exp_event
-        assert db_event == exp_event
+        assert isinstance(db_event.timestamp, int)
+        assert db_event.model_copy(update={"timestamp": None}) == exp_event
 
 
 @pytest.mark.asyncio
@@ -1162,9 +1163,11 @@ async def test_threadstorage_save_single_event(the_async_session):
 
     assert len(pairs) == 2
     assert pairs[0][0] == 0
-    assert pairs[0][1] == event_0
+    assert isinstance(pairs[0][1].timestamp, int)
+    assert pairs[0][1].model_copy(update={"timestamp": None}) == event_0
     assert pairs[1][0] == 1
-    assert pairs[1][1] == event_1
+    assert isinstance(pairs[1][1].timestamp, int)
+    assert pairs[1][1].model_copy(update={"timestamp": None}) == event_1
 
     # Query with after_index=0 should only return the second
     pairs_after = await ts.list_run_events_after(
@@ -1177,7 +1180,8 @@ async def test_threadstorage_save_single_event(the_async_session):
 
     assert len(pairs_after) == 1
     assert pairs_after[0][0] == 1
-    assert pairs_after[0][1] == event_1
+    assert isinstance(pairs_after[0][1].timestamp, int)
+    assert pairs_after[0][1].model_copy(update={"timestamp": None}) == event_1
 
 
 @pytest.mark.asyncio
