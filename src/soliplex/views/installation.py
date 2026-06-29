@@ -18,6 +18,7 @@ depend_the_installation = installation.depend_the_installation
 depend_the_admin_users = views.depend_the_admin_user_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
+depend_the_unauth_logger = views.depend_the_unauth_logger
 
 ConfigAuditLog = loggers.InstallationConfigAuditLog
 
@@ -149,3 +150,30 @@ async def get_installation_git_metadata(
         git_branch=git_metadata.git_branch,
         git_tag=git_metadata.git_tag,
     )
+
+
+@util.logfire_span("GET /v1/installation/identity")
+@router.get(
+    "/v1/installation/identity",
+    summary="Get human-readable server identity",
+)
+async def get_installation_identity(
+    the_installation: installation.Installation = depend_the_installation,
+    the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
+) -> models.ServerInfo:
+    """Return the installation's human-readable name and description.
+
+    Public (pre-auth) so clients can show a friendly identity on the connect
+    screen. Responds 404 when neither a name nor a description is configured,
+    letting clients fall back to displaying the raw server address.
+    """
+    config = the_installation._config
+    if config.server_name is None and config.server_description is None:
+        the_unauth_logger.debug(loggers.INST_NO_INSTALLATION_IDENTITY)
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=loggers.INST_NO_INSTALLATION_IDENTITY,
+        )
+
+    the_unauth_logger.debug(loggers.INST_GET_INSTALLATION_IDENTITY)
+    return models.ServerInfo.from_config(config)

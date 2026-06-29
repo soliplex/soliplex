@@ -513,6 +513,35 @@ InstalledPackages = dict[str, InstalledPackage]
 
 
 # ----------------------------------------------------------------------------
+#   Server identity
+# ----------------------------------------------------------------------------
+class ServerInfo(pydantic.BaseModel):
+    """Human-readable identity for a Soliplex server.
+
+    Exposed publicly via `GET /api/v1/installation/identity` so clients can
+    show a friendly name and description in place of the raw server address.
+    At least one of
+    ``name`` / ``description`` is set whenever this is returned; the endpoint
+    responds 404 when the installation configures neither.
+    """
+
+    installation_id: str
+    name: str | None = None
+    description: str | None = None
+
+    @classmethod
+    def from_config(
+        cls,
+        installation_config: config_installation.InstallationConfig,
+    ) -> ServerInfo:
+        return cls(
+            installation_id=installation_config.id,
+            name=installation_config.server_name,
+            description=installation_config.server_description,
+        )
+
+
+# ----------------------------------------------------------------------------
 #   Git metadata
 # ----------------------------------------------------------------------------
 class GitMetadata(pydantic.BaseModel):

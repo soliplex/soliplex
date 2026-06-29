@@ -349,6 +349,15 @@ class InstallationConfig:
     #
     id: str
 
+    #
+    # Human-readable server identity, surfaced to clients via the public
+    # `GET /api/v1/installation/identity` endpoint. Both are optional; when
+    # neither is set the endpoint responds 404 and clients fall back to the
+    # raw server address.
+    #
+    server_name: str | None = None
+    server_description: str | None = None
+
     meta: config_meta.InstallationConfigMeta = None
 
     #
