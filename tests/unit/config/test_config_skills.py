@@ -1174,6 +1174,33 @@ def test_roomskillsconfig_skills(installation_config):
     assert found == {SKILL_NAME: skill_config.skill}
 
 
+def test_roomskillsconfig_rag_db_paths(
+    installation_config,
+    haiku_rag_config,
+    lancedb,
+    config_path,
+):
+    skill_config = config_skills.HR_RAG_SkillConfig(
+        rag_lancedb_override_path=lancedb,
+        _haiku_rag_config=haiku_rag_config,
+        _config_path=config_path,
+        _installation_config=installation_config,
+    )
+    installation_config.skill_configs = {
+        SKILL_NAME: skill_config,
+        "other_skill": object(),
+    }
+
+    room_skill_config = config_skills.RoomSkillsConfig(
+        installation_skill_names=[SKILL_NAME, "other_skill"],
+        _installation_config=installation_config,
+    )
+
+    found = room_skill_config.rag_db_paths
+
+    assert found == {skill_config.name: str(skill_config.rag_lancedb_path)}
+
+
 def test_roomskillsconfig_skill_preambles(
     installation_config,
     haiku_rag_config,

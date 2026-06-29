@@ -20,6 +20,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import rag_audit
 from soliplex import titles
 from soliplex import util
 from soliplex import views
@@ -632,6 +633,8 @@ async def drive_llm_stream(
     run_id: str,
     title_agent_config: config_agents.AgentConfig | None = None,
     messages: list[agui_core.Message] | None = None,
+    claims: authn.UserClaims | None = None,
+    rag_db_paths: dict[str, str] | None = None,
 ):
     """Primary consumer of LLM event stream
 
@@ -640,6 +643,15 @@ async def drive_llm_stream(
     Events are pushed to the queue (for the live SSE client) and
     saved to the database incrementally (for reconnect).
     """
+    auditor = rag_audit.RagAccessAuditor(
+        loggers.RAGAccessAuditLog(
+            claims=claims or {},
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        ),
+        (rag_db_paths or {}).get,
+    )
     with logfire.span(
         "AG-UI event stream: {room_id}/{thread_id}/{run_id}",
         room_id=room_id,
@@ -654,6 +666,7 @@ async def drive_llm_stream(
             async for event in llm_stream:
                 event_list.append(event)
                 await event_queue.put(event)
+                auditor.handle(event)
 
                 try:
                     await save_single_event(
@@ -744,6 +757,13 @@ def find_skill_toolset(
         if isinstance(toolset, hs_agent.SkillToolset):
             return toolset
     return None
+
+
+def _rag_db_paths(room_config: config_rooms.RoomConfig) -> dict[str, str]:
+    skills = room_config.skills
+    if skills is None:
+        return {}
+    return skills.rag_db_paths
 
 
 async def init_agent_stream(
@@ -906,6 +926,14 @@ async def post_room_agui_thread_id_run_id(
 
     skill_toolset = find_skill_toolset(agent)
 
+    room_config = await the_installation.get_room_config(
+        room_id=room_id,
+        user=the_user_claims,
+        the_room_authz=the_room_authz,
+        the_logger=the_logger,
+    )
+    rag_db_paths = _rag_db_paths(room_config)
+
     # We use an unbounded queue here, so that the 'drive_llm_stream'
     # task completes even when the SSE stream gets cancelled due to a
     # client disconnect, thereby permitting the client to see the
@@ -941,6 +969,8 @@ async def post_room_agui_thread_id_run_id(
             run_id=run_id,
             title_agent_config=title_agent_config,
             messages=agui_adapter.run_input.messages,
+            claims=the_user_claims,
+            rag_db_paths=rag_db_paths,
         )
     )
     bg_tasks.add(task)

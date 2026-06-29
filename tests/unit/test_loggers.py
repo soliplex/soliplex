@@ -676,3 +676,25 @@ def test_ragaccessauditlog_ctor(w_claims):
     scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
     assert scope == SCOPE_RAG_ACCESS
     assert found.extra["claims"] == w_claims
+
+
+def test_rag_retrieval(audit_records):
+    wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
+
+    wrapper.retrieval("db", "search", "what is x", ["c1", "c2"])
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_RAG_ACCESS,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_RAG_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_RAG_ACTION_RETRIEVAL,
+            "db_path": "db",
+            "tool": "search",
+            "selector": "what is x",
+            "result_refs": ["c1", "c2"],
+        },
+    )

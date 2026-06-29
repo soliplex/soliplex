@@ -620,6 +620,15 @@ class RoomSkillsConfig(_SkillConfigModelBase):
         }
 
     @property
+    def rag_db_paths(self) -> dict[str, str]:
+        """Map each haiku-rag skill's name to the LanceDB path it reads."""
+        return {
+            skill_config.name: str(skill_config.rag_lancedb_path)
+            for skill_config in self.skill_configs.values()
+            if isinstance(skill_config, _HR_SkillConfigBase)
+        }
+
+    @property
     def skill_preambles(self) -> list[str]:
         preambles = []
 
