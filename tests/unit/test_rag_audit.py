@@ -1,5 +1,6 @@
 import ag_ui.core as agui_core
 
+from soliplex import loggers
 from soliplex import rag_audit
 
 SEARCH_RESULT = (
@@ -33,7 +34,7 @@ def _auditor(log):
     )
 
 
-def test_search_call_then_result_records_access():
+def test_ragaccessauditor__handle_search_call_then_result_records_access():
     log = _RecordingLog()
     auditor = _auditor(log)
 
@@ -70,7 +71,7 @@ def test_search_call_then_result_records_access():
     ]
 
 
-def test_cite_records_chunk_ids_as_selector():
+def test_ragaccessauditor__handle_cite_records_chunk_ids_as_selector():
     log = _RecordingLog()
     auditor = _auditor(log)
 
@@ -102,7 +103,7 @@ def test_cite_records_chunk_ids_as_selector():
     ]
 
 
-def test_non_activity_event_is_ignored():
+def test_ragaccessauditor__handle_non_activity_event_is_ignored():
     log = _RecordingLog()
     auditor = _auditor(log)
 
@@ -117,7 +118,7 @@ def test_non_activity_event_is_ignored():
     assert log.calls == []
 
 
-def test_unrelated_activity_type_is_ignored():
+def test_ragaccessauditor__handle_unrelated_activity_type_is_ignored():
     log = _RecordingLog()
     auditor = _auditor(log)
 
@@ -126,7 +127,7 @@ def test_unrelated_activity_type_is_ignored():
     assert log.calls == []
 
 
-def test_unknown_skill_is_skipped():
+def test_ragaccessauditor__handle_unknown_skill_is_skipped():
     log = _RecordingLog()
     auditor = rag_audit.RagAccessAuditor(log, db_path_for=lambda skill: None)
 
@@ -156,7 +157,7 @@ def test_unknown_skill_is_skipped():
     assert log.calls == []
 
 
-def test_orphan_result_is_ignored():
+def test_ragaccessauditor__handle_orphan_result_is_ignored():
     log = _RecordingLog()
     auditor = _auditor(log)
 
@@ -173,3 +174,42 @@ def test_orphan_result_is_ignored():
     )
 
     assert log.calls == []
+
+
+def test_ragaccessauditor__handle_missing_content_key_swallowed_warned(caplog):
+    log = _RecordingLog()
+    auditor = _auditor(log)
+
+    with caplog.at_level("WARNING", logger=loggers.SOLIPLEX_LOGGER_NAME):
+        auditor.handle(
+            _activity(
+                "skill_tool_call",
+                {"skill": "rag", "tool_name": "search", "args": "{}"},
+            )
+        )
+
+    assert log.calls == []
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "ERROR"
+
+
+def test_ragaccessauditor__handle_non_json_args_swallowed_warned(caplog):
+    log = _RecordingLog()
+    auditor = _auditor(log)
+
+    with caplog.at_level("WARNING", logger=loggers.SOLIPLEX_LOGGER_NAME):
+        auditor.handle(
+            _activity(
+                "skill_tool_call",
+                {
+                    "skill": "rag",
+                    "tool_name": "search",
+                    "tool_call_id": "t1",
+                    "args": "not json",
+                },
+            )
+        )
+
+    assert log.calls == []
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "ERROR"

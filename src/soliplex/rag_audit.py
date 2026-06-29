@@ -1,8 +1,13 @@
 import json
+import logging
 import re
 import typing
 
 import ag_ui.core as agui_core
+
+from soliplex import loggers
+
+_logger = logging.getLogger(loggers.SOLIPLEX_LOGGER_NAME)
 
 # Each search result is rendered as "[<chunk_id>] [rank N of M]\n...", so the
 # chunk ids a query returned can be recovered from the result text.
@@ -36,6 +41,17 @@ class RagAccessAuditor:
         self._selectors: dict[str, tuple[str, typing.Any]] = {}
 
     def handle(self, event: typing.Any) -> None:
+        # Auditing must never break the run it observes: a malformed activity
+        # event (missing content key, non-JSON args, upstream schema drift) is
+        # logged and swallowed rather than propagated into the event stream.
+        try:
+            self._handle(event)
+        except Exception:
+            _logger.exception(
+                "rag-access audit skipped a malformed skill activity event",
+            )
+
+    def _handle(self, event: typing.Any) -> None:
         if getattr(event, "type", None) is not (
             agui_core.EventType.ACTIVITY_SNAPSHOT
         ):
