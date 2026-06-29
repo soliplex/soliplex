@@ -12,8 +12,8 @@ id: "soliplex-conf-default"
 # server address. Both are optional: omit them and the endpoint responds
 # 404, so clients fall back to displaying the address.
 #==========================================================================
-# server_name: "Soliplex Full Demo"
-# server_description: "A full-featured Soliplex instance; requires provider API key environment variables."
+server_name: "Soliplex Full Demo"
+server_description: "A full-featured Soliplex instance; requires provider API key environment variables."
 
 #==========================================================================
 # Meta-configuration
