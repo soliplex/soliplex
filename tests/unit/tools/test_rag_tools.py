@@ -4,6 +4,7 @@ import pydantic_ai
 import pytest
 
 from soliplex import agents
+from soliplex import loggers
 from soliplex.config import tools as config_tools
 from soliplex.tools import rag as rag_tools
 
@@ -30,7 +31,7 @@ def ctx_w_deps(sd_tool_config):
 @pytest.mark.parametrize("n_docs", [0, 1, 10])
 @mock.patch("soliplex.tools.rag.hr_client")
 async def test_search_documents(
-    hr_client, ctx_w_deps, sd_tool_config, n_docs, w_limit
+    hr_client, ctx_w_deps, sd_tool_config, n_docs, w_limit, audit_records
 ):
     hr_class = hr_client.HaikuRAG = mock.MagicMock()
     hr = hr_class.return_value
@@ -39,15 +40,22 @@ async def test_search_documents(
 
     search_results = [
         mock.Mock(
-            spec=["content", "document_uri", "score"],
+            spec=["content", "document_uri", "score", "chunk_id"],
             content=f"Doc #{i_doc}",
             document_uri=f"https://example.com/docs/doc_{i_doc}.pdf",
             score=i_doc,
+            chunk_id=f"chunk-{i_doc}",
         )
         for i_doc in range(n_docs)
     ]
 
     search.return_value = search_results
+
+    sd_tool_config.rag_lancedb_path = "/db/tool"
+    ctx_w_deps.deps.user = None
+    ctx_w_deps.deps.room_id = "room-1"
+    ctx_w_deps.deps.thread_id = "thread-1"
+    ctx_w_deps.deps.run_id = "run-1"
 
     if w_limit is None:
         sd_tool_config.search_documents_limit = exp_limit = 5
@@ -69,3 +77,41 @@ async def test_search_documents(
         config=sd_tool_config.haiku_rag_config,
         read_only=True,
     )
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_RAG_ACTION_SEARCH
+    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.db_path == "/db/tool"
+    assert record.selector == QUESTION
+    assert record.result_refs == [f"chunk-{i_doc}" for i_doc in range(n_docs)]
+    assert record.claims == {}
+    assert record.room_id == "room-1"
+    assert record.thread_id == "thread-1"
+    assert record.run_id == "run-1"
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.tools.rag.hr_client")
+async def test_search_documents_records_failure(
+    hr_client, ctx_w_deps, sd_tool_config, audit_records
+):
+    hr_class = hr_client.HaikuRAG = mock.MagicMock()
+    client = hr_class.return_value.__aenter__.return_value
+    client.search.side_effect = RuntimeError("boom")
+
+    sd_tool_config.rag_lancedb_path = "/db/tool"
+    sd_tool_config.search_documents_limit = 5
+    ctx_w_deps.deps.user = None
+    ctx_w_deps.deps.room_id = "room-1"
+    ctx_w_deps.deps.thread_id = "thread-1"
+    ctx_w_deps.deps.run_id = "run-1"
+
+    with pytest.raises(RuntimeError):
+        await rag_tools.search_documents(ctx_w_deps, query=QUESTION)
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_RAG_ACTION_SEARCH
+    assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
+    assert record.db_path == "/db/tool"
+    assert record.selector == QUESTION
+    assert record.reason == "RuntimeError"

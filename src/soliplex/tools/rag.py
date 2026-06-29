@@ -5,6 +5,7 @@ from haiku.rag import client as hr_client
 from haiku.rag.store.models import chunk as rag_store_models_chunk
 
 from soliplex import agents
+from soliplex import rag_audit
 from soliplex.config import tools as config_tools
 
 
@@ -26,14 +27,22 @@ async def search_documents(
 
     hr_config = tool_config.haiku_rag_config
 
-    async with hr_client.HaikuRAG(
-        db_path=tool_config.rag_lancedb_path,
-        config=hr_config,
-        read_only=True,
-    ) as rag:
-        results = await rag.search(
-            query,
-            limit=tool_config.search_documents_limit,
-        )
+    with rag_audit.audit_tool_access(
+        ctx.deps,
+        audit_method="search",
+        db_path=str(tool_config.rag_lancedb_path),
+        selector=query,
+    ) as access:
+        async with hr_client.HaikuRAG(
+            db_path=tool_config.rag_lancedb_path,
+            config=hr_config,
+            read_only=True,
+        ) as rag:
+            results = await rag.search(
+                query,
+                limit=tool_config.search_documents_limit,
+            )
+
+        access.record_refs([result.chunk_id for result in results])
 
         return results
