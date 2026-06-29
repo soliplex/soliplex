@@ -1389,6 +1389,7 @@ async def test_drive_llm_stream_audits_rag_access(logfire, sse, fr, mgt):
     ]
     assert len(rag_records) == 1
     record = rag_records[0]
+    assert record.action == loggers.AUDIT_RAG_ACTION_RETRIEVAL
     assert record.db_path == "/db.lancedb"
     assert record.tool == "search"
     assert record.selector == {"query": "x"}

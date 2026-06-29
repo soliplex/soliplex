@@ -73,7 +73,7 @@ class RagAccessAuditor:
             if db_path is None:
                 return
             tool, selector = captured
-            self._audit_log.access(
+            self._audit_log.retrieval(
                 db_path,
                 tool,
                 selector,

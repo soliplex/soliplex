@@ -127,6 +127,12 @@ AUDIT_SERVER_STOPPING = "server stopping"
 # rag-access audit events
 AUDIT_RAG_ACCESS = "rag access"
 
+# rag-access 'action' values: the kind of protected-data read, carried as a
+# field so both access paths share one vocabulary. The run-mediated path
+# records 'rag-retrieval'; the direct helper endpoints (future) will add
+# 'search' / 'chunk-viz' / 'doc-list' alongside their own methods.
+AUDIT_RAG_ACTION_RETRIEVAL = "rag-retrieval"
+
 
 class _StructuredFieldsAdapter(logging.LoggerAdapter):
     """LoggerAdapter that folds caller keyword fields into 'extra'."""
@@ -285,6 +291,11 @@ class AuditLogWrapper(_StructuredFieldsAdapter):
 
 
 class ProcessLifetimeAuditLog(AuditLogWrapper):
+    """Record process lifetime audit events
+
+    Each method corresponds to an event type.
+    """
+
     def __init__(self, **extra):
         super().__init__(scope=AuditLogScopes.PROCESS_LIFETIME, **extra)
 
@@ -299,6 +310,11 @@ class ProcessLifetimeAuditLog(AuditLogWrapper):
 
 
 class RoomAuthzAuditLog(AuditLogWrapper):
+    """Record room authorization audit events
+
+    Each method corresponds to an event type, with variants for outcomes.
+    """
+
     def __init__(self, claims: dict[str, typing.Any], **extra):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(scope=AuditLogScopes.ROOM_AUTHZ, **extra_with_claims)
@@ -357,11 +373,17 @@ class RoomAuthzAuditLog(AuditLogWrapper):
             reason=reason,
         )
 
+    # policy / security-object deletion
     def acl_cleared(self, room_id: str):
         self._succeeded(AUDIT_ROOM_ACL_CLEARED, room_id=room_id)
 
 
 class AdminUsersAuditLog(AuditLogWrapper):
+    """Record admin users audit events
+
+    Each method corresponds to an event type, with variants for outcomes.
+    """
+
     def __init__(self, claims: dict[str, typing.Any], **extra):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(scope=AuditLogScopes.ADMIN_USERS, **extra_with_claims)
@@ -402,6 +424,11 @@ class AdminUsersAuditLog(AuditLogWrapper):
 
 
 class InstallationConfigAuditLog(AuditLogWrapper):
+    """Record installation configuratino audit events
+
+    Each method corresponds to an access type.
+    """
+
     def __init__(self, claims: dict[str, typing.Any], **extra):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(
@@ -423,22 +450,35 @@ class InstallationConfigAuditLog(AuditLogWrapper):
 
 
 class RAGAccessAuditLog(AuditLogWrapper):
-    # Records the knowledge-base accesses a skill makes while answering a
-    # request. 'db_path' names the LanceDB the access targeted; 'selector' is
-    # the query / document reference / chunk ids the access used; 'result_refs'
-    # are the identifiers returned (not their content), empty when the read
-    # matched nothing.
-    #
-    # On the run-mediated path Soliplex sees only the rendered tool result, not
-    # a tool-error signal, so every observed skill access is recorded via
-    # 'access' (outcome=success). 'access_failed' (outcome=error) is reserved
-    # for the direct helper endpoints (views.rooms), where the HTTP outcome
-    # authoritatively distinguishes a refused or absent access.
+    """Record knowledge-base accesses made while answering a request
+
+    Each method corresponds to an access type (the 'action' field).
+
+    The 'retrieval' acation covers the run-mediated path: Soliplex sees only
+    the rendered tool result, not a tool-error signal, so every observed
+    skill access is recorded as a success.
+
+    The direct helper endpoints for API endpoints (`views.rooms`) will add
+    their own action methods ('search' / 'chunk-viz' / 'doc-list') with
+    failure variants, where the HTTP outcome authoritatively distinguishes a
+    refused or absent access.
+
+    Room-level agent tool access will use the same action methods, but log
+    failure variants based on exceptions raised.
+
+    Action method parameters:
+
+    - 'db_path' names the LanceDB the access targeted
+    - 'selector' is the query / document reference / chunk ids used
+    - 'result_refs' are the identifiers returned (not their content);
+      empty when the read matched nothing.
+    """
+
     def __init__(self, claims: dict[str, typing.Any], **extra):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(scope=AuditLogScopes.RAG_ACCESS, **extra_with_claims)
 
-    def access(
+    def retrieval(
         self,
         db_path: str,
         tool: str,
@@ -447,19 +487,9 @@ class RAGAccessAuditLog(AuditLogWrapper):
     ):
         self._succeeded(
             AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_RETRIEVAL,
             db_path=db_path,
             tool=tool,
             selector=selector,
             result_refs=result_refs,
-        )
-
-    def access_failed(
-        self, db_path: str, tool: str, selector: typing.Any, reason: str
-    ):
-        self._failed(
-            AUDIT_RAG_ACCESS,
-            db_path=db_path,
-            tool=tool,
-            selector=selector,
-            reason=reason,
         )

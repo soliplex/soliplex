@@ -19,7 +19,7 @@ class _RecordingLog:
     def __init__(self):
         self.calls = []
 
-    def access(self, db_path, tool, selector, result_refs):
+    def retrieval(self, db_path, tool, selector, result_refs):
         self.calls.append((db_path, tool, selector, result_refs))
 
 

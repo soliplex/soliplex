@@ -678,10 +678,10 @@ def test_ragaccessauditlog_ctor(w_claims):
     assert found.extra["claims"] == w_claims
 
 
-def test_rag_access(audit_records):
+def test_rag_retrieval(audit_records):
     wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
 
-    wrapper.access("db", "search", "what is x", ["c1", "c2"])
+    wrapper.retrieval("db", "search", "what is x", ["c1", "c2"])
 
     _assert_audit_record(
         audit_records[-1],
@@ -691,30 +691,10 @@ def test_rag_access(audit_records):
         scope=SCOPE_RAG_ACCESS,
         fields={
             "claims": CLAIMS,
+            "action": loggers.AUDIT_RAG_ACTION_RETRIEVAL,
             "db_path": "db",
             "tool": "search",
             "selector": "what is x",
             "result_refs": ["c1", "c2"],
-        },
-    )
-
-
-def test_rag_access_failed(audit_records):
-    wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
-
-    wrapper.access_failed("db", "cite", ["c9"], "unresolved")
-
-    _assert_audit_record(
-        audit_records[-1],
-        message=loggers.AUDIT_RAG_ACCESS,
-        levelno=logging.ERROR,
-        outcome=loggers.AUDIT_OUTCOME_ERROR,
-        scope=SCOPE_RAG_ACCESS,
-        fields={
-            "claims": CLAIMS,
-            "db_path": "db",
-            "tool": "cite",
-            "selector": ["c9"],
-            "reason": "unresolved",
         },
     )
