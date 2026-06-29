@@ -1393,6 +1393,9 @@ async def test_drive_llm_stream_audits_rag_access(logfire, sse, fr, mgt):
     assert record.tool == "search"
     assert record.selector == {"query": "x"}
     assert record.result_refs == ["c1"]
+    assert record.room_id == TEST_ROOM_ID
+    assert record.thread_id == TEST_THREAD_ID_STR
+    assert record.run_id == TEST_RUN_ID_STR
 
 
 @pytest.mark.asyncio

@@ -644,7 +644,12 @@ async def drive_llm_stream(
     saved to the database incrementally (for reconnect).
     """
     auditor = rag_audit.RagAccessAuditor(
-        loggers.RAGAccessAuditLog(claims=claims or {}),
+        loggers.RAGAccessAuditLog(
+            claims=claims or {},
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        ),
         (rag_db_paths or {}).get,
     )
     with logfire.span(
