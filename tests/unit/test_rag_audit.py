@@ -1,4 +1,9 @@
+import datetime as dt
+
 import ag_ui.core as agui_core
+from haiku.rag.store.models import chunk as hr_chunk
+from haiku.skills import agent as hs_agent
+from pydantic_ai import messages as ai_messages
 
 from soliplex import loggers
 from soliplex import rag_audit
@@ -213,3 +218,55 @@ def test_ragaccessauditor__handle_non_json_args_swallowed_warned(caplog):
     assert log.calls == []
     assert len(caplog.records) == 1
     assert caplog.records[0].levelname == "ERROR"
+
+
+# -- upstream-contract regression guards -------------------------------
+#
+# The auditor depends on surfaces owned by haiku.rag / haiku.skills that are
+# not part of a stable public API: the agent-facing search render
+# ('SearchResult.format_for_agent') and the skill activity events
+# ('_events_to_activity', a private upstream helper). If either drifts, the
+# auditor would silently record nothing rather than fail. These tests exercise
+# the real upstream code so a future dependency bump breaks here -- loudly --
+# instead of in production.
+
+
+def test_contract_searchresult_render_yields_recoverable_chunk_ids():
+    rendered = "\n\n".join(
+        hr_chunk.SearchResult(
+            content="x", score=1.0, chunk_id=chunk_id
+        ).format_for_agent(rank=rank, total=2)
+        for rank, chunk_id in enumerate(["c1", "c2"], start=1)
+    )
+
+    refs = rag_audit._result_refs(rendered)
+
+    assert refs == ["c1", "c2"]
+
+
+def test_contract_skill_activity_events_drive_the_auditor():
+    call = ai_messages.FunctionToolCallEvent(
+        part=ai_messages.ToolCallPart(
+            tool_name="search", args={"query": "x"}, tool_call_id="t1"
+        )
+    )
+    result = ai_messages.FunctionToolResultEvent(
+        part=ai_messages.ToolReturnPart(
+            tool_name="search",
+            content=hr_chunk.SearchResult(
+                content="x", score=1.0, chunk_id="c1"
+            ).format_for_agent(rank=1, total=1),
+            tool_call_id="t1",
+            timestamp=dt.datetime(2024, 1, 1, tzinfo=dt.UTC),
+        )
+    )
+    events = hs_agent._events_to_activity("rag", [call, result])
+    log = _RecordingLog()
+    auditor = _auditor(log)
+
+    for event in events:
+        auditor.handle(event)
+
+    assert log.calls == [
+        ("/dbs/rag.lancedb", "search", {"query": "x"}, ["c1"])
+    ]
