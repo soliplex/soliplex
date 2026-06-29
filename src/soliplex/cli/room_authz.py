@@ -51,7 +51,10 @@ def _room_authz_callback(
             "verbose-by-default setting."
         ),
     ),
+    cli_log_config: pathlib.Path | None = cli_util.CLI_LOG_CONFIG_OPTION,
 ):
+    cli_util._configure_cli_logging(cli_log_config)
+
     if quiet:
         effective = False
     elif verbose:

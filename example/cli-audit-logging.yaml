@@ -1,0 +1,37 @@
+# Ready-made logging config enabling CLI audit logging.
+#
+# Pass it to a privileged 'soliplex-cli' command group via '--cli-log-config'
+# (before the subcommand) or the 'SOLIPLEX_CLI_LOG_CONFIG' env var, e.g.:
+#
+#   soliplex-cli room-authz --cli-log-config example/cli-audit-logging.yaml \
+#       make-private example/minimal.yaml faux
+#
+# It routes the dedicated 'soliplex-audit' logger to a file (so audit records
+# do not intermingle with normal CLI output). Without such a config, CLI
+# audit records are suppressed. See: docs/config/logging.md
+#
+# https://docs.python.org/3/library/logging.config.html#dictionary-schema-details
+version: 1
+disable_existing_loggers: false
+formatters:
+
+  audit:
+    # 'outcome' is one of: success, denied, error.
+    format: "$asctime|$levelname|$outcome|$message"
+    datefmt: "%Y-%m-%dT%H:%M:%S"
+    style: "$"
+
+handlers:
+
+  audit_file:
+    class: "logging.FileHandler"
+    formatter: "audit"
+    filename: "soliplex-cli-audit.log"
+
+loggers:
+
+  soliplex-audit:
+    level: "INFO"
+    handlers:
+      - "audit_file"
+    propagate: false

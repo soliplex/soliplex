@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import contextlib
 import getpass
+import logging
 import os
 import pathlib
+from logging import config as logging_config
 
 import typer
 from rich import console
@@ -11,11 +13,27 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import authz
 from soliplex import installation
+from soliplex import loggers
 from soliplex.authz import persistence as authz_persistence
 from soliplex.authz import schema as authz_schema
 from soliplex.config import installation as config_installation
 
 the_console = console.Console()
+
+
+# Shared across the audit-relevant command groups ('admin-users', 'room-authz',
+# 'audit'); see '_configure_cli_logging'.
+CLI_LOG_CONFIG_OPTION = typer.Option(
+    None,
+    "--cli-log-config",
+    envvar="SOLIPLEX_CLI_LOG_CONFIG",
+    help=(
+        "Path to a Python logging-config YAML enabling CLI audit logging "
+        "(e.g. routing the 'soliplex-audit' logger to a file). Without it, "
+        "audit records are suppressed so they don't intermingle with CLI "
+        "output."
+    ),
+)
 
 
 def get_installation(
@@ -54,6 +72,43 @@ def _check_ram_dburi(dburi: str, command: str):
         raise typer.Exit(1)
 
 
+# Logging is process-global; the first caller (a group callback, or the
+# '_authz_session' safety net for the callback-bypassing hidden aliases)
+# wins and the rest no-op.
+_CLI_LOGGING_CONFIGURED = False
+
+
+def _configure_cli_logging(cli_log_config: pathlib.Path | None = None) -> None:
+    """Configure (or silence) audit logging for an audited CLI operation.
+
+    Opt-in only: 'cli_log_config' (from '--cli-log-config' /
+    'SOLIPLEX_CLI_LOG_CONFIG') names a Python logging-config YAML the operator
+    wants applied -- e.g. routing 'soliplex-audit' to a file. With nothing
+    set, the CLI stays silent so audit records never intermingle with
+    interactive output. The installation's own (stdout-targeting)
+    'logging_config' is deliberately NOT consulted here, keeping STIG audit
+    logging segregated from ordinary CLI use.
+    """
+    global _CLI_LOGGING_CONFIGURED
+    if _CLI_LOGGING_CONFIGURED:
+        return
+
+    if cli_log_config is not None:
+        logging_config.dictConfig(
+            config_installation._load_config_yaml(cli_log_config)
+        )
+    else:
+        audit_logger = logging.getLogger(loggers.SOLIPLEX_AUDIT_LOGGER_NAME)
+        # Replace (not append) any handlers and stop propagation: a
+        # NullHandler alone still lets records bubble to ancestor handlers,
+        # and with no handler at all 'lastResort' still prints ERROR records
+        # to stderr.
+        audit_logger.handlers[:] = [logging.NullHandler()]
+        audit_logger.propagate = False
+
+    _CLI_LOGGING_CONFIGURED = True
+
+
 @contextlib.asynccontextmanager
 async def _authz_session(dburi):
     """Yield an async session over the authz DB, disposing its engine.
@@ -67,6 +122,10 @@ async def _authz_session(dburi):
     'typer.Exit' paths -- so the underlying SQLite connection is released
     deterministically instead of leaking it until garbage collection.
     """
+    # Safety net: the hidden 'add-admin-user' / 'show-room-authz' / ...
+    # aliases bypass the group callbacks, so silence audit output here unless
+    # a callback already configured it.
+    _configure_cli_logging()
     engine = installation._create_async_engine(dburi)
     try:
         async with engine.begin() as connection:

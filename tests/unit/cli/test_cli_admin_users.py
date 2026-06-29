@@ -34,7 +34,9 @@ def ctx():
         (True, True, True, False),
     ],
 )
+@mock.patch("soliplex.cli.cli_util._configure_cli_logging")
 def test__admin_users_callback(
+    configure_logging,
     ctx,
     w_verbose,
     w_quiet,
@@ -50,9 +52,11 @@ def test__admin_users_callback(
             ctx,
             verbose=w_verbose,
             quiet=w_quiet,
+            cli_log_config=None,
         )
 
     assert ctx.obj == {"verbose": exp_effective}
+    configure_logging.assert_called_once_with(None)
 
 
 @pytest.mark.parametrize(
@@ -496,6 +500,28 @@ def _invoke(cli_runner, scratch, subcommand, *rest, **kwargs):
         [subcommand, str(scratch.path), *rest],
         **kwargs,
     )
+
+
+@mock.patch("soliplex.cli.cli_util._configure_cli_logging")
+def test_cli_log_config_from_env(
+    configure_logging, scratch_installation, cli_runner, tmp_path
+):
+    # The '--cli-log-config' option is backed by 'SOLIPLEX_CLI_LOG_CONFIG'
+    # via Typer's 'envvar='; the env value reaches the callback as a Path.
+    cfg = tmp_path / "audit-logging.yaml"
+    cfg.write_text("version: 1\n")
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "list",
+        env={"SOLIPLEX_CLI_LOG_CONFIG": str(cfg)},
+    )
+
+    assert result.exit_code == 0
+    # The group callback (which runs first) forwards the env-derived Path;
+    # the '_authz_session' safety net then calls it again with no argument.
+    assert configure_logging.call_args_list[0] == mock.call(cfg)
 
 
 # -- list -------------------------------------------------------------------

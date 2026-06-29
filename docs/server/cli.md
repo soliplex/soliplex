@@ -158,6 +158,15 @@ example/minimal.yaml`.
   run, the errors are emitted as a single JSON document on stdout
   (suitable for piping into `jq` or a CI log parser); each subcommand
   documents its own JSON shape under "Exit Status".
+- `--cli-log-config PATH` — apply the named Python logging-config YAML
+  for CLI audit logging (also read from the `SOLIPLEX_CLI_LOG_CONFIG`
+  environment variable); without it, audit records are suppressed. The
+  `audit` subcommands do not mutate state, but
+  [`audit admin-users`](#audit-admin-users) and
+  [`audit room-authz`](#audit-room-authz) read security objects through
+  the authorization policies and so emit security-object-read audit
+  records, which this option captures. See
+  [CLI Audit Logging](../config/logging.md#cli-audit-logging).
 
 ### Default Subcommand
 
@@ -1347,6 +1356,13 @@ All six commands share the following conventions:
     2. bob@example.com
   ```
 
+- The group-level `--cli-log-config PATH` option (also read from the
+  `SOLIPLEX_CLI_LOG_CONFIG` environment variable) enables CLI audit
+  logging by applying the named Python logging-config YAML; without it,
+  the audit records these commands emit are suppressed so they don't
+  intermingle with the JSON / human output. See
+  [CLI Audit Logging](../config/logging.md#cli-audit-logging).
+
 - Exit status is `0` on success, or `1` when the RAM-DB guard fires
   or any per-command precondition fails: for
   [`admin-users add`](#admin-users-add), when the discriminator
@@ -1761,6 +1777,13 @@ All eight commands share the following:
     1. ALLOW  email=alice@example.com
     2. DENY   everyone
   ```
+
+- The group-level `--cli-log-config PATH` option (also read from the
+  `SOLIPLEX_CLI_LOG_CONFIG` environment variable) enables CLI audit
+  logging by applying the named Python logging-config YAML; without it,
+  the audit records these commands emit are suppressed so they don't
+  intermingle with the JSON / human output. See
+  [CLI Audit Logging](../config/logging.md#cli-audit-logging).
 
 - Exit status is `0` on success (including when no policy row exists
   for the room), or `1` when the RAM-DB guard fires or `ROOM_ID`
