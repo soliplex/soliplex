@@ -1,4 +1,7 @@
+import datetime
 from unittest import mock
+
+import pytest
 
 from soliplex.agui import util as agui_util
 
@@ -22,3 +25,14 @@ def test__timestamp(dt, tz):
     assert found is dt.now.return_value
 
     dt.now.assert_called_once_with(tz.utc)
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (datetime.datetime(1970, 1, 1, 0, 0, 1, tzinfo=datetime.UTC), 1000),
+        (datetime.datetime(1970, 1, 1, 0, 0, 1), 1000),
+    ],
+)
+def test__epoch_ms(value, expected):
+    assert agui_util._epoch_ms(value) == expected
