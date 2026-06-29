@@ -509,6 +509,17 @@ class RAGAccessAuditLog(AuditLogWrapper):
             result_refs=result_refs,
         )
 
+    def search_failed(
+        self, db_path: str | None, selector: typing.Any, reason: str
+    ):
+        self._failed(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_SEARCH,
+            db_path=db_path,
+            selector=selector,
+            reason=reason,
+        )
+
     def doc_list(self, db_path: str, result_refs: typing.Any):
         self._succeeded(
             AUDIT_RAG_ACCESS,

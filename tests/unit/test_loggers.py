@@ -706,6 +706,27 @@ def test_rag_search(audit_records):
     )
 
 
+def test_rag_search_failed(audit_records):
+    wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
+
+    wrapper.search_failed("db", "what is x", "RuntimeError")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_RAG_ACCESS,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_RAG_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_RAG_ACTION_SEARCH,
+            "db_path": "db",
+            "selector": "what is x",
+            "reason": "RuntimeError",
+        },
+    )
+
+
 def test_rag_doc_list(audit_records):
     wrapper = loggers.RAGAccessAuditLog(claims=CLAIMS)
 
