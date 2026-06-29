@@ -25,6 +25,7 @@ from soliplex import titles
 from soliplex import util
 from soliplex import views
 from soliplex.agui import persistence as agui_persistence
+from soliplex.agui import util as agui_util
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
@@ -664,6 +665,8 @@ async def drive_llm_stream(
         event_index = 0
         try:
             async for event in llm_stream:
+                event.timestamp = agui_util._epoch_ms(agui_util._timestamp())
+
                 event_list.append(event)
                 await event_queue.put(event)
                 auditor.handle(event)

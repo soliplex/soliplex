@@ -1148,6 +1148,7 @@ def test_parse_last_event_id(header, expected):
 )
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
 @pytest.mark.parametrize("w_title_config", [False, True])
+@mock.patch("soliplex.views.agui.agui_util._epoch_ms")
 @mock.patch("soliplex.views.agui.titles.maybe_generate_title")
 @mock.patch("soliplex.views.agui.finish_run")
 @mock.patch("soliplex.views.agui.save_single_event")
@@ -1157,12 +1158,16 @@ async def test_drive_llm_stream(
     sse,
     fr,
     maybe_gen_title,
+    epoch_ms,
     w_title_config,
     w_finished_error,
     w_finish_error,
     finish_expectation,
     w_event_count,
 ):
+    FIXED_TIMESTAMP_MS = 1_700_000_000_000
+    epoch_ms.return_value = FIXED_TIMESTAMP_MS
+
     sqla_engine = mock.AsyncMock(spec_set=())
     event_queue = asyncio.Queue()
 
@@ -1189,6 +1194,8 @@ async def test_drive_llm_stream(
             yield error_event
 
     expected = [event async for event in event_iter()]
+    for expected_event in expected:
+        expected_event.timestamp = FIXED_TIMESTAMP_MS
 
     with finish_expectation as finish_expected:
         await agui_views.drive_llm_stream(
@@ -1278,6 +1285,39 @@ async def test_drive_llm_stream(
         )
     else:
         maybe_gen_title.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.titles.maybe_generate_title")
+@mock.patch("soliplex.views.agui.finish_run")
+@mock.patch("soliplex.views.agui.save_single_event")
+@mock.patch("soliplex.views.agui.logfire")
+async def test_drive_llm_stream_stamps_live_timestamp(logfire, sse, fr, mgt):
+    sqla_engine = mock.AsyncMock(spec_set=())
+    event_queue = asyncio.Queue()
+
+    async def event_iter():
+        yield agui_core.events.RawEvent(event={"i": 0})
+        yield agui_core.events.RawEvent(event={"i": 1})
+
+    before = int(datetime.datetime.now(datetime.UTC).timestamp() * 1000)
+    await agui_views.drive_llm_stream(
+        event_iter(),
+        sqla_engine=sqla_engine,
+        event_queue=event_queue,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+    )
+    after = int(datetime.datetime.now(datetime.UTC).timestamp() * 1000)
+
+    queued = [await event_queue.get(), await event_queue.get()]
+    assert await event_queue.get() is None  # sentinel
+
+    for event in queued:
+        assert isinstance(event.timestamp, int)
+        assert before <= event.timestamp <= after
 
 
 @pytest.mark.asyncio
