@@ -5,7 +5,7 @@ import jsonpatch
 import pytest
 from ag_ui import core as agui_core
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex.agui import parser as agui_parser
 
 TEST_THREAD_ID = "thread-123"
@@ -264,7 +264,7 @@ WO_REPLACE_E_ACTIVITY_MESSAGE_SNAPSHOT = agui_core.ActivitySnapshotEvent(
 
 @pytest.fixture
 def run():
-    return mock.create_autospec(agui_package.Run, events=[])
+    return mock.create_autospec(agui.Run, events=[])
 
 
 @pytest.fixture

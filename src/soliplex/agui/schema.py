@@ -12,7 +12,7 @@ from sqlalchemy import schema as sqla_schema
 from sqlalchemy.ext import asyncio as sqla_asyncio
 from sqlalchemy.sql import sqltypes as sqla_sqltypes
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import util
 from soliplex.agui import util as agui_util
 from soliplex.config import installation as config_installation
@@ -42,7 +42,7 @@ JSON_Mapped_From = dict[str, typing.Any]
 
 metadata = sqla_schema.MetaData(naming_convention=NAMING_CONVENTION)
 
-FeedbackReviewStatus = agui_package.FeedbackReviewStatus
+FeedbackReviewStatus = agui.FeedbackReviewStatus
 
 
 class Base(AsyncAttrs, DeclarativeBase):
@@ -447,8 +447,8 @@ class RunUsage(Base):
     requests: Mapped[int] = mapped_column()
     tool_calls: Mapped[int] = mapped_column()
 
-    def as_tuple(self) -> agui_package.RunUsageStats:
-        return agui_package.RunUsageStats(
+    def as_tuple(self) -> agui.RunUsageStats:
+        return agui.RunUsageStats(
             self.input_tokens,
             self.output_tokens,
             self.requests,

@@ -14,10 +14,10 @@ import pydantic_ai
 from ag_ui import core as agui_core
 
 from soliplex import agents
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex.agui import parser as agui_parser
 
-FRS = agui_package.FeedbackReviewStatus
+FRS = agui.FeedbackReviewStatus
 STATE_NAMESPACE = "soliplex-agui-run-feedback"
 
 
@@ -63,7 +63,7 @@ class RunFeedbackEntry(pydantic.BaseModel):
     created: datetime.datetime
     feedback: str
     reason: str | None
-    status: agui_package.FeedbackReviewStatus | None
+    status: agui.FeedbackReviewStatus | None
     note: str | None
 
 

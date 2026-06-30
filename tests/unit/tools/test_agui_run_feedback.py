@@ -6,14 +6,14 @@ import pydantic_ai
 import pytest
 from ag_ui import core as agui_core
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import models
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.tools import agui_run_feedback as arf_tools
 from tests.unit.agui import agui_constants
 
-FRS = agui_package.FeedbackReviewStatus
+FRS = agui.FeedbackReviewStatus
 
 NOW = datetime.datetime.now(datetime.UTC)
 SINCE = NOW - datetime.timedelta(days=1)
@@ -89,7 +89,7 @@ def the_review_entries(request):
 
     for status in request.param:
         entry = mock.create_autospec(
-            agui_package.RunFeedbackReviewEntry,
+            agui.RunFeedbackReviewEntry,
             awaitable_attrs=mock.AsyncMock(),
         )
         entry.awaitable_attrs.status = _awaitable("status", status)
@@ -107,7 +107,7 @@ def the_run_feedback(the_review_entries):
     review_history, _ = the_review_entries
 
     run_feedback = mock.create_autospec(
-        agui_package.RunFeedback,
+        agui.RunFeedback,
         awaitable_attrs=mock.AsyncMock(),
     )
     run_feedback.awaitable_attrs.feedback = _awaitable(
@@ -127,7 +127,7 @@ def the_run_feedback(the_review_entries):
 @pytest.fixture
 def the_thread():
     thread = mock.create_autospec(
-        agui_package.Thread,
+        agui.Thread,
         awaitable_attrs=mock.AsyncMock(),
     )
     thread.awaitable_attrs.user_name = _awaitable("user_name", USER_NAME)
@@ -142,7 +142,7 @@ def the_thread():
 def the_run(request, the_thread, the_run_feedback):
     if request.param:
         run = mock.create_autospec(
-            agui_package.Run,
+            agui.Run,
             awaitable_attrs=mock.AsyncMock(),
         )
         run.awaitable_attrs.run_id = _awaitable("run_id", RUN_ID)
@@ -427,7 +427,7 @@ async def test_get_feedback_run_info(
         db_events.append(db_event)
 
     run = mock.create_autospec(
-        agui_package.Run,
+        agui.Run,
         awaitable_attrs=mock.AsyncMock(),
     )
     run.awaitable_attrs.thread = _awaitable("thread", the_thread)

@@ -8,7 +8,7 @@ from ag_ui import core as agui_core
 from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.agui import util as agui_util
@@ -16,7 +16,7 @@ from soliplex.agui import util as agui_util
 # Temporary backward-compatibility:  to be removed in 'v0.45'
 from soliplex.agui.schema import *  # noqa F403
 
-FeedbackReviewStatus = agui_package.FeedbackReviewStatus
+FeedbackReviewStatus = agui.FeedbackReviewStatus
 
 
 class NoFeedbackFound(ValueError):
@@ -48,7 +48,7 @@ _LAST_ACTIVITY = sqla_sql.func.max(
 )
 
 
-class ThreadStorage(agui_package.ThreadStorage):
+class ThreadStorage(agui.ThreadStorage):
     def __init__(self, session: sqla_asyncio.AsyncSession):
         self._session = session
 
@@ -74,12 +74,12 @@ class ThreadStorage(agui_package.ThreadStorage):
         thread = (await session.scalars(query)).first()
 
         if thread is None:
-            raise agui_package.UnknownThread(user_name, thread_id)
+            raise agui.UnknownThread(user_name, thread_id)
 
         t_room_id = await thread.awaitable_attrs.room_id
 
         if t_room_id != room_id:
-            raise agui_package.ThreadRoomMismatch(room_id, t_room_id)
+            raise agui.ThreadRoomMismatch(room_id, t_room_id)
 
         return thread
 
@@ -91,7 +91,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         thread_id: str,
         run_id: str,
         session,
-        exc_type=agui_package.UnknownRun,
+        exc_type=agui.UnknownRun,
     ):
         thread = await self._find_user_thread(
             user_name=user_name,
@@ -294,7 +294,7 @@ class ThreadStorage(agui_package.ThreadStorage):
                     thread_id=thread_id,
                     run_id=parent_run_id,
                     session=session,
-                    exc_type=agui_package.MissingParentRun,
+                    exc_type=agui.MissingParentRun,
                 )
             else:
                 parent = None
@@ -362,7 +362,7 @@ class ThreadStorage(agui_package.ThreadStorage):
             already = await run.awaitable_attrs.run_agent_input
 
             if already is not None:
-                raise agui_package.RunAlreadyStarted(
+                raise agui.RunAlreadyStarted(
                     user_name,
                     thread_id,
                     run_id,
@@ -524,8 +524,8 @@ class ThreadStorage(agui_package.ThreadStorage):
         room_id: str,
         thread_id: str,
         run_id: str,
-        events: agui_package.AGUI_Events,
-    ) -> agui_package.AGUI_Events:
+        events: agui.AGUI_Events,
+    ) -> agui.AGUI_Events:
         """Save the events for a gven run"""
         await self._session.commit()
 
@@ -624,7 +624,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         room_id: str,
         thread_id: str,
         run_id: str,
-    ) -> agui_package.RunFeedbackType | None:
+    ) -> agui.RunFeedbackType | None:
         """Get the run feedback"""
         await self._session.commit()
 
