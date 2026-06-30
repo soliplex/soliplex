@@ -3,7 +3,6 @@ from __future__ import annotations  # forward refs in typing decls
 import dataclasses
 import pathlib
 import typing
-import warnings
 
 import pydantic
 from bubble_sandbox import config as bs_config
@@ -334,40 +333,6 @@ class HR_RAG_SkillConfig(_HR_SkillConfigBase):
 
     kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rag"
     _hr_skill_module = hr_skills_rag
-
-    @property
-    def tool_names(self) -> list[str]:
-        return []  # see #773
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
-        config_path: pathlib.Path,
-        config_dict: dict,
-    ):
-        tool_names = config_dict.pop("tool_names", None)
-        rag_features = config_dict.pop("rag_features", None)
-
-        if tool_names is not None:
-            warnings.warn(
-                "'tool_names' is deprecated, and has no effect",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-
-        if rag_features is not None:
-            warnings.warn(
-                "'rag_features' is deprecated, and has no effect",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-
-        return super().from_yaml(
-            installation_config=installation_config,
-            config_path=config_path,
-            config_dict=config_dict,
-        )
 
 
 @dataclasses.dataclass(kw_only=True)

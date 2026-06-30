@@ -79,8 +79,6 @@ _hidden_alias("list-admin-users", admin_users.list_admin_users)
 _hidden_alias("clear-admin-users", admin_users.clear_admin_users)
 _hidden_alias("add-admin-user", admin_users.add_admin_user)
 _hidden_alias("show-room-authz", room_authz.show_room_authz)
-_hidden_alias("clear-room-authz", room_authz.clear_room_authz)
-_hidden_alias("add-room-user", room_authz.add_room_user)
 
 the_cli.add_typer(serve.app)
 the_cli.add_typer(audit.app)

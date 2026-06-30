@@ -1,6 +1,5 @@
 import functools
 import pathlib
-import warnings
 from unittest import mock
 
 import pytest
@@ -108,55 +107,6 @@ def test_app_with_session():
     )
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize("w_already_tgm", [None, mock.Mock()])
-@mock.patch("soliplex.util.GitMetadata")
-@mock.patch("pathlib.Path.cwd")
-async def test_add_custom_header(pp_cwd, gm_klass, w_already_tgm):
-    main_patch = {"the_git_metadata": None}
-
-    if w_already_tgm is not None:
-        main_patch["the_git_metadata"] = w_already_tgm
-        exp_hash = w_already_tgm.git_hash
-    else:
-        exp_hash = gm_klass.return_value.git_hash
-
-    request = object()
-    call_next = mock.AsyncMock(spec_set=())
-    exp_response = call_next.return_value = mock.Mock(
-        spec_set=["headers"],
-        headers={},
-    )
-
-    with mock.patch.dict("soliplex.main.__dict__", **main_patch):
-        response = await main.add_custom_header(request, call_next)
-
-    assert response is exp_response
-    assert response.headers["X-Git-Hash"] == exp_hash
-    call_next.assert_awaited_once_with(request)
-
-    if w_already_tgm:
-        gm_klass.assert_not_called()
-    else:
-        gm_klass.assert_called_once_with(pp_cwd.return_value)
-
-
-def test_app_with_git_hash():
-    app = mock.Mock(spec_set=["middleware"])
-
-    with warnings.catch_warnings(record=True) as logged:
-        found = main.app_with_git_hash(app)
-
-    assert found is app
-    assert logged
-
-    app.middleware.assert_called_once_with("http")
-    (called,) = app.middleware.return_value.call_args_list
-    assert called.kwargs == {}
-    (mw_func,) = called.args
-    assert mw_func is main.add_custom_header
-
-
 @pytest.fixture
 def installation_w_session_token(explicit_inst_dir):
     secret_file = explicit_inst_dir / "session_secret.txt"
@@ -189,7 +139,6 @@ def test_create_app_with_explicit_overrides(
     app_with_lifespan = mock.Mock(spec_set=())
     app_with_cors = mock.Mock(spec_set=())
     app_with_session = mock.Mock(spec_set=())
-    app_with_git_hash = mock.Mock(spec_set=())
 
     found = main.create_app(
         installation_path=installation_w_session_token,
@@ -198,14 +147,10 @@ def test_create_app_with_explicit_overrides(
         app_with_lifespan=app_with_lifespan,
         app_with_cors=app_with_cors,
         app_with_session=app_with_session,
-        app_with_git_hash=app_with_git_hash,
         **kwargs,
     )
 
-    assert found is app_with_git_hash.return_value
-    app_with_git_hash.assert_called_once_with(
-        app_with_session.return_value,
-    )
+    assert found is app_with_session.return_value
     app_with_session.assert_called_once_with(
         app_with_cors.return_value,
         "DEADBEEF",
@@ -239,7 +184,6 @@ def test_create_app_wo_explicit_overrides(
     app_with_lifespan = mock.Mock(spec_set=())
     app_with_cors = mock.Mock(spec_set=())
     app_with_session = mock.Mock(spec_set=())
-    app_with_git_hash = mock.Mock(spec_set=())
 
     with mock.patch.multiple(
         "soliplex.main",
@@ -247,7 +191,6 @@ def test_create_app_wo_explicit_overrides(
         app_with_lifespan=app_with_lifespan,
         app_with_cors=app_with_cors,
         app_with_session=app_with_session,
-        app_with_git_hash=app_with_git_hash,
     ):
         found = main.create_app(
             installation_path=installation_w_session_token,
@@ -256,8 +199,6 @@ def test_create_app_wo_explicit_overrides(
         )
 
     assert found is app_with_session.return_value
-
-    app_with_git_hash.assert_not_called()
 
     app_with_session.assert_called_once_with(
         app_with_cors.return_value,

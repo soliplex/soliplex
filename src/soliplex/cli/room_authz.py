@@ -5,7 +5,6 @@ import json
 import pathlib
 import sys
 import typing
-import warnings
 
 import typer
 import yaml
@@ -823,94 +822,4 @@ def delete_acl_entry(
         )
         raise typer.Exit(1) from None
 
-    _dump(ctx, room_id, policy)
-
-
-# Deprecated and hidden BBB commands.
-
-ADD_COMMAND_DEPRECATION = """\
-Deprecated: to be removed after `v0.71'.  Use 'add-acl-entry' instead.
-"""
-
-
-async def _add_user(dburi, room_id, entry):
-    async with cli_util._room_authz_policy(dburi) as policy:
-        if await policy.get_room_policy_unchecked(room_id) is None:
-            await policy.set_room_default(room_id, authz.AllowDeny.DENY)
-        await policy.add_acl_entry(room_id, entry)
-        return await policy.get_room_policy_unchecked(room_id)
-
-
-@app.command("add-user", hidden=True, deprecated=True)
-def add_room_user(
-    ctx: typer.Context,
-    installation_path: types.installation_path_type,
-    room_id: str,
-    user_email: str,
-):
-    """Add a user to the ACL for a room."""
-    warnings.warn(
-        ADD_COMMAND_DEPRECATION,
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
-
-    cli_util._check_ram_dburi(dburi, "room-authz add-user")
-
-    json_path = authz.token_field_json_path("email", user_email)
-    entry = models.ACLEntry(
-        allow_deny=authz.AllowDeny.ALLOW,
-        json_path=json_path,
-    )
-
-    policy = asyncio.run(_add_user(dburi, room_id, entry))
-    _dump(ctx, room_id, policy)
-
-
-CLEAR_COMMAND_DEPRECATION = """\
-Deprecated: to be removed after `v0.71'.
-Use 'clear' plus either 'make-public' or 'make-private' instead.
-"""
-
-
-async def _clear(dburi, room_id, make_room_private):
-    async with cli_util._room_authz_policy(dburi) as policy:
-        await policy.delete_room_policy(room_id)
-        if make_room_private:
-            await policy.set_room_default(room_id, authz.AllowDeny.DENY)
-        return await policy.get_room_policy_unchecked(room_id)
-
-
-@app.command("clear", hidden=True, deprecated=True)
-def clear_room_authz(
-    ctx: typer.Context,
-    installation_path: types.installation_path_type,
-    room_id: str,
-    make_room_private: bool = typer.Option(
-        False,
-        "--make-room-private",
-        help="Make room private",
-    ),
-):
-    """Clear room ACL entries from the installation's authz database
-
-    Unless '--make-room-private' is passed, the room will be in its
-    default-public state.
-
-    If '--make-room-private' is passed, the room policy will be set to
-    private (default_allow_deny of DENY), with no users.
-    """
-    warnings.warn(
-        CLEAR_COMMAND_DEPRECATION,
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
-
-    cli_util._check_ram_dburi(dburi, "room-authz clear")
-
-    policy = asyncio.run(_clear(dburi, room_id, make_room_private))
     _dump(ctx, room_id, policy)
