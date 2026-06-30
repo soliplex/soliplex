@@ -1,3 +1,4 @@
+import json
 import pathlib
 import uuid
 from unittest import mock
@@ -67,14 +68,23 @@ def environments_path(temp_dir):
 
 
 @pytest.fixture
+def transcripts_path(temp_dir):
+    result = temp_dir / "sandbox" / "transcripts"
+    result.mkdir(parents=True)
+    return result
+
+
+@pytest.fixture
 def s_config(
     workdirs_path,
     environments_path,
+    transcripts_path,
 ):
     return mock.create_autospec(
         config_installation.SandboxConfig,
         environments_path=environments_path,
         workdirs_path=workdirs_path,
+        transcripts_path=transcripts_path,
     )
 
 
@@ -463,6 +473,45 @@ def test_get_extra_volumes(
     assert found == expected
 
 
+def test_write_transcript_wo_transcripts_path():
+    found = skills_bwrap_sandbox.write_transcript(
+        None,
+        ROOM_ID,
+        str(THREAD_ID),
+        str(RUN_ID),
+        content="print('hi')",
+        suffix=".py",
+    )
+
+    assert found is None
+
+
+@pytest.mark.parametrize(
+    "content, suffix",
+    [
+        ("print('hi')", ".py"),
+        ('["/bin/true"]', ".txt"),
+    ],
+)
+def test_write_transcript(transcripts_path, content, suffix):
+    found = skills_bwrap_sandbox.write_transcript(
+        transcripts_path,
+        ROOM_ID,
+        str(THREAD_ID),
+        str(RUN_ID),
+        content=content,
+        suffix=suffix,
+    )
+
+    found_path = pathlib.Path(found)
+    assert found_path.parent == (
+        transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+    )
+    assert found_path.suffix == suffix
+    assert found_path.read_text(encoding="utf-8") == content
+    assert (found_path.stat().st_mode & 0o777) == 0o600
+
+
 @pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
     "w_kwargs",
@@ -642,6 +691,7 @@ async def test_create_sandbox_toolset_run(
     workdirs_path,
     rooms_upload_path,
     threads_upload_path,
+    transcripts_path,
     w_kw,
     w_iconfig,
     audit_records,
@@ -686,6 +736,19 @@ async def test_create_sandbox_toolset_run(
     assert record.room_id == ROOM_ID
     assert record.thread_id == str(THREAD_ID)
     assert record.run_id == str(RUN_ID)
+
+    if w_iconfig:
+        (ref,) = record.refs
+        ref_path = pathlib.Path(ref)
+        assert ref_path.parent == (
+            transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+        )
+        assert ref_path.suffix == ".txt"
+        assert ref_path.read_text(encoding="utf-8") == json.dumps(
+            ["/bin/true"]
+        )
+    else:
+        assert record.refs == []
 
     if w_iconfig:
         gw.assert_called_once_with(
@@ -739,6 +802,7 @@ async def test_create_sandbox_toolset_run_python(
     workdirs_path,
     rooms_upload_path,
     threads_upload_path,
+    transcripts_path,
     w_kw,
     w_iconfig,
     audit_records,
@@ -780,6 +844,17 @@ async def test_create_sandbox_toolset_run_python(
     assert record.workdir == str(gw.return_value)
     assert record.environment == w_kw.get("environment_name")
     assert record.claims == {"preferred_username": USERNAME}
+
+    if w_iconfig:
+        (ref,) = record.refs
+        ref_path = pathlib.Path(ref)
+        assert ref_path.parent == (
+            transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+        )
+        assert ref_path.suffix == ".py"
+        assert ref_path.read_text(encoding="utf-8") == "print('hello')"
+    else:
+        assert record.refs == []
 
     if w_iconfig:
         gw.assert_called_once_with(
@@ -890,11 +965,13 @@ async def test_create_sandbox_toolset_run_audits_failure(
     gev,
     ctx_w_deps,
     i_config,
+    transcripts_path,
     audit_records,
 ):
     # An exception escaping the tool body is recorded as a failure and
     # re-raised (the skill's own 'skill_run' swallows 'RuntimeError', so this
-    # mocks it to raise).
+    # mocks it to raise). The transcript is written before execution, so its
+    # ref still lands on the failure record.
     skill_run.side_effect = RuntimeError("boom")
     toolset = skills_bwrap_sandbox.create_sandbox_toolset(
         installation_config=i_config,
@@ -910,3 +987,10 @@ async def test_create_sandbox_toolset_run_audits_failure(
     assert record.reason == "RuntimeError"
     assert record.workdir == str(gw.return_value)
     assert record.claims == {"preferred_username": USERNAME}
+
+    (ref,) = record.refs
+    ref_path = pathlib.Path(ref)
+    assert ref_path.parent == (
+        transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+    )
+    assert ref_path.read_text(encoding="utf-8") == json.dumps(["/bin/true"])
