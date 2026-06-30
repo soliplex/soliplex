@@ -1,3 +1,4 @@
+import json
 import pathlib
 import uuid
 from unittest import mock
@@ -10,12 +11,14 @@ from haiku.skills import models as hs_models
 from haiku.skills import state as hs_state
 from pydantic_ai import toolsets as ai_toolsets
 
+from soliplex import loggers
 from soliplex.config import installation as config_installation
 from soliplex.skills import bwrap_sandbox as skills_bwrap_sandbox
 
 ROOM_ID = "test_room"
 THREAD_ID = uuid.uuid4()
 RUN_ID = uuid.uuid4()
+USERNAME = "phreddy"
 
 ONE_ENVIRONMENT = mock.create_autospec(bs_models.EnvironmentInfo)
 ONE_ENVIRONMENT.name = "one"  # mock quirk
@@ -35,6 +38,7 @@ def ctx_w_deps():
             room_id=ROOM_ID,
             thread_id=str(THREAD_ID),
             run_id=str(RUN_ID),
+            preferred_username=USERNAME,
         ),
     )
     return ctx
@@ -64,14 +68,23 @@ def environments_path(temp_dir):
 
 
 @pytest.fixture
+def transcripts_path(temp_dir):
+    result = temp_dir / "sandbox" / "transcripts"
+    result.mkdir(parents=True)
+    return result
+
+
+@pytest.fixture
 def s_config(
     workdirs_path,
     environments_path,
+    transcripts_path,
 ):
     return mock.create_autospec(
         config_installation.SandboxConfig,
         environments_path=environments_path,
         workdirs_path=workdirs_path,
+        transcripts_path=transcripts_path,
     )
 
 
@@ -460,6 +473,45 @@ def test_get_extra_volumes(
     assert found == expected
 
 
+def test_write_transcript_wo_transcripts_path():
+    found = skills_bwrap_sandbox.write_transcript(
+        None,
+        ROOM_ID,
+        str(THREAD_ID),
+        str(RUN_ID),
+        content="print('hi')",
+        suffix=".py",
+    )
+
+    assert found is None
+
+
+@pytest.mark.parametrize(
+    "content, suffix",
+    [
+        ("print('hi')", ".py"),
+        ('["/bin/true"]', ".txt"),
+    ],
+)
+def test_write_transcript(transcripts_path, content, suffix):
+    found = skills_bwrap_sandbox.write_transcript(
+        transcripts_path,
+        ROOM_ID,
+        str(THREAD_ID),
+        str(RUN_ID),
+        content=content,
+        suffix=suffix,
+    )
+
+    found_path = pathlib.Path(found)
+    assert found_path.parent == (
+        transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+    )
+    assert found_path.suffix == suffix
+    assert found_path.read_text(encoding="utf-8") == content
+    assert (found_path.stat().st_mode & 0o777) == 0o600
+
+
 @pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
     "w_kwargs",
@@ -639,8 +691,10 @@ async def test_create_sandbox_toolset_run(
     workdirs_path,
     rooms_upload_path,
     threads_upload_path,
+    transcripts_path,
     w_kw,
     w_iconfig,
+    audit_records,
 ):
     if w_iconfig:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset(
@@ -672,6 +726,29 @@ async def test_create_sandbox_toolset_run(
         command=["/bin/true"],
         **exp_kw,
     )
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
+    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.workdir == str(gw.return_value)
+    assert record.environment == w_kw.get("environment_name")
+    assert record.claims == {"preferred_username": USERNAME}
+    assert record.room_id == ROOM_ID
+    assert record.thread_id == str(THREAD_ID)
+    assert record.run_id == str(RUN_ID)
+
+    if w_iconfig:
+        (ref,) = record.refs
+        ref_path = pathlib.Path(ref)
+        assert ref_path.parent == (
+            transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+        )
+        assert ref_path.suffix == ".txt"
+        assert ref_path.read_text(encoding="utf-8") == json.dumps(
+            ["/bin/true"]
+        )
+    else:
+        assert record.refs == []
 
     if w_iconfig:
         gw.assert_called_once_with(
@@ -725,8 +802,10 @@ async def test_create_sandbox_toolset_run_python(
     workdirs_path,
     rooms_upload_path,
     threads_upload_path,
+    transcripts_path,
     w_kw,
     w_iconfig,
+    audit_records,
 ):
     if w_iconfig:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset(
@@ -758,6 +837,24 @@ async def test_create_sandbox_toolset_run_python(
         script="print('hello')",
         **exp_kw,
     )
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON
+    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.workdir == str(gw.return_value)
+    assert record.environment == w_kw.get("environment_name")
+    assert record.claims == {"preferred_username": USERNAME}
+
+    if w_iconfig:
+        (ref,) = record.refs
+        ref_path = pathlib.Path(ref)
+        assert ref_path.parent == (
+            transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+        )
+        assert ref_path.suffix == ".py"
+        assert ref_path.read_text(encoding="utf-8") == "print('hello')"
+    else:
+        assert record.refs == []
 
     if w_iconfig:
         gw.assert_called_once_with(
@@ -854,3 +951,46 @@ def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig, i_config):
     )
 
     csts.assert_called_once_with(**exp_toolset_kw)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.skills.bwrap_sandbox.get_extra_volumes")
+@mock.patch("soliplex.skills.bwrap_sandbox.get_workdir")
+@mock.patch("soliplex.skills.bwrap_sandbox.skill_run")
+@mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
+async def test_create_sandbox_toolset_run_audits_failure(
+    bs_klass,
+    skill_run,
+    gw,
+    gev,
+    ctx_w_deps,
+    i_config,
+    transcripts_path,
+    audit_records,
+):
+    # An exception escaping the tool body is recorded as a failure and
+    # re-raised (the skill's own 'skill_run' swallows 'RuntimeError', so this
+    # mocks it to raise). The transcript is written before execution, so its
+    # ref still lands on the failure record.
+    skill_run.side_effect = RuntimeError("boom")
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+        installation_config=i_config,
+    )
+    tool = toolset.tools["run"]
+
+    with pytest.raises(RuntimeError):
+        await tool.function(ctx=ctx_w_deps, command=["/bin/true"])
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
+    assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
+    assert record.reason == "RuntimeError"
+    assert record.workdir == str(gw.return_value)
+    assert record.claims == {"preferred_username": USERNAME}
+
+    (ref,) = record.refs
+    ref_path = pathlib.Path(ref)
+    assert ref_path.parent == (
+        transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+    )
+    assert ref_path.read_text(encoding="utf-8") == json.dumps(["/bin/true"])

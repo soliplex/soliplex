@@ -14,6 +14,7 @@ SCOPE_ROOM_AUTHZ = loggers.AuditLogScopes.ROOM_AUTHZ
 SCOPE_ADMIN_USERS = loggers.AuditLogScopes.ADMIN_USERS
 SCOPE_INSTALLATION_CONFIG = loggers.AuditLogScopes.INSTALLATION_CONFIG
 SCOPE_RAG_ACCESS = loggers.AuditLogScopes.RAG_ACCESS
+SCOPE_SANDBOX_EXEC = loggers.AuditLogScopes.SANDBOX_EXEC
 
 
 @pytest.fixture
@@ -785,5 +786,69 @@ def test_rag_chunk_viz_failed(audit_records):
             "db_path": None,
             "selector": "chunk-uuid",
             "reason": "unknown chunk id",
+        },
+    )
+
+
+# --- SandboxExecAuditLog -------------------------------------------------
+
+
+@pytest.mark.parametrize("w_claims", [{}, CLAIMS])
+def test_sandboxexecauditlog_ctor(w_claims):
+    found = loggers.SandboxExecAuditLog(claims=w_claims)
+
+    assert found.name == loggers.SOLIPLEX_AUDIT_LOGGER_NAME
+    scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
+    assert scope == SCOPE_SANDBOX_EXEC
+    assert found.extra["claims"] == w_claims
+
+
+def test_sandbox_executed(audit_records):
+    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
+
+    wrapper.executed(
+        loggers.AUDIT_SANDBOX_ACTION_RUN, "/work/run", "bare", ["/t/abc.txt"]
+    )
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SANDBOX_EXEC,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_SANDBOX_EXEC,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_SANDBOX_ACTION_RUN,
+            "workdir": "/work/run",
+            "environment": "bare",
+            "refs": ["/t/abc.txt"],
+        },
+    )
+
+
+def test_sandbox_execute_failed(audit_records):
+    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
+
+    wrapper.execute_failed(
+        loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
+        None,
+        None,
+        ["/t/abc.py"],
+        "RuntimeError",
+    )
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SANDBOX_EXEC,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_SANDBOX_EXEC,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
+            "workdir": None,
+            "environment": None,
+            "refs": ["/t/abc.py"],
+            "reason": "RuntimeError",
         },
     )

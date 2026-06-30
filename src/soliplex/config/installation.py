@@ -288,6 +288,7 @@ class EnvironmentSource:
 class SandboxConfig:
     _environments_path: pathlib.Path
     _workdirs_path: pathlib.Path | None = None
+    _transcripts_path: pathlib.Path | None = None
 
     # Set by `from_yaml` factory
     _config_path: pathlib.Path | None = None
@@ -301,6 +302,10 @@ class SandboxConfig:
             "workdirs_path",
             None,
         )
+        config_dict["_transcripts_path"] = config_dict.pop(
+            "transcripts_path",
+            None,
+        )
         return cls(_config_path=config_path, **config_dict)
 
     @property
@@ -308,6 +313,8 @@ class SandboxConfig:
         result = {"environments_path": str(self.environments_path)}
         if self._workdirs_path is not None:
             result["workdirs_path"] = str(self.workdirs_path)
+        if self._transcripts_path is not None:
+            result["transcripts_path"] = str(self.transcripts_path)
 
         return result
 
@@ -336,6 +343,27 @@ class SandboxConfig:
         """
         if self._config_path is not None and self._workdirs_path is not None:
             return (self._config_path.parent / self._workdirs_path).resolve()
+        else:
+            return None
+
+    @property
+    def transcripts_path(self) -> pathlib.Path | None:
+        """Directory holding saved command / script transcripts per run
+
+        Named with the run ID, with parent directories for the room ID and
+        thread ID, mirroring 'workdirs_path'. Unlike the workdir, this
+        directory is NEVER mounted into the sandbox, so executed code cannot
+        read or tamper with the saved command / script.
+
+        If not set, transcripts are not saved.
+        """
+        if (
+            self._config_path is not None
+            and self._transcripts_path is not None
+        ):
+            return (
+                self._config_path.parent / self._transcripts_path
+            ).resolve()
         else:
             return None
 
@@ -685,6 +713,13 @@ class InstallationConfig:
             return None
         else:
             return self.sandbox_config.workdirs_path
+
+    @property
+    def sandbox_transcripts_path(self) -> pathlib.Path | None:
+        if self.sandbox_config is None:
+            return None
+        else:
+            return self.sandbox_config.transcripts_path
 
     #
     # Path(s) to OIDC Authentication System configs

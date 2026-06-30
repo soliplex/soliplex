@@ -111,6 +111,8 @@ installation_skill_names:
 TEST_ROOM_ID = "test_room_id"
 TEST_THREAD_ID = "test_thread_id"
 TEST_RUN_ID = "test_run_id"
+TEST_USERNAME = "phreddy"
+TEST_EMAIL = "phreddy@example.com"
 
 
 @pytest.fixture
@@ -1288,6 +1290,10 @@ def test_roomskillsconfig_skill_toolset(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
             run_id=TEST_RUN_ID,
+            user=mock.Mock(
+                preferred_username=TEST_USERNAME,
+                email=TEST_EMAIL,
+            ),
             state={},
         ),
     ],
@@ -1312,7 +1318,9 @@ async def test_soliplex_skill_toolset_for_run(
         assert ns.room_id == TEST_ROOM_ID
         assert ns.thread_id == TEST_THREAD_ID
         assert ns.run_id == TEST_RUN_ID
+        assert ns.preferred_username == TEST_USERNAME
     else:
         assert ns.room_id is None
         assert ns.thread_id is None
         assert ns.run_id is None
+        assert ns.preferred_username is None

@@ -1,5 +1,7 @@
+import json
 import pathlib
 import typing
+import uuid
 
 import pydantic
 import pydantic_ai
@@ -10,6 +12,9 @@ from haiku.skills import models as hs_models
 from haiku.skills import parser as hs_parser
 from haiku.skills import state as hs_state
 from pydantic_ai import toolsets as ai_toolests
+
+from soliplex import loggers
+from soliplex import sandbox_audit
 
 VolumeName = typing.Literal["thread"] | typing.Literal["room"]
 
@@ -30,6 +35,8 @@ class SandboxState(pydantic.BaseModel):
     room_id: str | None = None
     thread_id: str | None = None
     run_id: str | None = None
+    # Actor identity for auditing sandbox data changes.
+    preferred_username: str | None = None
 
 
 STATE_TYPE = SandboxState
@@ -287,6 +294,35 @@ def get_extra_volumes(
     return result
 
 
+def write_transcript(
+    transcripts_path: pathlib.Path | None,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+    *,
+    content: str,
+    suffix: str,
+) -> str | None:
+    """Save a command / script transcript for auditing; return its host path.
+
+    Written under '<transcripts_path>/<room_id>/<thread_id>/<run_id>/' with a
+    UUID-based filename and owner-only ('0600') permissions. This directory is
+    never mounted into the sandbox, so executed code cannot read or tamper
+    with the saved transcript. Returns 'None' (writing nothing) when no
+    'transcripts_path' is configured.
+    """
+    if transcripts_path is None:
+        return None
+
+    run_dir = transcripts_path / room_id / str(thread_id) / str(run_id)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    target = run_dir / f"{uuid.uuid4()}{suffix}"
+    target.write_text(content, encoding="utf-8")
+    target.chmod(0o600)
+
+    return str(target)
+
+
 def create_sandbox_toolset(
     *,
     id: str | None = None,
@@ -331,10 +367,12 @@ def create_sandbox_toolset(
 
         threads_upload_path = i_config.threads_upload_path
         rooms_upload_path = i_config.rooms_upload_path
+        transcripts_path = s_config.transcripts_path
     else:
         workdirs_path = None
         threads_upload_path = None
         rooms_upload_path = None
+        transcripts_path = None
 
     if volumes is None:
         volumes = {}
@@ -405,14 +443,35 @@ def create_sandbox_toolset(
             state.thread_id or "",
         )
 
-        return await skill_run(
-            bwrap_sandbox=bwrap_sandbox,
-            command=command,
-            environment_name=environment_name,
+        with sandbox_audit.audit_sandbox_exec(
+            state,
+            action=loggers.AUDIT_SANDBOX_ACTION_RUN,
+            environment=environment_name,
             workdir=workdir,
-            timeout=timeout,
-            extra_volumes=extra_volumes,
-        )
+        ) as access:
+            ref = write_transcript(
+                transcripts_path,
+                state.room_id or "",
+                state.thread_id or "",
+                state.run_id or "",
+                content=(
+                    command
+                    if isinstance(command, str)
+                    else json.dumps(command)
+                ),
+                suffix=".txt",
+            )
+            if ref is not None:
+                access.record_ref(ref)
+
+            return await skill_run(
+                bwrap_sandbox=bwrap_sandbox,
+                command=command,
+                environment_name=environment_name,
+                workdir=workdir,
+                timeout=timeout,
+                extra_volumes=extra_volumes,
+            )
 
     @toolset.tool(description=RUN_PYTHON_DESCRIPTION)
     async def run_python(
@@ -436,14 +495,31 @@ def create_sandbox_toolset(
             state.thread_id or "",
         )
 
-        return await skill_run_python(
-            bwrap_sandbox=bwrap_sandbox,
-            script=script,
-            environment_name=environment_name,
+        with sandbox_audit.audit_sandbox_exec(
+            state,
+            action=loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
+            environment=environment_name,
             workdir=workdir,
-            timeout=timeout,
-            extra_volumes=extra_volumes,
-        )
+        ) as access:
+            ref = write_transcript(
+                transcripts_path,
+                state.room_id or "",
+                state.thread_id or "",
+                state.run_id or "",
+                content=script,
+                suffix=".py",
+            )
+            if ref is not None:
+                access.record_ref(ref)
+
+            return await skill_run_python(
+                bwrap_sandbox=bwrap_sandbox,
+                script=script,
+                environment_name=environment_name,
+                workdir=workdir,
+                timeout=timeout,
+                extra_volumes=extra_volumes,
+            )
 
     return toolset
 

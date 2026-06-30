@@ -138,6 +138,14 @@ AUDIT_RAG_ACTION_SEARCH = "search"
 AUDIT_RAG_ACTION_CHUNK_VIZ = "chunk-viz"
 AUDIT_RAG_ACTION_DOC_LIST = "doc-list"
 
+# sandbox-exec audit events (data change): the room agent's sandbox skill
+# executes code against a per-run, writable working directory.
+AUDIT_SANDBOX_EXEC = "sandbox exec"
+
+# sandbox-exec 'action' values: which tool drove the execution.
+AUDIT_SANDBOX_ACTION_RUN = "run"
+AUDIT_SANDBOX_ACTION_RUN_PYTHON = "run-python"
+
 
 class _StructuredFieldsAdapter(logging.LoggerAdapter):
     """LoggerAdapter that folds caller keyword fields into 'extra'."""
@@ -262,6 +270,7 @@ class AuditLogScopes(enum.StrEnum):
     ADMIN_USERS = "admin-users"
     INSTALLATION_CONFIG = "installation-config"
     RAG_ACCESS = "rag-access"
+    SANDBOX_EXEC = "sandbox-exec"
 
 
 class AuditLogWrapper(_StructuredFieldsAdapter):
@@ -547,5 +556,57 @@ class RAGAccessAuditLog(AuditLogWrapper):
             action=AUDIT_RAG_ACTION_CHUNK_VIZ,
             db_path=db_path,
             selector=selector,
+            reason=reason,
+        )
+
+
+class SandboxExecAuditLog(AuditLogWrapper):
+    """Record sandbox executions that may change run-workdir data.
+
+    Each ``run`` / ``run_python`` invocation is one data-change event: the
+    room agent's sandbox skill executes code against the run's writable
+    working directory. The command and script bodies are deliberately not
+    recorded inline (size / content leakage); the record captures the
+    'action' (which tool ran), the 'workdir' whose data the execution may
+    have changed, the 'environment' it ran in, and 'refs' -- the host paths
+    of the saved command / script transcripts (empty when transcripts are
+    not configured).
+    """
+
+    def __init__(self, claims: dict[str, typing.Any], **extra):
+        extra_with_claims = {"claims": claims} | extra
+        super().__init__(
+            scope=AuditLogScopes.SANDBOX_EXEC, **extra_with_claims
+        )
+
+    def executed(
+        self,
+        action: str,
+        workdir: str | None,
+        environment: str | None,
+        refs: typing.Any,
+    ):
+        self._succeeded(
+            AUDIT_SANDBOX_EXEC,
+            action=action,
+            workdir=workdir,
+            environment=environment,
+            refs=refs,
+        )
+
+    def execute_failed(
+        self,
+        action: str,
+        workdir: str | None,
+        environment: str | None,
+        refs: typing.Any,
+        reason: str,
+    ):
+        self._failed(
+            AUDIT_SANDBOX_EXEC,
+            action=action,
+            workdir=workdir,
+            environment=environment,
+            refs=refs,
             reason=reason,
         )
