@@ -566,9 +566,11 @@ class SandboxExecAuditLog(AuditLogWrapper):
     Each ``run`` / ``run_python`` invocation is one data-change event: the
     room agent's sandbox skill executes code against the run's writable
     working directory. The command and script bodies are deliberately not
-    recorded (size / content leakage); the record captures the 'action'
-    (which tool ran), the 'workdir' whose data the execution may have
-    changed, and the 'environment' it ran in.
+    recorded inline (size / content leakage); the record captures the
+    'action' (which tool ran), the 'workdir' whose data the execution may
+    have changed, the 'environment' it ran in, and 'refs' -- the host paths
+    of the saved command / script transcripts (empty when transcripts are
+    not configured).
     """
 
     def __init__(self, claims: dict[str, typing.Any], **extra):
@@ -578,13 +580,18 @@ class SandboxExecAuditLog(AuditLogWrapper):
         )
 
     def executed(
-        self, action: str, workdir: str | None, environment: str | None
+        self,
+        action: str,
+        workdir: str | None,
+        environment: str | None,
+        refs: typing.Any,
     ):
         self._succeeded(
             AUDIT_SANDBOX_EXEC,
             action=action,
             workdir=workdir,
             environment=environment,
+            refs=refs,
         )
 
     def execute_failed(
@@ -592,6 +599,7 @@ class SandboxExecAuditLog(AuditLogWrapper):
         action: str,
         workdir: str | None,
         environment: str | None,
+        refs: typing.Any,
         reason: str,
     ):
         self._failed(
@@ -599,5 +607,6 @@ class SandboxExecAuditLog(AuditLogWrapper):
             action=action,
             workdir=workdir,
             environment=environment,
+            refs=refs,
             reason=reason,
         )

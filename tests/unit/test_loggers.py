@@ -806,7 +806,9 @@ def test_sandboxexecauditlog_ctor(w_claims):
 def test_sandbox_executed(audit_records):
     wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
 
-    wrapper.executed(loggers.AUDIT_SANDBOX_ACTION_RUN, "/work/run", "bare")
+    wrapper.executed(
+        loggers.AUDIT_SANDBOX_ACTION_RUN, "/work/run", "bare", ["/t/abc.txt"]
+    )
 
     _assert_audit_record(
         audit_records[-1],
@@ -819,6 +821,7 @@ def test_sandbox_executed(audit_records):
             "action": loggers.AUDIT_SANDBOX_ACTION_RUN,
             "workdir": "/work/run",
             "environment": "bare",
+            "refs": ["/t/abc.txt"],
         },
     )
 
@@ -827,7 +830,11 @@ def test_sandbox_execute_failed(audit_records):
     wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
 
     wrapper.execute_failed(
-        loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON, None, None, "RuntimeError"
+        loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
+        None,
+        None,
+        ["/t/abc.py"],
+        "RuntimeError",
     )
 
     _assert_audit_record(
@@ -841,6 +848,7 @@ def test_sandbox_execute_failed(audit_records):
             "action": loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
             "workdir": None,
             "environment": None,
+            "refs": ["/t/abc.py"],
             "reason": "RuntimeError",
         },
     )
