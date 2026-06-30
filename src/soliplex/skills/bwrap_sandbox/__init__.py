@@ -105,11 +105,14 @@ Return a list of absolute filenames of files in a sandbox volume
 async def skill_list_volume_files(
     *,
     volume: VolumeName,
-    room_upload_path: pathlib.Path,
-    thread_upload_path: pathlib.Path,
+    room_upload_path: pathlib.Path | None,
+    thread_upload_path: pathlib.Path | None,
 ) -> list[str]:
 
-    def _list_volume_files(volume_path: pathlib.Path) -> list[str]:
+    def _list_volume_files(volume_path: pathlib.Path | None) -> list[str]:
+        if volume_path is None:
+            return []
+
         return [
             sub.absolute().name
             for sub in volume_path.glob("*")
@@ -368,8 +371,16 @@ def create_sandbox_toolset(
 
             return await skill_list_volume_files(
                 volume=volume,
-                room_upload_path=rooms_upload_path / room_id,
-                thread_upload_path=threads_upload_path / thread_id,
+                room_upload_path=(
+                    rooms_upload_path / room_id
+                    if rooms_upload_path is not None
+                    else None
+                ),
+                thread_upload_path=(
+                    threads_upload_path / thread_id
+                    if threads_upload_path is not None
+                    else None
+                ),
             )
 
     @toolset.tool(description=RUN_DESCRIPTION)

@@ -37,3 +37,11 @@ class NotADict(ValueError):
     def __init__(self, found):
         self.found = found
         super().__init__(f"YAML did not parse as a dict: {found}")
+
+
+class RemovedUploadPathConfig(ValueError):
+    def __init__(self):
+        super().__init__(
+            "'upload_path' is no longer supported; set "
+            "'rooms_upload_path' and/or 'threads_upload_path' instead."
+        )

@@ -162,6 +162,18 @@ async def test_skill_list_volume_files(
     assert found == expected
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("volume", ["room", "thread"])
+async def test_skill_list_volume_files_wo_configured_path(volume):
+    found = await skills_bwrap_sandbox.skill_list_volume_files(
+        volume=volume,
+        room_upload_path=None,
+        thread_upload_path=None,
+    )
+
+    assert found == []
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_att_rte", [False, True])
 @pytest.mark.parametrize("w_exit_code", [0, None, 42])
@@ -573,6 +585,34 @@ async def test_create_sandbox_toolset_list_volume_files(
         )
     else:
         assert found == []
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.skills.bwrap_sandbox.skill_list_volume_files")
+async def test_create_sandbox_toolset_list_volume_files_wo_upload_paths(
+    skill_list_volume_files,
+    s_config,
+    ctx_w_deps,
+):
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig,
+        sandbox_config=s_config,
+        rooms_upload_path=None,
+        threads_upload_path=None,
+    )
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+        installation_config=i_config,
+    )
+    tool = toolset.tools["list_volume_files"]
+
+    found = await tool.function(ctx=ctx_w_deps, volume="foo")
+
+    assert found is skill_list_volume_files.return_value
+    skill_list_volume_files.assert_called_once_with(
+        volume="foo",
+        room_upload_path=None,
+        thread_upload_path=None,
+    )
 
 
 @pytest.mark.anyio

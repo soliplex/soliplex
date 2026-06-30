@@ -294,7 +294,8 @@ title_agent_config_id: "title"
 #==========================================================================
 # Upload directory configuration
 #==========================================================================
-upload_path: ../uploads
+rooms_upload_path: ../uploads/rooms
+threads_upload_path: ../uploads/threads
 
 #==========================================================================
 # Sandbox configuration
