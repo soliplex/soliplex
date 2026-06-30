@@ -757,23 +757,12 @@ def test_hr_rag_skillconfig_skill(
 @pytest.mark.parametrize(
     "w_config, expectation",
     [
-        # kwargs, expected_warning_count or exception type
+        # kwargs, expectation
         (
             {"not_a_valid_key": "FAIL"},
             pytest.raises(config_exc.FromYamlException),
         ),
-        ({}, contextlib.nullcontext(0)),
-        (
-            {"tool_names": ["get_document", "list_documents"]},
-            contextlib.nullcontext(1),
-        ),
-        ({"rag_features": ["search"]}, contextlib.nullcontext(1)),
-        ({"rag_features": ["bogus"]}, contextlib.nullcontext(1)),
-        ({"rag_features": ["analysis"]}, contextlib.nullcontext(1)),
-        (
-            {"tool_names": ["ask"], "rag_features": ["search"]},
-            contextlib.nullcontext(2),
-        ),
+        ({}, contextlib.nullcontext()),
     ],
 )
 def test_hr_rag_skillconfig_from_yaml(
@@ -787,10 +776,7 @@ def test_hr_rag_skillconfig_from_yaml(
         "rag_lancedb_override_path": lancedb,
     } | w_config
 
-    with (
-        warnings.catch_warnings(record=True) as warned,
-        expectation as expected,
-    ):
+    with expectation as expected:
         inst = config_skills.HR_RAG_SkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
@@ -798,13 +784,8 @@ def test_hr_rag_skillconfig_from_yaml(
         )
 
     if not isinstance(expected, pytest.ExceptionInfo):
-        assert len(warned) == expected
-        for warning in warned:
-            assert warning.category is DeprecationWarning
-
         assert inst.rag_lancedb_path == lancedb
         assert inst.haiku_rag_config is installation_config.haiku_rag_config
-        assert inst.tool_names == []  # See #773
 
 
 def test_hr_analysis_skillconfig_metadata(

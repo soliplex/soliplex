@@ -6,7 +6,6 @@ import os
 import pathlib
 import sys
 import typing
-import warnings
 
 import fastapi
 import uvicorn
@@ -14,7 +13,6 @@ from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
 from soliplex import installation
-from soliplex import util
 from soliplex.config import installation as config_installation
 
 
@@ -62,35 +60,6 @@ def app_with_session(app: fastapi.FastAPI, token: str) -> fastapi.FastAPI:
     return app
 
 
-the_git_metadata = None
-
-
-async def add_custom_header(request: fastapi.Request, call_next):
-    global the_git_metadata
-
-    if the_git_metadata is None:
-        cwd = pathlib.Path.cwd()
-        the_git_metadata = util.GitMetadata(cwd)
-
-    response: fastapi.Response = await call_next(request)
-    response.headers["X-Git-Hash"] = the_git_metadata.git_hash
-    return response
-
-
-def app_with_git_hash(app: fastapi.FastAPI) -> fastapi.FastAPI:
-    # The direct caller is likely 'create_app' below: use 'stacklevel=3'
-    # to get *its* caller.
-    warnings.warn(
-        "'soliplex.main.app_with_git_hash' is deprecated, and will be "
-        "removed after version 0.43.",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-    app.middleware("http")(add_custom_header)
-
-    return app
-
-
 def create_app(
     installation_path: pathlib.Path,
     no_auth_mode: bool,
@@ -99,7 +68,6 @@ def create_app(
     app_with_lifespan=None,
     app_with_cors=None,
     app_with_session=None,
-    app_with_git_hash=None,  # deprecated
 ):
     """Construct the Soliplex FastAPI application
 
@@ -131,9 +99,6 @@ def create_app(
         "secret:SESSION_MIDDLEWARE_TOKEN"
     )
     app = app_with_session(app, session_token)
-
-    if app_with_git_hash is not None:
-        app = app_with_git_hash(app)
 
     return app
 

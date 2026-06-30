@@ -187,12 +187,6 @@ E.g.:
         - skill_name: "rag"
           kind: "haiku.rag.skill.rag"
           rag_lancedb_stem: "rag"
-          tool_names:
-            - "search"
-            - "ask"
-            - "get_document"
-            - "list_documents"
-            - "research"
 
         - skill_name: "analysis"
           kind: "haiku.rag.skill.rag"
@@ -222,49 +216,27 @@ configuring the RAG database and RAG client:
   values from this file are overlaid on the the installation configuration's
   `haiku_rag_config`.
 
-Skill configurations with the `kind` of `"haiku.rag.skill.rag"` have these
-additional options:
+Skill configurations with the `kind` of `"haiku.rag.skill.rag"` give the
+agent the following RAG tools:
 
-- `tool_names` (a list of strings, from among this list:  `"search"`,
-  `"ask"`, `"list_documents"`, `"get_document"`, and `"research"`.
-  Defaults to `["search", "ask", "list_documents", "get_document"]`.
+- `"search"` — semantic document search with multi-query expansion.
+  Gives the agent a `search` tool that returns ranked passages with
+  citations.
 
-  Available tools:
+- `"list_documents"` — list the documents in the RAG database.
 
-  - `"search"` — semantic document search with multi-query expansion.
-    Gives the agent a `search` tool that returns ranked passages with
-    citations.
+- `"get_document"` — return the content of a single document in the
+  RAG database.
 
-  - `"list_documents"` — list the documents in the RAG database.
+- `"ask"` — question-answering via a research graph.  Gives the agent
+  an `ask` tool that searches, synthesizes an answer with citations,
+  and caches results for similar follow-up questions.
 
-  - `"get_document"` — return the content of a single document in the
-    RAG database.
-
-  - `"ask"` — question-answering via a research graph.  Gives the agent
-    an `ask` tool that searches, synthesizes an answer with citations,
-    and caches results for similar follow-up questions.
-
-  - `"research"` — deep research via a research graph. Gives the agent
-    a `research` tool that performs a more elaborate search, analysis,
-    and synthesis. Slower than the `ask` tool, and more expensive in
-    terms of token budget, but potentially produces a higher-quality
-    result.
-
-- `rag_features` (a list of strings) controls which haiku.rag toolsets
-  are enabled.  A deprecated alternative to `tool_names`:  each "features"
-  maps to one or more of the tools enumerated above.
-
-  Available features:
-
-  - `"search"` — equivalent to the `search` tool above.
-
-  - `"documents"` — equivalent to the `list_documents` and `get_document`
-    tools above.
-
-  - `"qa"` — equivalent to the `ask` tool above.
-
-  - `"analysis"` — formerly equivalent to the `haiku.rag.skills.rml`
-    skill below.  This feature is no longer supported.
+- `"research"` — deep research via a research graph. Gives the agent
+  a `research` tool that performs a more elaborate search, analysis,
+  and synthesis. Slower than the `ask` tool, and more expensive in
+  terms of token budget, but potentially produces a higher-quality
+  result.
 
 The `haiku.rag.skills.analysis` skill gives the agent an `analyze` tool that
 iteratively writes and executes Python code in a Docker sandbox with

@@ -617,8 +617,7 @@ def test__check_acl_entry_args_allow_invalid_json_path(
 # 'CliRunner' against a throwaway copy of 'example/minimal.yaml' backed by
 # a scratch authorization database (see the 'scratch_installation' and
 # 'cli_runner' fixtures in 'tests/unit/cli/conftest.py'). Every command
-# body -- including the deprecated/hidden 'add-user' / 'clear' commands --
-# is now exercised here rather than coverage-excluded; only the two
+# body is now exercised here rather than coverage-excluded; only the two
 # '_*_dump_room_policy' helpers stay '# pragma NO COVER UI ONLY'.
 # ---------------------------------------------------------------------------
 
@@ -1350,99 +1349,3 @@ def test_from_yaml_null_without_room_id_errors(
     )
 
     assert result.exit_code == 1
-
-
-# -- deprecated: add-user / clear -------------------------------------------
-
-
-def test_add_user_creates_policy_when_missing(
-    scratch_installation,
-    cli_runner,
-):
-    # No policy yet: 'add-user' creates an empty DENY policy, then adds an
-    # ALLOW entry for the email.
-    with pytest.warns(DeprecationWarning, match="Deprecated"):
-        result = _invoke(
-            cli_runner,
-            scratch_installation,
-            "add-user",
-            "chat",
-            ALICE_EMAIL,
-        )
-
-    assert result.exit_code == 0
-    assert _read_policy(scratch_installation, "chat") == {
-        "default": DENY,
-        "entries": {(ALLOW, False, False, ALICE_EMAIL_JP)},
-    }
-
-
-def test_add_user_existing_policy_preserves_default(
-    scratch_installation,
-    cli_runner,
-):
-    # An existing policy's default is left intact; the new ALLOW entry is
-    # added alongside the existing (different-discriminator) entry.
-    _seed_policy(
-        scratch_installation,
-        "chat",
-        ALLOW,
-        [_entry(DENY, everyone=True)],
-    )
-
-    with pytest.warns(DeprecationWarning, match="Deprecated"):
-        result = _invoke(
-            cli_runner,
-            scratch_installation,
-            "add-user",
-            "chat",
-            ALICE_EMAIL,
-        )
-
-    assert result.exit_code == 0
-    assert _read_policy(scratch_installation, "chat") == {
-        "default": ALLOW,
-        "entries": {
-            (DENY, True, False, None),
-            (ALLOW, False, False, ALICE_EMAIL_JP),
-        },
-    }
-
-
-def test_clear_removes_policy(scratch_installation, cli_runner):
-    _seed_policy(
-        scratch_installation,
-        "chat",
-        DENY,
-        [_entry(ALLOW, everyone=True)],
-    )
-
-    with pytest.warns(DeprecationWarning, match="Deprecated"):
-        result = _invoke(cli_runner, scratch_installation, "clear", "chat")
-
-    assert result.exit_code == 0
-    assert _read_policy(scratch_installation, "chat") is None
-
-
-def test_clear_make_room_private(scratch_installation, cli_runner):
-    _seed_policy(
-        scratch_installation,
-        "chat",
-        ALLOW,
-        [_entry(ALLOW, everyone=True)],
-    )
-
-    with pytest.warns(DeprecationWarning, match="Deprecated"):
-        result = _invoke(
-            cli_runner,
-            scratch_installation,
-            "clear",
-            "chat",
-            "--make-room-private",
-        )
-
-    assert result.exit_code == 0
-    assert _read_policy(scratch_installation, "chat") == {
-        "default": DENY,
-        "entries": set(),
-    }
