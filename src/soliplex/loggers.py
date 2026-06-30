@@ -146,6 +146,10 @@ AUDIT_SANDBOX_EXEC = "sandbox exec"
 AUDIT_SANDBOX_ACTION_RUN = "run"
 AUDIT_SANDBOX_ACTION_RUN_PYTHON = "run-python"
 
+# room-upload audit events: an admin (privileged) adds shared reference
+# material to a room, changing what the room's agent and members can access.
+AUDIT_ROOM_UPLOAD_ADDED = "room upload added"
+
 
 class _StructuredFieldsAdapter(logging.LoggerAdapter):
     """LoggerAdapter that folds caller keyword fields into 'extra'."""
@@ -271,6 +275,7 @@ class AuditLogScopes(enum.StrEnum):
     INSTALLATION_CONFIG = "installation-config"
     RAG_ACCESS = "rag-access"
     SANDBOX_EXEC = "sandbox-exec"
+    ROOM_UPLOAD = "room-upload"
 
 
 class AuditLogWrapper(_StructuredFieldsAdapter):
@@ -609,4 +614,27 @@ class SandboxExecAuditLog(AuditLogWrapper):
             environment=environment,
             refs=refs,
             reason=reason,
+        )
+
+
+class RoomUploadAuditLog(AuditLogWrapper):
+    """Record privileged room-upload activity.
+
+    Adding a file to a room's shared uploads is an admin-only action that
+    changes the reference material available to the room's agent and members;
+    each successful upload is recorded for privileged-activity auditing
+    (actor 'claims', 'room_id', and the stored 'filename').
+    """
+
+    def __init__(self, claims: dict[str, typing.Any], **extra):
+        extra_with_claims = {"claims": claims} | extra
+        super().__init__(scope=AuditLogScopes.ROOM_UPLOAD, **extra_with_claims)
+
+    def room_upload_added(self, room_id: str, filename: str):
+        # NB: 'filename' is a reserved LogRecord attribute, so the stored
+        # file is recorded under 'upload_filename'.
+        self._succeeded(
+            AUDIT_ROOM_UPLOAD_ADDED,
+            room_id=room_id,
+            upload_filename=filename,
         )
