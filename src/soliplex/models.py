@@ -10,7 +10,7 @@ from ag_ui import core as agui_core
 from haiku.rag.store.models import chunk as hr_chunk
 from haiku.skills import models as hs_models
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import authz
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
@@ -691,7 +691,7 @@ class AGUI_RunMetadata(pydantic.BaseModel):
     @classmethod
     def from_run_meta(
         cls,
-        a_run_meta: agui_package.RunMetadata | None,
+        a_run_meta: agui.RunMetadata | None,
     ):
         if a_run_meta is not None:
             return cls(
@@ -722,7 +722,7 @@ class AGUI_RunFeedbackResolution(pydantic.BaseModel):
 class AGUI_RunFeedbackHistoryEntry(pydantic.BaseModel):
     """Review / resolution record"""
 
-    status: agui_package.FeedbackReviewStatus = KW_ONLY
+    status: agui.FeedbackReviewStatus = KW_ONLY
     note: str | None = KW_ONLY_NONE
 
 
@@ -764,7 +764,7 @@ class AGUI_RunUsage(pydantic.BaseModel):
     tool_calls: int
 
     @classmethod
-    def from_tuple(cls, ru_tuple: agui_package.RunUsageStats):
+    def from_tuple(cls, ru_tuple: agui.RunUsageStats):
         return cls(
             input_tokens=ru_tuple.input_tokens,
             output_tokens=ru_tuple.output_tokens,
@@ -793,11 +793,11 @@ class AGUI_Run(pydantic.BaseModel):
     @classmethod
     def from_run(
         cls,
-        a_run: agui_package.Run,
+        a_run: agui.Run,
         a_run_input: agui_core.RunAgentInput | None = None,
-        a_run_meta: agui_package.RunMetadata = None,
-        a_run_events: list[agui_package.RunEvent] = None,
-        a_run_usage: agui_package.RunUsageStats | None = None,
+        a_run_meta: agui.RunMetadata = None,
+        a_run_events: list[agui.RunEvent] = None,
+        a_run_usage: agui.RunUsageStats | None = None,
     ):
         return cls(
             thread_id=a_run.thread_id,
@@ -829,7 +829,7 @@ class AGUI_ThreadMetadata(pydantic.BaseModel):
     @classmethod
     def from_thread_meta(
         cls,
-        a_thread_meta: agui_package.ThreadMeta | None,
+        a_thread_meta: agui.ThreadMeta | None,
     ):
         if a_thread_meta is not None:
             return cls(
@@ -862,7 +862,7 @@ class AGUI_Thread(pydantic.BaseModel):
     @classmethod
     def from_thread(
         cls,
-        a_thread: agui_package.Thread,
+        a_thread: agui.Thread,
         a_thread_meta: AGUI_ThreadMetadata,
         a_thread_runs: AGUI_Runs = None,
         a_thread_last_activity: datetime.datetime | None = None,

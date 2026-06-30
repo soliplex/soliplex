@@ -6,7 +6,7 @@ from unittest import mock
 import fastapi
 import pytest
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
@@ -41,7 +41,7 @@ def raises_httpexc(*, match, code) -> pytest.raises:
 
 @pytest.fixture
 def the_threads():
-    return mock.create_autospec(agui_package.ThreadStorage)
+    return mock.create_autospec(agui.ThreadStorage)
 
 
 @pytest.fixture
@@ -522,7 +522,7 @@ async def test_get_uploads_room_thread_filename(
     [
         (None, True, no_error(204)),
         (
-            agui_package.UnknownThread(USER_NAME, str(TEST_THREAD_ID)),
+            agui.UnknownThread(USER_NAME, str(TEST_THREAD_ID)),
             True,
             raises_httpexc(code=404, match="Unknown thread"),
         ),

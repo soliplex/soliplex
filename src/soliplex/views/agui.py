@@ -14,7 +14,7 @@ from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import authn
 from soliplex import authz
 from soliplex import installation
@@ -33,7 +33,7 @@ from soliplex.views import streaming as streaming_views
 router = fastapi.APIRouter(tags=["rooms"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_threads = agui_package.depend_the_threads
+depend_the_threads = agui.depend_the_threads
 depend_the_room_authz = views.depend_the_room_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
@@ -106,7 +106,7 @@ async def _check_user_room_agent(
 async def get_room_agui(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -163,7 +163,7 @@ async def get_room_agui_thread_id(
     room_id: str,
     thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -187,7 +187,7 @@ async def get_room_agui_thread_id(
             thread_id=thread_id,
         )
 
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
@@ -223,7 +223,7 @@ async def get_room_agui_thread_id_run_id(
     thread_id: pydantic.UUID4,
     run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -249,7 +249,7 @@ async def get_room_agui_thread_id_run_id(
             run_id=run_id,
         )
 
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
@@ -273,7 +273,7 @@ async def post_room_agui(
     room_id: str,
     new_thread_request: models.AGUI_NewThreadRequest,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -360,7 +360,7 @@ async def post_room_agui_thread_id(
     thread_id: pydantic.UUID4,
     new_run_request: models.AGUI_NewRunRequest,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -394,7 +394,7 @@ async def post_room_agui_thread_id(
             run_metadata=r_metadata,
         )
 
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
@@ -427,7 +427,7 @@ async def post_room_agui_thread_id_meta(
     thread_id: pydantic.UUID4,
     new_metadata: models.AGUI_ThreadMetadata,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -464,7 +464,7 @@ async def post_room_agui_thread_id_meta(
             thread_metadata=new_md_dict or None,
         )
 
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
@@ -479,7 +479,7 @@ async def delete_room_agui_thread_id(
     room_id: str,
     thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -503,7 +503,7 @@ async def delete_room_agui_thread_id(
             thread_id=thread_id,
         )
 
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
@@ -778,7 +778,7 @@ async def init_agent_stream(
         toolset=skill_toolset,
         **run_stream_kwargs,
     ) as event_stream:
-        compacted = agui_package.compact_event_stream(event_stream)
+        compacted = agui.compact_event_stream(event_stream)
         await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
 
 
@@ -811,7 +811,7 @@ async def post_room_agui_thread_id_run_id(
     thread_id: pydantic.UUID4,
     run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -910,7 +910,7 @@ async def post_room_agui_thread_id_run_id(
             run_input=agui_adapter.run_input,
         )
 
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
@@ -1010,7 +1010,7 @@ async def post_room_agui_thread_id_run_id_meta(
     run_id: pydantic.UUID4,
     new_metadata: models.AGUI_RunMetadata,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -1049,7 +1049,7 @@ async def post_room_agui_thread_id_run_id_meta(
             run_metadata=new_md_dict,
         )
 
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
@@ -1067,7 +1067,7 @@ async def get_room_agui_thread_id_run_id_feedback(
     thread_id: pydantic.UUID4,
     run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -1094,7 +1094,7 @@ async def get_room_agui_thread_id_run_id_feedback(
             run_id=run_id,
         )
 
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
@@ -1116,7 +1116,7 @@ async def post_room_agui_thread_id_run_id_feedback(
     run_id: pydantic.UUID4,
     new_feedback: models.AGUI_RunFeedback,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -1148,7 +1148,7 @@ async def post_room_agui_thread_id_run_id_feedback(
             reason=new_feedback.reason,
         )
 
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
@@ -1162,7 +1162,7 @@ async def post_room_agui_thread_id_run_id_feedback(
 async def post_agui_recent_feedback(
     query_terms: models.AGUI_FeedbackQueryTerms,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -1189,7 +1189,7 @@ async def post_agui_recent_room_feedback(
     room_id: str,
     query_terms: models.AGUI_FeedbackQueryTerms,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -1217,7 +1217,7 @@ async def post_agui_recent_user_feedback(
     user_name: str,
     query_terms: models.AGUI_FeedbackQueryTerms,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -1244,7 +1244,7 @@ async def post_agui_recent_user_feedback(
 async def post_agui_review_recent_feedback(
     review: models.AGUI_RunFeedbackReview,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -1271,7 +1271,7 @@ async def post_agui_review_recent_feedback(
 async def post_agui_resolve_recent_feedback(
     resolution: models.AGUI_RunFeedbackReview,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,

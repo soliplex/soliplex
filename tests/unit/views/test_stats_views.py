@@ -6,7 +6,7 @@ import fastapi
 import pytest
 from fastapi import testclient
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
@@ -36,7 +36,7 @@ def raises_httpexc(*, match, code) -> pytest.raises:
 
 @pytest.fixture
 def the_threads():
-    return mock.create_autospec(agui_package.ThreadStorage)
+    return mock.create_autospec(agui.ThreadStorage)
 
 
 @pytest.fixture
@@ -229,7 +229,7 @@ def the_app(the_threads):
 
     app.dependency_overrides[installation.get_the_installation] = _inst
     app.dependency_overrides[views.get_the_room_authz_policy] = _authz
-    app.dependency_overrides[agui_package.get_the_threads] = _threads
+    app.dependency_overrides[agui.get_the_threads] = _threads
     app.dependency_overrides[views.get_the_user_claims] = _user_claims
     app.dependency_overrides[views.get_the_logger] = _logger
     return app

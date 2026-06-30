@@ -11,7 +11,7 @@ import pytest
 from ag_ui import core as agui_core
 from sqlalchemy import exc as sqla_exc
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
@@ -21,7 +21,7 @@ from soliplex.config import rooms as config_rooms
 from soliplex.views import agui as agui_views
 from soliplex.views import streaming as streaming_views
 
-FRS = agui_package.FeedbackReviewStatus
+FRS = agui.FeedbackReviewStatus
 
 NOW = datetime.datetime.now(datetime.UTC)
 USER_NAME = "phreddy"
@@ -97,7 +97,7 @@ AGUI_EVENTS = [
 @pytest.fixture
 def test_thread():
     return mock.create_autospec(
-        agui_package.Thread,
+        agui.Thread,
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,
         thread_metadata=None,
@@ -111,7 +111,7 @@ def _make_thread_metadata(
     name=TEST_THREAD_NAME,
     description=None,
 ):
-    class TestMetadata(agui_package.ThreadMetadata):
+    class TestMetadata(agui.ThreadMetadata):
         def __init__(self):
             self.name = name
             self.description = description
@@ -122,7 +122,7 @@ def _make_thread_metadata(
 @pytest.fixture
 def test_run():
     return mock.create_autospec(
-        agui_package.Run,
+        agui.Run,
         thread_id=TEST_THREAD_ID_STR,
         run_id=TEST_RUN_ID_STR,
         parent_run_id=None,
@@ -137,7 +137,7 @@ def test_run():
 @pytest.fixture
 def test_run_metadata():
     return mock.create_autospec(
-        agui_package.RunMetadata,
+        agui.RunMetadata,
         label=TEST_RUN_LABEL,
     )
 
@@ -145,7 +145,7 @@ def test_run_metadata():
 @pytest.fixture
 def test_run_feedback():
     return mock.create_autospec(
-        agui_package.RunFeedback,
+        agui.RunFeedback,
         feedback=TEST_RUN_FEEDBACK,
         reason=TEST_RUN_FEEDBACK_REASON,
     )
@@ -166,7 +166,7 @@ def run_input():
 
 @pytest.fixture
 def the_threads():
-    return mock.create_autospec(agui_package.ThreadStorage)
+    return mock.create_autospec(agui.ThreadStorage)
 
 
 def _awaitable(name, value):
@@ -180,14 +180,14 @@ def _awaitable(name, value):
 
 no_error = contextlib.nullcontext
 
-UNKNOWN_THREAD = agui_package.UnknownThread(USER_NAME, TEST_THREAD_ID_STR)
-THREAD_ROOM_MISMATCH = agui_package.ThreadRoomMismatch(
+UNKNOWN_THREAD = agui.UnknownThread(USER_NAME, TEST_THREAD_ID_STR)
+THREAD_ROOM_MISMATCH = agui.ThreadRoomMismatch(
     OTHER_ROOM_ID,
     TEST_ROOM_ID,
 )
-UNKNOWN_PARENT_RUN = agui_package.MissingParentRun(TEST_PARENT_RUN_ID_STR)
-UNKNOWN_RUN = agui_package.UnknownRun(TEST_RUN_ID_STR)
-ALREADY_STARTED = agui_package.RunAlreadyStarted(
+UNKNOWN_PARENT_RUN = agui.MissingParentRun(TEST_PARENT_RUN_ID_STR)
+UNKNOWN_RUN = agui.UnknownRun(TEST_RUN_ID_STR)
+ALREADY_STARTED = agui.RunAlreadyStarted(
     USER_NAME,
     TEST_THREAD_ID_STR,
     TEST_RUN_ID_STR,
@@ -542,7 +542,7 @@ async def test_get_room_agui_thread_id_run_id(
 
     if w_usage is not None:
         w_usage = mock.create_autospec(
-            agui_package.RunUsage,
+            agui.RunUsage,
             input_tokens=w_usage[0],
             output_tokens=w_usage[1],
             requests=w_usage[2],
@@ -987,7 +987,7 @@ async def test_capture_usage_after_stream(a_session, t_storage, w_usage):
     the_threads.save_run_usage = mock.AsyncMock(spec_set=())
     sqla_engine = object()
     usage = mock.create_autospec(
-        agui_package.RunUsage,
+        agui.RunUsage,
         input_tokens=1,
         output_tokens=2,
         requests=3,
@@ -2270,7 +2270,7 @@ async def test_post_agui_review_recent_feedback(
 
     if tsrvwrf_side_effect is None:
         review_entry = mock.create_autospec(
-            agui_package.RunFeedbackReviewEntry,
+            agui.RunFeedbackReviewEntry,
             status=FRS.REVIEWED,
             note=REVIEWED_NOTE,
             created=NOW,
@@ -2344,7 +2344,7 @@ async def test_post_agui_resolve_recent_feedback(
 
     if tsrslvrf_side_effect is None:
         review_entry = mock.create_autospec(
-            agui_package.RunFeedbackReviewEntry,
+            agui.RunFeedbackReviewEntry,
             status=FRS.REVIEWED,
             note=RESOLVED_NOTE,
             created=NOW,

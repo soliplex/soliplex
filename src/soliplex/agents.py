@@ -11,7 +11,7 @@ from pydantic_ai import agent as ai_agent
 from pydantic_ai import tools as ai_tools
 from pydantic_ai import toolsets as ai_toolsets
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import mcp_client
 from soliplex import models
 from soliplex.config import agents as config_agents
@@ -41,8 +41,8 @@ class AgentDependencies:
     """
 
     the_installation: typing.Any  # installation.Installation
-    the_threads: agui_package.ThreadStorage = None
-    state: agui_package.AGUI_State = dataclasses.field(default_factory=dict)
+    the_threads: agui.ThreadStorage = None
+    state: agui.AGUI_State = dataclasses.field(default_factory=dict)
     room_id: str | None = None
     thread_id: str | None = None
     run_id: str | None = None

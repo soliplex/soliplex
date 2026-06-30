@@ -11,7 +11,7 @@ from ag_ui import core as agui_core
 from haiku.rag.skills import rag as hr_skills_rag
 from haiku.skills import models as hs_models
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import authz
 from soliplex import models
 from soliplex.config import agents as config_agents
@@ -171,7 +171,7 @@ AGUI_EVENTS = [
 
 
 def _make_run(**kw):
-    return mock.create_autospec(agui_package.Run, **kw)
+    return mock.create_autospec(agui.Run, **kw)
 
 
 AGUI_RUNS = {
@@ -190,7 +190,7 @@ AGUI_RUNS = {
 
 RUN_LABEL = "run-label"
 AGUI_RUN_METADATA = mock.create_autospec(
-    agui_package.RunMetadata,
+    agui.RunMetadata,
     label=RUN_LABEL,
 )
 
@@ -217,7 +217,7 @@ FULL_AGUI_THREAD_METADATA = _make_thread_meta(
 
 
 def _make_thread(**kw):
-    return mock.create_autospec(agui_package.Thread, **kw)
+    return mock.create_autospec(agui.Thread, **kw)
 
 
 def _from_param(request, key):
@@ -1357,7 +1357,7 @@ def test_aguifeedbackqueryterms_as_dict(w_kwargs):
 
 
 def test_aguirunusage_from_tuple():
-    ru_stats = agui_package.RunUsageStats(
+    ru_stats = agui.RunUsageStats(
         input_tokens=13,
         output_tokens=17,
         requests=23,

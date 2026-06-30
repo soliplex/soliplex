@@ -5,13 +5,13 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.config import installation as config_installation
 from tests.unit.agui import agui_constants
 
-FeedbackReviewStatus = agui_package.FeedbackReviewStatus
+FeedbackReviewStatus = agui.FeedbackReviewStatus
 
 NOW = datetime.datetime.now(datetime.UTC)
 
@@ -125,7 +125,7 @@ async def test_threadstorage_thread_crud(the_async_session):
     ).all()
     assert found == []
 
-    with pytest.raises(agui_package.UnknownThread):
+    with pytest.raises(agui.UnknownThread):
         await ts.get_thread(
             user_name=USER_NAME,
             room_id=ROOM_ID,
@@ -152,7 +152,7 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    with pytest.raises(agui_package.ThreadRoomMismatch):
+    with pytest.raises(agui.ThreadRoomMismatch):
         await ts.get_thread(
             user_name=USER_NAME,
             room_id="NONESUCH",
@@ -171,7 +171,7 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    with pytest.raises(agui_package.ThreadRoomMismatch):
+    with pytest.raises(agui.ThreadRoomMismatch):
         await ts.update_thread_metadata(
             user_name=USER_NAME,
             thread_id=thread_id,
@@ -257,7 +257,7 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    with pytest.raises(agui_package.ThreadRoomMismatch):
+    with pytest.raises(agui.ThreadRoomMismatch):
         await ts.delete_thread(
             user_name=USER_NAME,
             room_id="NONESUCH",
@@ -377,7 +377,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    with pytest.raises(agui_package.RunAlreadyStarted):
+    with pytest.raises(agui.RunAlreadyStarted):
         await ts.add_run_input(
             user_name=USER_NAME,
             room_id=ROOM_ID,
@@ -399,7 +399,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    with pytest.raises(agui_package.UnknownRun):
+    with pytest.raises(agui.UnknownRun):
         await ts.get_run(
             user_name=USER_NAME,
             room_id=ROOM_ID,
@@ -1043,14 +1043,14 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     await the_async_session.commit()
 
     w_reviewed = await ts.list_recent_run_feedback(
-        status=agui_package.FeedbackReviewStatus.REVIEWED,
+        status=agui.FeedbackReviewStatus.REVIEWED,
     )
     assert review_only in w_reviewed
     assert resolve_only not in w_reviewed
 
     # Query for resolved status
     w_resolved = await ts.list_recent_run_feedback(
-        status=agui_package.FeedbackReviewStatus.RESOLVED,
+        status=agui.FeedbackReviewStatus.RESOLVED,
     )
     assert review_only not in w_resolved
     assert resolve_only in w_resolved

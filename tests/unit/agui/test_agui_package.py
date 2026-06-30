@@ -4,7 +4,7 @@ import fastapi
 import pytest
 from ag_ui import core as agui_core
 
-from soliplex import agui as agui_package
+from soliplex import agui
 
 MESSAGE_ID_1 = "message-id-1"
 MESSAGE_ID_2 = "message-id-2"
@@ -210,9 +210,7 @@ async def test_compact_event_stream(events, expected):
         for event in events:
             yield event
 
-    found = [
-        event async for event in agui_package.compact_event_stream(stream())
-    ]
+    found = [event async for event in agui.compact_event_stream(stream())]
 
     for f_event, e_event in zip(found, expected, strict=True):
         assert f_event == e_event
@@ -228,7 +226,7 @@ async def test_get_the_threads(as_klass, ts_klass):
 
     counter = 0
 
-    async for the_threads in agui_package.get_the_threads(request):
+    async for the_threads in agui.get_the_threads(request):
         assert the_threads is ts_klass.return_value
         counter += 1
 

@@ -11,7 +11,7 @@ from sqlalchemy import pool as sqla_pool  # NullPool
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -1112,7 +1112,7 @@ async def test_installation_get_agent_deps_for_room(
     if w_run_agent_input:
         kw["run_agent_input"] = RUN_AGENT_INPUT
 
-    the_threads = mock.create_autospec(agui_package.ThreadStorage)
+    the_threads = mock.create_autospec(agui.ThreadStorage)
     if w_the_threads:
         kw["the_threads"] = the_threads
 

@@ -1,6 +1,6 @@
 import fastapi
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import authn
 from soliplex import authz
 from soliplex import installation
@@ -13,7 +13,7 @@ router = fastapi.APIRouter(tags=["stats"])
 
 depend_the_installation = installation.depend_the_installation
 depend_the_room_authz = views.depend_the_room_authz_policy
-depend_the_threads = agui_package.depend_the_threads
+depend_the_threads = agui.depend_the_threads
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
 
@@ -23,7 +23,7 @@ depend_the_logger = views.depend_the_logger
 async def get_rooms_stats(
     the_installation: installation.Installation = depend_the_installation,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> dict[str, models.RoomStats]:
@@ -62,7 +62,7 @@ async def get_room_stats(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.RoomStats:

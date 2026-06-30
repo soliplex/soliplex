@@ -4,7 +4,7 @@ import fastapi
 import pydantic
 from fastapi import responses
 
-from soliplex import agui as agui_package
+from soliplex import agui
 from soliplex import authn as authn_package
 from soliplex import authz
 from soliplex import installation
@@ -18,7 +18,7 @@ from soliplex.views import util as soliplex_views_util
 router = fastapi.APIRouter(tags=["uploads"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_threads = agui_package.depend_the_threads
+depend_the_threads = agui.depend_the_threads
 depend_the_admin_users = views.depend_the_admin_user_policy
 depend_the_room_authz = views.depend_the_room_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
@@ -144,7 +144,7 @@ async def post_uploads_room(
     room_id: str,
     upload_file: fastapi.UploadFile,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
@@ -318,7 +318,7 @@ async def post_uploads_room_thread(
     thread_id: pydantic.UUID4,
     upload_file: fastapi.UploadFile,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -347,7 +347,7 @@ async def post_uploads_room_thread(
             room_id=room_id,
             thread_id=thread_id,
         )
-    except agui_package.AGUI_Exception as exc:
+    except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
             status_code=exc.status_code,
             detail=exc.args,
