@@ -4,14 +4,12 @@ from unittest import mock
 
 import fastapi
 import pytest
-from fastapi import testclient
 
 from soliplex import agui
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
-from soliplex import views
 from soliplex.views import stats as stats_views
 
 ROOM_ID = "test-room"
@@ -203,72 +201,71 @@ async def test_get_room_stats_unknown_room(the_threads, the_logger):
     )
 
 
-@pytest.fixture
-def the_app(the_threads):
-    app = fastapi.FastAPI()
-    app.include_router(stats_views.router, prefix="/api")
-
-    the_installation = _installation_with_rooms(ROOM_ID, ROOM_ID_2)
+@pytest.mark.anyio
+async def test_get_room_stats_serializes_aware_datetime(
+    the_threads, the_logger
+):
+    # The whole point of '_as_utc' + 'AwareDatetime': the serialized value
+    # must carry a UTC offset so clients don't parse it as local time.
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_threads.get_room_last_activity.return_value = T1
+
+    found = await stats_views.get_room_stats(
+        room_id=ROOM_ID,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_threads=the_threads,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    dumped = found.model_dump(mode="json")
+    parsed = datetime.datetime.fromisoformat(dumped["last_activity"])
+    assert parsed.tzinfo is not None
+    assert parsed == T1
+
+
+@pytest.mark.anyio
+async def test_get_rooms_stats_serializes_aware_datetime(
+    the_threads, the_logger
+):
+    the_installation = _installation_with_rooms(ROOM_ID)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_threads.get_rooms_last_activity.return_value = {ROOM_ID: T1}
 
-    async def _inst():
-        return the_installation
-
-    async def _authz():
-        return mock.create_autospec(authz.RoomAuthorizationPolicy)
-
-    async def _threads():
-        return the_threads
-
-    async def _user_claims():
-        return THE_USER_CLAIMS
-
-    async def _logger():
-        return mock.create_autospec(loggers.LogWrapper)
-
-    app.dependency_overrides[installation.get_the_installation] = _inst
-    app.dependency_overrides[views.get_the_room_authz_policy] = _authz
-    app.dependency_overrides[agui.get_the_threads] = _threads
-    app.dependency_overrides[views.get_the_user_claims] = _user_claims
-    app.dependency_overrides[views.get_the_logger] = _logger
-    return app
-
-
-@pytest.fixture
-def the_client(the_app):
-    with testclient.TestClient(the_app) as client:
-        yield client
-
-
-def test_get_room_stats_serializes_aware_datetime(the_client):
-    # The whole point of '_as_utc' + 'AwareDatetime': the wire value must
-    # carry a UTC offset so clients don't parse it as local time.
-    response = the_client.get(f"/api/v1/stats/rooms/{ROOM_ID}")
-
-    assert response.status_code == 200
-    parsed = datetime.datetime.fromisoformat(response.json()["last_activity"])
-    assert parsed.tzinfo is not None
-    assert parsed == T1
-
-
-def test_get_rooms_stats_serializes_aware_datetime(the_client):
-    response = the_client.get("/api/v1/stats/rooms")
-
-    assert response.status_code == 200
-    parsed = datetime.datetime.fromisoformat(
-        response.json()[ROOM_ID]["last_activity"]
+    found = await stats_views.get_rooms_stats(
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_threads=the_threads,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
     )
+
+    dumped = found[ROOM_ID].model_dump(mode="json")
+    parsed = datetime.datetime.fromisoformat(dumped["last_activity"])
     assert parsed.tzinfo is not None
     assert parsed == T1
 
 
-def test_get_room_stats_serializes_null_activity(the_client, the_threads):
+@pytest.mark.anyio
+async def test_get_room_stats_serializes_null_activity(
+    the_threads, the_logger
+):
     # An accessible room with no runs must serialize last_activity as JSON
-    # null over the wire -- not omit the key, not error.
+    # null -- not omit the key, not error.
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_threads.get_room_last_activity.return_value = None
 
-    response = the_client.get(f"/api/v1/stats/rooms/{ROOM_ID}")
+    found = await stats_views.get_room_stats(
+        room_id=ROOM_ID,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_threads=the_threads,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
 
-    assert response.status_code == 200
-    assert response.json()["last_activity"] is None
+    dumped = found.model_dump(mode="json")
+    assert dumped["last_activity"] is None
