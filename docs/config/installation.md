@@ -322,6 +322,24 @@ sandbox_config:
   or prune them per your audit policy -- separately from `workdirs_path`. If
   unset, transcripts are not saved.
 
+### Uploaded files in the sandbox
+
+When the top-level `rooms_upload_path` / `threads_upload_path` options are
+configured (these are installation-level options, not part of `sandbox_config`),
+the skill mounts the corresponding uploaded files into the sandbox
+**read-only**, as the `room` and `thread` volumes, and exposes their names
+through the `list_volume_files` tool. By design these are
+**non-protected, availability-intended** material: **room uploads** are
+admin-provided reference / context meant to be available to every room member
+(by download or via the sandbox), and **thread uploads** are provided by the
+thread's own user. Reads of them are therefore not separately audited.
+
+Nothing technically prevents an administrator from uploading information that
+*should* be protected. An installation that wants to remove that risk
+entirely can **disable room uploads** by leaving `rooms_upload_path` unset: the
+room-upload endpoint then returns `404` and no `room` volume is mounted into
+the sandbox.
+
 ## Room Configuration Paths
 
 The `room_paths` element specify one or more filesystem paths to
