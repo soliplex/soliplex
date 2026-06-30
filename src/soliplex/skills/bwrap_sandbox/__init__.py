@@ -30,6 +30,8 @@ class SandboxState(pydantic.BaseModel):
     room_id: str | None = None
     thread_id: str | None = None
     run_id: str | None = None
+    # Actor identity for auditing sandbox data changes.
+    preferred_username: str | None = None
 
 
 STATE_TYPE = SandboxState

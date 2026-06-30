@@ -624,7 +624,9 @@ class SoliplexSkillToolset(hs_agent.SkillToolset):
 
     Copies ``room_id``, ``thread_id`` and ``run_id`` from the outer
     agent's deps into the sandbox skill namespace so that sub-agent
-    tools can resolve workdirs and upload volumes.
+    tools can resolve workdirs and upload volumes, plus the acting
+    user's ``preferred_username`` so sandbox data-change events can be
+    attributed to them.
     """
 
     async def for_run(self, ctx):
@@ -638,5 +640,11 @@ class SoliplexSkillToolset(hs_agent.SkillToolset):
             sandbox_ns.room_id = getattr(deps, "room_id", None)
             sandbox_ns.thread_id = getattr(deps, "thread_id", None)
             sandbox_ns.run_id = getattr(deps, "run_id", None)
+            user = getattr(deps, "user", None)
+            sandbox_ns.preferred_username = getattr(
+                user,
+                "preferred_username",
+                None,
+            )
 
         return result
