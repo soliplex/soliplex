@@ -13,6 +13,10 @@ from soliplex import main
 from soliplex.cli import cli_util
 from soliplex.cli import types
 
+WEBSOCKETS_SANSIO = "websockets-sansio"
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8000
+
 
 class ReloadOption(enum.StrEnum):
     CONFIG = "config"
@@ -78,6 +82,13 @@ def serve(
         "--no-auth-mode",
         help="Disable OIDC authentication providers",
     ),
+    insecure_session_cookie: bool = typer.Option(
+        False,
+        "--insecure-session-cookie",
+        help="Allow the session cookie over plain HTTP for local "
+        "development only; clears the cookie Secure flag. Do not use "
+        "in production.",
+    ),
     add_admin_user: str | None = typer.Option(
         None,
         "--add-admin-user",
@@ -88,13 +99,13 @@ Passing this option now fails with a non-zero exit.
 """,
     ),
     host: str = typer.Option(
-        "127.0.0.1",
+        DEFAULT_HOST,
         "-H",
         "--host",
         help="Bind socket to this host",
     ),
     port: int = typer.Option(
-        8000,
+        DEFAULT_PORT,
         "-p",
         "--port",
         help="Port number",
@@ -176,7 +187,7 @@ Passing this option now fails with a non-zero exit.
     uvicorn_kw = {
         "host": host,
         "port": port,
-        "ws": "websockets-sansio",
+        "ws": WEBSOCKETS_SANSIO,
     }
 
     if uds is not None:
@@ -224,6 +235,9 @@ Passing this option now fails with a non-zero exit.
         if log_config is not None:  # pass to the app, disable Uvicorn.
             os.environ["_SOLIPLEX_LOG_CONFIG_FILE"] = str(log_config)
 
+        if insecure_session_cookie:
+            os.environ["_SOLIPLEX_INSECURE_SESSION_COOKIE"] = "Y"
+
         if app_factory_name is None:
             app_factory_name = "soliplex.main:create_app_from_environment"
 
@@ -243,5 +257,6 @@ Passing this option now fails with a non-zero exit.
             installation_path=installation_path,
             no_auth_mode=no_auth_mode,
             log_config_file=log_config,
+            session_https_only=not insecure_session_cookie,
         )
         uvicorn.run(app, **uvicorn_kw)
