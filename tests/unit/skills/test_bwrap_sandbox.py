@@ -10,12 +10,14 @@ from haiku.skills import models as hs_models
 from haiku.skills import state as hs_state
 from pydantic_ai import toolsets as ai_toolsets
 
+from soliplex import loggers
 from soliplex.config import installation as config_installation
 from soliplex.skills import bwrap_sandbox as skills_bwrap_sandbox
 
 ROOM_ID = "test_room"
 THREAD_ID = uuid.uuid4()
 RUN_ID = uuid.uuid4()
+USERNAME = "phreddy"
 
 ONE_ENVIRONMENT = mock.create_autospec(bs_models.EnvironmentInfo)
 ONE_ENVIRONMENT.name = "one"  # mock quirk
@@ -35,6 +37,7 @@ def ctx_w_deps():
             room_id=ROOM_ID,
             thread_id=str(THREAD_ID),
             run_id=str(RUN_ID),
+            preferred_username=USERNAME,
         ),
     )
     return ctx
@@ -641,6 +644,7 @@ async def test_create_sandbox_toolset_run(
     threads_upload_path,
     w_kw,
     w_iconfig,
+    audit_records,
 ):
     if w_iconfig:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset(
@@ -672,6 +676,16 @@ async def test_create_sandbox_toolset_run(
         command=["/bin/true"],
         **exp_kw,
     )
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
+    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.workdir == str(gw.return_value)
+    assert record.environment == w_kw.get("environment_name")
+    assert record.claims == {"preferred_username": USERNAME}
+    assert record.room_id == ROOM_ID
+    assert record.thread_id == str(THREAD_ID)
+    assert record.run_id == str(RUN_ID)
 
     if w_iconfig:
         gw.assert_called_once_with(
@@ -727,6 +741,7 @@ async def test_create_sandbox_toolset_run_python(
     threads_upload_path,
     w_kw,
     w_iconfig,
+    audit_records,
 ):
     if w_iconfig:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset(
@@ -758,6 +773,13 @@ async def test_create_sandbox_toolset_run_python(
         script="print('hello')",
         **exp_kw,
     )
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON
+    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.workdir == str(gw.return_value)
+    assert record.environment == w_kw.get("environment_name")
+    assert record.claims == {"preferred_username": USERNAME}
 
     if w_iconfig:
         gw.assert_called_once_with(
@@ -854,3 +876,37 @@ def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig, i_config):
     )
 
     csts.assert_called_once_with(**exp_toolset_kw)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.skills.bwrap_sandbox.get_extra_volumes")
+@mock.patch("soliplex.skills.bwrap_sandbox.get_workdir")
+@mock.patch("soliplex.skills.bwrap_sandbox.skill_run")
+@mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
+async def test_create_sandbox_toolset_run_audits_failure(
+    bs_klass,
+    skill_run,
+    gw,
+    gev,
+    ctx_w_deps,
+    i_config,
+    audit_records,
+):
+    # An exception escaping the tool body is recorded as a failure and
+    # re-raised (the skill's own 'skill_run' swallows 'RuntimeError', so this
+    # mocks it to raise).
+    skill_run.side_effect = RuntimeError("boom")
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+        installation_config=i_config,
+    )
+    tool = toolset.tools["run"]
+
+    with pytest.raises(RuntimeError):
+        await tool.function(ctx=ctx_w_deps, command=["/bin/true"])
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
+    assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
+    assert record.reason == "RuntimeError"
+    assert record.workdir == str(gw.return_value)
+    assert record.claims == {"preferred_username": USERNAME}

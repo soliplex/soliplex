@@ -11,6 +11,9 @@ from haiku.skills import parser as hs_parser
 from haiku.skills import state as hs_state
 from pydantic_ai import toolsets as ai_toolests
 
+from soliplex import loggers
+from soliplex import sandbox_audit
+
 VolumeName = typing.Literal["thread"] | typing.Literal["room"]
 
 SKILL_NAME = "bubble-sandbox"
@@ -407,14 +410,20 @@ def create_sandbox_toolset(
             state.thread_id or "",
         )
 
-        return await skill_run(
-            bwrap_sandbox=bwrap_sandbox,
-            command=command,
-            environment_name=environment_name,
+        with sandbox_audit.audit_sandbox_exec(
+            state,
+            action=loggers.AUDIT_SANDBOX_ACTION_RUN,
+            environment=environment_name,
             workdir=workdir,
-            timeout=timeout,
-            extra_volumes=extra_volumes,
-        )
+        ):
+            return await skill_run(
+                bwrap_sandbox=bwrap_sandbox,
+                command=command,
+                environment_name=environment_name,
+                workdir=workdir,
+                timeout=timeout,
+                extra_volumes=extra_volumes,
+            )
 
     @toolset.tool(description=RUN_PYTHON_DESCRIPTION)
     async def run_python(
@@ -438,14 +447,20 @@ def create_sandbox_toolset(
             state.thread_id or "",
         )
 
-        return await skill_run_python(
-            bwrap_sandbox=bwrap_sandbox,
-            script=script,
-            environment_name=environment_name,
+        with sandbox_audit.audit_sandbox_exec(
+            state,
+            action=loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
+            environment=environment_name,
             workdir=workdir,
-            timeout=timeout,
-            extra_volumes=extra_volumes,
-        )
+        ):
+            return await skill_run_python(
+                bwrap_sandbox=bwrap_sandbox,
+                script=script,
+                environment_name=environment_name,
+                workdir=workdir,
+                timeout=timeout,
+                extra_volumes=extra_volumes,
+            )
 
     return toolset
 
