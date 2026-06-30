@@ -666,25 +666,13 @@ class InstallationConfig:
     #
     # If not set, uploads are disabled.
     #
-    # If set, uploads within this directory will be kept in subdirectories:
-    # - 'threads/{thread_uuid}' will hold per-thread uploads
-    # - 'rooms/{room_id}' will hold per-room uploads
+    # Upload directories.  Each is independent and has no default:  uploads
+    # of a given kind are disabled unless its directory is configured.
+    # - 'rooms_upload_path / {room_id}' holds per-room uploads
+    # - 'threads_upload_path / {thread_uuid}' holds per-thread uploads
     #
-    upload_path: pathlib.Path | None = None
-
-    @property
-    def rooms_upload_path(self) -> pathlib.Path | None:
-        if self.upload_path is None:
-            return None
-        else:
-            return self.upload_path / "rooms"
-
-    @property
-    def threads_upload_path(self) -> pathlib.Path | None:
-        if self.upload_path is None:
-            return None
-        else:
-            return self.upload_path / "threads"
+    rooms_upload_path: pathlib.Path | None = None
+    threads_upload_path: pathlib.Path | None = None
 
     #
     # Sandbox configuration
@@ -859,6 +847,9 @@ class InstallationConfig:
 
     @classmethod
     def from_yaml(cls, config_path: pathlib.Path, config_dict: dict):
+        if config_dict is not None and "upload_path" in config_dict:
+            raise config_exc.RemovedUploadPathConfig()
+
         try:
             config_dict["_config_path"] = config_path
 
@@ -1036,8 +1027,13 @@ class InstallationConfig:
         if self._config_path is not None:
             parent_dir = self._config_path.parent
 
-            if self.upload_path is not None:
-                self.upload_path = parent_dir / self.upload_path
+            if self.rooms_upload_path is not None:
+                self.rooms_upload_path = parent_dir / self.rooms_upload_path
+
+            if self.threads_upload_path is not None:
+                self.threads_upload_path = (
+                    parent_dir / self.threads_upload_path
+                )
 
             self.oidc_paths = [
                 parent_dir / oidc_path
@@ -1089,8 +1085,11 @@ class InstallationConfig:
             "quizzes_paths": [str(path) for path in self.quizzes_paths],
         }
 
-        if self.upload_path:
-            result["upload_path"] = str(self.upload_path)
+        if self.rooms_upload_path:
+            result["rooms_upload_path"] = str(self.rooms_upload_path)
+
+        if self.threads_upload_path:
+            result["threads_upload_path"] = str(self.threads_upload_path)
 
         if self.sandbox_config:
             result["sandbox_config"] = self.sandbox_config.as_yaml

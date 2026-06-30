@@ -311,15 +311,41 @@ agent_configs:
       factory_name: "soliplex.haiku_chat.chat_agent_factory"
 """
 
-UPLOAD_PATH = "uploads"
+ROOMS_UPLOAD_PATH = "uploads/rooms"
+THREADS_UPLOAD_PATH = "uploads/threads"
+
+W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "rooms_upload_path": ROOMS_UPLOAD_PATH,
+}
+W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+rooms_upload_path: "{ROOMS_UPLOAD_PATH}"
+"""
+
+W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "threads_upload_path": THREADS_UPLOAD_PATH,
+}
+W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+threads_upload_path: "{THREADS_UPLOAD_PATH}"
+"""
 
 W_UPLOAD_PATH_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "upload_path": UPLOAD_PATH,
+    "rooms_upload_path": ROOMS_UPLOAD_PATH,
+    "threads_upload_path": THREADS_UPLOAD_PATH,
 }
 W_UPLOAD_PATH_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-upload_path: "{UPLOAD_PATH}"
+rooms_upload_path: "{ROOMS_UPLOAD_PATH}"
+threads_upload_path: "{THREADS_UPLOAD_PATH}"
+"""
+
+REMOVED_UPLOAD_PATH_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+upload_path: "uploads"
 """
 
 SANDBOX_ENVIRONMENTS_PATH = "sandbox/environments"
@@ -1627,6 +1653,14 @@ def test_installationconfig_authorization_dburi_async(w_kw, expected):
             W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
+            W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
+            W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
+            W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
             W_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
             W_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
         ),
@@ -1755,10 +1789,17 @@ def test_installationconfig_from_yaml(
             _config_path=config_path,
         )
 
-        if "upload_path" in expected_kw:
-            exp_upload_path = temp_dir / expected_kw["upload_path"]
+        if "rooms_upload_path" in expected_kw:
+            exp_rooms_upload_path = temp_dir / expected_kw["rooms_upload_path"]
         else:
-            exp_upload_path = None
+            exp_rooms_upload_path = None
+
+        if "threads_upload_path" in expected_kw:
+            exp_threads_upload_path = (
+                temp_dir / expected_kw["threads_upload_path"]
+            )
+        else:
+            exp_threads_upload_path = None
 
         if "sandbox_config" in expected_kw:
             exp_sandbox_config = dataclasses.replace(
@@ -1770,7 +1811,11 @@ def test_installationconfig_from_yaml(
                 sandbox_config=exp_sandbox_config,
             )
 
-        expected = dataclasses.replace(expected, upload_path=exp_upload_path)
+        expected = dataclasses.replace(
+            expected,
+            rooms_upload_path=exp_rooms_upload_path,
+            threads_upload_path=exp_threads_upload_path,
+        )
 
         if "oidc_paths" in expected_kw:
             exp_oidc_paths = [
@@ -1899,6 +1944,20 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
     assert found == expected
 
 
+def test_installationconfig_from_yaml_rejects_legacy_upload_path(temp_dir):
+    yaml_file = temp_dir / "installation.yaml"
+    yaml_file.write_text(REMOVED_UPLOAD_PATH_INSTALLATION_CONFIG_YAML)
+    config_dict = yaml.safe_load(REMOVED_UPLOAD_PATH_INSTALLATION_CONFIG_YAML)
+
+    with pytest.raises(config_exc.RemovedUploadPathConfig) as exc:
+        config_installation.InstallationConfig.from_yaml(
+            yaml_file, config_dict
+        )
+
+    assert "rooms_upload_path" in str(exc.value)
+    assert "threads_upload_path" in str(exc.value)
+
+
 @pytest.mark.parametrize("w_aro", [False, True])
 @pytest.mark.parametrize("w_logfire_config", [False, True])
 @pytest.mark.parametrize("w_title_agent_config_id", [None, "title"])
@@ -1941,7 +2000,12 @@ def test_installationconfig_as_yaml(
         ]
 
     if w_upload_path:
-        upload_path = kwargs["upload_path"] = temp_dir / "uploads"
+        rooms_upload_path = kwargs["rooms_upload_path"] = (
+            temp_dir / "uploads" / "rooms"
+        )
+        threads_upload_path = kwargs["threads_upload_path"] = (
+            temp_dir / "uploads" / "threads"
+        )
 
     if w_sandbox_config:
         environments_path = temp_dir / "sandbox" / "environments"
@@ -2001,7 +2065,8 @@ def test_installationconfig_as_yaml(
     }
 
     if w_upload_path:
-        expected["upload_path"] = str(upload_path)
+        expected["rooms_upload_path"] = str(rooms_upload_path)
+        expected["threads_upload_path"] = str(threads_upload_path)
 
     if w_sandbox_config:
         expected["sandbox_config"] = sandbox_config.as_yaml
@@ -2703,6 +2768,8 @@ def test_resolve_skill_configs_unknown_skill_raises():
     "w_kwargs, expected",
     [
         (BARE_INSTALLATION_CONFIG_KW.copy(), None),
+        (W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(), "uploads/rooms"),
+        (W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(), None),
         (W_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(), "uploads/rooms"),
     ],
 )
@@ -2712,10 +2779,6 @@ def test_installationconfig_rooms_upload_path(
     expected,
 ):
     w_kwargs["_config_path"] = temp_dir / "installation.yaml"
-
-    upload_path = w_kwargs.pop("upload_path", None)
-    if upload_path is not None:
-        w_kwargs["upload_path"] = pathlib.Path(upload_path)
 
     if expected is not None:
         expected = temp_dir / expected
@@ -2731,6 +2794,11 @@ def test_installationconfig_rooms_upload_path(
     "w_kwargs, expected",
     [
         (BARE_INSTALLATION_CONFIG_KW.copy(), None),
+        (W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(), None),
+        (
+            W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
+            "uploads/threads",
+        ),
         (W_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(), "uploads/threads"),
     ],
 )
@@ -2740,10 +2808,6 @@ def test_installationconfig_threads_upload_path(
     expected,
 ):
     w_kwargs["_config_path"] = temp_dir / "installation.yaml"
-
-    upload_path = w_kwargs.pop("upload_path", None)
-    if upload_path is not None:
-        w_kwargs["upload_path"] = pathlib.Path(upload_path)
 
     if expected is not None:
         expected = temp_dir / expected
