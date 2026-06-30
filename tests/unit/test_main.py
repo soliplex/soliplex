@@ -10,6 +10,7 @@ from soliplex import main
 
 LOG_CONFIG_FILE_PATH = "/path/to/logging.yaml"
 EXPLICIT_INST_PATH = "/explicit"
+TOKEN = "DEADBEEF"
 
 
 @pytest.fixture
@@ -94,7 +95,6 @@ def test_app_with_cors():
 
 
 def test_app_with_session():
-    TOKEN = "DEADBEEF"
     app = mock.Mock(spec_set=["add_middleware"])
 
     found = main.app_with_session(app, TOKEN)
@@ -104,13 +104,30 @@ def test_app_with_session():
     app.add_middleware.assert_called_once_with(
         starlette_mw_sessions.SessionMiddleware,
         secret_key=TOKEN.encode("ascii"),
+        https_only=True,
+        same_site="lax",
+    )
+
+
+def test_app_with_session_insecure():
+    app = mock.Mock(spec_set=["add_middleware"])
+
+    found = main.app_with_session(app, TOKEN, https_only=False)
+
+    assert found is app
+
+    app.add_middleware.assert_called_once_with(
+        starlette_mw_sessions.SessionMiddleware,
+        secret_key=TOKEN.encode("ascii"),
+        https_only=False,
+        same_site="lax",
     )
 
 
 @pytest.fixture
 def installation_w_session_token(explicit_inst_dir):
     secret_file = explicit_inst_dir / "session_secret.txt"
-    secret_file.write_text("DEADBEEF")
+    secret_file.write_text(TOKEN)
     i_yaml = explicit_inst_dir / "installation.yaml"
     i_yaml.write_text("""\
 id: test-create-main
@@ -123,17 +140,25 @@ secrets:
     return explicit_inst_dir
 
 
+@pytest.mark.parametrize("w_session_https_only", [None, False])
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 def test_create_app_with_explicit_overrides(
     installation_w_session_token,
     w_no_auth_mode,
     w_log_config_file,
+    w_session_https_only,
 ):
     kwargs = {}
 
     if w_log_config_file is not None:
         kwargs["log_config_file"] = w_log_config_file
+
+    if w_session_https_only is not None:
+        kwargs["session_https_only"] = w_session_https_only
+        exp_session_https_only = w_session_https_only
+    else:
+        exp_session_https_only = True
 
     curry_lifespan = mock.Mock(spec_set=())
     app_with_lifespan = mock.Mock(spec_set=())
@@ -153,7 +178,8 @@ def test_create_app_with_explicit_overrides(
     assert found is app_with_session.return_value
     app_with_session.assert_called_once_with(
         app_with_cors.return_value,
-        "DEADBEEF",
+        TOKEN,
+        https_only=exp_session_https_only,
     )
     app_with_cors.assert_called_once_with(
         app_with_lifespan.return_value,
@@ -168,17 +194,25 @@ def test_create_app_with_explicit_overrides(
     )
 
 
+@pytest.mark.parametrize("w_session_https_only", [None, False])
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 def test_create_app_wo_explicit_overrides(
     installation_w_session_token,
     w_no_auth_mode,
     w_log_config_file,
+    w_session_https_only,
 ):
     kwargs = {}
 
     if w_log_config_file is not None:
         kwargs["log_config_file"] = w_log_config_file
+
+    if w_session_https_only is not None:
+        kwargs["session_https_only"] = w_session_https_only
+        exp_session_https_only = w_session_https_only
+    else:
+        exp_session_https_only = True
 
     curry_lifespan = mock.Mock(spec_set=())
     app_with_lifespan = mock.Mock(spec_set=())
@@ -202,7 +236,8 @@ def test_create_app_wo_explicit_overrides(
 
     app_with_session.assert_called_once_with(
         app_with_cors.return_value,
-        "DEADBEEF",
+        TOKEN,
+        https_only=exp_session_https_only,
     )
     app_with_cors.assert_called_once_with(
         app_with_lifespan.return_value,
@@ -217,6 +252,7 @@ def test_create_app_wo_explicit_overrides(
     )
 
 
+@pytest.mark.parametrize("w_insecure_cookie", [False, True])
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 @mock.patch("soliplex.main.create_app")
@@ -225,6 +261,7 @@ def test_create_app_from_environment(
     temp_dir,
     w_no_auth_mode,
     w_log_config_file,
+    w_insecure_cookie,
 ):
     i_path = temp_dir / "installation.yaml"
 
@@ -236,6 +273,9 @@ def test_create_app_from_environment(
     if w_log_config_file:
         env_patch["_SOLIPLEX_LOG_CONFIG_FILE"] = w_log_config_file
 
+    if w_insecure_cookie:
+        env_patch["_SOLIPLEX_INSECURE_SESSION_COOKIE"] = "Y"
+
     with mock.patch.dict("os.environ", clear=True, **env_patch):
         found = main.create_app_from_environment()
 
@@ -245,4 +285,5 @@ def test_create_app_from_environment(
         installation_path=i_path,
         no_auth_mode=w_no_auth_mode,
         log_config_file=w_log_config_file,
+        session_https_only=not w_insecure_cookie,
     )

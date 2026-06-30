@@ -52,10 +52,18 @@ def app_with_cors(app: fastapi.FastAPI) -> fastapi.FastAPI:
     return app
 
 
-def app_with_session(app: fastapi.FastAPI, token: str) -> fastapi.FastAPI:
+def app_with_session(
+    app: fastapi.FastAPI,
+    token: str,
+    *,
+    https_only: bool = True,
+    same_site: str = "lax",
+) -> fastapi.FastAPI:
     app.add_middleware(
         starlette_mw_sessions.SessionMiddleware,
         secret_key=token.encode("ascii"),
+        https_only=https_only,
+        same_site=same_site,
     )
     return app
 
@@ -64,6 +72,7 @@ def create_app(
     installation_path: pathlib.Path,
     no_auth_mode: bool,
     log_config_file: str = None,
+    session_https_only: bool = True,
     curry_lifespan=None,
     app_with_lifespan=None,
     app_with_cors=None,
@@ -98,7 +107,7 @@ def create_app(
     session_token = tmp_installation.get_secret(
         "secret:SESSION_MIDDLEWARE_TOKEN"
     )
-    app = app_with_session(app, session_token)
+    app = app_with_session(app, session_token, https_only=session_https_only)
 
     return app
 
@@ -114,11 +123,15 @@ def create_app_from_environment():
     installation_path = pathlib.Path(installation_path_str)
     no_auth_mode = os.environ.get("_SOLIPLEX_NO_AUTH_MODE") == "Y"
     log_config_file = os.environ.get("_SOLIPLEX_LOG_CONFIG_FILE")
+    session_https_only = (
+        os.environ.get("_SOLIPLEX_INSECURE_SESSION_COOKIE") != "Y"
+    )
 
     return create_app(
         installation_path=installation_path,
         log_config_file=log_config_file,
         no_auth_mode=no_auth_mode,
+        session_https_only=session_https_only,
     )
 
 
