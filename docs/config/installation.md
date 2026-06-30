@@ -289,6 +289,39 @@ skill_configs:
 Discovered skills which are not mentioned in this stanza cannot be
 referenced by other parts of the configuration, e.g. rooms.
 
+## Sandbox Configuration
+
+The `sandbox_config` stanza configures the bubblewrap sandbox that backs the
+`bubble-sandbox` skill (shell / Python execution). Non-absolute paths are
+evaluated relative to the installation directory.
+
+```yaml
+sandbox_config:
+    environments_path: ../sandbox/environments
+    workdirs_path: ../sandbox/workdirs
+    transcripts_path: ../sandbox/transcripts
+```
+
+- `environments_path` (required) -- directory whose subdirectories are
+  selectable sandbox environments. To qualify, a subdirectory must contain
+  both a `pyproject.toml` and a `.venv` initialized from it.
+
+- `workdirs_path` (optional) -- root for each run's working directory, named
+  `<room_id>/<thread_id>/<run_id>`. This directory is mounted **read-write**
+  into the sandbox as the execution working directory. If unset, a temporary
+  directory is used and discarded after the run.
+
+- `transcripts_path` (optional) -- root under which each `run` / `run_python`
+  execution's command line or Python script is saved (under the same
+  `<room_id>/<thread_id>/<run_id>` layout, with a UUID-based filename), so that
+  a reviewer can recover exactly what was executed. Unlike `workdirs_path`,
+  this directory is **never mounted into the sandbox**, so executed code can
+  neither read nor tamper with the saved transcripts. The saved files hold the
+  raw (possibly sensitive) command / script content, so treat them as audit
+  artifacts: protect them at least as strongly as uploaded files, and retain
+  or prune them per your audit policy -- separately from `workdirs_path`. If
+  unset, transcripts are not saved.
+
 ## Room Configuration Paths
 
 The `room_paths` element specify one or more filesystem paths to

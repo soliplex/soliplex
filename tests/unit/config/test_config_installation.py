@@ -350,6 +350,7 @@ upload_path: "uploads"
 
 SANDBOX_ENVIRONMENTS_PATH = "sandbox/environments"
 SANDBOX_WORKDIRS_PATH = "sandbox/workdirs"
+SANDBOX_TRANSCRIPTS_PATH = "sandbox/transcripts"
 
 WO_WORKDIRS_PATH_SANDBOX_CONFIG_KW = {
     "_environments_path": SANDBOX_ENVIRONMENTS_PATH,
@@ -367,6 +368,17 @@ environments_path: "{SANDBOX_ENVIRONMENTS_PATH}"
 workdirs_path: "{SANDBOX_WORKDIRS_PATH}"
 """
 
+W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_KW = {
+    "_environments_path": SANDBOX_ENVIRONMENTS_PATH,
+    "_workdirs_path": SANDBOX_WORKDIRS_PATH,
+    "_transcripts_path": SANDBOX_TRANSCRIPTS_PATH,
+}
+W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_YAML = f"""\
+environments_path: "{SANDBOX_ENVIRONMENTS_PATH}"
+workdirs_path: "{SANDBOX_WORKDIRS_PATH}"
+transcripts_path: "{SANDBOX_TRANSCRIPTS_PATH}"
+"""
+
 W_SANDBOX_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "sandbox_config": config_installation.SandboxConfig(
@@ -380,6 +392,15 @@ sandbox_config:
     environments_path: "{SANDBOX_ENVIRONMENTS_PATH}"
     workdirs_path: "{SANDBOX_WORKDIRS_PATH}"
 """
+
+W_SANDBOX_TRANSCRIPTS_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "sandbox_config": config_installation.SandboxConfig(
+        _environments_path=SANDBOX_ENVIRONMENTS_PATH,
+        _workdirs_path=SANDBOX_WORKDIRS_PATH,
+        _transcripts_path=SANDBOX_TRANSCRIPTS_PATH,
+    ),
+}
 
 OIDC_PATH_1 = "./oidc"
 OIDC_PATH_2 = "/path/to/other/oidc"
@@ -736,6 +757,10 @@ def test_resolve_file_prefix_non_string(temp_dir):
             W_WORKDIRS_PATH_SANDBOX_CONFIG_YAML,
             W_WORKDIRS_PATH_SANDBOX_CONFIG_KW.copy(),
         ),
+        (
+            W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_YAML,
+            W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_KW.copy(),
+        ),
     ],
 )
 def test_sandboxconfig_from_yaml(
@@ -767,6 +792,7 @@ def test_sandboxconfig_from_yaml(
     [
         WO_WORKDIRS_PATH_SANDBOX_CONFIG_KW.copy(),
         W_WORKDIRS_PATH_SANDBOX_CONFIG_KW.copy(),
+        W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_KW.copy(),
     ],
 )
 def test_sandboxconfig_as_yaml(temp_dir, w_kw):
@@ -782,6 +808,9 @@ def test_sandboxconfig_as_yaml(temp_dir, w_kw):
 
     if "_workdirs_path" in w_kw:
         expected["workdirs_path"] = str(temp_dir / SANDBOX_WORKDIRS_PATH)
+
+    if "_transcripts_path" in w_kw:
+        expected["transcripts_path"] = str(temp_dir / SANDBOX_TRANSCRIPTS_PATH)
 
     found = inst.as_yaml
 
@@ -853,6 +882,38 @@ def test_sandboxconfig_workdirs_path(
 
     if w_config_path and w_workdirs_path:
         assert found == temp_dir / wd_relative
+    else:
+        assert found is None
+
+
+@pytest.mark.parametrize("w_transcripts_path", [False, True])
+@pytest.mark.parametrize("w_config_path", [False, True])
+def test_sandboxconfig_transcripts_path(
+    temp_dir,
+    w_config_path,
+    w_transcripts_path,
+):
+    config_path = temp_dir / "installation.yaml"
+    ep_relative = pathlib.Path("sandbox") / "environments"
+    tr_relative = pathlib.Path("sandbox") / "transcripts"
+
+    kw = {}
+
+    if w_config_path:
+        kw["_config_path"] = config_path
+
+    if w_transcripts_path:
+        kw["_transcripts_path"] = tr_relative
+
+    inst = config_installation.SandboxConfig(
+        _environments_path=ep_relative,
+        **kw,
+    )
+
+    found = inst.transcripts_path
+
+    if w_config_path and w_transcripts_path:
+        assert found == temp_dir / tr_relative
     else:
         assert found is None
 
@@ -2845,6 +2906,39 @@ def test_installationconfig_sandbox_workdirs_path(
     i_config = config_installation.InstallationConfig(**w_kwargs)
 
     found = i_config.sandbox_workdirs_path
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kwargs, expected",
+    [
+        (BARE_INSTALLATION_CONFIG_KW.copy(), None),
+        (
+            W_SANDBOX_TRANSCRIPTS_INSTALLATION_CONFIG_KW.copy(),
+            "sandbox/transcripts",
+        ),
+    ],
+)
+def test_installationconfig_sandbox_transcripts_path(
+    temp_dir,
+    w_kwargs,
+    expected,
+):
+    config_path = w_kwargs["_config_path"] = temp_dir / "installation.yaml"
+
+    sandbox_config = w_kwargs.get("sandbox_config")
+    if sandbox_config is not None:
+        transcripts_path = sandbox_config._transcripts_path
+        sandbox_config._transcripts_path = pathlib.Path(transcripts_path)
+        sandbox_config._config_path = config_path
+
+    if expected is not None:
+        expected = temp_dir / expected
+
+    i_config = config_installation.InstallationConfig(**w_kwargs)
+
+    found = i_config.sandbox_transcripts_path
 
     assert found == expected
 

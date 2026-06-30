@@ -276,6 +276,7 @@ threads_upload_path: ../uploads/threads
 sandbox_config:
     environments_path: ../sandbox/environments
     workdirs_path: ../sandbox/workdirs
+    transcripts_path: ../sandbox/transcripts
 
 #==========================================================================
 # Thread peristence:  SQLAlchemy DBURIs
