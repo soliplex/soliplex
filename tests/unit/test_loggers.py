@@ -15,6 +15,7 @@ SCOPE_ADMIN_USERS = loggers.AuditLogScopes.ADMIN_USERS
 SCOPE_INSTALLATION_CONFIG = loggers.AuditLogScopes.INSTALLATION_CONFIG
 SCOPE_RAG_ACCESS = loggers.AuditLogScopes.RAG_ACCESS
 SCOPE_SANDBOX_EXEC = loggers.AuditLogScopes.SANDBOX_EXEC
+SCOPE_ROOM_UPLOAD = loggers.AuditLogScopes.ROOM_UPLOAD
 
 
 @pytest.fixture
@@ -850,5 +851,37 @@ def test_sandbox_execute_failed(audit_records):
             "environment": None,
             "refs": ["/t/abc.py"],
             "reason": "RuntimeError",
+        },
+    )
+
+
+# --- RoomUploadAuditLog --------------------------------------------------
+
+
+@pytest.mark.parametrize("w_claims", [{}, CLAIMS])
+def test_roomuploadauditlog_ctor(w_claims):
+    found = loggers.RoomUploadAuditLog(claims=w_claims)
+
+    assert found.name == loggers.SOLIPLEX_AUDIT_LOGGER_NAME
+    scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
+    assert scope == SCOPE_ROOM_UPLOAD
+    assert found.extra["claims"] == w_claims
+
+
+def test_room_upload_added(audit_records):
+    wrapper = loggers.RoomUploadAuditLog(claims=CLAIMS)
+
+    wrapper.room_upload_added("test-room", "model.md")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_UPLOAD_ADDED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_UPLOAD,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "test-room",
+            "upload_filename": "model.md",
         },
     )

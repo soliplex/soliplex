@@ -216,6 +216,14 @@ async def test_get_uploads_room_filename(
     )
 
 
+@mock.patch("soliplex.views.room_file_uploads.RoomUploadAuditLog")
+def test_get_the_room_upload_audit_log(rual_klass):
+    found = room_views.get_the_room_upload_audit_log(THE_USER_CLAIMS)
+
+    assert found is rual_klass.return_value
+    rual_klass.assert_called_once_with(claims=THE_USER_CLAIMS)
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_filename, exp_filename",
@@ -264,6 +272,7 @@ async def test_post_uploads_room(
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
+    the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
 
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -276,6 +285,7 @@ async def test_post_uploads_room(
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
                 the_authz_logger=the_authz_logger,
+                the_audit=the_audit,
             )
 
         assert exc.value.status_code == 403
@@ -284,6 +294,8 @@ async def test_post_uploads_room(
         the_authz_logger.error.assert_called_once_with(
             loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
         )
+        # A refused (non-admin) attempt records no privileged-upload event.
+        the_audit.room_upload_added.assert_not_called()
 
     else:
         with expectation as expected:
@@ -296,12 +308,20 @@ async def test_post_uploads_room(
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
                 the_authz_logger=the_authz_logger,
+                the_audit=the_audit,
             )
 
         if not isinstance(expected, pytest.ExceptionInfo):
             assert response.status_code == expected
             exp_file = uploads_path / "rooms" / TEST_ROOM_ID / exp_filename
             assert exp_file.read_bytes() == TEST_CONTENT
+            the_audit.room_upload_added.assert_called_once_with(
+                room_id=TEST_ROOM_ID,
+                filename=exp_filename,
+            )
+        else:
+            # No upload occurred (uploads not configured) -> no audit record.
+            the_audit.room_upload_added.assert_not_called()
 
     the_authz_logger.debug.assert_called_once_with(
         loggers.UPLOADS_POST_ROOM,

@@ -24,6 +24,19 @@ depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
 depend_the_authz_logger = soliplex_views_authz.depend_the_authz_logger
 
+RoomUploadAuditLog = loggers.RoomUploadAuditLog
+
+
+def get_the_room_upload_audit_log(
+    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+) -> RoomUploadAuditLog:
+    return RoomUploadAuditLog(claims=the_user_claims)
+
+
+depend_the_room_upload_audit_log = fastapi.Depends(
+    get_the_room_upload_audit_log,
+)
+
 
 @soliplex_views_util.logfire_span(
     "GET /v1/uploads/{room_id}",
@@ -149,6 +162,7 @@ async def post_uploads_room(
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
     the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
+    the_audit: RoomUploadAuditLog = depend_the_room_upload_audit_log,
 ) -> fastapi.Response:
     """Upload a file for a thread within the given room
 
@@ -186,5 +200,7 @@ async def post_uploads_room(
     stripped_filename = pathlib.Path(upload_file.filename).name
     upload_target = room_dir / stripped_filename
     upload_target.write_bytes(await upload_file.read())
+
+    the_audit.room_upload_added(room_id=room_id, filename=stripped_filename)
 
     return fastapi.Response(status_code=204)
