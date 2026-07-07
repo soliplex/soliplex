@@ -40,16 +40,15 @@ def faux_sqlaa_session():
 @pytest.mark.anyio
 async def test_threadstorage_session(faux_sqlaa_session):
     ts = agui_persistence.ThreadStorage(faux_sqlaa_session)
-    begin = faux_sqlaa_session.begin
 
     async with ts.session as session:
-        assert session is faux_sqlaa_session
+        entered = session
 
-        begin.assert_called_once_with()
-        begin.return_value.__aenter__.assert_called_once_with()
-        begin.return_value.__aexit__.assert_not_called()
-
-    begin.return_value.__aenter__.assert_called_once_with()
+    # The session property is a passthrough: it yields the caller-owned
+    # session unchanged and never opens its own transaction. The session
+    # owner owns the commit boundary.
+    assert entered is faux_sqlaa_session
+    faux_sqlaa_session.begin.assert_not_called()
 
 
 @pytest_asyncio.fixture()
@@ -96,7 +95,6 @@ async def _add_run(
             room_id=room_id,
         )
         thread_id = await thread.awaitable_attrs.thread_id
-        await session.commit()
         (run,) = await thread.list_runs()
     else:
         run = await ts.new_run(
@@ -104,17 +102,15 @@ async def _add_run(
             room_id=room_id,
             thread_id=thread_id,
         )
-        await session.commit()
 
     run.created = created
     run.finished = finished
-    await session.commit()
 
     return thread_id
 
 
 @pytest.mark.asyncio
-async def test_threadstorage_thread_crud(the_async_session):
+async def test_threadstorage_thread_crud(the_async_session, unit_of_work):
     ts = agui_persistence.ThreadStorage(the_async_session)
 
     found = (await ts.list_user_threads(user_name=USER_NAME)).all()
@@ -140,8 +136,6 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     thread_id = await thread.awaitable_attrs.thread_id
 
-    await the_async_session.commit()
-
     found = (await ts.list_user_threads(user_name=USER_NAME)).all()
     assert found == [thread]
 
@@ -150,16 +144,12 @@ async def test_threadstorage_thread_crud(the_async_session):
     ).all()
     assert found == [thread]
 
-    await the_async_session.commit()
-
     with pytest.raises(agui.ThreadRoomMismatch):
         await ts.get_thread(
             user_name=USER_NAME,
             room_id="NONESUCH",
             thread_id=thread_id,
         )
-
-    await the_async_session.commit()
 
     gotten = await ts.get_thread(
         user_name=USER_NAME,
@@ -168,8 +158,6 @@ async def test_threadstorage_thread_crud(the_async_session):
     )
 
     assert gotten is thread
-
-    await the_async_session.commit()
 
     with pytest.raises(agui.ThreadRoomMismatch):
         await ts.update_thread_metadata(
@@ -181,8 +169,6 @@ async def test_threadstorage_thread_crud(the_async_session):
                 "description": agui_constants.THREAD_DESCRIPTION,
             },
         )
-
-    await the_async_session.commit()
 
     updated = await ts.update_thread_metadata(
         user_name=USER_NAME,
@@ -196,14 +182,10 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     assert updated is thread
 
-    await the_async_session.commit()
-
     thread_meta = await updated.awaitable_attrs.thread_metadata
 
     assert thread_meta.name == agui_constants.THREAD_NAME
     assert thread_meta.description == agui_constants.THREAD_DESCRIPTION
-
-    await the_async_session.commit()
 
     updated_again = await ts.update_thread_metadata(
         user_name=USER_NAME,
@@ -216,46 +198,36 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     assert updated_again is thread
 
-    await the_async_session.commit()
-
     thread_meta = await updated.awaitable_attrs.thread_metadata
 
     assert thread_meta.name == agui_constants.THREAD_NAME
     assert thread_meta.description is None
 
-    await the_async_session.commit()
-
-    cleared = await ts.update_thread_metadata(
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-        thread_metadata=None,
-    )
+    async with unit_of_work():
+        cleared = await ts.update_thread_metadata(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            thread_metadata=None,
+        )
 
     assert cleared is thread
 
-    await the_async_session.commit()
-
     thread_meta = await updated.awaitable_attrs.thread_metadata
     assert thread_meta is None
 
-    await the_async_session.commit()
-
-    cleared_again = await ts.update_thread_metadata(
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-        thread_metadata=None,
-    )
+    async with unit_of_work():
+        cleared_again = await ts.update_thread_metadata(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            thread_metadata=None,
+        )
 
     assert cleared_again is thread
 
-    await the_async_session.commit()
-
     thread_meta = await updated.awaitable_attrs.thread_metadata
     assert thread_meta is None
-
-    await the_async_session.commit()
 
     with pytest.raises(agui.ThreadRoomMismatch):
         await ts.delete_thread(
@@ -264,17 +236,11 @@ async def test_threadstorage_thread_crud(the_async_session):
             thread_id=thread_id,
         )
 
-    await the_async_session.commit()
-
     await ts.delete_thread(
         user_name=USER_NAME,
         room_id=ROOM_ID,
         thread_id=thread_id,
     )
-
-    await the_async_session.commit()
-
-    await the_async_session.commit()
 
     found = (await ts.list_user_threads(user_name=USER_NAME)).all()
     assert found == []
@@ -283,8 +249,6 @@ async def test_threadstorage_thread_crud(the_async_session):
         await ts.list_user_threads(user_name=USER_NAME, room_id=ROOM_ID)
     ).all()
     assert found == []
-
-    await the_async_session.commit()
 
     w_md_dict = await ts.new_thread(
         user_name=USER_NAME,
@@ -298,13 +262,9 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await w_md_dict.awaitable_attrs.thread_id
 
-    await the_async_session.commit()
-
     tmd = await w_md_dict.awaitable_attrs.thread_metadata
     assert tmd.name == "w_md_dict"
     assert tmd.description == "Created with metadata as a dict"
-
-    await the_async_session.commit()
 
     w_md_obj = await ts.new_thread(
         user_name=USER_NAME,
@@ -318,17 +278,13 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await w_md_obj.awaitable_attrs.thread_id
 
-    await the_async_session.commit()
-
     tmd = await w_md_obj.awaitable_attrs.thread_metadata
     assert tmd.name == "w_md_obj"
     assert tmd.description == "Created with metadata as an object"
 
-    await the_async_session.commit()
-
 
 @pytest.mark.asyncio
-async def test_threadstorage_thread_run_cru(the_async_session):
+async def test_threadstorage_thread_run_cru(the_async_session, unit_of_work):
     ts = agui_persistence.ThreadStorage(the_async_session)
 
     thread = await ts.new_thread(
@@ -350,13 +306,9 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     assert initial_run in await thread.awaitable_attrs.runs
 
-    await the_async_session.commit()
-
     found = await thread.list_runs()
 
     assert found == runs
-
-    await the_async_session.commit()
 
     rai_added = await ts.add_run_input(
         user_name=USER_NAME,
@@ -368,14 +320,10 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     assert rai_added is initial_run
 
-    await the_async_session.commit()
-
     assert (
         await initial_run.awaitable_attrs.run_input
         == agui_constants.FULL_RUN_AGENT_INPUT
     )
-
-    await the_async_session.commit()
 
     with pytest.raises(agui.RunAlreadyStarted):
         await ts.add_run_input(
@@ -386,8 +334,6 @@ async def test_threadstorage_thread_run_cru(the_async_session):
             run_input=agui_constants.FULL_RUN_AGENT_INPUT,
         )
 
-    await the_async_session.commit()
-
     gotten = await ts.get_run(
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -396,8 +342,6 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     )
 
     assert gotten is initial_run
-
-    await the_async_session.commit()
 
     with pytest.raises(agui.UnknownRun):
         await ts.get_run(
@@ -415,8 +359,6 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     )
     added_id = await added.awaitable_attrs.run_id
 
-    await the_async_session.commit()
-
     updated = await ts.update_run_metadata(
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -431,8 +373,6 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     rmd = await updated.awaitable_attrs.run_metadata
     assert rmd.label == agui_constants.RUN_LABEL
-
-    await the_async_session.commit()
 
     updated_again = await ts.update_run_metadata(
         user_name=USER_NAME,
@@ -449,35 +389,31 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     rmd = await updated_again.awaitable_attrs.run_metadata
     assert rmd.label == agui_constants.OTHER_RUN_LABEL
 
-    await the_async_session.commit()
-
-    cleared = await ts.update_run_metadata(
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-        run_id=added_id,
-        run_metadata=None,
-    )
+    async with unit_of_work():
+        cleared = await ts.update_run_metadata(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=added_id,
+            run_metadata=None,
+        )
 
     assert cleared is added
 
     assert await cleared.awaitable_attrs.run_metadata is None
 
-    await the_async_session.commit()
-
-    cleared_again = await ts.update_run_metadata(
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-        run_id=added_id,
-        run_metadata=None,
-    )
+    async with unit_of_work():
+        cleared_again = await ts.update_run_metadata(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=added_id,
+            run_metadata=None,
+        )
 
     assert cleared_again is added
 
     assert await cleared_again.awaitable_attrs.run_metadata is None
-
-    await the_async_session.commit()
 
     parent = await ts.new_run(
         user_name=USER_NAME,
@@ -486,11 +422,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
         run_metadata=agui_schema.RunMetadata(label="parent"),
     )
 
-    await the_async_session.commit()
-
     parent_id = await parent.awaitable_attrs.run_id
-
-    await the_async_session.commit()
 
     spare = await ts.new_run(
         user_name=USER_NAME,
@@ -501,14 +433,10 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     )
     await spare.awaitable_attrs.run_id
 
-    await the_async_session.commit()
-
     rmd = await spare.awaitable_attrs.run_metadata
     assert rmd.label == "spare"
 
     assert await spare.awaitable_attrs.parent is parent
-
-    await the_async_session.commit()
 
     wo_meta = await ts.new_run(
         user_name=USER_NAME,
@@ -516,14 +444,8 @@ async def test_threadstorage_thread_run_cru(the_async_session):
         thread_id=thread_id,
     )
 
-    await the_async_session.commit()
-
     rmd = await wo_meta.awaitable_attrs.run_metadata
     assert rmd is None
-
-    await the_async_session.commit()
-
-    await the_async_session.commit()
 
     before = await ts.new_run(
         user_name=USER_NAME,
@@ -531,7 +453,6 @@ async def test_threadstorage_thread_run_cru(the_async_session):
         thread_id=thread_id,
     )
 
-    await the_async_session.commit()
     before_id = await before.awaitable_attrs.run_id
 
     usage = await before.awaitable_attrs.run_usage
@@ -548,8 +469,6 @@ async def test_threadstorage_thread_run_cru(the_async_session):
         tool_calls=4,
     )
 
-    await the_async_session.commit()
-
     after = await ts.get_run(
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -564,11 +483,11 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     assert after_usage.requests == 3
     assert after_usage.tool_calls == 4
 
-    await the_async_session.commit()
-
 
 @pytest.mark.asyncio
-async def test_threadstorage_thread_run_feedback(the_async_session):
+async def test_threadstorage_thread_run_feedback(
+    the_async_session, unit_of_work
+):
     ts = agui_persistence.ThreadStorage(the_async_session)
 
     thread = await ts.new_thread(
@@ -591,8 +510,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     )
     assert pre_feedback is None
 
-    await the_async_session.commit()
-
     await ts.save_run_feedback(
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -601,8 +518,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         feedback="thumbs_up",
         reason="just because",
     )
-
-    await the_async_session.commit()
 
     run_feedback = await ts.get_run_feedback(
         user_name=USER_NAME,
@@ -614,8 +529,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     assert await run_feedback.awaitable_attrs.feedback == "thumbs_up"
     assert await run_feedback.awaitable_attrs.reason == "just because"
 
-    await the_async_session.commit()
-
     await ts.save_run_feedback(
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -624,8 +537,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         feedback="thumbs_down",
         reason="dithering",
     )
-
-    await the_async_session.commit()
 
     moar_run_feedback = await ts.get_run_feedback(
         user_name=USER_NAME,
@@ -636,8 +547,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
 
     assert await moar_run_feedback.awaitable_attrs.feedback == "thumbs_down"
     assert await moar_run_feedback.awaitable_attrs.reason == "dithering"
-
-    await the_async_session.commit()
 
     added = await ts.new_run(
         user_name=USER_NAME,
@@ -654,8 +563,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         feedback="thumbs_up",
         reason="fresh",
     )
-
-    await the_async_session.commit()
 
     # Default query
     later, earlier = await ts.list_recent_run_feedback()
@@ -755,8 +662,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     assert await tid_earlier_fb.awaitable_attrs.feedback == "thumbs_down"
     assert await tid_earlier_fb.awaitable_attrs.reason == "dithering"
 
-    await the_async_session.commit()
-
     await ts.save_run_feedback(
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -777,8 +682,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     assert await further_run_feedback.awaitable_attrs.feedback == "thumbs_up"
     assert await further_run_feedback.awaitable_attrs.reason == "vacillating"
 
-    await the_async_session.commit()
-
     tid_later, tid_earlier = await ts.list_recent_run_feedback(
         thread_id=thread_id,
     )
@@ -795,16 +698,13 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     tid_later_hist = await tid_later_fb.awaitable_attrs.review_history
     assert tid_later_hist == []
 
-    await the_async_session.commit()
-
-    await ts.review_run_feedback(
-        reviewer_user_name=REVIEWER_USER_NAME,
-        reviewer_email=REVIEWER_EMAIL,
-        note="reviewing feedback",
-        run_feedback=tid_later_fb,
-    )
-
-    await the_async_session.commit()
+    async with unit_of_work():
+        await ts.review_run_feedback(
+            reviewer_user_name=REVIEWER_USER_NAME,
+            reviewer_email=REVIEWER_EMAIL,
+            note="reviewing feedback",
+            run_feedback=tid_later_fb,
+        )
 
     tid_later_hist = await tid_later_fb.awaitable_attrs.review_history
     (tid_later_entry,) = tid_later_hist
@@ -814,14 +714,13 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     )
     assert await tid_later_entry.awaitable_attrs.note == "reviewing feedback"
 
-    await the_async_session.commit()
-
-    await ts.resolve_run_feedback(
-        resolver_user_name=RESOLVER_USER_NAME,
-        resolver_email=RESOLVER_EMAIL,
-        note="resolving feedback",
-        run_feedback=tid_later_fb,
-    )
+    async with unit_of_work():
+        await ts.resolve_run_feedback(
+            resolver_user_name=RESOLVER_USER_NAME,
+            resolver_email=RESOLVER_EMAIL,
+            note="resolving feedback",
+            run_feedback=tid_later_fb,
+        )
     tid_later_hist = await tid_later_fb.awaitable_attrs.review_history
 
     # Check that review history is sorted in descending order
@@ -845,20 +744,17 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     )
     assert await last_entry.awaitable_attrs.note == ("reviewing feedback")
 
-    await the_async_session.commit()
-
     # Feedback review workflow using lookup
-    await ts.review_run_feedback(
-        reviewer_user_name=REVIEWER_USER_NAME,
-        reviewer_email=REVIEWER_EMAIL,
-        note="reviewing feedback",
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-        run_id=added_id,
-    )
-
-    await the_async_session.commit()
+    async with unit_of_work():
+        await ts.review_run_feedback(
+            reviewer_user_name=REVIEWER_USER_NAME,
+            reviewer_email=REVIEWER_EMAIL,
+            note="reviewing feedback",
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=added_id,
+        )
 
     tid_earlier_hist = await tid_earlier_fb.awaitable_attrs.review_history
     (tid_earlier_entry,) = tid_earlier_hist
@@ -870,14 +766,13 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     )
     assert await tid_earlier_entry.awaitable_attrs.note == "reviewing feedback"
 
-    await the_async_session.commit()
-
-    await ts.resolve_run_feedback(
-        resolver_user_name=RESOLVER_USER_NAME,
-        resolver_email=RESOLVER_EMAIL,
-        note="resolving feedback",
-        run_feedback=tid_later_fb,
-    )
+    async with unit_of_work():
+        await ts.resolve_run_feedback(
+            resolver_user_name=RESOLVER_USER_NAME,
+            resolver_email=RESOLVER_EMAIL,
+            note="resolving feedback",
+            run_feedback=tid_later_fb,
+        )
     tid_later_hist = await tid_later_fb.awaitable_attrs.review_history
 
     (
@@ -900,19 +795,16 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     )
     assert await last_entry.awaitable_attrs.note == "reviewing feedback"
 
-    await the_async_session.commit()
-
-    await ts.resolve_run_feedback(
-        resolver_user_name=RESOLVER_USER_NAME,
-        resolver_email=RESOLVER_EMAIL,
-        note="resolving feedback",
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-        run_id=added_id,
-    )
-
-    await the_async_session.commit()
+    async with unit_of_work():
+        await ts.resolve_run_feedback(
+            resolver_user_name=RESOLVER_USER_NAME,
+            resolver_email=RESOLVER_EMAIL,
+            note="resolving feedback",
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=added_id,
+        )
 
     tid_earlier_hist = await tid_earlier_fb.awaitable_attrs.review_history
 
@@ -935,8 +827,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     )
     assert await last_entry.awaitable_attrs.note == "reviewing feedback"
 
-    await the_async_session.commit()
-
     # Test lookup where no feedback found
     no_feedback = await ts.new_run(
         user_name=USER_NAME,
@@ -944,8 +834,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         thread_id=thread_id,
     )
     no_feedback_id = await no_feedback.awaitable_attrs.run_id
-
-    await the_async_session.commit()
 
     with pytest.raises(agui_persistence.NoFeedbackFound):
         await ts.review_run_feedback(
@@ -958,8 +846,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
             run_id=no_feedback_id,
         )
 
-    await the_async_session.commit()
-
     with pytest.raises(agui_persistence.NoFeedbackFound):
         await ts.resolve_run_feedback(
             resolver_user_name=RESOLVER_USER_NAME,
@@ -971,8 +857,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
             run_id=no_feedback_id,
         )
 
-    await the_async_session.commit()
-
     # Query for reviewed status
     review_only = await ts.new_run(
         user_name=USER_NAME,
@@ -980,8 +864,6 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         thread_id=thread_id,
     )
     review_only_id = await review_only.awaitable_attrs.run_id
-
-    await the_async_session.commit()
 
     await ts.save_run_feedback(
         user_name=USER_NAME,
@@ -992,31 +874,23 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         reason="winning",
     )
 
-    await the_async_session.commit()
-
     review_only_fb = await review_only.awaitable_attrs.run_feedback
 
-    await the_async_session.commit()
-
-    await ts.review_run_feedback(
-        reviewer_user_name=REVIEWER_USER_NAME,
-        reviewer_email=REVIEWER_EMAIL,
-        note="reviewing feedback; no resolve",
-        run_feedback=review_only_fb,
-    )
-
-    await the_async_session.commit()
+    async with unit_of_work():
+        await ts.review_run_feedback(
+            reviewer_user_name=REVIEWER_USER_NAME,
+            reviewer_email=REVIEWER_EMAIL,
+            note="reviewing feedback; no resolve",
+            run_feedback=review_only_fb,
+        )
 
     resolve_only = await ts.new_run(
         user_name=USER_NAME,
         room_id=ROOM_ID,
         thread_id=thread_id,
     )
-    await the_async_session.commit()
 
     resolve_only_id = await resolve_only.awaitable_attrs.run_id
-
-    await the_async_session.commit()
 
     await ts.save_run_feedback(
         user_name=USER_NAME,
@@ -1027,20 +901,15 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         reason="winning",
     )
 
-    await the_async_session.commit()
-
     resolve_only_fb = await resolve_only.awaitable_attrs.run_feedback
 
-    await the_async_session.commit()
-
-    await ts.resolve_run_feedback(
-        resolver_user_name=RESOLVER_USER_NAME,
-        resolver_email=RESOLVER_EMAIL,
-        note="resolving feedback; no view",
-        run_feedback=resolve_only_fb,
-    )
-
-    await the_async_session.commit()
+    async with unit_of_work():
+        await ts.resolve_run_feedback(
+            resolver_user_name=RESOLVER_USER_NAME,
+            resolver_email=RESOLVER_EMAIL,
+            note="resolving feedback; no view",
+            run_feedback=resolve_only_fb,
+        )
 
     w_reviewed = await ts.list_recent_run_feedback(
         status=agui.FeedbackReviewStatus.REVIEWED,
@@ -1066,6 +935,7 @@ async def test_threadstorage_save_run_events(
     ts,
     the_async_session,
     w_agui_events,
+    unit_of_work,
 ):
     ts.return_value = NOW
 
@@ -1083,17 +953,14 @@ async def test_threadstorage_save_run_events(
 
     run_id = await run.awaitable_attrs.run_id
 
-    await the_async_session.commit()
-
-    found_events = await ts.save_run_events(
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-        run_id=run_id,
-        events=w_agui_events,
-    )
-
-    await the_async_session.commit()
+    async with unit_of_work():
+        found_events = await ts.save_run_events(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=run_id,
+            events=w_agui_events,
+        )
 
     finished = await run.awaitable_attrs.finished
     assert finished == NOW.replace(tzinfo=None)  # sqlalchemy drops zone
@@ -1126,8 +993,6 @@ async def test_threadstorage_save_single_event(the_async_session):
 
     run_id = await run.awaitable_attrs.run_id
 
-    await the_async_session.commit()
-
     event_0 = agui_constants.TEXT_MESSAGE_START_EVENT
     event_1 = agui_constants.TEXT_MESSAGE_CONTENT_EVENT
 
@@ -1139,8 +1004,6 @@ async def test_threadstorage_save_single_event(the_async_session):
         event=event_0,
     )
 
-    await the_async_session.commit()
-
     await ts.save_single_event(
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -1148,8 +1011,6 @@ async def test_threadstorage_save_single_event(the_async_session):
         run_id=run_id,
         event=event_1,
     )
-
-    await the_async_session.commit()
 
     # Verify events were persisted
     pairs = await ts.list_run_events_after(
@@ -1185,6 +1046,7 @@ async def test_threadstorage_save_single_event(the_async_session):
 async def test_threadstorage_finish_run(
     ts_mock,
     the_async_session,
+    unit_of_work,
 ):
     ts_mock.return_value = NOW
 
@@ -1202,8 +1064,6 @@ async def test_threadstorage_finish_run(
 
     run_id = await run.awaitable_attrs.run_id
 
-    await the_async_session.commit()
-
     # Run not yet finished
     is_fin = await ts.is_run_finished(
         user_name=USER_NAME,
@@ -1213,17 +1073,14 @@ async def test_threadstorage_finish_run(
     )
     assert is_fin is False
 
-    await the_async_session.commit()
-
     # Mark it finished
-    await ts.finish_run(
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-        run_id=run_id,
-    )
-
-    await the_async_session.commit()
+    async with unit_of_work():
+        await ts.finish_run(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
 
     # Now it should be finished
     is_fin = await ts.is_run_finished(
@@ -1233,8 +1090,6 @@ async def test_threadstorage_finish_run(
         run_id=run_id,
     )
     assert is_fin is True
-
-    await the_async_session.commit()
 
     finished = await run.awaitable_attrs.finished
     assert finished == NOW.replace(tzinfo=None)

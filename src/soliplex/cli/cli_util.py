@@ -132,6 +132,12 @@ async def _authz_session(dburi):
             await connection.run_sync(authz_schema.Base.metadata.create_all)
         async with sqla_asyncio.AsyncSession(bind=engine) as session:
             yield session
+            # The policy methods no longer commit; this context manager
+            # owns the session, so it commits the CLI command's unit of
+            # work once here. On a 'typer.Exit'/exception through the
+            # 'yield' this line is skipped and 'AsyncSession.__aexit__'
+            # rolls back.
+            await session.commit()
     finally:
         await engine.dispose()
 

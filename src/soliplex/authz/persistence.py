@@ -80,8 +80,13 @@ class _SessionPolicy:
     @property
     @contextlib.asynccontextmanager
     async def session(self):
-        async with self._session.begin():
-            yield self._session
+        # Yield the caller-owned session as-is: the session owner (a
+        # FastAPI dependency or the CLI '_authz_session' context manager)
+        # owns the transaction boundary and commits the unit of work
+        # exactly once. Policy methods here never open their own
+        # transaction or commit, so callers -- and tests -- need no
+        # interleaved commits.
+        yield self._session
 
 
 class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):

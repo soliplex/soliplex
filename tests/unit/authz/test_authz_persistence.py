@@ -46,16 +46,15 @@ def _room_authz_policy(session):
 @pytest.mark.anyio
 async def test_admin_user_session(faux_sqlaa_session):
     aup = authz_persistence.AdminUserPolicy(faux_sqlaa_session, CLAIMS)
-    begin = faux_sqlaa_session.begin
 
     async with aup.session as session:
-        assert session is faux_sqlaa_session
+        entered = session
 
-        begin.assert_called_once_with()
-        begin.return_value.__aenter__.assert_called_once_with()
-        begin.return_value.__aexit__.assert_not_called()
-
-    begin.return_value.__aenter__.assert_called_once_with()
+    # The session property is a passthrough: it yields the caller-owned
+    # session unchanged and never opens its own transaction. The session
+    # owner owns the commit boundary.
+    assert entered is faux_sqlaa_session
+    faux_sqlaa_session.begin.assert_not_called()
 
 
 def test_admin_user_policy_builds_audit_log():
@@ -70,7 +69,6 @@ async def test_list_admin_user_discriminators(the_async_session):
     aup = _admin_user_policy(the_async_session)
     the_async_session.add(authz_schema.AdminUser(json_path=JSON_PATH))
     the_async_session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
-    await the_async_session.commit()
 
     found = await aup.list_admin_user_discriminators()
 
@@ -93,7 +91,6 @@ async def test_add_admin_user_discriminator(the_async_session):
 async def test_add_admin_user_discriminator_already_exists(the_async_session):
     aup = _admin_user_policy(the_async_session)
     the_async_session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
-    await the_async_session.commit()
 
     with pytest.raises(authz.AdminUserExists):
         await aup.add_admin_user_discriminator(ROLE_JSON_PATH)
@@ -110,7 +107,6 @@ async def test_add_admin_user_discriminator_already_exists(the_async_session):
 async def test_remove_admin_user_discriminator(the_async_session):
     aup = _admin_user_policy(the_async_session)
     the_async_session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
-    await the_async_session.commit()
 
     await aup.remove_admin_user_discriminator(ROLE_JSON_PATH)
 
@@ -148,7 +144,6 @@ async def test_remove_admin_user_discriminator_invalid_json_path(
             created=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
         )
     )
-    await the_async_session.commit()
 
     await aup.remove_admin_user_discriminator(INVALID_JSON_PATH)
 
@@ -162,7 +157,6 @@ async def test_clear_admin_user_discriminators(the_async_session):
     aup = _admin_user_policy(the_async_session)
     the_async_session.add(authz_schema.AdminUser(json_path=JSON_PATH))
     the_async_session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
-    await the_async_session.commit()
 
     await aup.clear_admin_user_discriminators()
 
@@ -201,14 +195,12 @@ async def test_admin_user_crud(the_async_session):
         session=the_async_session,
     )
     assert user is not None
-    await the_async_session.commit()
 
     aup._audit.admin_user_added.assert_called_once_with(JSON_PATH)
     aup._audit.admin_user_added.reset_mock()
 
     found = await aup.list_admin_users()
     assert found == [JSON_PATH]
-    await the_async_session.commit()
 
     aup._audit.admin_users_listed.assert_called_once_with()
     aup._audit.admin_users_listed.reset_mock()
@@ -221,7 +213,6 @@ async def test_admin_user_crud(the_async_session):
         session=the_async_session,
     )
     assert no_dupe is user
-    await the_async_session.commit()
 
     ((args, kwargs),) = aup._audit.admin_user_add_failed.call_args_list
     (arg,) = args
@@ -233,7 +224,6 @@ async def test_admin_user_crud(the_async_session):
 
     found = await aup.list_admin_users()
     assert found == [JSON_PATH]
-    await the_async_session.commit()
 
     aup._audit.admin_users_listed.assert_called_once_with()
     aup._audit.admin_users_listed.reset_mock()
@@ -244,14 +234,12 @@ async def test_admin_user_crud(the_async_session):
         session=the_async_session,
     )
     assert gone is None
-    await the_async_session.commit()
 
     aup._audit.admin_user_removed.assert_called_once_with(JSON_PATH)
     aup._audit.admin_user_removed.reset_mock()
 
     found = await aup.list_admin_users()
     assert found == []
-    await the_async_session.commit()
 
     aup._audit.admin_users_listed.assert_called_once_with()
     aup._audit.admin_users_listed.reset_mock()
@@ -309,7 +297,6 @@ async def test_admin_user_check_admin_access_json_path(
     the_async_session.add(
         authz_schema.AdminUser(json_path='$[?$.role == "admin"]'),
     )
-    await the_async_session.commit()
 
     assert await aup.check_admin_access({"role": "admin"})
 
@@ -352,7 +339,6 @@ async def test_room_authz_check_room_access(the_async_session):
     # Policy w/ deny as default, no ACL entries
     denier = authz_schema.RoomPolicy(room_id=ROOM_ID)
     the_async_session.add(denier)
-    await the_async_session.commit()
 
     assert not await rap.check_room_access(ROOM_ID, None)
 
@@ -362,7 +348,6 @@ async def test_room_authz_check_room_access(the_async_session):
         everyone=True,
     )
     the_async_session.add(allower)
-    await the_async_session.commit()
 
     assert await rap.check_room_access(ROOM_ID, None)
 
@@ -382,7 +367,6 @@ async def test_room_authz_filter_room_ids(the_async_session):
     # Policy w/ deny as default, no ACL entries
     denier = authz_schema.RoomPolicy(room_id=ROOM_ID)
     the_async_session.add(denier)
-    await the_async_session.commit()
 
     assert await rap.filter_room_ids(room_ids, None) == []
 
@@ -392,7 +376,6 @@ async def test_room_authz_filter_room_ids(the_async_session):
         everyone=True,
     )
     the_async_session.add(allower)
-    await the_async_session.commit()
 
     assert await rap.filter_room_ids(room_ids, None) == room_ids
 
@@ -420,14 +403,12 @@ async def test_room_authz_policy_crud(the_async_session):
         acl_entries=[acl_entry_model],
     )
     await rap.update_room_policy(ROOM_ID, policy_model)
-    await the_async_session.commit()
 
     rap._audit.room_policy_updated.assert_called_once_with(ROOM_ID)
     rap._audit.room_policy_updated.reset_mock()
 
     after = await rap.get_room_policy(ROOM_ID)
     assert after == policy_model
-    await the_async_session.commit()
 
     rap._audit.room_policy_read.assert_called_once_with(ROOM_ID)
     rap._audit.room_policy_read.reset_mock()
@@ -440,33 +421,28 @@ async def test_room_authz_policy_crud(the_async_session):
         update={"acl_entries": [new_acl_entry_model]},
     )
     await rap.update_room_policy(ROOM_ID, new_policy_model)
-    await the_async_session.commit()
 
     rap._audit.room_policy_updated.assert_called_once_with(ROOM_ID)
     rap._audit.room_policy_updated.reset_mock()
 
     policy = await rap.get_room_policy(ROOM_ID)
     assert policy == new_policy_model
-    await the_async_session.commit()
 
     rap._audit.room_policy_read.assert_called_once_with(ROOM_ID)
     rap._audit.room_policy_read.reset_mock()
 
     await rap.delete_room_policy(ROOM_ID)
-    await the_async_session.commit()
 
     rap._audit.room_policy_deleted.assert_called_once_with(ROOM_ID)
     rap._audit.room_policy_deleted.reset_mock()
 
     gone = await rap.get_room_policy(ROOM_ID)
     assert gone is None
-    await the_async_session.commit()
 
     rap._audit.room_policy_read.assert_called_once_with(ROOM_ID)
     rap._audit.room_policy_read.reset_mock()
 
     await rap.delete_room_policy(ROOM_ID)
-    await the_async_session.commit()
 
     rap._audit.room_policy_deleted.assert_called_once_with(ROOM_ID)
     rap._audit.room_policy_deleted.reset_mock()
@@ -496,7 +472,6 @@ async def _seed_policy(session, *, default=DENY, entries=()):
     for entry in entries:
         entry.room_policy = policy
         session.add(entry)
-    await session.commit()
     return policy
 
 
@@ -506,6 +481,12 @@ async def _seed_stale_entry(session, *, allow_deny=ALLOW):
         default=DENY,
         entries=[_orm_entry(allow_deny, json_path=JSON_PATH)],
     )
+    # Flush so the entry is a persistent row (not just pending state)
+    # before the raw UPDATE corrupts its 'json_path' out from under the
+    # ORM '@validates' hook. This is ORM setup for the stale-value
+    # scenario, not a transaction-boundary commit: the enclosing
+    # session still owns the (single) commit.
+    await session.flush()
     await session.execute(
         sqla_sql.text(
             "UPDATE room_acl_entries SET json_path = :stale "
@@ -513,7 +494,6 @@ async def _seed_stale_entry(session, *, allow_deny=ALLOW):
         ),
         {"stale": STALE_JSON_PATH, "placeholder": JSON_PATH},
     )
-    await session.commit()
     session.expire_all()
 
 
@@ -562,7 +542,6 @@ async def test_list_room_policies(the_async_session):
     the_async_session.add(
         authz_schema.RoomPolicy(room_id="beta", default_allow_deny=DENY)
     )
-    await the_async_session.commit()
 
     found = await rap.list_room_policies()
 
@@ -601,7 +580,6 @@ async def test_update_room_policy_room_id_is_authoritative(the_async_session):
     )
 
     await rap.update_room_policy(ROOM_ID, policy_model)
-    await the_async_session.commit()
 
     rap._audit.room_policy_updated.assert_called_once_with(ROOM_ID)
     stored = await rap.get_room_policy(ROOM_ID)
@@ -624,7 +602,6 @@ async def test_delete_room_policy_removes_acl_entries(the_async_session):
     )
 
     await rap.delete_room_policy(ROOM_ID)
-    await the_async_session.commit()
 
     remaining = (
         await the_async_session.scalars(sqla_sql.select(authz_schema.ACLEntry))
@@ -634,7 +611,7 @@ async def test_delete_room_policy_removes_acl_entries(the_async_session):
 
 
 @pytest.mark.asyncio
-async def test_clear_room_acl(the_async_session):
+async def test_clear_room_acl(the_async_session, unit_of_work):
     rap = _room_authz_policy(the_async_session)
     await _seed_policy(
         the_async_session,
@@ -645,8 +622,8 @@ async def test_clear_room_acl(the_async_session):
         ],
     )
 
-    await rap.clear_room_acl(ROOM_ID)
-    await the_async_session.commit()
+    async with unit_of_work():
+        await rap.clear_room_acl(ROOM_ID)
 
     rap._audit.acl_cleared.assert_called_once_with(ROOM_ID)
     after = await rap.get_room_policy(ROOM_ID)
@@ -671,7 +648,6 @@ async def test_add_acl_entry_to_policy(the_async_session):
     entry = models.ACLEntry(allow_deny=ALLOW, everyone=True)
 
     await rap.add_acl_entry(ROOM_ID, entry)
-    await the_async_session.commit()
 
     rap._audit.acl_entry_added.assert_called_once_with(ROOM_ID, entry)
     after = await rap.get_room_policy(ROOM_ID)
@@ -707,7 +683,7 @@ async def test_add_acl_entry_no_policy_raises(the_async_session):
 )
 @pytest.mark.asyncio
 async def test_add_acl_entry_replaces_same_discriminator(
-    the_async_session, discriminator_kwargs
+    the_async_session, discriminator_kwargs, unit_of_work
 ):
     rap = _room_authz_policy(the_async_session)
     await _seed_policy(
@@ -717,8 +693,8 @@ async def test_add_acl_entry_replaces_same_discriminator(
     )
     entry = models.ACLEntry(allow_deny=DENY, **discriminator_kwargs)
 
-    await rap.add_acl_entry(ROOM_ID, entry)
-    await the_async_session.commit()
+    async with unit_of_work():
+        await rap.add_acl_entry(ROOM_ID, entry)
 
     rap._audit.acl_entry_added.assert_called_once_with(ROOM_ID, entry)
     after = await rap.get_room_policy(ROOM_ID)
@@ -737,7 +713,6 @@ async def test_add_acl_entry_keeps_other_discriminator(the_async_session):
     entry = models.ACLEntry(allow_deny=DENY, json_path=ROLE_JSON_PATH)
 
     await rap.add_acl_entry(ROOM_ID, entry)
-    await the_async_session.commit()
 
     rap._audit.acl_entry_added.assert_called_once_with(ROOM_ID, entry)
     after = await rap.get_room_policy(ROOM_ID)
@@ -763,7 +738,7 @@ async def test_add_acl_entry_keeps_other_discriminator(the_async_session):
 )
 @pytest.mark.asyncio
 async def test_remove_acl_entry_matches_discriminator(
-    the_async_session, seed_kwargs, remove_kwargs
+    the_async_session, seed_kwargs, remove_kwargs, unit_of_work
 ):
     rap = _room_authz_policy(the_async_session)
     await _seed_policy(
@@ -773,8 +748,8 @@ async def test_remove_acl_entry_matches_discriminator(
     )
     entry = models.ACLEntryUnchecked(allow_deny=ALLOW, **remove_kwargs)
 
-    await rap.remove_acl_entry(ROOM_ID, entry)
-    await the_async_session.commit()
+    async with unit_of_work():
+        await rap.remove_acl_entry(ROOM_ID, entry)
 
     rap._audit.acl_entry_removed.assert_called_once_with(ROOM_ID, entry)
     after = await rap.get_room_policy(ROOM_ID)
@@ -835,7 +810,6 @@ async def test_remove_acl_entry_stale_json_path(the_async_session):
     )
 
     await rap.remove_acl_entry(ROOM_ID, entry)
-    await the_async_session.commit()
 
     rap._audit.acl_entry_removed.assert_called_once_with(ROOM_ID, entry)
     after = await rap.get_room_policy(ROOM_ID)
@@ -847,7 +821,6 @@ async def test_set_room_default_creates_when_missing(the_async_session):
     rap = _room_authz_policy(the_async_session)
 
     await rap.set_room_default(ROOM_ID, ALLOW)
-    await the_async_session.commit()
 
     rap._audit.room_default_set.assert_called_once_with(ROOM_ID, ALLOW)
     after = await rap.get_room_policy(ROOM_ID)
@@ -866,7 +839,6 @@ async def test_set_room_default_updates_existing(the_async_session):
     )
 
     await rap.set_room_default(ROOM_ID, ALLOW)
-    await the_async_session.commit()
 
     rap._audit.room_default_set.assert_called_once_with(ROOM_ID, ALLOW)
     after = await rap.get_room_policy(ROOM_ID)

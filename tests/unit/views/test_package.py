@@ -141,52 +141,58 @@ async def test_get_the_logger(the_installation, w_claims, w_claims_map):
 
 @pytest.mark.anyio
 @mock.patch("soliplex.authz.persistence.AdminUserPolicy")
-@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_get_the_admin_user_policy(as_klass, ap_klass):
+async def test_get_the_admin_user_policy(ap_klass, fake_async_session):
     engine = object()
     request = fastapi.Request(scope={"type": "http"})
     request.state.authorization_engine = engine
 
     counter = 0
 
-    async for policy in views.get_the_admin_user_policy(
-        request, THE_USER_CLAIMS
+    with mock.patch(
+        "sqlalchemy.ext.asyncio.AsyncSession",
+        new=fake_async_session.cls,
     ):
-        assert policy is ap_klass.return_value
-        counter += 1
+        async for policy in views.get_the_admin_user_policy(
+            request, THE_USER_CLAIMS
+        ):
+            assert policy is ap_klass.return_value
+            counter += 1
 
     assert counter == 1
 
     ap_klass.assert_called_once_with(
-        as_klass.return_value.__aenter__.return_value,
+        fake_async_session.session,
         THE_USER_CLAIMS,
     )
-    as_klass.assert_called_once_with(bind=engine)
+    fake_async_session.cls.assert_called_once_with(bind=engine)
 
 
 @pytest.mark.anyio
 @mock.patch("soliplex.authz.persistence.RoomAuthorizationPolicy")
-@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_get_the_room_authz_policy(as_klass, rap_klass):
+async def test_get_the_room_authz_policy(rap_klass, fake_async_session):
     engine = object()
     request = fastapi.Request(scope={"type": "http"})
     request.state.authorization_engine = engine
 
     counter = 0
 
-    async for policy in views.get_the_room_authz_policy(
-        request, THE_USER_CLAIMS
+    with mock.patch(
+        "sqlalchemy.ext.asyncio.AsyncSession",
+        new=fake_async_session.cls,
     ):
-        assert policy is rap_klass.return_value
-        counter += 1
+        async for policy in views.get_the_room_authz_policy(
+            request, THE_USER_CLAIMS
+        ):
+            assert policy is rap_klass.return_value
+            counter += 1
 
     assert counter == 1
 
     rap_klass.assert_called_once_with(
-        as_klass.return_value.__aenter__.return_value,
+        fake_async_session.session,
         THE_USER_CLAIMS,
     )
-    as_klass.assert_called_once_with(bind=engine)
+    fake_async_session.cls.assert_called_once_with(bind=engine)
 
 
 @pytest.mark.anyio
