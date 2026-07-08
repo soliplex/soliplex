@@ -980,9 +980,10 @@ async def test_delete_room_agui_thread_id(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_usage", [False, True])
 @mock.patch("soliplex.agui.persistence.ThreadStorage")
-@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_capture_usage_after_stream(a_session, t_storage, w_usage):
-    w_session = a_session.return_value.__aenter__.return_value
+async def test_capture_usage_after_stream(
+    t_storage, w_usage, fake_async_session
+):
+    w_session = fake_async_session.session
     the_threads = t_storage.return_value
     the_threads.save_run_usage = mock.AsyncMock(spec_set=())
     sqla_engine = object()
@@ -999,14 +1000,18 @@ async def test_capture_usage_after_stream(a_session, t_storage, w_usage):
     else:
         result = object()
 
-    await agui_views.capture_usage_after_stream(
-        result,
-        sqla_engine=sqla_engine,
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
-    )
+    with mock.patch(
+        "soliplex.views.agui.sqla_asyncio.AsyncSession",
+        new=fake_async_session.cls,
+    ):
+        await agui_views.capture_usage_after_stream(
+            result,
+            sqla_engine=sqla_engine,
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+        )
 
     if w_usage:
         the_threads.save_run_usage.assert_awaited_once_with(
@@ -1020,31 +1025,34 @@ async def test_capture_usage_after_stream(a_session, t_storage, w_usage):
             tool_calls=4,
         )
         t_storage.assert_called_once_with(w_session)
-        a_session.assert_called_once_with(bind=sqla_engine)
+        fake_async_session.cls.assert_called_once_with(bind=sqla_engine)
     else:
         the_threads.save_run_usage.assert_not_awaited()
         t_storage.assert_not_called()
-        a_session.assert_not_called()
+        fake_async_session.cls.assert_not_called()
 
 
 @pytest.mark.asyncio
 @mock.patch("soliplex.agui.persistence.ThreadStorage")
-@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_save_thread_run_events(a_session, t_storage):
-    w_session = a_session.return_value.__aenter__.return_value
+async def test_save_thread_run_events(t_storage, fake_async_session):
+    w_session = fake_async_session.session
     the_threads = t_storage.return_value
     the_threads.save_run_events = mock.AsyncMock(spec_set=())
     sqla_engine = object()
     event_list = [object()]
 
-    await agui_views.save_thread_run_events(
-        sqla_engine=sqla_engine,
-        event_list=event_list,
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
-    )
+    with mock.patch(
+        "soliplex.views.agui.sqla_asyncio.AsyncSession",
+        new=fake_async_session.cls,
+    ):
+        await agui_views.save_thread_run_events(
+            sqla_engine=sqla_engine,
+            event_list=event_list,
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+        )
 
     the_threads.save_run_events.assert_called_once_with(
         events=event_list,
@@ -1056,27 +1064,30 @@ async def test_save_thread_run_events(a_session, t_storage):
 
     t_storage.assert_called_once_with(w_session)
 
-    a_session.assert_called_once_with(bind=sqla_engine)
+    fake_async_session.cls.assert_called_once_with(bind=sqla_engine)
 
 
 @pytest.mark.asyncio
 @mock.patch("soliplex.agui.persistence.ThreadStorage")
-@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_save_single_event_helper(a_session, t_storage):
-    w_session = a_session.return_value.__aenter__.return_value
+async def test_save_single_event_helper(t_storage, fake_async_session):
+    w_session = fake_async_session.session
     the_threads = t_storage.return_value
     the_threads.save_single_event = mock.AsyncMock(spec_set=())
     sqla_engine = object()
     event = object()
 
-    await agui_views.save_single_event(
-        sqla_engine,
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
-        event=event,
-    )
+    with mock.patch(
+        "soliplex.views.agui.sqla_asyncio.AsyncSession",
+        new=fake_async_session.cls,
+    ):
+        await agui_views.save_single_event(
+            sqla_engine,
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+            event=event,
+        )
 
     the_threads.save_single_event.assert_called_once_with(
         user_name=USER_NAME,
@@ -1087,25 +1098,28 @@ async def test_save_single_event_helper(a_session, t_storage):
     )
 
     t_storage.assert_called_once_with(w_session)
-    a_session.assert_called_once_with(bind=sqla_engine)
+    fake_async_session.cls.assert_called_once_with(bind=sqla_engine)
 
 
 @pytest.mark.asyncio
 @mock.patch("soliplex.agui.persistence.ThreadStorage")
-@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_finish_run_helper(a_session, t_storage):
-    w_session = a_session.return_value.__aenter__.return_value
+async def test_finish_run_helper(t_storage, fake_async_session):
+    w_session = fake_async_session.session
     the_threads = t_storage.return_value
     the_threads.finish_run = mock.AsyncMock(spec_set=())
     sqla_engine = object()
 
-    await agui_views.finish_run(
-        sqla_engine,
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
-    )
+    with mock.patch(
+        "soliplex.views.agui.sqla_asyncio.AsyncSession",
+        new=fake_async_session.cls,
+    ):
+        await agui_views.finish_run(
+            sqla_engine,
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+        )
 
     the_threads.finish_run.assert_called_once_with(
         user_name=USER_NAME,
@@ -1115,7 +1129,7 @@ async def test_finish_run_helper(a_session, t_storage):
     )
 
     t_storage.assert_called_once_with(w_session)
-    a_session.assert_called_once_with(bind=sqla_engine)
+    fake_async_session.cls.assert_called_once_with(bind=sqla_engine)
 
 
 @pytest.mark.parametrize(
@@ -1574,6 +1588,8 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     run_input,
     ari_side_effect,
     expectation,
+    fake_async_session,
+    mock_thread_storage,
 ):
     USER_PROFILE = models.UserProfile(**AUTH_USER)
     agent = object()
@@ -1603,10 +1619,16 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     test_run.run_input = None
     the_threads.get_run.return_value = test_run
 
+    # 'add_run_input' now runs on its own short-lived, committed session
+    # rather than the request-scoped 'the_threads'. The shared
+    # 'fake_async_session' / 'mock_thread_storage' fixtures stand that
+    # session + storage in so the call (and its AGUI_Exception ->
+    # HTTPException translation, which relies on 'session.begin()' not
+    # swallowing the error) can be exercised and asserted.
     if ari_side_effect is not None:
-        the_threads.add_run_input.side_effect = ari_side_effect
+        mock_thread_storage.add_run_input.side_effect = ari_side_effect
     else:
-        the_threads.add_run_input.return_value = test_run
+        mock_thread_storage.add_run_input.return_value = test_run
 
     aga.from_request = mock.AsyncMock()
     exp_adapter = aga.from_request.return_value
@@ -1615,7 +1637,17 @@ async def test_post_room_agui_thread_id_run_id_streaming(
 
     exp_sse_stream = exp_adapter.encode_stream.return_value
 
-    with expectation as expected:
+    with (
+        mock.patch(
+            "soliplex.views.agui.sqla_asyncio.AsyncSession",
+            new=fake_async_session.cls,
+        ),
+        mock.patch(
+            "soliplex.views.agui.agui_persistence.ThreadStorage",
+            return_value=mock_thread_storage,
+        ),
+        expectation as expected,
+    ):
         found = await agui_views.post_room_agui_thread_id_run_id(
             request,
             room_id=TEST_ROOM_ID,
@@ -1710,13 +1742,16 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             agent=agent,
         )
 
-        the_threads.add_run_input.assert_called_once_with(
+        mock_thread_storage.add_run_input.assert_called_once_with(
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_STR,
             run_id=TEST_RUN_ID_STR,
             run_input=exp_adapter.run_input,
         )
+        # The input write ran on its own session bound to the request's
+        # threads engine, not the request-scoped 'the_threads'.
+        fake_async_session.cls.assert_called_once_with(bind=sqla_engine)
 
         cura.assert_called_once_with(
             room_id=TEST_ROOM_ID,
@@ -1765,12 +1800,14 @@ async def test_post_room_agui_reconnect(
     exp_adapter.encode_stream = mock.MagicMock()
 
     last_event_id = f"{TEST_RUN_ID_STR}:5"
+    threads_engine = object()
     request = fastapi.Request(
         scope={
             "type": "http",
             "headers": [
                 (b"last-event-id", last_event_id.encode()),
             ],
+            "state": {"threads_engine": threads_engine},
         },
     )
 
@@ -1807,7 +1844,7 @@ async def test_post_room_agui_reconnect(
     )
 
     sfdb.assert_called_once_with(
-        the_threads,
+        threads_engine,
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,

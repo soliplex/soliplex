@@ -587,7 +587,11 @@ async def get_the_threads(request: fastapi.Request) -> ThreadStorage:
 
     engine = request.state.threads_engine
     async with sqla_asyncio.AsyncSession(bind=engine) as session:
-        yield persistence.ThreadStorage(session)
+        # One transaction per request: the storage methods no longer
+        # commit, so the request owns the unit of work -- committed on a
+        # clean response, rolled back if the handler raises.
+        async with session.begin():
+            yield persistence.ThreadStorage(session)
 
 
 depend_the_threads = fastapi.Depends(get_the_threads)

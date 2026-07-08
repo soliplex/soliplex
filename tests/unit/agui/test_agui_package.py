@@ -218,22 +218,23 @@ async def test_compact_event_stream(events, expected):
 
 @pytest.mark.anyio
 @mock.patch("soliplex.agui.persistence.ThreadStorage")
-@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
-async def test_get_the_threads(as_klass, ts_klass):
+async def test_get_the_threads(ts_klass, fake_async_session):
     engine = object()
     request = fastapi.Request(scope={"type": "http"})
     request.state.threads_engine = engine
 
     counter = 0
 
-    async for the_threads in agui.get_the_threads(request):
-        assert the_threads is ts_klass.return_value
-        counter += 1
+    with mock.patch(
+        "sqlalchemy.ext.asyncio.AsyncSession",
+        new=fake_async_session.cls,
+    ):
+        async for the_threads in agui.get_the_threads(request):
+            assert the_threads is ts_klass.return_value
+            counter += 1
 
     assert counter == 1
 
-    ts_klass.assert_called_once_with(
-        as_klass.return_value.__aenter__.return_value,
-    )
+    ts_klass.assert_called_once_with(fake_async_session.session)
 
-    as_klass.assert_called_once_with(bind=engine)
+    fake_async_session.cls.assert_called_once_with(bind=engine)

@@ -55,8 +55,12 @@ class ThreadStorage(agui.ThreadStorage):
     @property
     @contextlib.asynccontextmanager
     async def session(self):
-        async with self._session.begin():
-            yield self._session
+        # Yield the caller-owned session as-is: the session owner (a
+        # FastAPI dependency, CLI context manager, or streaming helper)
+        # owns the transaction boundary and commits the unit of work
+        # exactly once. Methods here never open their own transaction or
+        # commit, so callers -- and tests -- need no interleaved commits.
+        yield self._session
 
     async def _find_user_thread(
         self,
@@ -420,8 +424,6 @@ class ThreadStorage(agui.ThreadStorage):
         event: agui_core.Event,
     ) -> None:
         """Save a single event for a run (incremental persistence)"""
-        await self._session.commit()
-
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
@@ -448,8 +450,6 @@ class ThreadStorage(agui.ThreadStorage):
         run_id: str,
     ) -> None:
         """Mark a run as finished"""
-        await self._session.commit()
-
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
@@ -475,8 +475,6 @@ class ThreadStorage(agui.ThreadStorage):
 
         Each element is a (event_index, event) tuple.
         """
-        await self._session.commit()
-
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
@@ -504,8 +502,6 @@ class ThreadStorage(agui.ThreadStorage):
         run_id: str,
     ) -> bool:
         """Return True if the run has a 'finished' timestamp"""
-        await self._session.commit()
-
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
@@ -527,8 +523,6 @@ class ThreadStorage(agui.ThreadStorage):
         events: agui.AGUI_Events,
     ) -> agui.AGUI_Events:
         """Save the events for a gven run"""
-        await self._session.commit()
-
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
@@ -560,8 +554,6 @@ class ThreadStorage(agui.ThreadStorage):
         tool_calls: int,
     ):
         """Save the run usage statistics"""
-        await self._session.commit()
-
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
@@ -591,8 +583,6 @@ class ThreadStorage(agui.ThreadStorage):
         reason: str,
     ):
         """Save the run feedback"""
-        await self._session.commit()
-
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
@@ -626,8 +616,6 @@ class ThreadStorage(agui.ThreadStorage):
         run_id: str,
     ) -> agui.RunFeedbackType | None:
         """Get the run feedback"""
-        await self._session.commit()
-
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
@@ -657,8 +645,6 @@ class ThreadStorage(agui.ThreadStorage):
         """
         if limit is None and since is None:
             limit = 20
-
-        await self._session.commit()
 
         async with self.session as session:
             query = (

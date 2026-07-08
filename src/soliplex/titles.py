@@ -114,11 +114,14 @@ async def maybe_generate_title(
             bind=threads_engine,
         ) as session:
             the_threads = agui_persistence.ThreadStorage(session)
-            await the_threads.update_thread_metadata(
-                user_name=user_name,
-                room_id=room_id,
-                thread_id=thread_id,
-                thread_metadata={"name": title},
-            )
+            # This helper owns the session, so it owns the commit: the
+            # storage method no longer commits on its own.
+            async with session.begin():
+                await the_threads.update_thread_metadata(
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    thread_metadata={"name": title},
+                )
     except Exception:
         logfire.exception("Failed to generate thread title")

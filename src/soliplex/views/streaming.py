@@ -13,9 +13,11 @@ import typing
 import fastapi
 from fastapi import WebSocket
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext import asyncio as sqla_asyncio
 from starlette.websockets import WebSocketDisconnect
 
 from soliplex import util
+from soliplex.agui import persistence as agui_persistence
 
 SSE_POLL_INTERVAL_SECS = 2.0
 SSE_KEEPALIVE_INTERVAL_SECS = 15.0
@@ -124,7 +126,7 @@ async def add_sse_event_ids(
 
 
 async def stream_from_db(
-    the_threads,
+    sqla_engine,
     *,
     user_name: str,
     room_id: str,
@@ -138,37 +140,55 @@ async def stream_from_db(
     Used for SSE reconnect: reads persisted events written by the
     background ``drive_llm_stream`` task.  Stops when the run is
     marked finished and all remaining events have been drained.
+
+    Each poll opens its own short-lived read session, so every
+    iteration observes the background task's freshly-committed events
+    regardless of backend isolation level (a new SQLite snapshot; a
+    new Postgres READ COMMITTED transaction).  The session is closed
+    before yielding to the consumer and before sleeping, so no read
+    transaction or connection is held across those awaits.
     """
     while True:
-        pairs = await the_threads.list_run_events_after(
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-            run_id=run_id,
-            after_index=after_index,
-        )
+        async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
+            the_threads = agui_persistence.ThreadStorage(session)
 
-        for idx, event in pairs:
-            yield event
-            after_index = idx
-
-        finished = await the_threads.is_run_finished(
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-            run_id=run_id,
-        )
-
-        if finished:
-            # Drain any final events written between the last
-            # query and the finished flag being set.
-            final = await the_threads.list_run_events_after(
+            pairs = await the_threads.list_run_events_after(
                 user_name=user_name,
                 room_id=room_id,
                 thread_id=thread_id,
                 run_id=run_id,
                 after_index=after_index,
             )
+            # Highest event index seen this iteration -- the drain (and
+            # the next poll) start after it.
+            next_after = pairs[-1][0] if pairs else after_index
+
+            finished = await the_threads.is_run_finished(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+            )
+
+            final = ()
+            if finished:
+                # Drain any final events written between the last
+                # query and the finished flag being set.  The finished
+                # flag is committed last, so any snapshot that sees it
+                # also sees every preceding event.
+                final = await the_threads.list_run_events_after(
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    after_index=next_after,
+                )
+
+        for _idx, event in pairs:
+            yield event
+        after_index = next_after
+
+        if finished:
             for _idx, event in final:
                 yield event
             break

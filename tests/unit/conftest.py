@@ -1,11 +1,14 @@
+import contextlib
 import logging
 import pathlib
 import tempfile
+import types
 from unittest import mock
 
 import _test_features as agui_features
 import pytest
 
+from soliplex import agui
 from soliplex import authz
 from soliplex import loggers
 from soliplex.config import agents as config_agents
@@ -36,6 +39,70 @@ def _auth_systems(n_auth_systems):
 def anyio_backend():
     """Run anyio-marked tests on asyncio only (no trio)."""
     return "asyncio"
+
+
+@pytest.fixture
+def unit_of_work(the_async_session):
+    """Group storage writes into one committed unit of work.
+
+    The persistence APIs no longer commit -- the session owner does. In
+    production that owner is a FastAPI dependency (or the CLI session
+    context manager) that commits once per request/invocation. Tests
+    mirror that boundary: statements that mutate go inside
+
+        async with unit_of_work():
+            await storage.mutate(...)
+
+    which commits on clean exit, and any assertion that observes the
+    *persisted* result (a reloaded attribute, a refreshed relationship,
+    a datetime round-tripped through the DB) is made afterwards, outside
+    the block, where a fresh view is guaranteed. Resolves whichever
+    'the_async_session' is in scope for the requesting test.
+    """
+
+    @contextlib.asynccontextmanager
+    async def _unit_of_work():
+        yield the_async_session
+        await the_async_session.commit()
+
+    return _unit_of_work
+
+
+@pytest.fixture
+def fake_async_session():
+    """Stand-in for ``sqla_asyncio.AsyncSession``.
+
+    Production code opens a fresh per-call session with
+    ``async with sqla_asyncio.AsyncSession(bind=...) as session:`` and
+    sometimes a nested ``async with session.begin():``. Patch
+    ``.cls`` in for ``AsyncSession`` (in whichever module opens the
+    session); it records its construction call and yields ``.session``
+    as the context value.
+
+    ``session.begin()`` is a non-suppressing async context manager (its
+    ``__aexit__`` returns ``False``), so code that wraps a call in a
+    transaction still propagates exceptions from the body.
+    """
+    session = mock.MagicMock()
+    session.begin.return_value.__aenter__ = mock.AsyncMock()
+    session.begin.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+
+    @contextlib.asynccontextmanager
+    async def _open(*_args, **_kwargs):
+        yield session
+
+    cls = mock.MagicMock(side_effect=_open)
+    return types.SimpleNamespace(cls=cls, session=session)
+
+
+@pytest.fixture
+def mock_thread_storage():
+    """Stand-in ``ThreadStorage`` for code that builds one per call.
+
+    Patch ``agui_persistence.ThreadStorage`` (in whichever module builds
+    it) with ``return_value=`` this mock, then drive/assert its methods.
+    """
+    return mock.create_autospec(agui.ThreadStorage)
 
 
 @pytest.fixture

@@ -94,7 +94,10 @@ async def get_the_admin_user_policy(
 
     engine = request.state.authorization_engine
     async with sqla_asyncio.AsyncSession(bind=engine) as session:
-        yield persistence.AdminUserPolicy(session, the_user_claims)
+        # One transaction per request: the policy methods no longer
+        # commit, so the request owns the unit of work.
+        async with session.begin():
+            yield persistence.AdminUserPolicy(session, the_user_claims)
 
 
 depend_the_admin_user_policy = fastapi.Depends(get_the_admin_user_policy)
@@ -108,7 +111,10 @@ async def get_the_room_authz_policy(
 
     engine = request.state.authorization_engine
     async with sqla_asyncio.AsyncSession(bind=engine) as session:
-        yield persistence.RoomAuthorizationPolicy(session, the_user_claims)
+        # One transaction per request: the policy methods no longer
+        # commit, so the request owns the unit of work.
+        async with session.begin():
+            yield persistence.RoomAuthorizationPolicy(session, the_user_claims)
 
 
 depend_the_room_authz_policy = fastapi.Depends(get_the_room_authz_policy)

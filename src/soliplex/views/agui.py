@@ -535,16 +535,19 @@ async def capture_usage_after_stream(
         async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
             the_threads = agui_persistence.ThreadStorage(session)
 
-            await the_threads.save_run_usage(
-                user_name=user_name,
-                room_id=room_id,
-                thread_id=thread_id,
-                run_id=run_id,
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                requests=usage.requests,
-                tool_calls=usage.tool_calls,
-            )
+            # This helper owns the session, so it owns the commit: the
+            # storage method no longer commits on its own.
+            async with session.begin():
+                await the_threads.save_run_usage(
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    requests=usage.requests,
+                    tool_calls=usage.tool_calls,
+                )
 
 
 async def save_thread_run_events(
@@ -564,13 +567,16 @@ async def save_thread_run_events(
     async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
         the_threads = agui_persistence.ThreadStorage(session)
 
-        await the_threads.save_run_events(
-            events=event_list,
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-            run_id=run_id,
-        )
+        # This helper owns the session, so it owns the commit: the
+        # storage method no longer commits on its own.
+        async with session.begin():
+            await the_threads.save_run_events(
+                events=event_list,
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+            )
 
 
 async def save_single_event(
@@ -590,13 +596,18 @@ async def save_single_event(
     async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
         the_threads = agui_persistence.ThreadStorage(session)
 
-        await the_threads.save_single_event(
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-            run_id=run_id,
-            event=event,
-        )
+        # This helper owns the session, so it owns the commit: the
+        # storage method no longer commits on its own.  Committing per
+        # event is what lets a reconnecting client's poll observe them
+        # incrementally.
+        async with session.begin():
+            await the_threads.save_single_event(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                event=event,
+            )
 
 
 async def finish_run(
@@ -615,12 +626,15 @@ async def finish_run(
     async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
         the_threads = agui_persistence.ThreadStorage(session)
 
-        await the_threads.finish_run(
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-            run_id=run_id,
-        )
+        # This helper owns the session, so it owns the commit: the
+        # storage method no longer commits on its own.
+        async with session.begin():
+            await the_threads.finish_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+            )
 
 
 async def drive_llm_stream(
@@ -859,7 +873,7 @@ async def post_room_agui_thread_id_run_id(
         )
 
         db_event_stream = streaming_views.stream_from_db(
-            the_threads,
+            request.state.threads_engine,
             user_name=user_name,
             room_id=room_id,
             thread_id=thread_id,
@@ -901,14 +915,25 @@ async def post_room_agui_thread_id_run_id(
         agent=agent,
     )
 
+    # Persist the run input in its own short-lived, committed session
+    # rather than via the request-scoped 'the_threads'. This handler
+    # returns a long-lived StreamingResponse, so the request session's
+    # transaction stays open for the whole stream; committing the input
+    # write here releases its lock immediately (and keeps the request
+    # transaction from holding a writer lock behind the incremental
+    # per-event background saves).
     try:
-        await the_threads.add_run_input(
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-            run_id=run_id,
-            run_input=agui_adapter.run_input,
-        )
+        async with sqla_asyncio.AsyncSession(
+            bind=request.state.threads_engine,
+        ) as session:
+            async with session.begin():
+                await agui_persistence.ThreadStorage(session).add_run_input(
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    run_input=agui_adapter.run_input,
+                )
 
     except agui.AGUI_Exception as exc:
         raise fastapi.HTTPException(
