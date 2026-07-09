@@ -1,5 +1,6 @@
 import base64
 import io
+import json
 
 import fastapi
 from fastapi import responses
@@ -226,13 +227,31 @@ async def get_room_documents(
 async def get_chunk_visualization(
     room_id: str,
     chunk_id: str,
+    refs: str | None = None,
+    expand: bool = True,
     the_installation: installation.Installation = depend_the_installation,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.ChunkVisualization:
-    """Return a set of page images for a chunk, highlighting the chunk text"""
+    """Return a set of page images for a chunk, highlighting the chunk text.
+
+    ``refs`` is an optional JSON-encoded list of the citation's
+    ``doc_item_refs`` (the exact items the model saw); when given, the
+    highlight matches the cited content instead of re-expanding. ``expand``
+    (default true) re-expands the chunk's section when no refs are supplied;
+    ``expand=false`` highlights only the chunk itself.
+    """
     the_logger.debug(loggers.ROOM_GET_CHUNK_VISUALIZATION)
+
+    doc_item_refs: list[str] | None = None
+    if refs:
+        try:
+            parsed = json.loads(refs)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, list):
+            doc_item_refs = [str(r) for r in parsed]
 
     try:
         room_config = await the_installation.get_room_config(
@@ -263,7 +282,9 @@ async def get_chunk_visualization(
             chunk = await rag.chunk_repository.get_by_id(chunk_id)
 
             if chunk:
-                images = await rag.visualize_chunk(chunk)
+                images = await rag.visualize_chunk(
+                    chunk, refs=doc_item_refs, expand=expand
+                )
                 break  # first hit wins
 
     else:

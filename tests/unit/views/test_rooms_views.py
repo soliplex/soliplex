@@ -707,6 +707,75 @@ async def test_get_chunk_visualization(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("expand", [True, False])
+@pytest.mark.parametrize(
+    "refs_arg,expected_refs",
+    [
+        ('["#/texts/0", "#/texts/1"]', ["#/texts/0", "#/texts/1"]),
+        ("not valid json", None),
+        ('{"not": "a list"}', None),
+        (None, None),
+    ],
+)
+@mock.patch("haiku.rag.client.HaikuRAG")
+@mock.patch("base64.b64encode")
+async def test_get_chunk_visualization_refs_and_expand(
+    b64enc,
+    hr_klass,
+    refs_arg,
+    expected_refs,
+    expand,
+    audit_records,
+):
+    """refs (JSON list) and expand reach visualize_chunk."""
+    ROOM_ID = "foo"
+    CHUNK_ID = "test-chunk-123"
+    DOCUMENT_URI = f"https://example.com/chunks/{CHUNK_ID}"
+    PAGES_PNG = [mock.Mock(spec_set=["blob", "save"], blob="facedace8765")]
+    b64enc.return_value.decode.return_value = "facedace8765"
+
+    hr_insts = {"agent": mock.AsyncMock()}
+    rag = hr_insts["agent"].__aenter__.return_value
+    hr_klass.side_effect = hr_insts.values()
+
+    chunk = hr_chunk.Chunk(
+        chunk_id=CHUNK_ID,
+        document_uri=DOCUMENT_URI,
+        content="waaa",
+    )
+    rag.chunk_repository.get_by_id.return_value = chunk
+    rag.visualize_chunk.return_value = PAGES_PNG
+
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.list_haiku_rag_client_kw = mock.Mock(
+        spec_set=(),
+        return_value=[{"source": "agent", "db_path": "/db/agent"}],
+    )
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_room_config.return_value = room_config
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    found = await rooms_views.get_chunk_visualization(
+        room_id=ROOM_ID,
+        chunk_id=CHUNK_ID,
+        refs=refs_arg,
+        expand=expand,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert found.chunk_id == CHUNK_ID
+    rag.visualize_chunk.assert_awaited_once_with(
+        chunk,
+        refs=expected_refs,
+        expand=expand,
+    )
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("w_search_type", [False, True])
 @pytest.mark.parametrize(
     "w_hrc_kws",
