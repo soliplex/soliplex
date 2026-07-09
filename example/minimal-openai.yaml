@@ -133,6 +133,34 @@ meta:
   #------------------------------------------------------------------------
 
 #==========================================================================
+# ASGI middleware stack
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/middleware/
+#
+# Ordered list of ASGI middleware wrapping the application, outermost
+# first. Each entry names a 'app_factory' (a dotted-name factory that
+# wraps the app it is passed and returns the result); factories that
+# declare a keyword-only 'installation_config' parameter receive the
+# resolved installation config (e.g. to look up secrets). Any additional
+# keys under 'extra_params' are forwarded to the factory as keywords.
+#
+# Omit 'middleware_stack' entirely (the default) to get Soliplex's built-in
+# stack: a session middleware wrapping a permissive CORS middleware. Provide
+# your own list to replace that default outright -- include session/CORS
+# yourself if you still want them.
+#==========================================================================
+# middleware_stack:
+#   - name: "session"
+#     app_factory: "soliplex.main.app_with_session"
+#   - name: "cors"
+#     app_factory: "soliplex.main.app_with_cors"
+#     extra_params:
+#       allow_origins: ["*"]
+#       allow_credentials: true
+#       allow_methods: ["*"]
+#       allow_headers: ["*"]
+
+#==========================================================================
 # FastAPI routers
 #==========================================================================
 # Routers from these Soliplex view modules are registered by default,

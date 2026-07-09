@@ -104,8 +104,8 @@ def test_serve_direct_default_uses_create_app(patched_serve, tmp_path):
         installation_path=i_path,
         no_auth_mode=False,
         log_config_file=None,
-        session_https_only=True,
     )
+    assert "_SOLIPLEX_INSECURE_SESSION_COOKIE" not in os.environ
     patched_serve.uvicorn_run.assert_called_once_with(
         patched_serve.create_app.return_value,
         host=serve.DEFAULT_HOST,
@@ -125,7 +125,6 @@ def test_serve_direct_honors_explicit_app_maker(patched_serve, tmp_path):
         installation_path=i_path,
         no_auth_mode=False,
         log_config_file=None,
-        session_https_only=True,
     )
     patched_serve.create_app.assert_not_called()
     patched_serve.uvicorn_run.assert_called_once_with(
@@ -239,17 +238,18 @@ def test_serve_workers_factory_with_all_options(patched_serve, tmp_path):
 
 def test_serve_direct_insecure_session_cookie(patched_serve, tmp_path):
     # '--insecure-session-cookie' on the direct path turns off the cookie's
-    # Secure flag via the app factory.
+    # Secure flag via the private env var read in-process by
+    # 'soliplex.main.app_with_session'.
     i_path = tmp_path / "installation.yaml"
     kwargs = _serve_kwargs(i_path, insecure_session_cookie=True)
 
     serve.serve(**kwargs)
 
+    assert os.environ["_SOLIPLEX_INSECURE_SESSION_COOKIE"] == "Y"
     patched_serve.create_app.assert_called_once_with(
         installation_path=i_path,
         no_auth_mode=False,
         log_config_file=None,
-        session_https_only=False,
     )
 
 
