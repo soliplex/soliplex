@@ -29,6 +29,7 @@ nav = [
     { "Meta" = "config/meta.md" },
     { "Environment" = "config/environment.md" },
     { "Secrets" = "config/secrets.md" },
+    { "Middleware" = "config/middleware.md" },
     { "Agents" = "config/agents.md" },
     { "Rooms" = "config/rooms.md" },
     { "Completions" = "config/completions.md" },

@@ -218,15 +218,21 @@ Passing this option now fails with a non-zero exit.
 
     reload_dirs = [str(rd) for rd in reload_dirs]
 
+    # 'soliplex.main.app_with_session' reads this env var in-process to
+    # decide the session cookie's 'Secure' attribute, so set it for both
+    # run paths (not just the uvicorn-factory contract below).
+    if insecure_session_cookie:
+        os.environ["_SOLIPLEX_INSECURE_SESSION_COOKIE"] = "Y"
+
     if reload or workers:
         # Work around uvicorn's aversion to passing arguments to the app
         # factory.
         #
         # N.B.:  The environment variables set here are a private contract
         #        between this command and the
-        #        'soliplex.main.create_app_from_environment'
-        #        function:  do not try setting them yourself, either
-        #        directly or via a '.env' file.
+        #        'soliplex.main.create_app_from_environment' /
+        #        'soliplex.main.app_with_session' functions:  do not try
+        #        setting them yourself, either directly or via a '.env' file.
         os.environ["_SOLIPLEX_INSTALLATION_PATH"] = str(installation_path)
 
         if no_auth_mode:
@@ -234,9 +240,6 @@ Passing this option now fails with a non-zero exit.
 
         if log_config is not None:  # pass to the app, disable Uvicorn.
             os.environ["_SOLIPLEX_LOG_CONFIG_FILE"] = str(log_config)
-
-        if insecure_session_cookie:
-            os.environ["_SOLIPLEX_INSECURE_SESSION_COOKIE"] = "Y"
 
         if app_factory_name is None:
             app_factory_name = "soliplex.main:create_app_from_environment"
@@ -257,6 +260,5 @@ Passing this option now fails with a non-zero exit.
             installation_path=installation_path,
             no_auth_mode=no_auth_mode,
             log_config_file=log_config,
-            session_https_only=not insecure_session_cookie,
         )
         uvicorn.run(app, **uvicorn_kw)

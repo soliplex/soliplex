@@ -24,6 +24,7 @@ from . import completions as config_completions
 from . import exceptions as config_exc
 from . import logfire as config_logfire
 from . import meta as config_meta
+from . import middleware as config_middleware
 from . import rooms as config_rooms
 from . import routing as config_routing
 from . import secrets as config_secrets
@@ -387,6 +388,13 @@ class InstallationConfig:
     server_description: str | None = None
 
     meta: config_meta.InstallationConfigMeta = None
+
+    #
+    # ASGI middleware (Scarlett pattern).
+    #
+    middleware_stack: list[config_middleware.MiddlewareConfig] = (
+        _utils._default_list_field()
+    )
 
     #
     # FastAPI routers to be configured during app startup
@@ -893,6 +901,13 @@ class InstallationConfig:
                 config_path,
                 meta,
             )
+
+            config_dict["middleware_stack"] = [
+                config_middleware.MiddlewareConfig.from_yaml(
+                    mwc_yaml,
+                )
+                for mwc_yaml in config_dict.get("middleware_stack", ())
+            ]
 
             config_dict["app_router_operations"] = [
                 config_routing.app_router_operation_from_yaml(

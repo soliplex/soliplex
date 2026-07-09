@@ -5,6 +5,7 @@ import pathlib
 from unittest import mock
 
 import _test_features as agui_features
+import _test_middleware
 import pytest
 import yaml
 from haiku.rag import config as hr_config_module
@@ -17,6 +18,7 @@ from soliplex.config import exceptions as config_exc
 from soliplex.config import installation as config_installation
 from soliplex.config import logfire as config_logfire
 from soliplex.config import meta as config_meta
+from soliplex.config import middleware as config_middleware
 from soliplex.config import routing as config_routing
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
@@ -135,6 +137,22 @@ meta:
   secret_sources:
     - "config_klass": "soliplex.config.secrets.EnvVarSecretSource"
       "registered_func": "soliplex.config.test_secret_func"
+"""
+
+W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "middleware_stack": [
+        config_middleware.MiddlewareConfig(
+            name="null",
+            app_factory=_test_middleware.null_app_factory,
+        ),
+    ],
+}
+W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+middleware_stack:
+    - name: "null"
+      app_factory: "_test_middleware.null_app_factory"
 """
 
 W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_KW = {
@@ -1684,6 +1702,10 @@ def test_installationconfig_authorization_dburi_async(w_kw, expected):
         (
             W_FULL_META_INSTALLATION_CONFIG_YAML,
             W_FULL_META_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_YAML,
+            W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
             W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_YAML,

@@ -417,3 +417,15 @@ completion_paths:
 ## Logfire Configuration
 
 See the [Soliplex logfire configuration](logfire.md) page.
+
+## ASGI Middleware Stack
+
+```yaml
+middleware_stack:
+```
+
+The optional `middleware_stack` section declares the ASGI middleware wrapping
+the application (outermost first). Omit it to use the built-in default stack
+(session + CORS).
+
+See the [Soliplex middleware configuration](middleware.md) page.

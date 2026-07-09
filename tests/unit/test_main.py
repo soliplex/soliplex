@@ -13,13 +13,6 @@ EXPLICIT_INST_PATH = "/explicit"
 TOKEN = "DEADBEEF"
 
 
-@pytest.fixture
-def explicit_inst_dir(temp_dir):
-    result = temp_dir / "explicit"
-    result.mkdir()
-    return result
-
-
 @pytest.fixture(scope="module", params=[False, True])
 def no_auth_mode_kwargs(request):
     kw = {"no_auth_mode": request.param}
@@ -80,179 +73,207 @@ def test_app_with_lifespan(acm, fapi):
 
 def test_app_with_cors():
     app = mock.Mock(spec_set=["add_middleware"])
+    extra_params = {
+        "allow_origins": ["*"],
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
 
-    found = main.app_with_cors(app)
+    found = main.app_with_cors(app, **extra_params)
 
     assert found is app
-
     app.add_middleware.assert_called_once_with(
         fastapi_mw_cors.CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        **extra_params,
     )
 
 
-def test_app_with_session():
+@pytest.mark.parametrize(
+    "env, exp_https_only",
+    [
+        ({}, True),
+        ({"_SOLIPLEX_INSECURE_SESSION_COOKIE": "Y"}, False),
+    ],
+)
+def test_app_with_session(env, exp_https_only):
     app = mock.Mock(spec_set=["add_middleware"])
+    installation_config = mock.Mock(spec_set=["get_secret"])
+    installation_config.get_secret.return_value = TOKEN
 
-    found = main.app_with_session(app, TOKEN)
+    with mock.patch.dict("os.environ", env, clear=True):
+        found = main.app_with_session(
+            app,
+            installation_config=installation_config,
+        )
 
     assert found is app
-
+    installation_config.get_secret.assert_called_once_with(
+        "secret:SESSION_MIDDLEWARE_TOKEN",
+    )
     app.add_middleware.assert_called_once_with(
         starlette_mw_sessions.SessionMiddleware,
         secret_key=TOKEN.encode("ascii"),
-        https_only=True,
+        https_only=exp_https_only,
         same_site="lax",
     )
 
 
-def test_app_with_session_insecure():
-    app = mock.Mock(spec_set=["add_middleware"])
+def test_default_middleware_stack():
+    found = main.default_middleware_stack()
 
-    found = main.app_with_session(app, TOKEN, https_only=False)
-
-    assert found is app
-
-    app.add_middleware.assert_called_once_with(
-        starlette_mw_sessions.SessionMiddleware,
-        secret_key=TOKEN.encode("ascii"),
-        https_only=False,
-        same_site="lax",
-    )
-
-
-@pytest.fixture
-def installation_w_session_token(explicit_inst_dir):
-    secret_file = explicit_inst_dir / "session_secret.txt"
-    secret_file.write_text(TOKEN)
-    i_yaml = explicit_inst_dir / "installation.yaml"
-    i_yaml.write_text("""\
-id: test-create-main
-secrets:
-  - secret_name: "SESSION_MIDDLEWARE_TOKEN"
-    sources:
-      - kind: "file_path"
-        file_path: "./session_secret.txt"
-""")
-    return explicit_inst_dir
+    session_mw, cors_mw = found
+    assert session_mw.name == "session"
+    assert session_mw.app_factory is main.app_with_session
+    assert session_mw.extra_params == {}
+    assert cors_mw.name == "cors"
+    assert cors_mw.app_factory is main.app_with_cors
+    assert cors_mw.extra_params == {
+        "allow_origins": ["*"],
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
 
 
-@pytest.mark.parametrize("w_session_https_only", [None, False])
+def _loaded_installation(w_configured_stack):
+    """Build a mock 'InstallationConfig' with a controllable stack.
+
+    When 'w_configured_stack' is true the config carries an explicit
+    'middleware_stack'; otherwise it is empty (so 'create_app' falls back to
+    'default_middleware_stack').
+    """
+    configured_stack = [mock.Mock(name="configured_mw")]
+    inst = mock.Mock(spec_set=["middleware_stack"])
+    inst.middleware_stack = configured_stack if w_configured_stack else []
+    return inst
+
+
+@pytest.mark.parametrize("w_configured_stack", [False, True])
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 def test_create_app_with_explicit_overrides(
-    installation_w_session_token,
     w_no_auth_mode,
     w_log_config_file,
-    w_session_https_only,
+    w_configured_stack,
 ):
     kwargs = {}
 
     if w_log_config_file is not None:
         kwargs["log_config_file"] = w_log_config_file
 
-    if w_session_https_only is not None:
-        kwargs["session_https_only"] = w_session_https_only
-        exp_session_https_only = w_session_https_only
-    else:
-        exp_session_https_only = True
-
+    loaded_installation = _loaded_installation(w_configured_stack)
+    i_path = pathlib.Path(EXPLICIT_INST_PATH)
     curry_lifespan = mock.Mock(spec_set=())
     app_with_lifespan = mock.Mock(spec_set=())
-    app_with_cors = mock.Mock(spec_set=())
-    app_with_session = mock.Mock(spec_set=())
+    compose_middleware_stack = mock.Mock(spec_set=())
+    default_middleware_stack = mock.Mock(spec_set=())
 
-    found = main.create_app(
-        installation_path=installation_w_session_token,
-        no_auth_mode=w_no_auth_mode,
-        curry_lifespan=curry_lifespan,
-        app_with_lifespan=app_with_lifespan,
-        app_with_cors=app_with_cors,
-        app_with_session=app_with_session,
-        **kwargs,
-    )
+    with mock.patch.object(
+        main.config_installation,
+        "load_installation",
+        return_value=loaded_installation,
+    ) as load_installation:
+        found = main.create_app(
+            installation_path=i_path,
+            no_auth_mode=w_no_auth_mode,
+            curry_lifespan=curry_lifespan,
+            app_with_lifespan=app_with_lifespan,
+            compose_middleware_stack=compose_middleware_stack,
+            default_middleware_stack=default_middleware_stack,
+            **kwargs,
+        )
 
-    assert found is app_with_session.return_value
-    app_with_session.assert_called_once_with(
-        app_with_cors.return_value,
-        TOKEN,
-        https_only=exp_session_https_only,
-    )
-    app_with_cors.assert_called_once_with(
+    assert found is compose_middleware_stack.return_value
+    load_installation.assert_called_once_with(i_path)
+
+    if w_configured_stack:
+        exp_stack = loaded_installation.middleware_stack
+        default_middleware_stack.assert_not_called()
+    else:
+        exp_stack = default_middleware_stack.return_value
+        default_middleware_stack.assert_called_once_with()
+
+    compose_middleware_stack.assert_called_once_with(
         app_with_lifespan.return_value,
+        loaded_installation,
+        exp_stack,
     )
-    app_with_lifespan.assert_called_once_with(
-        curry_lifespan.return_value,
-    )
+    app_with_lifespan.assert_called_once_with(curry_lifespan.return_value)
     curry_lifespan.assert_called_once_with(
-        installation_path=installation_w_session_token,
+        installation_path=i_path,
         no_auth_mode=w_no_auth_mode,
         log_config_file=w_log_config_file,
     )
 
 
-@pytest.mark.parametrize("w_session_https_only", [None, False])
+@pytest.mark.parametrize("w_configured_stack", [False, True])
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 def test_create_app_wo_explicit_overrides(
-    installation_w_session_token,
     w_no_auth_mode,
     w_log_config_file,
-    w_session_https_only,
+    w_configured_stack,
 ):
     kwargs = {}
 
     if w_log_config_file is not None:
         kwargs["log_config_file"] = w_log_config_file
 
-    if w_session_https_only is not None:
-        kwargs["session_https_only"] = w_session_https_only
-        exp_session_https_only = w_session_https_only
-    else:
-        exp_session_https_only = True
-
+    loaded_installation = _loaded_installation(w_configured_stack)
+    i_path = pathlib.Path(EXPLICIT_INST_PATH)
     curry_lifespan = mock.Mock(spec_set=())
     app_with_lifespan = mock.Mock(spec_set=())
-    app_with_cors = mock.Mock(spec_set=())
-    app_with_session = mock.Mock(spec_set=())
+    compose_middleware_stack = mock.Mock(spec_set=())
+    default_middleware_stack = mock.Mock(spec_set=())
 
-    with mock.patch.multiple(
-        "soliplex.main",
-        curry_lifespan=curry_lifespan,
-        app_with_lifespan=app_with_lifespan,
-        app_with_cors=app_with_cors,
-        app_with_session=app_with_session,
+    with (
+        mock.patch.multiple(
+            "soliplex.main",
+            curry_lifespan=curry_lifespan,
+            app_with_lifespan=app_with_lifespan,
+            default_middleware_stack=default_middleware_stack,
+        ),
+        mock.patch.object(
+            main.config_middleware,
+            "compose_middleware_stack",
+            compose_middleware_stack,
+        ),
+        mock.patch.object(
+            main.config_installation,
+            "load_installation",
+            return_value=loaded_installation,
+        ) as load_installation,
     ):
         found = main.create_app(
-            installation_path=installation_w_session_token,
+            installation_path=i_path,
             no_auth_mode=w_no_auth_mode,
             **kwargs,
         )
 
-    assert found is app_with_session.return_value
+    assert found is compose_middleware_stack.return_value
+    load_installation.assert_called_once_with(i_path)
 
-    app_with_session.assert_called_once_with(
-        app_with_cors.return_value,
-        TOKEN,
-        https_only=exp_session_https_only,
-    )
-    app_with_cors.assert_called_once_with(
+    if w_configured_stack:
+        exp_stack = loaded_installation.middleware_stack
+        default_middleware_stack.assert_not_called()
+    else:
+        exp_stack = default_middleware_stack.return_value
+        default_middleware_stack.assert_called_once_with()
+
+    compose_middleware_stack.assert_called_once_with(
         app_with_lifespan.return_value,
+        loaded_installation,
+        exp_stack,
     )
-    app_with_lifespan.assert_called_once_with(
-        curry_lifespan.return_value,
-    )
+    app_with_lifespan.assert_called_once_with(curry_lifespan.return_value)
     curry_lifespan.assert_called_once_with(
-        installation_path=installation_w_session_token,
+        installation_path=i_path,
         no_auth_mode=w_no_auth_mode,
         log_config_file=w_log_config_file,
     )
 
 
-@pytest.mark.parametrize("w_insecure_cookie", [False, True])
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 @mock.patch("soliplex.main.create_app")
@@ -261,7 +282,6 @@ def test_create_app_from_environment(
     temp_dir,
     w_no_auth_mode,
     w_log_config_file,
-    w_insecure_cookie,
 ):
     i_path = temp_dir / "installation.yaml"
 
@@ -273,17 +293,12 @@ def test_create_app_from_environment(
     if w_log_config_file:
         env_patch["_SOLIPLEX_LOG_CONFIG_FILE"] = w_log_config_file
 
-    if w_insecure_cookie:
-        env_patch["_SOLIPLEX_INSECURE_SESSION_COOKIE"] = "Y"
-
     with mock.patch.dict("os.environ", clear=True, **env_patch):
         found = main.create_app_from_environment()
 
     assert found is create_app.return_value
-
     create_app.assert_called_once_with(
         installation_path=i_path,
         no_auth_mode=w_no_auth_mode,
         log_config_file=w_log_config_file,
-        session_https_only=not w_insecure_cookie,
     )
