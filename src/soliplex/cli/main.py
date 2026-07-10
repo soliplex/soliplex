@@ -12,6 +12,7 @@ import yaml
 from soliplex import secrets
 from soliplex import util
 from soliplex.cli import admin_users
+from soliplex.cli import ask
 from soliplex.cli import audit
 from soliplex.cli import cli_util
 from soliplex.cli import ollama
@@ -81,6 +82,7 @@ _hidden_alias("add-admin-user", admin_users.add_admin_user)
 _hidden_alias("show-room-authz", room_authz.show_room_authz)
 
 the_cli.add_typer(serve.app)
+the_cli.add_typer(ask.app)
 the_cli.add_typer(audit.app)
 the_cli.add_typer(admin_users.app)
 the_cli.add_typer(room_authz.app)

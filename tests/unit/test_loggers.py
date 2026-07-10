@@ -926,7 +926,7 @@ def test_room_agent_access(audit_records):
     )
 
 
-def test_room_agent_access_failed(audit_records):
+def test_room_agent_run_finished(audit_records):
     wrapper = loggers.RoomAccessAuditLog(
         claims=CLAIMS,
         room_id="r1",
@@ -934,11 +934,36 @@ def test_room_agent_access_failed(audit_records):
         run_id="u1",
     )
 
-    wrapper.agent_access_failed("boom")
+    wrapper.run_finished()
 
     _assert_audit_record(
         audit_records[-1],
-        message=loggers.AUDIT_ROOM_AGENT_ACCESS,
+        message=loggers.AUDIT_ROOM_AGENT_RUN,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "r1",
+            "thread_id": "t1",
+            "run_id": "u1",
+        },
+    )
+
+
+def test_room_agent_run_failed(audit_records):
+    wrapper = loggers.RoomAccessAuditLog(
+        claims=CLAIMS,
+        room_id="r1",
+        thread_id="t1",
+        run_id="u1",
+    )
+
+    wrapper.run_failed("boom")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_AGENT_RUN,
         levelno=logging.ERROR,
         outcome=loggers.AUDIT_OUTCOME_ERROR,
         scope=SCOPE_ROOM_ACCESS,

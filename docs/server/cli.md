@@ -129,6 +129,136 @@ soliplex-cli admin-users add example/installation.yaml alice@example.com
 soliplex-cli serve example/installation.yaml
 ```
 
+## `ask` Command
+
+Send a single prompt to a room's agent, print the response, and exit — a
+non-interactive, in-process counterpart to chatting with a room in the TUI
+or web client. It loads the installation, builds the room's agent exactly
+as the server would, runs one turn, and reports the result. This makes a
+room's configured agent scriptable: capture stdout, branch on the exit
+code, or parse the `--json` object.
+
+```bash
+soliplex-cli ask [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID PROMPT
+```
+
+The agent runs with per-room ACL **enforcement** skipped, so any configured
+room can be queried without seeding an admin or ACL entry. Skipping
+enforcement does not skip **auditing**: each invocation records a
+`room-access` audit event, and any RAG retrievals the agent performs are
+recorded too — the same audit trail the web/MCP paths emit, and gated by
+the same `--cli-log-config` option the [`audit`](#audit) and
+[`admin-users`](#admin-users) commands use (see
+[Auditing](#auditing) below). The turn is also persisted to the
+installation's thread-persistence database (thread, run, and events), so a
+follow-up turn can build on it.
+
+### Positional Arguments
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+- `ROOM_ID` — the id of the room whose agent should answer (as listed by
+  [`audit rooms`](#audit-rooms)).
+- `PROMPT` — the user prompt to send. Quote it so the shell passes it as a
+  single argument.
+
+### Options
+
+- `--json` — emit a single JSON object on stdout instead of the plain
+  response text. The object carries the response plus correlation
+  metadata:
+
+  ```json
+  {
+    "room_id": "haiku",
+    "thread_id": "0f3c…",
+    "prompt": "what language is the frontend written in?",
+    "response": "Dart (Flutter).",
+    "usage": {"input_tokens": 812, "output_tokens": 6}
+  }
+  ```
+
+  `thread_id` is the id of the persisted thread created for the turn.
+  `usage` reflects the provider's reported token counts for the run (an
+  empty object when the agent contacted no model).
+- `--cli-log-config PATH` — path to a Python logging-config YAML that
+  enables CLI audit logging (also read from `SOLIPLEX_CLI_LOG_CONFIG`);
+  without it the audit records are suppressed so they don't intermingle
+  with the command's output. See [Auditing](#auditing).
+
+### Output
+
+On success the plain-text response is written to stdout (via plain
+`print(...)`, undecorated, so it pipes cleanly). On failure a diagnostic
+is written to **stderr** — a human `Error: <message>` line, or a
+`{"error": "<message>"}` object under `--json` — leaving stdout empty.
+
+### Exit Status
+
+- `0` — the agent produced a response.
+- `1` — the room id is not configured, or the agent run raised (e.g. a
+  provider error, or a room whose agent deliberately fails on a given
+  prompt).
+
+Note that a misconfigured installation (for instance an unresolved
+required environment variable) surfaces as the config-load error common
+to all `soliplex-cli` commands, before `ask`'s own error handling.
+
+### Auditing
+
+`ask` skips per-room ACL *enforcement* but remains fully *auditable*, on
+the same audit trail (the `soliplex-audit` logger) that the web/MCP paths
+and the other privileged CLI commands use. Three kinds of record are
+emitted per invocation:
+
+- a `room agent access` event recording that the room's agent was invoked,
+  logged **before** the run begins — so an aborted or crashed run still
+  leaves a trace that access was made;
+- a `rag-access` event for each knowledge-base retrieval the agent makes
+  while answering, whether through a room RAG tool or a skill;
+- a `room agent run` event recording the outcome **after** the run:
+  `outcome=success` when it finished, or `outcome=error` (with the failure
+  `reason`) when it errored or was interrupted.
+
+Every record carries the acting operator's claims (`source: "cli"` and
+`actor`, taken from `SOLIPLEX_AUDIT_ACTOR` or the OS login name) plus the
+`room_id` / `thread_id` / `run_id`, so a reviewer can tie a CLI query to
+the room and data it touched.
+
+As with the other commands, the records are **suppressed unless**
+`--cli-log-config` (or `SOLIPLEX_CLI_LOG_CONFIG`) points at a Python
+logging-config YAML that routes the `soliplex-audit` logger somewhere
+durable. See
+[CLI Audit Logging](../config/logging.md#cli-audit-logging).
+
+### Examples
+
+Ask a room a question and print the answer:
+
+```bash
+soliplex-cli ask example/installation.yaml haiku \
+  "what language is the frontend written in?"
+```
+
+Script against the exit code:
+
+```bash
+if answer=$(soliplex-cli ask example/installation.yaml haiku "ping"); then
+  echo "agent said: $answer"
+else
+  echo "ask failed" >&2
+fi
+```
+
+Capture structured output and extract the response with `jq`:
+
+```bash
+soliplex-cli ask example/installation.yaml haiku "ping" --json \
+  | jq -r '.response'
+```
+
 ## `audit`
 
 The `audit` group bundles read-only validation and listing commands —
