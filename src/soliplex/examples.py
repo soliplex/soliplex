@@ -14,6 +14,7 @@ from pydantic_ai import output as ai_output
 from pydantic_ai import result as ai_result
 from pydantic_ai import run as ai_run
 from pydantic_ai import tools as ai_tools
+from pydantic_ai import usage as ai_usage
 from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
 
@@ -33,7 +34,7 @@ def joker_agent_factory(
     tool_configs: config_tools.ToolConfigMap = None,
     mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = None,
     skill_toolset_config: agents.SkillToolsetConfig | None = None,
-):  # pragma NO COVER
+):
     installation_config = agent_config._installation_config
 
     provider_base_url = installation_config.get_environment("OLLAMA_BASE_URL")
@@ -61,7 +62,7 @@ def joker_agent_factory(
     @joke_selection_agent.tool
     async def joke_factory(
         ctx: pydantic_ai.RunContext[None], count: int, topic: str = None
-    ) -> list[str]:
+    ) -> list[str]:  # pragma NO COVER
         if topic is None:
             prompt = f"Please generate {count} jokes."
         else:
@@ -107,6 +108,21 @@ async def faux_tool(
 
 
 @dataclasses.dataclass
+class _FauxRunResult:
+    """Minimal stand-in for a pydantic-ai ``AgentRunResult``.
+
+    Exposes just the surface a non-streaming caller reads: ``output`` (the
+    final text) and ``usage()`` (a zeroed ``RunUsage``, since the faux agent
+    never contacts a model).
+    """
+
+    output: str
+
+    def usage(self) -> ai_usage.RunUsage:
+        return ai_usage.RunUsage()
+
+
+@dataclasses.dataclass
 class FauxAgent:
     agent_config: config_agents.FactoryAgentConfig
     tool_configs: config_tools.ToolConfigMap = None
@@ -114,6 +130,37 @@ class FauxAgent:
     skill_toolset_config: agents.SkillToolsetConfig | None = None
 
     output_type = None
+
+    async def run(
+        self,
+        user_prompt: str | None = None,
+        *,
+        message_history: MessageHistory | None = None,
+        deps: ai_tools.AgentDepsT = None,
+        **kwargs,
+    ) -> _FauxRunResult:
+        """Non-streaming counterpart to ``run_stream_events``.
+
+        Mirrors the streamed behaviour without any model or tool calls: the
+        prompt ``"fail"`` raises (so callers can exercise the error path),
+        anything else resolves to the canned ``"I don't know!"`` answer.
+        """
+        prompt = user_prompt
+        if prompt is None and message_history:
+            last_message = message_history[-1]
+            if isinstance(last_message, ai_messages.ModelRequest):
+                ups = [
+                    part
+                    for part in last_message.parts
+                    if isinstance(part, ai_messages.UserPromptPart)
+                ]
+                if ups:
+                    prompt = ups[-1].content
+
+        if prompt == "fail":
+            raise ValueError("failing on request")  # noqa: TRY003
+
+        return _FauxRunResult(output="I don't know!")
 
     async def _run_stream_events(
         self,
@@ -257,7 +304,7 @@ def faux_agent_factory(
 def multi_arg_template(
     name: str,
     description: str | None,
-):
+):  # pragma NO COVER
     """Return a markdown document with the supplied arguments"""
     if description is None:
         return f"""
