@@ -169,18 +169,26 @@ def test_create_app_with_explicit_overrides(
     compose_middleware_stack = mock.Mock(spec_set=())
     default_middleware_stack = mock.Mock(spec_set=())
 
-    with mock.patch.object(
-        main.config_installation,
-        "load_installation",
-        return_value=loaded_installation,
-    ) as load_installation:
+    with (
+        mock.patch.object(
+            main.config_middleware,
+            "compose_middleware_stack",
+            compose_middleware_stack,
+        ),
+        mock.patch.object(
+            main, "default_middleware_stack", default_middleware_stack
+        ),
+        mock.patch.object(
+            main.config_installation,
+            "load_installation",
+            return_value=loaded_installation,
+        ) as load_installation,
+    ):
         found = main.create_app(
             installation_path=i_path,
             no_auth_mode=w_no_auth_mode,
             curry_lifespan=curry_lifespan,
             app_with_lifespan=app_with_lifespan,
-            compose_middleware_stack=compose_middleware_stack,
-            default_middleware_stack=default_middleware_stack,
             **kwargs,
         )
 

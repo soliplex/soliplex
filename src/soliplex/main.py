@@ -96,13 +96,13 @@ def create_app(
     log_config_file: str = None,
     curry_lifespan=None,
     app_with_lifespan=None,
-    compose_middleware_stack=None,
-    default_middleware_stack=None,
 ):
     """Construct the Soliplex FastAPI application
 
     Callers may override any of the component functions in this module
-    via parameters.
+    via parameters.  The middleware stack is configured via the
+    installation's 'middleware_stack' field (see 'default_middleware_stack'
+    for the built-in fallback), so it has no override parameter.
     """
     globs = globals()
 
@@ -114,12 +114,6 @@ def create_app(
 
     curry_lifespan = curry_lifespan or globs["curry_lifespan"]
     app_with_lifespan = app_with_lifespan or globs["app_with_lifespan"]
-    compose_middleware_stack = (
-        compose_middleware_stack or config_middleware.compose_middleware_stack
-    )
-    default_middleware_stack = (
-        default_middleware_stack or globs["default_middleware_stack"]
-    )
 
     curried_lifespan = curry_lifespan(
         installation_path=installation_path,
@@ -131,7 +125,9 @@ def create_app(
     to_compose = (
         tmp_installation.middleware_stack or default_middleware_stack()
     )
-    app = compose_middleware_stack(app, tmp_installation, to_compose)
+    app = config_middleware.compose_middleware_stack(
+        app, tmp_installation, to_compose
+    )
 
     return app
 
