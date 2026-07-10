@@ -160,5 +160,5 @@ def shell(
 
 the_cli.add_typer(misc_app)
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma NO COVER
     the_cli()
