@@ -1116,7 +1116,7 @@ wheels = [
 
 [[package]]
 name = "haiku-rag-slim"
-version = "0.65.0"
+version = "0.65.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docling-core" },
@@ -1139,9 +1139,9 @@ dependencies = [
     { name = "watchfiles" },
     { name = "zstandard", marker = "python_full_version < '3.14'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e5/cb/f0f215ad5b6cf4dd8d895b980e93fcd02c6350e486c4d8d588049ced7154/haiku_rag_slim-0.65.0.tar.gz", hash = "sha256:7d5aa43753b0a370913d34524a9be421da6ab44cc1c88d2b6e503037a3db73ed", size = 231732, upload-time = "2026-07-09T13:14:19.907Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a9/69/b62507bca4c5eeec0589b134c874810b1509cd3c9cf52939eb59c191eb8b/haiku_rag_slim-0.65.1.tar.gz", hash = "sha256:f1fb858c563eeb4d001b12b606f20b9d705ca6306df368eb5137ed857d7e9d12", size = 232288, upload-time = "2026-07-10T12:18:20.731Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/d0/2f308e6b61e5e56dcec7a9a4ab4329bc7cd5dbf4965d2426d091d5078516/haiku_rag_slim-0.65.0-py3-none-any.whl", hash = "sha256:688070b3c6f6d1d01ead0cb28cf0d7c78c4afac3e488671eec8c5f2bf4caa078", size = 310800, upload-time = "2026-07-09T13:14:18.629Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/db/18e3780c29b99e0fb5ed05562f002c74c5bfdd826a368b2f59133e1f8e22/haiku_rag_slim-0.65.1-py3-none-any.whl", hash = "sha256:1772ccdfdca7c2eca5453e522cf1f18b44ba57ac087fd6b323a2d27e601b6e53", size = 311316, upload-time = "2026-07-10T12:18:19.312Z" },
 ]
 
 [[package]]
@@ -3323,8 +3323,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
