@@ -425,6 +425,50 @@ def test_roomconfig_skill_configs_w_hit(installation_config):
     assert found == {test_skills.SKILL_NAME: skill_config}
 
 
+def test_roomconfig_rag_db_paths_bare(installation_config):
+    installation_config.skill_configs = {}
+
+    room_config_kw = BARE_ROOM_CONFIG_KW.copy()
+    room_config = config_rooms.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    room_config.skills = None
+
+    found = room_config.rag_db_paths
+
+    assert found == {}
+
+
+def test_roomconfig_rag_db_paths_w_hit(temp_dir, installation_config):
+    OVERRIDE_PATH = temp_dir / "rag.lancedb"
+    OVERRIDE_PATH.mkdir()
+
+    class Test_HRSkill(config_skills._HR_SkillConfigBase):
+        name: str = "test-skill"
+
+    skill_config = Test_HRSkill(
+        rag_lancedb_override_path=OVERRIDE_PATH,
+    )
+    installation_config.skill_configs = {
+        test_skills.SKILL_NAME: skill_config,
+        "other_skill": object(),
+    }
+
+    room_config_kw = FULL_ROOM_CONFIG_KW.copy()
+    room_config_kw["skills"].entrypoint_skills = []
+    room_config_kw["skills"]._installation_config = installation_config
+    room_config = config_rooms.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    found = room_config.rag_db_paths
+
+    assert found == {"test-skill": str(OVERRIDE_PATH)}
+
+
 @pytest.fixture
 def installation_config_w_skill(installation_config):
     skill_config = mock.create_autospec(

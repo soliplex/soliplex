@@ -1458,18 +1458,6 @@ def test_find_skill_toolset_returns_skill_toolset():
     assert agui_views.find_skill_toolset(agent) is skill_ts
 
 
-def test__rag_db_paths_without_skills():
-    room_config = mock.Mock()
-    room_config.skills = None
-    assert agui_views._rag_db_paths(room_config) == {}
-
-
-def test__rag_db_paths_with_skills():
-    room_config = mock.Mock()
-    room_config.skills.rag_db_paths = {"rag": "/db.lancedb"}
-    assert agui_views._rag_db_paths(room_config) == {"rag": "/db.lancedb"}
-
-
 # -- init_agent_stream -------------------------------------------------
 
 
@@ -1704,9 +1692,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert ias_kwargs["messages"] is exp_adapter.run_input.messages
         assert ias_kwargs["claims"] is THE_USER_CLAIMS
         exp_room_config = the_installation.get_room_config.return_value
-        assert (
-            ias_kwargs["rag_db_paths"] is exp_room_config.skills.rag_db_paths
-        )
+        assert ias_kwargs["rag_db_paths"] is exp_room_config.rag_db_paths
 
         # Verify run_stream_kwargs contains deps, conversation_id,
         # and on_complete

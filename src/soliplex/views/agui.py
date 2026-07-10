@@ -773,13 +773,6 @@ def find_skill_toolset(
     return None
 
 
-def _rag_db_paths(room_config: config_rooms.RoomConfig) -> dict[str, str]:
-    skills = room_config.skills
-    if skills is None:
-        return {}
-    return skills.rag_db_paths
-
-
 async def init_agent_stream(
     *,
     skill_toolset: hs_agent.SkillToolset | None,
@@ -957,7 +950,7 @@ async def post_room_agui_thread_id_run_id(
         the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
-    rag_db_paths = _rag_db_paths(room_config)
+    rag_db_paths = room_config.rag_db_paths
 
     # We use an unbounded queue here, so that the 'drive_llm_stream'
     # task completes even when the SSE stream gets cancelled due to a
