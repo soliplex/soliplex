@@ -14,6 +14,7 @@ from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+from soliplex import agents
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
@@ -514,42 +515,6 @@ async def delete_room_agui_thread_id(
     )
 
 
-async def capture_usage_after_stream(
-    result,
-    *,
-    sqla_engine,
-    user_name: str,
-    room_id: str,
-    thread_id: str,
-    run_id: str,
-):
-    """Save the run usage to the database.
-
-    This function needs to build its own session, because the one bound
-    to the request lifetime in the `the_threads` dependency might have
-    been closed (e.g., with an early connection reset).
-    """
-    usage = getattr(result, "usage", None)
-
-    if usage is not None:
-        async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
-            the_threads = agui_persistence.ThreadStorage(session)
-
-            # This helper owns the session, so it owns the commit: the
-            # storage method no longer commits on its own.
-            async with session.begin():
-                await the_threads.save_run_usage(
-                    user_name=user_name,
-                    room_id=room_id,
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    input_tokens=usage.input_tokens,
-                    output_tokens=usage.output_tokens,
-                    requests=usage.requests,
-                    tool_calls=usage.tool_calls,
-                )
-
-
 async def save_thread_run_events(
     sqla_engine,
     event_list,
@@ -572,64 +537,6 @@ async def save_thread_run_events(
         async with session.begin():
             await the_threads.save_run_events(
                 events=event_list,
-                user_name=user_name,
-                room_id=room_id,
-                thread_id=thread_id,
-                run_id=run_id,
-            )
-
-
-async def save_single_event(
-    sqla_engine,
-    user_name: str,
-    room_id: str,
-    thread_id: str,
-    run_id: str,
-    event,
-):
-    """Save a single event to the database.
-
-    This function builds its own session, because the one bound
-    to the request lifetime in the `the_threads` dependency might
-    have been closed (e.g., with an early connection reset).
-    """
-    async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
-        the_threads = agui_persistence.ThreadStorage(session)
-
-        # This helper owns the session, so it owns the commit: the
-        # storage method no longer commits on its own.  Committing per
-        # event is what lets a reconnecting client's poll observe them
-        # incrementally.
-        async with session.begin():
-            await the_threads.save_single_event(
-                user_name=user_name,
-                room_id=room_id,
-                thread_id=thread_id,
-                run_id=run_id,
-                event=event,
-            )
-
-
-async def finish_run(
-    sqla_engine,
-    user_name: str,
-    room_id: str,
-    thread_id: str,
-    run_id: str,
-):
-    """Mark a run as finished in the database.
-
-    This function builds its own session, because the one bound
-    to the request lifetime in the `the_threads` dependency might
-    have been closed (e.g., with an early connection reset).
-    """
-    async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
-        the_threads = agui_persistence.ThreadStorage(session)
-
-        # This helper owns the session, so it owns the commit: the
-        # storage method no longer commits on its own.
-        async with session.begin():
-            await the_threads.finish_run(
                 user_name=user_name,
                 room_id=room_id,
                 thread_id=thread_id,
@@ -683,7 +590,7 @@ async def drive_llm_stream(
                 auditor.handle(event)
 
                 try:
-                    await save_single_event(
+                    await agui_persistence.save_single_event(
                         sqla_engine,
                         user_name=user_name,
                         room_id=room_id,
@@ -703,7 +610,7 @@ async def drive_llm_stream(
             await event_queue.put(None)  # sentinel
 
             try:
-                await finish_run(
+                await agui_persistence.finish_run(
                     sqla_engine,
                     user_name=user_name,
                     room_id=room_id,
@@ -762,22 +669,6 @@ async def stream_llm_events(event_queue: asyncio.Queue):
         if event is None:
             break
         yield event
-
-
-def find_skill_toolset(
-    agent: pydantic_ai.Agent,
-) -> hs_agent.SkillToolset | None:
-    for toolset in getattr(agent, "toolsets", ()):
-        if isinstance(toolset, hs_agent.SkillToolset):
-            return toolset
-    return None
-
-
-def _rag_db_paths(room_config: config_rooms.RoomConfig) -> dict[str, str]:
-    skills = room_config.skills
-    if skills is None:
-        return {}
-    return skills.rag_db_paths
 
 
 async def init_agent_stream(
@@ -949,7 +840,7 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
-    skill_toolset = find_skill_toolset(agent)
+    skill_toolset = agents.find_skill_toolset(agent)
 
     room_config = await the_installation.get_room_config(
         room_id=room_id,
@@ -957,7 +848,7 @@ async def post_room_agui_thread_id_run_id(
         the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
-    rag_db_paths = _rag_db_paths(room_config)
+    rag_db_paths = room_config.rag_db_paths
 
     # We use an unbounded queue here, so that the 'drive_llm_stream'
     # task completes even when the SSE stream gets cancelled due to a
@@ -978,7 +869,7 @@ async def post_room_agui_thread_id_run_id(
                 deps=agent_deps,
                 conversation_id=thread_id,
                 on_complete=functools.partial(
-                    capture_usage_after_stream,
+                    agui_persistence.capture_usage_after_stream,
                     sqla_engine=request.state.threads_engine,
                     user_name=user_name,
                     room_id=room_id,

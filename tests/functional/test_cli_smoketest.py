@@ -123,6 +123,22 @@ def _audit(config_path, subcommand, *rest):
     return _run(config_path, "audit", subcommand, *rest)
 
 
+def _ask(config_path, *rest):
+    """Run the 'ask' command (no subcommand) via the real CLI binary."""
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "soliplex.cli.main",
+            "ask",
+            str(config_path),
+            *rest,
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+
 def _listed(result):
     """Parse the JSON 'admin_users' dump from the last line of stdout."""
     last = [line for line in result.stdout.splitlines() if line.strip()][-1]
@@ -316,3 +332,28 @@ def test_audit_smoketest(scratch_installation, authz_db_path):
     assert audited_rooms.returncode == 1, audited_rooms.stdout
     assert STALE_ACL_MARKER in audited_rooms.stdout
     assert BOB not in audited_rooms.stdout
+
+
+def test_ask_smoketest(scratch_installation):
+    # Drive the 'ask' command end-to-end against the faux room (no LLM):
+    # plain + JSON success on stdout, a prompt that makes the agent raise
+    # (non-zero exit, diagnostic on stderr), and an unknown room. A single
+    # multi-step smoke sequence, not a set of one-act unit tests.
+    plain = _ask(scratch_installation, ROOM, "what is up?")
+    assert plain.returncode == 0, plain.stderr
+    assert "I don't know!" in plain.stdout
+
+    as_json = _ask(scratch_installation, ROOM, "what is up?", "--json")
+    assert as_json.returncode == 0, as_json.stderr
+    payload = json.loads(as_json.stdout)
+    assert payload["room_id"] == ROOM
+    assert payload["response"] == "I don't know!"
+    assert payload["thread_id"]
+
+    failed = _ask(scratch_installation, ROOM, "fail")
+    assert failed.returncode == 1
+    assert "failing on request" in failed.stderr
+
+    unknown = _ask(scratch_installation, "no-such-room", "hi")
+    assert unknown.returncode == 1
+    assert "No room configured" in unknown.stderr

@@ -150,6 +150,15 @@ AUDIT_SANDBOX_ACTION_RUN_PYTHON = "run-python"
 # material to a room, changing what the room's agent and members can access.
 AUDIT_ROOM_UPLOAD_ADDED = "room upload added"
 
+# room-access audit events: a room's agent is invoked outside the normal
+# authenticated web/MCP paths -- notably the 'soliplex-cli ask' command,
+# which skips per-room ACL enforcement (trusted operator) but must remain
+# auditable, just like the 'admin-users' / 'room-authz' CLI commands. The
+# 'access' event records the attempt *before* the run begins (so a crash
+# mid-run still leaves a trace); the 'run' event records the outcome after.
+AUDIT_ROOM_AGENT_ACCESS = "room agent access"
+AUDIT_ROOM_AGENT_RUN = "room agent run"
+
 
 class _StructuredFieldsAdapter(logging.LoggerAdapter):
     """LoggerAdapter that folds caller keyword fields into 'extra'."""
@@ -276,6 +285,7 @@ class AuditLogScopes(enum.StrEnum):
     RAG_ACCESS = "rag-access"
     SANDBOX_EXEC = "sandbox-exec"
     ROOM_UPLOAD = "room-upload"
+    ROOM_ACCESS = "room-access"
 
 
 class AuditLogWrapper(_StructuredFieldsAdapter):
@@ -638,3 +648,33 @@ class RoomUploadAuditLog(AuditLogWrapper):
             room_id=room_id,
             upload_filename=filename,
         )
+
+
+class RoomAccessAuditLog(AuditLogWrapper):
+    """Record invocations of a room's agent outside the web/MCP paths.
+
+    The 'soliplex-cli ask' command runs a room's agent with per-room ACL
+    enforcement skipped (a trusted operator holding the installation
+    config); this records the access so it stays auditable like the other
+    privileged CLI operations. The actor 'claims', 'room_id', 'thread_id',
+    and 'run_id' are bound at construction.
+
+    'agent_access' is emitted *before* the run begins; 'run_finished' /
+    'run_failed' record the outcome *after* it completes, so an aborted or
+    crashed run still leaves the access record behind.
+    """
+
+    def __init__(self, claims: dict[str, typing.Any], **extra):
+        extra_with_claims = {"claims": claims} | extra
+        super().__init__(scope=AuditLogScopes.ROOM_ACCESS, **extra_with_claims)
+
+    # access gate (before the run): the operator invoked the room's agent
+    def agent_access(self):
+        self._succeeded(AUDIT_ROOM_AGENT_ACCESS)
+
+    # run outcome (after the run)
+    def run_finished(self):
+        self._succeeded(AUDIT_ROOM_AGENT_RUN)
+
+    def run_failed(self, reason: str):
+        self._failed(AUDIT_ROOM_AGENT_RUN, reason=reason)

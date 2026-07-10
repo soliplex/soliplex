@@ -150,3 +150,12 @@ def get_agent_from_configs(
             mcp_client_toolset_configs=mcp_client_toolset_configs,
             skill_toolset_config=skill_toolset_config,
         )
+
+
+def find_skill_toolset(
+    agent: pydantic_ai.Agent,
+) -> hs_agent.SkillToolset | None:
+    for toolset in getattr(agent, "toolsets", ()):
+        if isinstance(toolset, hs_agent.SkillToolset):
+            return toolset
+    return None

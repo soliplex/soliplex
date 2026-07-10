@@ -166,6 +166,11 @@ class RoomConfig:
         return self.skills.skill_configs if self.skills is not None else {}
 
     @property
+    def rag_db_paths(self) -> dict[str, str]:
+        """Map each RAG-bearing skill's name to its LanceDB path."""
+        return self.skills.rag_db_paths if self.skills is not None else {}
+
+    @property
     def agui_feature_names(self) -> tuple[str]:
         agent_features = set(self.agent_config.agui_feature_names)
         room_features = set(self._agui_feature_names)

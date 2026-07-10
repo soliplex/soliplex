@@ -16,6 +16,7 @@ SCOPE_INSTALLATION_CONFIG = loggers.AuditLogScopes.INSTALLATION_CONFIG
 SCOPE_RAG_ACCESS = loggers.AuditLogScopes.RAG_ACCESS
 SCOPE_SANDBOX_EXEC = loggers.AuditLogScopes.SANDBOX_EXEC
 SCOPE_ROOM_UPLOAD = loggers.AuditLogScopes.ROOM_UPLOAD
+SCOPE_ROOM_ACCESS = loggers.AuditLogScopes.ROOM_ACCESS
 
 
 @pytest.fixture
@@ -883,5 +884,94 @@ def test_room_upload_added(audit_records):
             "claims": CLAIMS,
             "room_id": "test-room",
             "upload_filename": "model.md",
+        },
+    )
+
+
+# --- RoomAccessAuditLog --------------------------------------------------
+
+
+@pytest.mark.parametrize("w_claims", [{}, CLAIMS])
+def test_roomaccessauditlog_ctor(w_claims):
+    found = loggers.RoomAccessAuditLog(claims=w_claims)
+
+    assert found.name == loggers.SOLIPLEX_AUDIT_LOGGER_NAME
+    scope = found.extra[loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA]
+    assert scope == SCOPE_ROOM_ACCESS
+    assert found.extra["claims"] == w_claims
+
+
+def test_room_agent_access(audit_records):
+    wrapper = loggers.RoomAccessAuditLog(
+        claims=CLAIMS,
+        room_id="r1",
+        thread_id="t1",
+        run_id="u1",
+    )
+
+    wrapper.agent_access()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_AGENT_ACCESS,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "r1",
+            "thread_id": "t1",
+            "run_id": "u1",
+        },
+    )
+
+
+def test_room_agent_run_finished(audit_records):
+    wrapper = loggers.RoomAccessAuditLog(
+        claims=CLAIMS,
+        room_id="r1",
+        thread_id="t1",
+        run_id="u1",
+    )
+
+    wrapper.run_finished()
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_AGENT_RUN,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "r1",
+            "thread_id": "t1",
+            "run_id": "u1",
+        },
+    )
+
+
+def test_room_agent_run_failed(audit_records):
+    wrapper = loggers.RoomAccessAuditLog(
+        claims=CLAIMS,
+        room_id="r1",
+        thread_id="t1",
+        run_id="u1",
+    )
+
+    wrapper.run_failed("boom")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_AGENT_RUN,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_ROOM_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "r1",
+            "thread_id": "t1",
+            "run_id": "u1",
+            "reason": "boom",
         },
     )

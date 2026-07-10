@@ -92,8 +92,6 @@ markers = [
 [tool.coverage.run]
 omit = [
     "src/soliplex/cli/__init__.py",
-
-    "src/soliplex/examples.py",
     "src/soliplex/tui.py",
 ]
 
