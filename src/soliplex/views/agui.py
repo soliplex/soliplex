@@ -14,6 +14,7 @@ from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+from soliplex import agents
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
@@ -764,15 +765,6 @@ async def stream_llm_events(event_queue: asyncio.Queue):
         yield event
 
 
-def find_skill_toolset(
-    agent: pydantic_ai.Agent,
-) -> hs_agent.SkillToolset | None:
-    for toolset in getattr(agent, "toolsets", ()):
-        if isinstance(toolset, hs_agent.SkillToolset):
-            return toolset
-    return None
-
-
 async def init_agent_stream(
     *,
     skill_toolset: hs_agent.SkillToolset | None,
@@ -942,7 +934,7 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
-    skill_toolset = find_skill_toolset(agent)
+    skill_toolset = agents.find_skill_toolset(agent)
 
     room_config = await the_installation.get_room_config(
         room_id=room_id,

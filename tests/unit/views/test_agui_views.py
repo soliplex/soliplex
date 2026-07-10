@@ -1435,29 +1435,6 @@ async def test_stream_llm_events(num_events):
     assert found == expected
 
 
-# -- find_skill_toolset ------------------------------------------------
-
-
-def test_find_skill_toolset_returns_none_when_absent():
-    agent = mock.MagicMock()
-    agent.toolsets = [mock.MagicMock(), mock.MagicMock()]
-    assert agui_views.find_skill_toolset(agent) is None
-
-
-def test_find_skill_toolset_returns_none_without_toolsets_attr():
-    agent = object()
-    assert agui_views.find_skill_toolset(agent) is None
-
-
-def test_find_skill_toolset_returns_skill_toolset():
-    from haiku.skills import agent as hs_agent
-
-    skill_ts = mock.create_autospec(hs_agent.SkillToolset)
-    agent = mock.MagicMock()
-    agent.toolsets = [mock.MagicMock(), skill_ts]
-    assert agui_views.find_skill_toolset(agent) is skill_ts
-
-
 # -- init_agent_stream -------------------------------------------------
 
 
@@ -1556,7 +1533,7 @@ async def test_init_agent_stream_with_skills(rags, ces, dls):
 @mock.patch("soliplex.views.agui.stream_llm_events")
 @mock.patch("soliplex.views.agui.init_agent_stream")
 @mock.patch("soliplex.views.agui.capture_usage_after_stream")
-@mock.patch("soliplex.views.agui.find_skill_toolset")
+@mock.patch("soliplex.agents.find_skill_toolset")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
 @mock.patch("soliplex.views.agui.logfire")

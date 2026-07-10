@@ -358,3 +358,35 @@ def test_get_agent_from_configs_w_python_kind(w_room_skills):
         mcp_client_toolset_configs=mcpcts_configs,
         **kwargs,
     )
+
+
+# -- find_skill_toolset ------------------------------------------------
+
+
+def test_find_skill_toolset_returns_none_when_absent():
+    agent = mock.MagicMock()
+    agent.toolsets = [mock.MagicMock(), mock.MagicMock()]
+
+    found = agents.find_skill_toolset(agent)
+
+    assert found is None
+
+
+def test_find_skill_toolset_returns_none_without_toolsets_attr():
+    agent = object()
+
+    found = agents.find_skill_toolset(agent)
+
+    assert found is None
+
+
+def test_find_skill_toolset_returns_skill_toolset():
+    from haiku.skills import agent as hs_agent
+
+    skill_ts = mock.create_autospec(hs_agent.SkillToolset)
+    agent = mock.MagicMock()
+    agent.toolsets = [mock.MagicMock(), skill_ts]
+
+    found = agents.find_skill_toolset(agent)
+
+    assert found is skill_ts
