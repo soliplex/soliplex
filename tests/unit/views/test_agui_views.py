@@ -16,6 +16,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex.agui import persistence as agui_persistence
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
 from soliplex.views import agui as agui_views
@@ -1004,7 +1005,7 @@ async def test_capture_usage_after_stream(
         "soliplex.views.agui.sqla_asyncio.AsyncSession",
         new=fake_async_session.cls,
     ):
-        await agui_views.capture_usage_after_stream(
+        await agui_persistence.capture_usage_after_stream(
             result,
             sqla_engine=sqla_engine,
             user_name=USER_NAME,
@@ -1080,7 +1081,7 @@ async def test_save_single_event_helper(t_storage, fake_async_session):
         "soliplex.views.agui.sqla_asyncio.AsyncSession",
         new=fake_async_session.cls,
     ):
-        await agui_views.save_single_event(
+        await agui_persistence.save_single_event(
             sqla_engine,
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
@@ -1113,7 +1114,7 @@ async def test_finish_run_helper(t_storage, fake_async_session):
         "soliplex.views.agui.sqla_asyncio.AsyncSession",
         new=fake_async_session.cls,
     ):
-        await agui_views.finish_run(
+        await agui_persistence.finish_run(
             sqla_engine,
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
@@ -1163,8 +1164,8 @@ def test_parse_last_event_id(header, expected):
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
 @pytest.mark.parametrize("w_title_config", [False, True])
 @mock.patch("soliplex.views.agui.titles.maybe_generate_title")
-@mock.patch("soliplex.views.agui.finish_run")
-@mock.patch("soliplex.views.agui.save_single_event")
+@mock.patch("soliplex.agui.persistence.finish_run")
+@mock.patch("soliplex.agui.persistence.save_single_event")
 @mock.patch("soliplex.views.agui.logfire")
 async def test_drive_llm_stream(
     logfire,
@@ -1296,8 +1297,8 @@ async def test_drive_llm_stream(
 
 @pytest.mark.asyncio
 @mock.patch("soliplex.views.agui.titles.maybe_generate_title")
-@mock.patch("soliplex.views.agui.finish_run")
-@mock.patch("soliplex.views.agui.save_single_event")
+@mock.patch("soliplex.agui.persistence.finish_run")
+@mock.patch("soliplex.agui.persistence.save_single_event")
 @mock.patch("soliplex.views.agui.logfire")
 async def test_drive_llm_stream_save_event_error(
     logfire,
@@ -1337,8 +1338,8 @@ async def test_drive_llm_stream_save_event_error(
 
 @pytest.mark.asyncio
 @mock.patch("soliplex.views.agui.titles.maybe_generate_title")
-@mock.patch("soliplex.views.agui.finish_run")
-@mock.patch("soliplex.views.agui.save_single_event")
+@mock.patch("soliplex.agui.persistence.finish_run")
+@mock.patch("soliplex.agui.persistence.save_single_event")
 @mock.patch("soliplex.views.agui.logfire")
 async def test_drive_llm_stream_audits_rag_access(logfire, sse, fr, mgt):
     """A skill tool-call / result pair emits a rag-access audit record."""
@@ -1532,7 +1533,7 @@ async def test_init_agent_stream_with_skills(rags, ces, dls):
 @mock.patch("soliplex.views.streaming.add_sse_event_ids")
 @mock.patch("soliplex.views.agui.stream_llm_events")
 @mock.patch("soliplex.views.agui.init_agent_stream")
-@mock.patch("soliplex.views.agui.capture_usage_after_stream")
+@mock.patch("soliplex.agui.persistence.capture_usage_after_stream")
 @mock.patch("soliplex.agents.find_skill_toolset")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
