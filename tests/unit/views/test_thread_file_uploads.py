@@ -73,7 +73,7 @@ def uploads_path(temp_dir):
     ],
 )
 @mock.patch("soliplex.views.agui._check_user_in_room")
-async def test_get_uploads_room_thread_only(
+async def test_get_uploads_room_id_thread_thread_id_only(
     cuir,
     uploads_path,
     w_upload_path,
@@ -85,7 +85,7 @@ async def test_get_uploads_room_thread_only(
     thread_path = thread_uploads_path / str(TEST_THREAD_ID)
     # Note: this is the name of the view function, and not the path
     #       to which it is bound.
-    ROUTE_NAME = "get_uploads_room_thread_filename"
+    ROUTE_NAME = "get_uploads_room_id_thread_thread_id_filename"
 
     def download_url(name, room_id, thread_id, filename):
         assert name == ROUTE_NAME
@@ -122,7 +122,7 @@ async def test_get_uploads_room_thread_only(
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
-        found = await thread_views.get_uploads_room_thread(
+        found = await thread_views.get_uploads_room_id_thread_thread_id(
             request=request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
@@ -178,7 +178,7 @@ async def test_get_uploads_room_thread_only(
     ],
 )
 @mock.patch("soliplex.views.agui._check_user_in_room")
-async def test_get_uploads_room_thread_filename(
+async def test_get_uploads_room_id_thread_thread_id_filename(
     cuir,
     uploads_path,
     w_upload_path,
@@ -211,8 +211,10 @@ async def test_get_uploads_room_thread_filename(
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
+    t_views = thread_views
+
     with expectation as expected:
-        found = await thread_views.get_uploads_room_thread_filename(
+        found = await t_views.get_uploads_room_id_thread_thread_id_filename(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
             filename=TEST_FILENAME,
@@ -271,7 +273,7 @@ async def test_get_uploads_room_thread_filename(
     ],
 )
 @mock.patch("soliplex.views.agui._check_user_in_room")
-async def test_post_uploads_room_thread(
+async def test_post_uploads_room_id_thread_thread_thread_id(
     cuir,
     uploads_path,
     the_threads,
@@ -307,7 +309,7 @@ async def test_post_uploads_room_thread(
     the_threads.get_thread.side_effect = tsgt_side_effect
 
     with expectation as expected:
-        response = await thread_views.post_uploads_room_thread(
+        response = await thread_views.post_uploads_room_id_thread_thread_id(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
             upload_file=upload_file,

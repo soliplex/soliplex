@@ -184,7 +184,7 @@ class TUI_REST_API:
         thread_id: str,
         file_path: pathlib.Path,
     ) -> None:
-        upload_url = f"{self.api_v1_base}/uploads/{room_id}/{thread_id}"
+        upload_url = f"{self.api_v1_base}/uploads/{room_id}/thread/{thread_id}"
 
         with file_path.open("rb") as file_stream:
             files = {
