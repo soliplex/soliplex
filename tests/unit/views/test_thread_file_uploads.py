@@ -29,9 +29,12 @@ URL_PREFIX = "http://test.example.com/api"
 no_error = contextlib.nullcontext
 
 
-def raises_httpexc(*, match, code) -> pytest.raises:
+def raises_httpexc(*, match, code, headers=None) -> pytest.raises:
     def _check(exc):
-        return exc.status_code == code
+        if headers is not None:
+            return exc.status_code == code and exc.headers == headers
+        else:
+            return exc.status_code == code
 
     return pytest.raises(fastapi.HTTPException, match=match, check=_check)
 
@@ -236,18 +239,34 @@ async def test_get_uploads_room_thread_filename(
     ],
 )
 @pytest.mark.parametrize(
-    "tsgt_side_effect, w_upload_path, expectation",
+    "w_sandbox, tsgt_side_effect, w_upload_path, expectation",
     [
-        (None, True, no_error(204)),
+        (True, None, True, no_error(204)),
         (
+            False,
+            None,
+            True,
+            raises_httpexc(
+                code=405,
+                match="Sandbox not configured",
+                headers={"Allow": "GET"},
+            ),
+        ),
+        (
+            True,
+            None,
+            False,
+            raises_httpexc(
+                code=405,
+                match="Thread uploads not configured",
+                headers={"Allow": "GET"},
+            ),
+        ),
+        (
+            True,
             agui.UnknownThread(USER_NAME, str(TEST_THREAD_ID)),
             True,
             raises_httpexc(code=404, match="Unknown thread"),
-        ),
-        (
-            None,
-            False,
-            raises_httpexc(code=404, match="Thread uploads not configured"),
         ),
     ],
 )
@@ -256,13 +275,17 @@ async def test_post_uploads_room_thread(
     cuir,
     uploads_path,
     the_threads,
+    w_sandbox,
     tsgt_side_effect,
     w_upload_path,
     expectation,
     w_filename,
     exp_filename,
 ):
-    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config = mock.create_autospec(
+        config_rooms.RoomConfig,
+        has_sandbox=w_sandbox,
+    )
     cuir.return_value = room_config
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),
@@ -302,11 +325,14 @@ async def test_post_uploads_room_thread(
         )
         assert exp_file.read_bytes() == TEST_CONTENT
 
-    the_threads.get_thread.assert_called_once_with(
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=str(TEST_THREAD_ID),
-    )
+    if w_sandbox and w_upload_path:
+        the_threads.get_thread.assert_called_once_with(
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=str(TEST_THREAD_ID),
+        )
+    else:
+        the_threads.get_thread.assert_not_called()
 
     the_logger.debug.assert_called_once_with(
         loggers.UPLOADS_POST_ROOM_THREAD,

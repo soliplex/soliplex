@@ -1157,31 +1157,68 @@ def test_roomskillsconfig_skills(installation_config):
     assert found == {SKILL_NAME: skill_config.skill}
 
 
+@pytest.mark.parametrize("w_rag_skill", [False, True])
 def test_roomskillsconfig_rag_db_paths(
     installation_config,
     haiku_rag_config,
     lancedb,
     config_path,
+    w_rag_skill,
 ):
-    skill_config = config_skills.HR_RAG_SkillConfig(
+    rag_skill_config = config_skills.HR_RAG_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=haiku_rag_config,
         _config_path=config_path,
         _installation_config=installation_config,
     )
     installation_config.skill_configs = {
-        SKILL_NAME: skill_config,
         "other_skill": object(),
     }
+    if w_rag_skill:
+        installation_config.skill_configs[SKILL_NAME] = rag_skill_config
+        expected = {
+            rag_skill_config.name: str(rag_skill_config.rag_lancedb_path),
+        }
+    else:
+        expected = {}
 
     room_skill_config = config_skills.RoomSkillsConfig(
-        installation_skill_names=[SKILL_NAME, "other_skill"],
+        installation_skill_names=list(installation_config.skill_configs),
         _installation_config=installation_config,
     )
 
     found = room_skill_config.rag_db_paths
 
-    assert found == {skill_config.name: str(skill_config.rag_lancedb_path)}
+    assert found == expected
+
+
+@pytest.mark.parametrize("w_sandbox_skill", [False, True])
+def test_roomskillsconfig_has_sandbox(
+    installation_config,
+    haiku_rag_config,
+    lancedb,
+    config_path,
+    w_sandbox_skill,
+):
+    sandbox_skill_config = config_skills.BwrapSandboxSkillConfig(
+        _config_path=config_path,
+        _installation_config=installation_config,
+    )
+    skill_configs = {
+        "other_skill": object(),
+    }
+    if w_sandbox_skill:
+        skill_configs[sandbox_skill_config.kind] = sandbox_skill_config
+
+    room_skill_config = config_skills.RoomSkillsConfig(
+        installation_skill_names=list(installation_config.skill_configs),
+        _installation_config=installation_config,
+        _skill_configs=skill_configs,
+    )
+
+    found = room_skill_config.has_sandbox
+
+    assert found == w_sandbox_skill
 
 
 def test_roomskillsconfig_skill_preambles(
