@@ -1,6 +1,5 @@
 import contextlib
 import dataclasses
-import warnings
 from unittest import mock
 
 import pytest
@@ -113,6 +112,15 @@ W_HR_TOOLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
     },
 }
 
+# Deprecated (#1133)
+W_ENABLE_ATTACHMENTS_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+enable_attachments: true
+"""
+W_ENABLE_ATTACHMENTS_KW = BARE_ROOM_CONFIG_KW | {
+    "enable_attachments": True,
+}
+
 EXTRA_AGUI_FEATURE_NAME = "extra-agui-feature"
 FULL_ROOM_CONFIG_KW = {
     "id": ROOM_ID,
@@ -122,7 +130,6 @@ FULL_ROOM_CONFIG_KW = {
     "suggestions": [
         SUGGESTION,
     ],
-    "enable_attachments": True,
     "logo_image": f"./{IMAGE_FILENAME}",
     "agent_config": config_agents.AgentConfig(
         id=f"room-{ROOM_ID}",
@@ -188,7 +195,6 @@ description: "{ROOM_DESCRIPTION}"
 welcome_message: "{WELCOME_MESSAGE}"
 suggestions:
   - "{SUGGESTION}"
-enable_attachments: true
 logo_image: "./{IMAGE_FILENAME}"
 agent:
     model_name: "{test_agents.MODEL_NAME}"
@@ -248,27 +254,32 @@ allow_mcp: true
         (
             BARE_ROOM_CONFIG_YAML,
             contextlib.nullcontext(BARE_ROOM_CONFIG_KW),
-            False,
+            None,
         ),
         (
             W_NON_HR_SKILLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_NON_HR_SKILLS_ROOM_CONFIG_KW),
-            False,
+            None,
         ),
         (
             W_HR_SKILLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_HR_SKILLS_ROOM_CONFIG_KW),
-            False,
+            None,
         ),
         (
             W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_NON_HR_TOOLS_ROOM_CONFIG_KW),
-            False,
+            None,
+        ),
+        (
+            W_ENABLE_ATTACHMENTS_YAML,
+            contextlib.nullcontext(W_ENABLE_ATTACHMENTS_KW),
+            "RoomConfig.enable_attachments",
         ),
         (
             FULL_ROOM_CONFIG_YAML,
             contextlib.nullcontext(FULL_ROOM_CONFIG_KW),
-            False,
+            None,
         ),
     ],
 )
@@ -296,8 +307,21 @@ def test_roomconfig_from_yaml(
     with yaml_file.open() as stream:
         config_dict = yaml.safe_load(stream)
 
+    if w_depr:
+        warn_guard_found = pytest.warns(
+            DeprecationWarning,
+            match=w_depr,
+        )
+        warn_guard_expected = pytest.warns(
+            DeprecationWarning,
+            match=w_depr,
+        )
+    else:
+        warn_guard_found = contextlib.nullcontext(())
+        warn_guard_expected = contextlib.nullcontext(())
+
     with (
-        warnings.catch_warnings(record=True) as warned,
+        warn_guard_found as warned,
         expectation as expected,
     ):
         found = config_rooms.RoomConfig.from_yaml(
@@ -310,12 +334,12 @@ def test_roomconfig_from_yaml(
         assert expected.value._config_path == yaml_file
 
     else:
-        expected = config_rooms.RoomConfig(**expected)
-        expected = dataclasses.replace(
-            expected,
-            _installation_config=installation_config,
-            _config_path=yaml_file,
-        )
+        with warn_guard_expected:
+            expected = config_rooms.RoomConfig(
+                **expected,
+                _installation_config=installation_config,
+                _config_path=yaml_file,
+            )
 
         expected.agent_config = dataclasses.replace(
             expected.agent_config,
