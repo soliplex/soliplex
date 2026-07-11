@@ -37,9 +37,10 @@ def _admin_user_policy(session):
 
 
 def _room_authz_policy(session):
-    """A 'RoomAuthorizationPolicy' whose '_audit' is a mock."""
+    """A 'RoomAuthorizationPolicy' whose audit logs are mocks."""
     policy = authz_persistence.RoomAuthorizationPolicy(session, CLAIMS)
     policy._audit = mock.create_autospec(loggers.RoomAuthzAuditLog)
+    policy._access_audit = mock.create_autospec(loggers.RoomAccessAuditLog)
     return policy
 
 
@@ -327,31 +328,55 @@ def test_room_authz_policy_builds_audit_log():
 
     assert isinstance(policy._audit, loggers.RoomAuthzAuditLog)
     assert policy._audit.extra["claims"] == CLAIMS
+    assert isinstance(policy._access_audit, loggers.RoomAccessAuditLog)
+    assert policy._access_audit.extra["claims"] == CLAIMS
 
 
 @pytest.mark.asyncio
-async def test_room_authz_check_room_access(the_async_session):
+async def test_room_authz_check_room_access_public(the_async_session):
     rap = _room_authz_policy(the_async_session)
 
-    # No policy -> public room
-    assert await rap.check_room_access(ROOM_ID, None)
+    granted = await rap.check_room_access(ROOM_ID, None)
 
-    # Policy w/ deny as default, no ACL entries
+    assert granted
+    rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_denied.assert_not_called()
+    # The room-policy CRUD audit log is not touched by an access check.
+    assert rap._audit.method_calls == []
+
+
+@pytest.mark.asyncio
+async def test_room_authz_check_room_access_denied(the_async_session):
+    rap = _room_authz_policy(the_async_session)
+    # Policy w/ deny as default, no ACL entries.
+    the_async_session.add(authz_schema.RoomPolicy(room_id=ROOM_ID))
+
+    granted = await rap.check_room_access(ROOM_ID, None)
+
+    assert not granted
+    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_allowed.assert_not_called()
+    assert rap._audit.method_calls == []
+
+
+@pytest.mark.asyncio
+async def test_room_authz_check_room_access_allowed(the_async_session):
+    rap = _room_authz_policy(the_async_session)
     denier = authz_schema.RoomPolicy(room_id=ROOM_ID)
     the_async_session.add(denier)
-
-    assert not await rap.check_room_access(ROOM_ID, None)
-
-    allower = authz_schema.ACLEntry(
-        room_policy=denier,
-        allow_deny=authz.AllowDeny.ALLOW,
-        everyone=True,
+    the_async_session.add(
+        authz_schema.ACLEntry(
+            room_policy=denier,
+            allow_deny=authz.AllowDeny.ALLOW,
+            everyone=True,
+        )
     )
-    the_async_session.add(allower)
 
-    assert await rap.check_room_access(ROOM_ID, None)
+    granted = await rap.check_room_access(ROOM_ID, None)
 
-    # The hot end-user access path is deliberately not audited.
+    assert granted
+    rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_denied.assert_not_called()
     assert rap._audit.method_calls == []
 
 

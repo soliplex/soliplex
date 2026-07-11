@@ -205,6 +205,7 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
     ):
         super().__init__(session)
         self._audit = loggers.RoomAuthzAuditLog(claims=claims)
+        self._access_audit = loggers.RoomAccessAuditLog(claims=claims)
 
     async def check_room_access(
         self,
@@ -224,9 +225,16 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             if policy is not None:
                 await policy.awaitable_attrs.acl_entries
                 allow_deny = policy.check_token(user_token)
-                return allow_deny == authz.AllowDeny.ALLOW
+                result = allow_deny == authz.AllowDeny.ALLOW
             else:
-                return True
+                result = True
+
+        if result:
+            self._access_audit.room_access_allowed(room_id)
+        else:
+            self._access_audit.room_access_denied(room_id)
+
+        return result
 
     async def filter_room_ids(
         self,

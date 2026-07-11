@@ -150,13 +150,16 @@ AUDIT_SANDBOX_ACTION_RUN_PYTHON = "run-python"
 # material to a room, changing what the room's agent and members can access.
 AUDIT_ROOM_UPLOAD_ADDED = "room upload added"
 
-# room-access audit events: a room's agent is invoked outside the normal
-# authenticated web/MCP paths -- notably the 'soliplex-cli ask' command,
-# which skips per-room ACL enforcement (trusted operator) but must remain
-# auditable, just like the 'admin-users' / 'room-authz' CLI commands. The
-# 'access' event records the attempt *before* the run begins (so a crash
-# mid-run still leaves a trace); the 'run' event records the outcome after.
-AUDIT_ROOM_AGENT_ACCESS = "room agent access"
+# room-access audit events. 'AUDIT_ROOM_ACCESS' is the single "a principal
+# accessed room X" event, emitted across every entry path: the authenticated
+# web/MCP paths (an ACL grant/deny adjudicated by 'check_room_access') and the
+# 'soliplex-cli ask' command (which skips per-room ACL enforcement -- trusted
+# operator -- but stays auditable like the other privileged CLI commands). The
+# 'outcome' plus the actor claims distinguish an adjudicated allow/deny from a
+# trusted CLI invocation. 'AUDIT_ROOM_AGENT_RUN' is the CLI-specific run
+# outcome, recorded *after* the run so a crash mid-run still leaves the access
+# record behind.
+AUDIT_ROOM_ACCESS = "room access"
 AUDIT_ROOM_AGENT_RUN = "room agent run"
 
 
@@ -651,26 +654,33 @@ class RoomUploadAuditLog(AuditLogWrapper):
 
 
 class RoomAccessAuditLog(AuditLogWrapper):
-    """Record invocations of a room's agent outside the web/MCP paths.
+    """Record access to a room (and, for the CLI, the agent-run outcome).
 
-    The 'soliplex-cli ask' command runs a room's agent with per-room ACL
-    enforcement skipped (a trusted operator holding the installation
-    config); this records the access so it stays auditable like the other
-    privileged CLI operations. The actor 'claims', 'room_id', 'thread_id',
-    and 'run_id' are bound at construction.
+    'room_access_allowed' / 'room_access_denied' record the single "a
+    principal accessed room X" decision, emitted across every entry path:
+    the authenticated web/MCP paths (an ACL grant/deny adjudicated by
+    'RoomAuthorizationPolicy.check_room_access') and the 'soliplex-cli ask'
+    command (per-room ACL enforcement skipped -- a trusted operator holding
+    the installation config -- but recorded so it stays auditable like the
+    other privileged CLI operations). 'room_id' is supplied per call, since
+    a single policy instance adjudicates many rooms.
 
-    'agent_access' is emitted *before* the run begins; 'run_finished' /
-    'run_failed' record the outcome *after* it completes, so an aborted or
-    crashed run still leaves the access record behind.
+    For the CLI run, 'run_finished' / 'run_failed' record the outcome
+    *after* the run completes, so an aborted or crashed run still leaves the
+    access record behind. The actor 'claims' (and, for the CLI, 'thread_id'
+    / 'run_id') are bound at construction.
     """
 
     def __init__(self, claims: dict[str, typing.Any], **extra):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(scope=AuditLogScopes.ROOM_ACCESS, **extra_with_claims)
 
-    # access gate (before the run): the operator invoked the room's agent
-    def agent_access(self):
-        self._succeeded(AUDIT_ROOM_AGENT_ACCESS)
+    # access decision: a principal accessed the room
+    def room_access_allowed(self, room_id: str):
+        self._succeeded(AUDIT_ROOM_ACCESS, room_id=room_id)
+
+    def room_access_denied(self, room_id: str):
+        self._denied(AUDIT_ROOM_ACCESS, room_id=room_id)
 
     # run outcome (after the run)
     def run_finished(self):

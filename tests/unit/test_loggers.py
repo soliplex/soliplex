@@ -901,27 +901,38 @@ def test_roomaccessauditlog_ctor(w_claims):
     assert found.extra["claims"] == w_claims
 
 
-def test_room_agent_access(audit_records):
-    wrapper = loggers.RoomAccessAuditLog(
-        claims=CLAIMS,
-        room_id="r1",
-        thread_id="t1",
-        run_id="u1",
-    )
+def test_room_access_allowed(audit_records):
+    wrapper = loggers.RoomAccessAuditLog(claims=CLAIMS)
 
-    wrapper.agent_access()
+    wrapper.room_access_allowed("r1")
 
     _assert_audit_record(
         audit_records[-1],
-        message=loggers.AUDIT_ROOM_AGENT_ACCESS,
+        message=loggers.AUDIT_ROOM_ACCESS,
         levelno=logging.INFO,
         outcome=loggers.AUDIT_OUTCOME_SUCCESS,
         scope=SCOPE_ROOM_ACCESS,
         fields={
             "claims": CLAIMS,
             "room_id": "r1",
-            "thread_id": "t1",
-            "run_id": "u1",
+        },
+    )
+
+
+def test_room_access_denied(audit_records):
+    wrapper = loggers.RoomAccessAuditLog(claims=CLAIMS)
+
+    wrapper.room_access_denied("r1")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_ACCESS,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_DENIED,
+        scope=SCOPE_ROOM_ACCESS,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "r1",
         },
     )
 
