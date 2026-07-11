@@ -173,6 +173,22 @@ async def post_uploads_room_thread(
         the_logger=the_logger,
     )
 
+    if not _room_config.has_sandbox:
+        raise fastapi.HTTPException(
+            status_code=405,
+            detail="Sandbox not configured",
+            headers={"Allow": "GET"},
+        )
+
+    uploads_path = the_installation.threads_upload_path
+
+    if uploads_path is None:
+        raise fastapi.HTTPException(
+            status_code=405,
+            detail="Thread uploads not configured",
+            headers={"Allow": "GET"},
+        )
+
     try:
         await the_threads.get_thread(
             user_name=user_name,
@@ -184,14 +200,6 @@ async def post_uploads_room_thread(
             status_code=exc.status_code,
             detail=exc.args,
         ) from None
-
-    uploads_path = the_installation.threads_upload_path
-
-    if uploads_path is None:
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail="Thread uploads not configured",
-        )
 
     thread_dir = pathlib.Path(uploads_path) / thread_id
     thread_dir.mkdir(parents=True, exist_ok=True)
