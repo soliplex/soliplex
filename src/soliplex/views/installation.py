@@ -45,7 +45,11 @@ async def get_installation(
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
     bound_logger.debug(loggers.INST_GET_INSTALLATION)
 
-    if not await the_admin_users.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION,
+        action=loggers.AUDIT_ACTION_READ,
+    ):
         bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
@@ -69,7 +73,11 @@ async def get_installation_versions(
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
     bound_logger.debug(loggers.INST_GET_INSTALLATION_VERSIONS)
 
-    if not await the_admin_users.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_VERSIONS,
+        action=loggers.AUDIT_ACTION_READ,
+    ):
         bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
@@ -111,7 +119,11 @@ async def get_installation_providers(
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
     bound_logger.debug(loggers.INST_GET_INSTALLATION_PROVIDERS)
 
-    if not await the_admin_users.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_PROVIDERS,
+        action=loggers.AUDIT_ACTION_READ,
+    ):
         bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
@@ -135,7 +147,11 @@ async def get_installation_git_metadata(
     bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
     bound_logger.debug(loggers.INST_GET_INSTALLATION_GIT_METADATA)
 
-    if not await the_admin_users.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_GIT_METADATA,
+        action=loggers.AUDIT_ACTION_READ,
+    ):
         bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,

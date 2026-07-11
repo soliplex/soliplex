@@ -172,7 +172,11 @@ async def post_uploads_room(
     the_logger.debug(loggers.UPLOADS_POST_ROOM)
     the_authz_logger.debug(loggers.UPLOADS_POST_ROOM)
 
-    if not await the_admin_users.check_admin_access(the_user_claims):
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_ROOM_UPLOAD,
+        action=loggers.AUDIT_ACTION_CREATE,
+    ):
         the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,

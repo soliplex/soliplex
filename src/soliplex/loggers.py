@@ -105,6 +105,23 @@ AUDIT_ADMIN_USER_ADDED = "admin user added"
 AUDIT_ADMIN_USER_REMOVED = "admin user removed"
 AUDIT_ADMIN_USERS_CLEARED = "admin users cleared"
 
+# admin-gate context: the 'AUDIT_ADMIN_ACCESS' record carries 'resource' /
+# 'action' fields naming the privileged operation the check gated, so a
+# reviewer can tell a denied admin check on (say) a room-policy update apart
+# from one on an installation-config read. 'action' follows the same
+# field-vocabulary style as the rag-access 'action' values below.
+AUDIT_ACTION_READ = "read"
+AUDIT_ACTION_CREATE = "create"
+AUDIT_ACTION_UPDATE = "update"
+AUDIT_ACTION_DELETE = "delete"
+AUDIT_RESOURCE_ROOM_POLICY = "room-policy"
+AUDIT_RESOURCE_INSTALLATION_AUTHZ = "installation-authz"
+AUDIT_RESOURCE_INSTALLATION = "installation"
+AUDIT_RESOURCE_INSTALLATION_VERSIONS = "installation-versions"
+AUDIT_RESOURCE_INSTALLATION_PROVIDERS = "installation-providers"
+AUDIT_RESOURCE_INSTALLATION_GIT_METADATA = "installation-git-metadata"
+AUDIT_RESOURCE_ROOM_UPLOAD = "room-upload"
+
 # room-authz audit events
 AUDIT_ROOM_POLICY_READ = "room policy read"
 AUDIT_ROOM_POLICIES_LISTED = "room policies listed"
@@ -420,12 +437,12 @@ class AdminUsersAuditLog(AuditLogWrapper):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(scope=AuditLogScopes.ADMIN_USERS, **extra_with_claims)
 
-    # privilege gate
-    def admin_access_allowed(self):
-        self._succeeded(AUDIT_ADMIN_ACCESS)
+    # privilege gate ('resource' / 'action' name the operation it gates)
+    def admin_access_allowed(self, *, resource: str, action: str):
+        self._succeeded(AUDIT_ADMIN_ACCESS, resource=resource, action=action)
 
-    def admin_access_denied(self):
-        self._denied(AUDIT_ADMIN_ACCESS)
+    def admin_access_denied(self, *, resource: str, action: str):
+        self._denied(AUDIT_ADMIN_ACCESS, resource=resource, action=action)
 
     # security-object read
     def admin_users_listed(self):

@@ -463,7 +463,10 @@ def test_adminusersauditlog_ctor(w_claims):
 def test_admin_access_allowed(audit_records):
     wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
 
-    wrapper.admin_access_allowed()
+    wrapper.admin_access_allowed(
+        resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
+        action=loggers.AUDIT_ACTION_UPDATE,
+    )
 
     _assert_audit_record(
         audit_records[-1],
@@ -471,14 +474,21 @@ def test_admin_access_allowed(audit_records):
         levelno=logging.INFO,
         outcome=loggers.AUDIT_OUTCOME_SUCCESS,
         scope=SCOPE_ADMIN_USERS,
-        fields={"claims": CLAIMS},
+        fields={
+            "claims": CLAIMS,
+            "resource": loggers.AUDIT_RESOURCE_ROOM_POLICY,
+            "action": loggers.AUDIT_ACTION_UPDATE,
+        },
     )
 
 
 def test_admin_access_denied(audit_records):
     wrapper = loggers.AdminUsersAuditLog(claims=CLAIMS)
 
-    wrapper.admin_access_denied()
+    wrapper.admin_access_denied(
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION,
+        action=loggers.AUDIT_ACTION_READ,
+    )
 
     _assert_audit_record(
         audit_records[-1],
@@ -486,7 +496,11 @@ def test_admin_access_denied(audit_records):
         levelno=logging.ERROR,
         outcome=loggers.AUDIT_OUTCOME_DENIED,
         scope=SCOPE_ADMIN_USERS,
-        fields={"claims": CLAIMS},
+        fields={
+            "claims": CLAIMS,
+            "resource": loggers.AUDIT_RESOURCE_INSTALLATION,
+            "action": loggers.AUDIT_ACTION_READ,
+        },
     )
 
 

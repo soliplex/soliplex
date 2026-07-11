@@ -257,13 +257,23 @@ async def test_admin_user_crud(the_async_session):
     aup._audit.admin_user_remove_failed.reset_mock()
 
 
+# A representative gated operation; 'check_admin_access' forwards these to
+# the audit record verbatim, so the exact values are arbitrary here.
+ADMIN_RESOURCE = loggers.AUDIT_RESOURCE_ROOM_POLICY
+ADMIN_ACTION = loggers.AUDIT_ACTION_READ
+
+
 @pytest.mark.asyncio
 async def test_admin_user_check_admin_access(the_async_session):
     aup = _admin_user_policy(the_async_session)
 
-    assert not await aup.check_admin_access(USER_TOKEN)
+    assert not await aup.check_admin_access(
+        USER_TOKEN, resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
 
-    aup._audit.admin_access_denied.assert_called_once_with()
+    aup._audit.admin_access_denied.assert_called_once_with(
+        resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
     aup._audit.admin_access_denied.reset_mock()
 
     await aup.add_admin_user(email=EMAIL)
@@ -271,9 +281,13 @@ async def test_admin_user_check_admin_access(the_async_session):
     aup._audit.admin_user_added.assert_called_once_with(JSON_PATH)
     aup._audit.admin_user_added.reset_mock()
 
-    assert await aup.check_admin_access(USER_TOKEN)
+    assert await aup.check_admin_access(
+        USER_TOKEN, resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
 
-    aup._audit.admin_access_allowed.assert_called_once_with()
+    aup._audit.admin_access_allowed.assert_called_once_with(
+        resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
     aup._audit.admin_access_allowed.reset_mock()
 
     await aup.remove_admin_user(email=EMAIL)
@@ -281,9 +295,13 @@ async def test_admin_user_check_admin_access(the_async_session):
     aup._audit.admin_user_removed.assert_called_once_with(JSON_PATH)
     aup._audit.admin_user_removed.reset_mock()
 
-    assert not await aup.check_admin_access(USER_TOKEN)
+    assert not await aup.check_admin_access(
+        USER_TOKEN, resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
 
-    aup._audit.admin_access_denied.assert_called_once_with()
+    aup._audit.admin_access_denied.assert_called_once_with(
+        resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
     aup._audit.admin_access_denied.reset_mock()
 
 
@@ -299,20 +317,32 @@ async def test_admin_user_check_admin_access_json_path(
         authz_schema.AdminUser(json_path='$[?$.role == "admin"]'),
     )
 
-    assert await aup.check_admin_access({"role": "admin"})
+    assert await aup.check_admin_access(
+        {"role": "admin"}, resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
 
-    aup._audit.admin_access_allowed.assert_called_once_with()
+    aup._audit.admin_access_allowed.assert_called_once_with(
+        resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
     aup._audit.admin_access_allowed.reset_mock()
 
-    assert not await aup.check_admin_access({"role": "user"})
+    assert not await aup.check_admin_access(
+        {"role": "user"}, resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
 
-    aup._audit.admin_access_denied.assert_called_once_with()
+    aup._audit.admin_access_denied.assert_called_once_with(
+        resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
     aup._audit.admin_access_denied.reset_mock()
 
     # A role-keyed admin is not matched by an unrelated email token.
-    assert not await aup.check_admin_access(USER_TOKEN)
+    assert not await aup.check_admin_access(
+        USER_TOKEN, resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
 
-    aup._audit.admin_access_denied.assert_called_once_with()
+    aup._audit.admin_access_denied.assert_called_once_with(
+        resource=ADMIN_RESOURCE, action=ADMIN_ACTION
+    )
     aup._audit.admin_access_denied.reset_mock()
 
     # A non-email admin surfaces as its raw JSONPath query, not an email.

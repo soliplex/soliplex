@@ -97,6 +97,8 @@ async def test_get_room_authz(w_policy, w_admin_access):
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
+        action=loggers.AUDIT_ACTION_READ,
     )
 
 
@@ -160,6 +162,8 @@ async def test_post_room_authz(w_existing, w_admin_access):
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
+        action=loggers.AUDIT_ACTION_UPDATE,
     )
 
 
@@ -220,6 +224,8 @@ async def test_delete_room_authz(w_existing, w_admin_access):
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
+        action=loggers.AUDIT_ACTION_DELETE,
     )
 
 
@@ -305,4 +311,6 @@ async def test_get_installation_authz(
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_AUTHZ,
+        action=loggers.AUDIT_ACTION_READ,
     )

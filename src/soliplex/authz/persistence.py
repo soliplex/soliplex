@@ -186,14 +186,21 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
     async def check_admin_access(
         self,
         user_token: authz.UserToken,
+        *,
+        resource: str,
+        action: str,
     ) -> bool:
-        """Is the user represented by 'user_token' an admin user?"""
+        """Is the user represented by 'user_token' an admin user?
+
+        'resource' / 'action' name the privileged operation being gated;
+        they are folded into the emitted 'admin access' audit record.
+        """
         async with self.session as session:
             is_admin = await _user_is_admin(user_token, session)
         if is_admin:
-            self._audit.admin_access_allowed()
+            self._audit.admin_access_allowed(resource=resource, action=action)
         else:
-            self._audit.admin_access_denied()
+            self._audit.admin_access_denied(resource=resource, action=action)
         return is_admin
 
 

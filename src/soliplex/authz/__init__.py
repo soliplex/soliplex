@@ -231,11 +231,18 @@ class AdminUserPolicy(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def check_admin_access(self, user_token: UserToken) -> bool:
+    async def check_admin_access(
+        self,
+        user_token: UserToken,
+        *,
+        resource: str,
+        action: str,
+    ) -> bool:
         """Is the user represented by 'user_token' an admin user?
 
         Matches 'user_token' against each admin entry's JSONPath query;
-        the user is an admin when any query matches.
+        the user is an admin when any query matches. 'resource' / 'action'
+        name the privileged operation being gated (for the audit record).
         """
 
 
