@@ -27,7 +27,7 @@ depend_the_logger = views.depend_the_logger
     "GET /v1/uploads/{room_id}/thread/{thread_id}",
 )
 @router.get("/v1/uploads/{room_id}/thread/{thread_id}")
-async def get_uploads_room_thread(
+async def get_uploads_room_id_thread_thread_id(
     request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
@@ -66,7 +66,7 @@ async def get_uploads_room_thread(
                 filename = file_or_sub.name
                 filename_urls[filename] = request.url_for(
                     # View function name, not the route path.
-                    "get_uploads_room_thread_filename",
+                    "get_uploads_room_id_thread_thread_id_filename",
                     room_id=room_id,
                     thread_id=thread_id,
                     filename=filename,
@@ -92,7 +92,7 @@ async def get_uploads_room_thread(
     "/v1/uploads/{room_id}/thread/{thread_id}/file/{filename}",
     response_class=responses.FileResponse,
 )
-async def get_uploads_room_thread_filename(
+async def get_uploads_room_id_thread_thread_id_filename(
     room_id: str,
     thread_id: pydantic.UUID4,
     filename: str,
@@ -142,10 +142,15 @@ async def get_uploads_room_thread_filename(
 
 
 @soliplex_views_util.logfire_span(
-    "POST /v1/uploads/{room_id}/{thread_id}/",
+    "POST /v1/uploads/{room_id}/thread/{thread_id}/",
 )
-@router.post("/v1/uploads/{room_id}/{thread_id}", status_code=204)
-async def post_uploads_room_thread(
+@router.post("/v1/uploads/{room_id}/thread/{thread_id}", status_code=204)
+@router.post(
+    "/v1/uploads/{room_id}/{thread_id}",
+    status_code=204,
+    deprecated=True,  # see #1137
+)
+async def post_uploads_room_id_thread_thread_id(
     room_id: str,
     thread_id: pydantic.UUID4,
     upload_file: fastapi.UploadFile,
