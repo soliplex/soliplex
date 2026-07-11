@@ -413,8 +413,10 @@ def test_roomconfig_skill_configs_w_hit(installation_config):
     }
 
     room_config_kw = FULL_ROOM_CONFIG_KW.copy()
-    room_config_kw["skills"].entrypoint_skills = []
-    room_config_kw["skills"]._installation_config = installation_config
+    room_config_kw["skills"] = dataclasses.replace(
+        room_config_kw["skills"],
+        _installation_config=installation_config,
+    )
     room_config = config_rooms.RoomConfig(
         **room_config_kw,
         _installation_config=installation_config,
@@ -457,8 +459,10 @@ def test_roomconfig_rag_db_paths_w_hit(temp_dir, installation_config):
     }
 
     room_config_kw = FULL_ROOM_CONFIG_KW.copy()
-    room_config_kw["skills"].entrypoint_skills = []
-    room_config_kw["skills"]._installation_config = installation_config
+    room_config_kw["skills"] = dataclasses.replace(
+        room_config_kw["skills"],
+        _installation_config=installation_config,
+    )
     room_config = config_rooms.RoomConfig(
         **room_config_kw,
         _installation_config=installation_config,
@@ -467,6 +471,48 @@ def test_roomconfig_rag_db_paths_w_hit(temp_dir, installation_config):
     found = room_config.rag_db_paths
 
     assert found == {"test-skill": str(OVERRIDE_PATH)}
+
+
+def test_roomconfig_has_sandbox_bare(installation_config):
+    installation_config.skill_configs = {}
+
+    room_config_kw = BARE_ROOM_CONFIG_KW.copy()
+    room_config = config_rooms.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    room_config.skills = None
+
+    found = room_config.has_sandbox
+
+    assert found is False
+
+
+def test_roomconfig_has_sandbox_w_hit(temp_dir, installation_config):
+    installation_config.skill_configs = {
+        "other_skill": object(),
+    }
+    sandbox_skill_config = config_skills.BwrapSandboxSkillConfig(
+        _installation_config=installation_config,
+    )
+
+    room_config_kw = FULL_ROOM_CONFIG_KW.copy()
+    room_config_kw["skills"] = dataclasses.replace(
+        room_config_kw["skills"],
+        installation_skill_names=list(installation_config.skill_configs),
+        _installation_config=installation_config,
+        _skill_configs={sandbox_skill_config.kind: sandbox_skill_config},
+    )
+
+    room_config = config_rooms.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    found = room_config.has_sandbox
+
+    assert found is True
 
 
 @pytest.fixture

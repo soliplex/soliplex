@@ -171,6 +171,11 @@ class RoomConfig:
         return self.skills.rag_db_paths if self.skills is not None else {}
 
     @property
+    def has_sandbox(self) -> bool:
+        """Does the room have the sandbox skill?"""
+        return self.skills.has_sandbox if self.skills is not None else False
+
+    @property
     def agui_feature_names(self) -> tuple[str]:
         agent_features = set(self.agent_config.agui_feature_names)
         room_features = set(self._agui_feature_names)

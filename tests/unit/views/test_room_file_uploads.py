@@ -26,9 +26,12 @@ URL_PREFIX = "http://test.example.com/api"
 no_error = contextlib.nullcontext
 
 
-def raises_httpexc(*, match, code) -> pytest.raises:
+def raises_httpexc(*, match, code, headers=None) -> pytest.raises:
     def _check(exc):
-        return exc.status_code == code
+        if headers is not None:
+            return exc.status_code == code and exc.headers == headers
+        else:
+            return exc.status_code == code
 
     return pytest.raises(fastapi.HTTPException, match=match, check=_check)
 
@@ -233,10 +236,27 @@ def test_get_the_room_upload_audit_log(rual_klass):
     ],
 )
 @pytest.mark.parametrize(
-    "w_upload_path, expectation",
+    "w_sandbox, w_upload_path, expectation",
     [
-        (True, no_error(204)),
-        (False, raises_httpexc(code=404, match="Room uploads not configured")),
+        (True, True, no_error(204)),
+        (
+            False,
+            True,
+            raises_httpexc(
+                code=405,
+                match="Sandbox not configured",
+                headers={"Allow": "GET"},
+            ),
+        ),
+        (
+            True,
+            False,
+            raises_httpexc(
+                code=405,
+                match="Room uploads not configured",
+                headers={"Allow": "GET"},
+            ),
+        ),
     ],
 )
 @pytest.mark.parametrize("w_admin_access", [False, True])
@@ -245,12 +265,16 @@ async def test_post_uploads_room(
     cuir,
     uploads_path,
     w_admin_access,
+    w_sandbox,
     w_upload_path,
     expectation,
     w_filename,
     exp_filename,
 ):
-    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config = mock.create_autospec(
+        config_rooms.RoomConfig,
+        has_sandbox=w_sandbox,
+    )
     cuir.return_value = room_config
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),

@@ -594,6 +594,15 @@ class RoomSkillsConfig(_SkillConfigModelBase):
         }
 
     @property
+    def has_sandbox(self) -> bool:
+        """Does the room have the sandbox skill?"""
+        return any(
+            skill_config
+            for skill_config in self.skill_configs.values()
+            if isinstance(skill_config, BwrapSandboxSkillConfig)
+        )
+
+    @property
     def skill_preambles(self) -> list[str]:
         preambles = []
 
