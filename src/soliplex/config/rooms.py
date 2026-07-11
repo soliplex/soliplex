@@ -3,6 +3,7 @@ from __future__ import annotations  # forward refs in typing decls
 import dataclasses
 import pathlib
 import typing
+import warnings
 
 from . import _utils
 from . import agents as config_agents
@@ -18,6 +19,12 @@ _default_dict_field = _utils._default_dict_field
 # ============================================================================
 #   Room-related configuration types
 # ============================================================================
+
+
+ENABLE_ATTACHMENTS_DEPRECATION = (
+    "'RoomConfig.enable_attachments' is deprecated, and will be removed "
+    "after 'soliplex v0.73'"
+)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -38,7 +45,7 @@ class RoomConfig:
     _order: str = None  # defaults to 'id'
     welcome_message: str = None
     suggestions: list[str] = _default_list_field()
-    enable_attachments: bool = False
+    enable_attachments: bool | None = None  # deprecated / ignored (#1133)
 
     #
     # Tool options
@@ -78,6 +85,13 @@ class RoomConfig:
     def __post_init__(self, logo_image: str | None):
         if logo_image is not None:
             self._logo_image = logo_image
+
+        if self.enable_attachments is not None:
+            warnings.warn(
+                ENABLE_ATTACHMENTS_DEPRECATION,
+                DeprecationWarning,
+                stacklevel=3,
+            )
 
     @classmethod
     def from_yaml(

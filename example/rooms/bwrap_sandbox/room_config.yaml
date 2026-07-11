@@ -2,8 +2,6 @@ id: "bwrap_sandbox"
 name: "BWrap Sandbox"
 description: "Upload files and analyze them with code execution and RAG"
 
-enable_attachments: true
-
 suggestions:
   - "List the files in the workspace"
   - "Analyze the uploaded data"

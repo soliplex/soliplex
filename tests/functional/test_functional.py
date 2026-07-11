@@ -25,9 +25,6 @@ def test_rooms_endpoints(client_no_llm):
     # assert ext_room_info["description"] == room_info["description"]
     assert ext_room_info["suggestions"] == room_info["suggestions"]
     assert ext_room_info["welcome_message"] == room_info["welcome_message"]
-    assert (
-        ext_room_info["enable_attachments"] == room_info["enable_attachments"]
-    )
 
 
 def test_room_authz_endpoints(client_no_llm):
