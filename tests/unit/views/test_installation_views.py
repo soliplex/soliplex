@@ -42,7 +42,6 @@ async def test_get_installation(fc, w_admin_access):
     the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
     the_admin_users.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
-    bound_logger = the_logger.bind.return_value
     the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
 
     if not w_admin_access:
@@ -57,9 +56,6 @@ async def test_get_installation(fc, w_admin_access):
 
         assert exc.value.status_code == 403
         assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-        bound_logger.error.assert_called_once_with(
-            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
-        )
         the_audit.installation_read.assert_not_called()
 
     else:
@@ -77,7 +73,9 @@ async def test_get_installation(fc, w_admin_access):
         the_audit.installation_read.assert_called_once_with()
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
-        THE_USER_CLAIMS
+        THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION,
+        action=loggers.AUDIT_ACTION_READ,
     )
 
 
@@ -109,6 +107,8 @@ async def test_get_installation_versions_w_error(sp):
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_VERSIONS,
+        action=loggers.AUDIT_ACTION_READ,
     )
 
     # The read is audited once the admin gate passes, before the
@@ -160,9 +160,6 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
 
         assert exc.value.status_code == 403
         assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-        bound_logger.error.assert_called_once_with(
-            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
-        )
         the_audit.installation_versions_read.assert_not_called()
 
     else:
@@ -179,6 +176,8 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_VERSIONS,
+        action=loggers.AUDIT_ACTION_READ,
     )
 
     bound_logger.debug.assert_called_once_with(
@@ -215,9 +214,6 @@ async def test_get_installation_providers(w_admin_access):
 
         assert exc.value.status_code == 403
         assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-        bound_logger.error.assert_called_once_with(
-            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
-        )
         the_audit.installation_providers_read.assert_not_called()
 
     else:
@@ -234,6 +230,8 @@ async def test_get_installation_providers(w_admin_access):
 
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_PROVIDERS,
+        action=loggers.AUDIT_ACTION_READ,
     )
 
     bound_logger.debug.assert_called_once_with(
@@ -269,9 +267,6 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
 
         assert exc.value.status_code == 403
         assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-        bound_logger.error.assert_called_once_with(
-            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
-        )
         the_audit.installation_git_metadata_read.assert_not_called()
 
     else:

@@ -186,14 +186,21 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
     async def check_admin_access(
         self,
         user_token: authz.UserToken,
+        *,
+        resource: str,
+        action: str,
     ) -> bool:
-        """Is the user represented by 'user_token' an admin user?"""
+        """Is the user represented by 'user_token' an admin user?
+
+        'resource' / 'action' name the privileged operation being gated;
+        they are folded into the emitted 'admin access' audit record.
+        """
         async with self.session as session:
             is_admin = await _user_is_admin(user_token, session)
         if is_admin:
-            self._audit.admin_access_allowed()
+            self._audit.admin_access_allowed(resource=resource, action=action)
         else:
-            self._audit.admin_access_denied()
+            self._audit.admin_access_denied(resource=resource, action=action)
         return is_admin
 
 
@@ -205,6 +212,7 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
     ):
         super().__init__(session)
         self._audit = loggers.RoomAuthzAuditLog(claims=claims)
+        self._access_audit = loggers.RoomAccessAuditLog(claims=claims)
 
     async def check_room_access(
         self,
@@ -224,9 +232,16 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             if policy is not None:
                 await policy.awaitable_attrs.acl_entries
                 allow_deny = policy.check_token(user_token)
-                return allow_deny == authz.AllowDeny.ALLOW
+                result = allow_deny == authz.AllowDeny.ALLOW
             else:
-                return True
+                result = True
+
+        if result:
+            self._access_audit.room_access_allowed(room_id)
+        else:
+            self._access_audit.room_access_denied(room_id)
+
+        return result
 
     async def filter_room_ids(
         self,

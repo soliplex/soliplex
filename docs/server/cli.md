@@ -213,9 +213,12 @@ the same audit trail (the `soliplex-audit` logger) that the web/MCP paths
 and the other privileged CLI commands use. Three kinds of record are
 emitted per invocation:
 
-- a `room agent access` event recording that the room's agent was invoked,
-  logged **before** the run begins — so an aborted or crashed run still
-  leaves a trace that access was made;
+- a `room access` event recording that the room was accessed, logged
+  **before** the run begins — so an aborted or crashed run still leaves a
+  trace that access was made. This is the same event the web/MCP paths emit
+  when their per-room ACL grants access, so "who accessed room X" is one
+  query across every entry path (the `outcome` and actor claims distinguish
+  a trusted CLI invocation from an adjudicated web allow/deny);
 - a `rag-access` event for each knowledge-base retrieval the agent makes
   while answering, whether through a room RAG tool or a skill;
 - a `room agent run` event recording the outcome **after** the run:

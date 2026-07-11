@@ -43,8 +43,11 @@ async def get_room_authz(
 ) -> models.RoomPolicy | None:
     the_authz_logger.debug(loggers.AUTHZ_GET_ROOM_POLICY)
 
-    if not await the_admin_users.check_admin_access(the_user_claims):
-        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
+        action=loggers.AUDIT_ACTION_READ,
+    ):
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
@@ -73,8 +76,11 @@ async def post_room_authz(
 ) -> models.RoomPolicy | None:
     the_authz_logger.debug(loggers.AUTHZ_POST_ROOM_POLICY)
 
-    if not await the_admin_users.check_admin_access(the_user_claims):
-        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
+        action=loggers.AUDIT_ACTION_UPDATE,
+    ):
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
@@ -103,8 +109,11 @@ async def delete_room_authz(
 ) -> models.RoomPolicy | None:
     the_authz_logger.debug(loggers.AUTHZ_DELETE_ROOM_POLICY)
 
-    if not await the_admin_users.check_admin_access(the_user_claims):
-        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
+        action=loggers.AUDIT_ACTION_DELETE,
+    ):
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
@@ -131,8 +140,11 @@ async def get_installation_authz(
 ) -> models.InstallationAuthorization:
     the_authz_logger.debug(loggers.AUTHZ_GET_INSTALLATION_AUTHZ)
 
-    if not await the_admin_users.check_admin_access(the_user_claims):
-        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_AUTHZ,
+        action=loggers.AUDIT_ACTION_READ,
+    ):
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,

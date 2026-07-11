@@ -40,7 +40,7 @@ def _records(audit_records, message):
 
 
 def _access_records(audit_records):
-    return _records(audit_records, loggers.AUDIT_ROOM_AGENT_ACCESS)
+    return _records(audit_records, loggers.AUDIT_ROOM_ACCESS)
 
 
 def _run_records(audit_records):

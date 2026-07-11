@@ -50,8 +50,6 @@ AUTHN_GET_USER_CLAIMS_FAILED = "get user claims failed"
 AUTHZ_LOGGER_NAME = "soliplex.authz"
 AUTHZ_FILTERING_ROOMS = "filtering rooms for user"
 AUTHZ_NOT_FILTERING_ROOMS = "no authz policy, not filtering rooms"
-AUTHZ_ROOM_AUTHORIZED = "room authorized"
-AUTHZ_ROOM_NOT_AUTHORIZED = "room not authorized"
 AUTHZ_ADMIN_ACCESS_REQUIRED = "Admin access required"
 AUTHZ_GET_ROOM_POLICY = "get room policy"
 AUTHZ_POST_ROOM_POLICY = "post room policy"
@@ -105,6 +103,23 @@ AUDIT_ADMIN_USER_ADDED = "admin user added"
 AUDIT_ADMIN_USER_REMOVED = "admin user removed"
 AUDIT_ADMIN_USERS_CLEARED = "admin users cleared"
 
+# admin-gate context: the 'AUDIT_ADMIN_ACCESS' record carries 'resource' /
+# 'action' fields naming the privileged operation the check gated, so a
+# reviewer can tell a denied admin check on (say) a room-policy update apart
+# from one on an installation-config read. 'action' follows the same
+# field-vocabulary style as the rag-access 'action' values below.
+AUDIT_ACTION_READ = "read"
+AUDIT_ACTION_CREATE = "create"
+AUDIT_ACTION_UPDATE = "update"
+AUDIT_ACTION_DELETE = "delete"
+AUDIT_RESOURCE_ROOM_POLICY = "room-policy"
+AUDIT_RESOURCE_INSTALLATION_AUTHZ = "installation-authz"
+AUDIT_RESOURCE_INSTALLATION = "installation"
+AUDIT_RESOURCE_INSTALLATION_VERSIONS = "installation-versions"
+AUDIT_RESOURCE_INSTALLATION_PROVIDERS = "installation-providers"
+AUDIT_RESOURCE_INSTALLATION_GIT_METADATA = "installation-git-metadata"
+AUDIT_RESOURCE_ROOM_UPLOAD = "room-upload"
+
 # room-authz audit events
 AUDIT_ROOM_POLICY_READ = "room policy read"
 AUDIT_ROOM_POLICIES_LISTED = "room policies listed"
@@ -150,13 +165,16 @@ AUDIT_SANDBOX_ACTION_RUN_PYTHON = "run-python"
 # material to a room, changing what the room's agent and members can access.
 AUDIT_ROOM_UPLOAD_ADDED = "room upload added"
 
-# room-access audit events: a room's agent is invoked outside the normal
-# authenticated web/MCP paths -- notably the 'soliplex-cli ask' command,
-# which skips per-room ACL enforcement (trusted operator) but must remain
-# auditable, just like the 'admin-users' / 'room-authz' CLI commands. The
-# 'access' event records the attempt *before* the run begins (so a crash
-# mid-run still leaves a trace); the 'run' event records the outcome after.
-AUDIT_ROOM_AGENT_ACCESS = "room agent access"
+# room-access audit events. 'AUDIT_ROOM_ACCESS' is the single "a principal
+# accessed room X" event, emitted across every entry path: the authenticated
+# web/MCP paths (an ACL grant/deny adjudicated by 'check_room_access') and the
+# 'soliplex-cli ask' command (which skips per-room ACL enforcement -- trusted
+# operator -- but stays auditable like the other privileged CLI commands). The
+# 'outcome' plus the actor claims distinguish an adjudicated allow/deny from a
+# trusted CLI invocation. 'AUDIT_ROOM_AGENT_RUN' is the CLI-specific run
+# outcome, recorded *after* the run so a crash mid-run still leaves the access
+# record behind.
+AUDIT_ROOM_ACCESS = "room access"
 AUDIT_ROOM_AGENT_RUN = "room agent run"
 
 
@@ -417,12 +435,12 @@ class AdminUsersAuditLog(AuditLogWrapper):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(scope=AuditLogScopes.ADMIN_USERS, **extra_with_claims)
 
-    # privilege gate
-    def admin_access_allowed(self):
-        self._succeeded(AUDIT_ADMIN_ACCESS)
+    # privilege gate ('resource' / 'action' name the operation it gates)
+    def admin_access_allowed(self, *, resource: str, action: str):
+        self._succeeded(AUDIT_ADMIN_ACCESS, resource=resource, action=action)
 
-    def admin_access_denied(self):
-        self._denied(AUDIT_ADMIN_ACCESS)
+    def admin_access_denied(self, *, resource: str, action: str):
+        self._denied(AUDIT_ADMIN_ACCESS, resource=resource, action=action)
 
     # security-object read
     def admin_users_listed(self):
@@ -651,26 +669,33 @@ class RoomUploadAuditLog(AuditLogWrapper):
 
 
 class RoomAccessAuditLog(AuditLogWrapper):
-    """Record invocations of a room's agent outside the web/MCP paths.
+    """Record access to a room (and, for the CLI, the agent-run outcome).
 
-    The 'soliplex-cli ask' command runs a room's agent with per-room ACL
-    enforcement skipped (a trusted operator holding the installation
-    config); this records the access so it stays auditable like the other
-    privileged CLI operations. The actor 'claims', 'room_id', 'thread_id',
-    and 'run_id' are bound at construction.
+    'room_access_allowed' / 'room_access_denied' record the single "a
+    principal accessed room X" decision, emitted across every entry path:
+    the authenticated web/MCP paths (an ACL grant/deny adjudicated by
+    'RoomAuthorizationPolicy.check_room_access') and the 'soliplex-cli ask'
+    command (per-room ACL enforcement skipped -- a trusted operator holding
+    the installation config -- but recorded so it stays auditable like the
+    other privileged CLI operations). 'room_id' is supplied per call, since
+    a single policy instance adjudicates many rooms.
 
-    'agent_access' is emitted *before* the run begins; 'run_finished' /
-    'run_failed' record the outcome *after* it completes, so an aborted or
-    crashed run still leaves the access record behind.
+    For the CLI run, 'run_finished' / 'run_failed' record the outcome
+    *after* the run completes, so an aborted or crashed run still leaves the
+    access record behind. The actor 'claims' (and, for the CLI, 'thread_id'
+    / 'run_id') are bound at construction.
     """
 
     def __init__(self, claims: dict[str, typing.Any], **extra):
         extra_with_claims = {"claims": claims} | extra
         super().__init__(scope=AuditLogScopes.ROOM_ACCESS, **extra_with_claims)
 
-    # access gate (before the run): the operator invoked the room's agent
-    def agent_access(self):
-        self._succeeded(AUDIT_ROOM_AGENT_ACCESS)
+    # access decision: a principal accessed the room
+    def room_access_allowed(self, room_id: str):
+        self._succeeded(AUDIT_ROOM_ACCESS, room_id=room_id)
+
+    def room_access_denied(self, room_id: str):
+        self._denied(AUDIT_ROOM_ACCESS, room_id=room_id)
 
     # run outcome (after the run)
     def run_finished(self):
