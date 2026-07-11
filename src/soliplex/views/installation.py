@@ -50,7 +50,6 @@ async def get_installation(
         resource=loggers.AUDIT_RESOURCE_INSTALLATION,
         action=loggers.AUDIT_ACTION_READ,
     ):
-        bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
@@ -78,7 +77,6 @@ async def get_installation_versions(
         resource=loggers.AUDIT_RESOURCE_INSTALLATION_VERSIONS,
         action=loggers.AUDIT_ACTION_READ,
     ):
-        bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
@@ -124,7 +122,6 @@ async def get_installation_providers(
         resource=loggers.AUDIT_RESOURCE_INSTALLATION_PROVIDERS,
         action=loggers.AUDIT_ACTION_READ,
     ):
-        bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
@@ -152,7 +149,6 @@ async def get_installation_git_metadata(
         resource=loggers.AUDIT_RESOURCE_INSTALLATION_GIT_METADATA,
         action=loggers.AUDIT_ACTION_READ,
     ):
-        bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,

@@ -177,7 +177,6 @@ async def post_uploads_room(
         resource=loggers.AUDIT_RESOURCE_ROOM_UPLOAD,
         action=loggers.AUDIT_ACTION_CREATE,
     ):
-        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,

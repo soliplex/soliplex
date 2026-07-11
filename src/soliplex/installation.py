@@ -310,25 +310,19 @@ class Installation:
         the_room_authz: authz.RoomAuthorizationPolicy = None,
         the_logger: loggers.LogWrapper = None,
     ) -> config_rooms.RoomConfig:
-        """Return a room configs IFF available to the user"""
-        if the_logger is None:
-            logger = loggers.LogWrapper(
-                loggers.AUTHZ_LOGGER_NAME,
-                the_installation=self,
-                user=user,
-            )
-        else:
-            logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME, user=user)
+        """Return a room config IFF available to the user.
 
+        The room-access grant/deny decision is recorded on the audit trail
+        by 'check_room_access' itself; 'the_logger' is accepted for
+        signature symmetry with 'get_room_configs' (which still uses it for
+        operational room-filtering traces).
+        """
         if the_room_authz is not None:
             if not await the_room_authz.check_room_access(
                 room_id=room_id,
                 user_token=user,
             ):
-                logger.error(loggers.AUTHZ_ROOM_NOT_AUTHORIZED)
                 raise KeyError(room_id)
-
-            logger.debug(loggers.AUTHZ_ROOM_AUTHORIZED)
 
         return self._config.room_configs[room_id]
 

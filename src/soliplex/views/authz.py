@@ -48,7 +48,6 @@ async def get_room_authz(
         resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
         action=loggers.AUDIT_ACTION_READ,
     ):
-        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
@@ -82,7 +81,6 @@ async def post_room_authz(
         resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
         action=loggers.AUDIT_ACTION_UPDATE,
     ):
-        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
@@ -116,7 +114,6 @@ async def delete_room_authz(
         resource=loggers.AUDIT_RESOURCE_ROOM_POLICY,
         action=loggers.AUDIT_ACTION_DELETE,
     ):
-        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
@@ -148,7 +145,6 @@ async def get_installation_authz(
         resource=loggers.AUDIT_RESOURCE_INSTALLATION_AUTHZ,
         action=loggers.AUDIT_ACTION_READ,
     ):
-        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
             detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,

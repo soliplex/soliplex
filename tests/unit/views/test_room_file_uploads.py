@@ -290,10 +290,6 @@ async def test_post_uploads_room(
 
         assert exc.value.status_code == 403
         assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-
-        the_authz_logger.error.assert_called_once_with(
-            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-        )
         # A refused (non-admin) attempt records no privileged-upload event.
         the_audit.room_upload_added.assert_not_called()
 

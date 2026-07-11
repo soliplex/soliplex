@@ -69,10 +69,6 @@ async def test_get_room_authz(w_policy, w_admin_access):
         assert exc.value.status_code == 403
         assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
 
-        the_authz_logger.error.assert_called_once_with(
-            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-        )
-
         the_room_authz.get_room_policy.assert_not_awaited()
 
     else:
@@ -130,10 +126,6 @@ async def test_post_room_authz(w_existing, w_admin_access):
 
         assert exc.value.status_code == 403
         assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-
-        the_authz_logger.error.assert_called_once_with(
-            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
-        )
 
         the_room_authz.update_room_policy.assert_not_awaited()
 
@@ -194,10 +186,6 @@ async def test_delete_room_authz(w_existing, w_admin_access):
 
         assert exc.value.status_code == 403
         assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-
-        the_authz_logger.error.assert_called_once_with(
-            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
-        )
 
         the_room_authz.delete_room_policy.assert_not_awaited()
 
@@ -269,10 +257,6 @@ async def test_get_installation_authz(
 
         assert exc.value.status_code == 403
         assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-
-        the_authz_logger.error.assert_called_once_with(
-            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
-        )
 
         the_room_authz.get_room_policy.assert_not_awaited()
         the_admin_users.list_admin_user_discriminators.assert_not_awaited()
