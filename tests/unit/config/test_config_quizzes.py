@@ -28,6 +28,8 @@ QUESTION_TYPE_QA = "qa"
 QUESTION_TYPE_MC = "multiple-choice"
 MC_OPTIONS = ["orange", "blue", "purple"]
 
+OLLAMA_BASE_URL = "http://ollama.example.com:11434"
+
 QUIZ_ID = "test_quiz"
 
 Q_UUID_1 = "DEADBEEF"
@@ -265,6 +267,51 @@ def test_quizconfig_from_yaml(
         yaml_file,
         config_dict,
     )
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        TEST_QUIZ_W_STEM_KW.copy(),
+        TEST_QUIZ_W_OVR_KW.copy(),
+    ],
+)
+def test_quizconfig_as_yaml(temp_dir, installation_config, w_kw):
+    config_path = temp_dir / "test.yaml"
+
+    installation_config.get_environment.side_effect = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+    }.get
+    w_kw["judge_agent"] = config_agents.extract_agent_config(
+        installation_config,
+        config_path,
+        w_kw.pop("judge_agent"),
+    )
+
+    inst = config_quizzes.QuizConfig(**w_kw)
+
+    expected = {
+        "id": w_kw["id"],
+        "question_file": w_kw["question_file"],
+        "judge_agent": w_kw["judge_agent"].as_yaml,
+    }
+
+    if "title" in w_kw:
+        expected["title"] = w_kw["title"]
+    else:
+        expected["title"] = "Quiz"
+
+    if "randomize" in w_kw:
+        expected["randomize"] = w_kw["randomize"]
+    else:
+        expected["randomize"] = False
+
+    if "max_questions" in w_kw:
+        expected["max_questions"] = w_kw["max_questions"]
+
+    found = inst.as_yaml
 
     assert found == expected
 

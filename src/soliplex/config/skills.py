@@ -316,6 +316,19 @@ class _HR_SkillConfigBase(
             ) from exc
 
     @property
+    def as_yaml(self) -> dict:
+        result = {"kind": self.kind}
+
+        if self.rag_lancedb_stem is not None:
+            result["rag_lancedb_stem"] = self.rag_lancedb_stem
+        else:
+            result["rag_lancedb_override_path"] = (
+                self.rag_lancedb_override_path
+            )
+
+        return result
+
+    @property
     def skill(self) -> hs_models.Skill:
         return self._hr_skill_module.create_skill(
             db_path=self.rag_lancedb_path,
@@ -341,19 +354,6 @@ class HR_Analysis_SkillConfig(_HR_SkillConfigBase):
 
     kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.analysis"
     _hr_skill_module = hr_skills_analysis
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
-        config_path: pathlib.Path,
-        config_dict: dict,
-    ):
-        return super().from_yaml(
-            installation_config,
-            config_path,
-            config_dict,
-        )
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -409,6 +409,29 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
                 "bwrap-sandbox",
                 config_dict,
             ) from exc
+
+    @property
+    def as_yaml(self) -> dict:
+        result = {
+            "kind": self.kind,
+            "default_environment": self.default_environment,
+        }
+
+        if self.id is not None:
+            result["id"] = self.id
+
+        if self.allowed_environments is not None:
+            result["allowed_environments"] = self.allowed_environments
+
+        if self.sandbox_config is not None:
+            sc = self.sandbox_config
+            result["sandbox_config"] = {
+                "environments_pathname": sc.environments_pathname,
+                "execution_timeout_seconds": sc.execution_timeout_seconds,
+                "max_output_chars": sc.max_output_chars,
+            }
+
+        return result
 
     @property
     def agui_feature_names(self) -> tuple[str]:
@@ -568,6 +591,20 @@ class RoomSkillsConfig(_SkillConfigModelBase):
                 "room_skills",
                 config_dict,
             ) from exc
+
+    @property
+    def as_yaml(self) -> dict:
+        result = {"model_name": self.model_name}
+
+        if self.installation_skill_names:
+            result["installation_skill_names"] = self.installation_skill_names
+
+        sc_map = [sc.as_yaml for sc in self._skill_configs.values()]
+
+        if sc_map:
+            result["skill_configs"] = sc_map
+
+        return result
 
     @property
     def skill_configs(self) -> SkillConfigMap:

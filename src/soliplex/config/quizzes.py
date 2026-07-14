@@ -154,6 +154,25 @@ class QuizConfig:
             self.judge_agent = agents.AgentConfig(**kwargs)
 
     @property
+    def as_yaml(self) -> dict:
+        result = {
+            "id": self.id,
+            "title": self.title,
+            "randomize": self.randomize,
+            "judge_agent": self.judge_agent.as_yaml,
+        }
+
+        if self._question_file_stem is not None:
+            result["question_file"] = self._question_file_stem
+        else:
+            result["question_file"] = self._question_file_path_override
+
+        if self.max_questions is not None:
+            result["max_questions"] = self.max_questions
+
+        return result
+
+    @property
     def question_file_path(self) -> pathlib.Path:
         if self._question_file_path_override is not None:
             return pathlib.Path(self._question_file_path_override)
