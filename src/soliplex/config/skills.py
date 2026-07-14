@@ -508,6 +508,12 @@ class RoomSkillsConfig(_SkillConfigModelBase):
     #
     installation_skill_names: list[str] = _default_list_field()
 
+    #
+    # Run skills as isolated sub-agents (the default) or expose their tools
+    # directly to the room's agent.
+    #
+    use_subagents: bool = True
+
     # Set by `from_yaml` factory
     _skill_configs: SkillConfigMap = _default_dict_field()
     _installation_config: InstallationConfig = (  # noqa F821 cycles
@@ -625,6 +631,7 @@ class RoomSkillsConfig(_SkillConfigModelBase):
         return SoliplexSkillToolset(
             skills=skill_map.values(),
             skill_model=self.model_or_name,
+            use_subagents=self.use_subagents,
         )
 
 
