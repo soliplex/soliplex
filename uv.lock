@@ -1116,7 +1116,7 @@ wheels = [
 
 [[package]]
 name = "haiku-rag-slim"
-version = "0.65.1"
+version = "0.66.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docling-core" },
@@ -1139,9 +1139,9 @@ dependencies = [
     { name = "watchfiles" },
     { name = "zstandard", marker = "python_full_version < '3.14'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a9/69/b62507bca4c5eeec0589b134c874810b1509cd3c9cf52939eb59c191eb8b/haiku_rag_slim-0.65.1.tar.gz", hash = "sha256:f1fb858c563eeb4d001b12b606f20b9d705ca6306df368eb5137ed857d7e9d12", size = 232288, upload-time = "2026-07-10T12:18:20.731Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/65/b25bff3ec7194482ae0a7eed7d67bdf98fb2c0d99c5266951c86b3df856f/haiku_rag_slim-0.66.0.tar.gz", hash = "sha256:1a56edc60030fb765f5711d93dd208e3491e8cb4ba03c1178482f77391f29c3e", size = 232342, upload-time = "2026-07-14T13:07:34.63Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e2/db/18e3780c29b99e0fb5ed05562f002c74c5bfdd826a368b2f59133e1f8e22/haiku_rag_slim-0.65.1-py3-none-any.whl", hash = "sha256:1772ccdfdca7c2eca5453e522cf1f18b44ba57ac087fd6b323a2d27e601b6e53", size = 311316, upload-time = "2026-07-10T12:18:19.312Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/04/e005e61bc58825b6cd520666a1fd2b2283bac21bacf101eb1014bcccd608/haiku_rag_slim-0.66.0-py3-none-any.whl", hash = "sha256:c83c44ec4e2a2f8a47df5ba79438285a8e04ee5c4b163a6ad9aff5e8d985ac0b", size = 310897, upload-time = "2026-07-14T13:07:33.243Z" },
 ]
 
 [[package]]
@@ -3450,7 +3450,7 @@ requires-dist = [
     { name = "fastapi" },
     { name = "fastmcp", specifier = ">=3.3.0,<3.4" },
     { name = "greenlet" },
-    { name = "haiku-rag-slim", specifier = ">=0.65,<0.66" },
+    { name = "haiku-rag-slim", specifier = ">=0.66,<0.67" },
     { name = "haiku-skills", specifier = ">=0.18.0,<0.19" },
     { name = "idna", specifier = ">=3.15" },
     { name = "itsdangerous" },
