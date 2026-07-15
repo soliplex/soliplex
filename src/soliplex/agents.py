@@ -31,6 +31,10 @@ class SkillToolsetConfig(typing.Protocol):
     @abc.abstractmethod
     def skill_toolset(self) -> hs_agent.SkillToolset: ...
 
+    @property
+    @abc.abstractmethod
+    def use_subagents(self) -> bool: ...
+
 
 @dataclasses.dataclass
 class AgentDependencies:
@@ -110,6 +114,7 @@ def get_default_agent_from_configs(
         instructions = hs_prompts.build_system_prompt(
             preamble=preamble,
             skill_catalog=toolset.skill_catalog,
+            use_subagents=skill_toolset_config.use_subagents,
         )
     else:
         instructions = agent_prompt
