@@ -1146,7 +1146,7 @@ wheels = [
 
 [[package]]
 name = "haiku-skills"
-version = "0.18.0"
+version = "0.18.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ag-ui-protocol" },
@@ -1156,9 +1156,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "skills-ref" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/64/a4/41cddc90280bea6d4150ed3361fe1cc804a0d110ca11319a78bf9880cfe9/haiku_skills-0.18.0.tar.gz", hash = "sha256:ac7033bafa79059800515a69d5e60a6fb6f0659174694bfceec473308add85b1", size = 189494, upload-time = "2026-06-29T08:00:29.782Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/09/0984a5ac416453ac2d170fde5ea973ed0700a21ed220d13d1d9ca2127b7f/haiku_skills-0.18.1.tar.gz", hash = "sha256:36edd612a91a897459a5218b79c207372e33670b89b312631f3c69bc9b211dc5", size = 190035, upload-time = "2026-07-15T10:24:52.973Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/b9/33ed400bd24ba0083ccc352053aae536b7a6bdbcd000171b7683bb756fd4/haiku_skills-0.18.0-py3-none-any.whl", hash = "sha256:cfeb0cd2bd8d297ccd607cf9d94f635c1a9d411676bb3ac8516b149d372154a8", size = 34044, upload-time = "2026-06-29T08:00:28.7Z" },
+    { url = "https://files.pythonhosted.org/packages/78/24/280e4d72b09136086b56658b9fb81d620b0365844f4eca50ab5c7e99f74b/haiku_skills-0.18.1-py3-none-any.whl", hash = "sha256:b6f8b31d54a0b3a8dfd54a53b9cdcaa45ddedc65dd0349c8db7ba8a59b0f891e", size = 34572, upload-time = "2026-07-15T10:24:52.086Z" },
 ]
 
 [[package]]
@@ -3325,8 +3325,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -3451,7 +3451,7 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=3.3.0,<3.4" },
     { name = "greenlet" },
     { name = "haiku-rag-slim", specifier = ">=0.66,<0.67" },
-    { name = "haiku-skills", specifier = ">=0.18.0,<0.19" },
+    { name = "haiku-skills", specifier = ">=0.18.1,<0.19" },
     { name = "idna", specifier = ">=3.15" },
     { name = "itsdangerous" },
     { name = "joserfc", specifier = ">=1.6.7,<1.7" },
