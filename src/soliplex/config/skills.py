@@ -398,6 +398,12 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
                 **sandbox_config_dict,
             )
 
+            volumes_dict = config_dict.pop("volumes", {})
+            config_dict["volumes"] = {
+                key: bs_models.VolumeInfo(**value)
+                for key, value in volumes_dict.items()
+            }
+
             de_name = config_dict.pop("default_environment_name", None)
             if de_name is not None:  # pragma: NO COVER forward-compat
                 config_dict["default_environment"] = de_name
@@ -429,6 +435,15 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
                 "environments_pathname": sc.environments_pathname,
                 "execution_timeout_seconds": sc.execution_timeout_seconds,
                 "max_output_chars": sc.max_output_chars,
+            }
+
+        if self.volumes:
+            result["volumes"] = {
+                key: {
+                    "host_path": str(value.host_path),
+                    "writable": value.writable,
+                }
+                for key, value in self.volumes.items()
             }
 
         return result

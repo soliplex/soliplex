@@ -1,6 +1,7 @@
 import contextlib
 import copy
 import dataclasses
+import pathlib
 import warnings
 from unittest import mock
 
@@ -139,22 +140,52 @@ BOGUS_RAG_SKILL_CONFIG_KW = {
 BWRAP_SANDBOX_SKILL_ID = "test-bwrap-sandbox-id"
 BWRAP_SANDBOX_DEFAULT_ENVIRONMENT = "test-environment"
 BWRAP_SANDBOX_EXEC_TIMEOUT_SECS = 60
+
 BWRAP_SANDBOX_SKILL_CONFIG_KW = {
     "id": BWRAP_SANDBOX_SKILL_ID,
     "default_environment": BWRAP_SANDBOX_DEFAULT_ENVIRONMENT,
-    "allowed_environments": [BWRAP_SANDBOX_DEFAULT_ENVIRONMENT],
-    "sandbox_config": {
-        "execution_timeout_seconds": BWRAP_SANDBOX_EXEC_TIMEOUT_SECS,
-    },
 }
 BWRAP_SANDBOX_SKILL_CONFIG_YAML = f"""\
   - kind: "{sk_bwrap_sandbox.SKILL_NAME}"
     id: "{BWRAP_SANDBOX_SKILL_ID}"
     default_environment: "{BWRAP_SANDBOX_DEFAULT_ENVIRONMENT}"
+"""
+
+W_ALLOWED_ENV_BWSB_SKILL_CONFIG_KW = BWRAP_SANDBOX_SKILL_CONFIG_KW | {
+    "allowed_environments": [BWRAP_SANDBOX_DEFAULT_ENVIRONMENT],
+}
+W_ALLOWED_ENV_BWSB_SKILL_CONFIG_YAML = f"""\
+{BWRAP_SANDBOX_SKILL_CONFIG_YAML}
     allowed_environments:
       - "{BWRAP_SANDBOX_DEFAULT_ENVIRONMENT}"
+"""
+
+W_SANDBOX_CONFIG_BWSB_SKILL_CONFIG_KW = BWRAP_SANDBOX_SKILL_CONFIG_KW | {
+    "sandbox_config": {
+        "execution_timeout_seconds": BWRAP_SANDBOX_EXEC_TIMEOUT_SECS,
+    },
+}
+W_SANDBOX_CONFIG_BWSB_SKILL_CONFIG_YAML = f"""\
+{BWRAP_SANDBOX_SKILL_CONFIG_YAML}
     sandbox_config:
       execution_timeout_seconds: {BWRAP_SANDBOX_EXEC_TIMEOUT_SECS}
+"""
+
+BS_VOLUME_PATH = "/path/to/host/volume/dir"
+W_VOLUMES_BWSB_SKILL_CONFIG_KW = BWRAP_SANDBOX_SKILL_CONFIG_KW | {
+    "volumes": {
+        "test_volume": bs_models.VolumeInfo(
+            host_path=pathlib.Path(BS_VOLUME_PATH),
+            writable=False,
+        ),
+    },
+}
+W_VOLUMES_BWSB_SKILL_CONFIG_YAML = f"""\
+{BWRAP_SANDBOX_SKILL_CONFIG_YAML}
+    volumes:
+      test_volume:
+        host_path: "{BS_VOLUME_PATH}"
+        writable: False
 """
 
 W_SKILL_CONFIGS_ROOM_SKILLS_CONFIG_KW = {
@@ -1029,6 +1060,18 @@ def test_hr_analysis_skillconfig_as_yaml(
             BWRAP_SANDBOX_SKILL_CONFIG_KW,
             contextlib.nullcontext(0),
         ),
+        (
+            W_ALLOWED_ENV_BWSB_SKILL_CONFIG_KW,
+            contextlib.nullcontext(0),
+        ),
+        (
+            W_SANDBOX_CONFIG_BWSB_SKILL_CONFIG_KW,
+            contextlib.nullcontext(0),
+        ),
+        (
+            W_VOLUMES_BWSB_SKILL_CONFIG_KW,
+            contextlib.nullcontext(0),
+        ),
     ],
 )
 def test_bwrapsandboxskillconfig_from_yaml(
@@ -1039,11 +1082,25 @@ def test_bwrapsandboxskillconfig_from_yaml(
 ):
     config_path = temp_dir / "config_file.yaml"
 
+    vol_map = w_config.get("volumes")
+    if vol_map:
+        volumes_kw = {
+            "volumes": {
+                key: {
+                    "host_path": str(value.host_path),
+                    "writable": value.writable,
+                }
+                for key, value in w_config["volumes"].items()
+            }
+        }
+    else:
+        volumes_kw = {}
+
     with expectation as expected:
         inst = config_skills.BwrapSandboxSkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
-            config_dict=w_config.copy(),
+            config_dict=w_config.copy() | volumes_kw,
         )
 
     if not isinstance(expected, pytest.ExceptionInfo):
@@ -1076,12 +1133,20 @@ def test_bwrapsandboxskillconfig_from_yaml(
         else:
             assert "allowed_environments" not in inst.extra_parameters
 
+        if "volumes" in w_config:
+            assert inst.volumes == w_config["volumes"]
+        else:
+            assert inst.volumes == {}
+
 
 @pytest.mark.parametrize(
     "w_kw",
     [
         {},
         BWRAP_SANDBOX_SKILL_CONFIG_KW.copy(),
+        W_ALLOWED_ENV_BWSB_SKILL_CONFIG_KW.copy(),
+        W_SANDBOX_CONFIG_BWSB_SKILL_CONFIG_KW.copy(),
+        W_VOLUMES_BWSB_SKILL_CONFIG_KW.copy(),
     ],
 )
 def test_bwrapsandboxskillconfig_as_yaml(
@@ -1115,6 +1180,15 @@ def test_bwrapsandboxskillconfig_as_yaml(
             key: value
             for key, value in sc.model_dump().items()
             if key != "config_file_path"
+        }
+
+    if "volumes" in w_kw:
+        expected["volumes"] = {
+            key: {
+                "host_path": str(value.host_path),
+                "writable": value.writable,
+            }
+            for key, value in w_kw["volumes"].items()
         }
 
     inst = config_skills.BwrapSandboxSkillConfig(**w_kw)
