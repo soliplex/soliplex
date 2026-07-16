@@ -19,9 +19,6 @@ from tests.unit.config import test_config_quizzes as test_quizzes
 from tests.unit.config import test_config_skills as test_skills
 from tests.unit.config import test_config_tools as test_tools
 
-NoRaise = contextlib.nullcontext()
-
-
 OLLAMA_BASE_URL = "http://ollama.example.com:11434"
 
 _ORDER = "explicitly_ordered"
@@ -119,15 +116,6 @@ W_HR_TOOLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
             haiku_rag_config=HR_CONFIG,
         ),
     },
-}
-
-# Deprecated (#1133)
-W_ENABLE_ATTACHMENTS_YAML = f"""\
-{BARE_ROOM_CONFIG_YAML}
-enable_attachments: true
-"""
-W_ENABLE_ATTACHMENTS_KW = BARE_ROOM_CONFIG_KW | {
-    "enable_attachments": True,
 }
 
 EXTRA_AGUI_FEATURE_NAME = "extra-agui-feature"
@@ -251,49 +239,39 @@ agui_feature_names:
 allow_mcp: true
 """
 
+NoRaise = contextlib.nullcontext()
+
 
 @pytest.mark.parametrize(
-    "config_yaml, expectation, w_depr",
+    "config_yaml, expectation",
     [
         (
             BOGUS_ROOM_CONFIG_YAML,
             pytest.raises(config_exc.FromYamlException),
-            None,
         ),
         (
             BARE_ROOM_CONFIG_YAML,
             contextlib.nullcontext(BARE_ROOM_CONFIG_KW),
-            None,
         ),
         (
             W__ORDER_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W__ORDER_ROOM_CONFIG_KW),
-            None,
         ),
         (
             W_NON_HR_SKILLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_NON_HR_SKILLS_ROOM_CONFIG_KW),
-            None,
         ),
         (
             W_HR_SKILLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_HR_SKILLS_ROOM_CONFIG_KW),
-            None,
         ),
         (
             W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_NON_HR_TOOLS_ROOM_CONFIG_KW),
-            None,
-        ),
-        (
-            W_ENABLE_ATTACHMENTS_YAML,
-            contextlib.nullcontext(W_ENABLE_ATTACHMENTS_KW),
-            "RoomConfig.enable_attachments",
         ),
         (
             FULL_ROOM_CONFIG_YAML,
             contextlib.nullcontext(FULL_ROOM_CONFIG_KW),
-            None,
         ),
     ],
 )
@@ -302,7 +280,6 @@ def test_roomconfig_from_yaml(
     temp_dir,
     config_yaml,
     expectation,
-    w_depr,
 ):
     skill = mock.create_autospec(hs_models.Skill)
     skill_config = mock.create_autospec(
@@ -321,23 +298,7 @@ def test_roomconfig_from_yaml(
     with yaml_file.open() as stream:
         config_dict = yaml.safe_load(stream)
 
-    if w_depr:
-        warn_guard_found = pytest.warns(
-            DeprecationWarning,
-            match=w_depr,
-        )
-        warn_guard_expected = pytest.warns(
-            DeprecationWarning,
-            match=w_depr,
-        )
-    else:
-        warn_guard_found = contextlib.nullcontext(())
-        warn_guard_expected = contextlib.nullcontext(())
-
-    with (
-        warn_guard_found as warned,
-        expectation as expected,
-    ):
+    with expectation as expected:
         found = config_rooms.RoomConfig.from_yaml(
             installation_config,
             yaml_file,
@@ -348,12 +309,11 @@ def test_roomconfig_from_yaml(
         assert expected.value._config_path == yaml_file
 
     else:
-        with warn_guard_expected:
-            expected = config_rooms.RoomConfig(
-                **expected,
-                _installation_config=installation_config,
-                _config_path=yaml_file,
-            )
+        expected = config_rooms.RoomConfig(
+            **expected,
+            _installation_config=installation_config,
+            _config_path=yaml_file,
+        )
 
         expected.agent_config = dataclasses.replace(
             expected.agent_config,
@@ -402,12 +362,6 @@ def test_roomconfig_from_yaml(
             ]
 
         assert found == expected
-
-        if w_depr:  # pragma: NO COVER
-            (depr,) = warned
-            assert depr.category is DeprecationWarning
-        else:
-            assert len(warned) == 0
 
 
 @pytest.mark.parametrize(
