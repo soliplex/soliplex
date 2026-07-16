@@ -404,10 +404,6 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
                 for key, value in volumes_dict.items()
             }
 
-            de_name = config_dict.pop("default_environment_name", None)
-            if de_name is not None:  # pragma: NO COVER forward-compat
-                config_dict["default_environment"] = de_name
-
             return cls(**config_dict)
         except Exception as exc:
             raise config_exc.FromYamlException(
@@ -464,10 +460,6 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
         )
         skill._factory = sk_bwrap_sandbox.create_bwrap_sandbox_skill
         return skill
-
-    @property
-    def default_environment_name(self) -> str:
-        return self.default_environment  # pragma: NO COVER deprecated alias
 
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:
