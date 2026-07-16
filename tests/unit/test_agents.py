@@ -266,6 +266,7 @@ def test_get_default_agent_from_configs(
         build_system_prompt.assert_called_once_with(
             preamble=exp_preamble,
             skill_catalog=room_skills.skill_toolset.skill_catalog,
+            use_subagents=room_skills.use_subagents,
         )
     else:
         build_system_prompt.assert_not_called()

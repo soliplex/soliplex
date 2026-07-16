@@ -1465,6 +1465,51 @@ def test_roomskillsconfig_skills(installation_config):
     assert found == {SKILL_NAME: skill_config.skill}
 
 
+@pytest.mark.parametrize(
+    "ctor_kw, expected",
+    [
+        ({}, True),
+        ({"use_subagents": True}, True),
+        ({"use_subagents": False}, False),
+    ],
+)
+def test_roomskillsconfig_skill_toolset_use_subagents(
+    installation_config, ctor_kw, expected
+):
+    skill = mock.create_autospec(hs_models.Skill)
+    skill_config = mock.create_autospec(
+        config_skills._DiscoveredSkillConfigBase, skill=skill
+    )
+    installation_config.skill_configs = {SKILL_NAME: skill_config}
+
+    room_skill_config = config_skills.RoomSkillsConfig(
+        installation_skill_names=[SKILL_NAME],
+        _installation_config=installation_config,
+        **ctor_kw,
+    )
+
+    with mock.patch.object(
+        config_skills, "SoliplexSkillToolset"
+    ) as mock_toolset:
+        _ = room_skill_config.skill_toolset
+
+    assert mock_toolset.call_args.kwargs["use_subagents"] is expected
+
+
+def test_roomskillsconfig_from_yaml_use_subagents(
+    installation_config, config_path
+):
+    config_dict = {"installation_skill_names": [], "use_subagents": False}
+
+    found = config_skills.RoomSkillsConfig.from_yaml(
+        installation_config,
+        config_path,
+        config_dict,
+    )
+
+    assert found.use_subagents is False
+
+
 @pytest.mark.parametrize("w_rag_skill", [False, True])
 def test_roomskillsconfig_rag_db_paths(
     installation_config,
