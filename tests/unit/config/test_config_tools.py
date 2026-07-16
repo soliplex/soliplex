@@ -445,6 +445,34 @@ def test_toolconfig_from_yaml(
         assert found == expected
 
 
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        BARE_TOOL_CONFIG_PARAMS_KW.copy(),
+        W_AGUI_FEATURE_NAME_TOOL_CONFIG_PARAMS_KW.copy(),
+        W_AI_TOOL_PARAMS_TOOL_CONFIG_PARAMS_KW.copy(),
+    ],
+)
+def test_toolconfig_as_yaml(
+    w_kw,
+):
+    inst = config_tools.ToolConfig(**w_kw)
+
+    expected = {
+        "tool_name": w_kw["tool_name"],
+        "allow_mcp": w_kw["allow_mcp"],
+    }
+    if "agui_feature_names" in w_kw:
+        expected["agui_feature_names"] = list(w_kw["agui_feature_names"])
+
+    if "_ai_tool_params" in w_kw:
+        expected["ai_tool_params"] = w_kw["_ai_tool_params"].as_yaml
+
+    found = inst.as_yaml
+
+    assert found == expected
+
+
 def test_toolconfig_kind():
     tool_config = config_tools.ToolConfig(
         tool_name="soliplex.tools.test_tool",
@@ -764,6 +792,49 @@ def test_sdtc_from_yaml(
 
 
 @pytest.mark.parametrize(
+    "w_kw",
+    [
+        W_STEM_SDTC_CONFIG_KW.copy(),
+        W_OVERRIDE_SDTC_CONFIG_KW.copy(),
+    ],
+)
+def test_sdtc_as_yaml(temp_dir, installation_config, w_kw):
+    db_rag_dir = temp_dir / "db" / "rag"
+    db_rag_dir.mkdir(parents=True)
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_dir)}
+    installation_config.get_environment = ic_environ.get
+
+    expected = {"tool_name": config_tools.SDTC_TOOL_NAME}
+
+    if "rag_lancedb_override_path" in w_kw:
+        expected["rag_lancedb_override_path"] = w_kw[
+            "rag_lancedb_override_path"
+        ]
+    else:
+        expected["rag_lancedb_stem"] = w_kw["rag_lancedb_stem"]
+
+    if "search_documents_limit" in w_kw:
+        expected["search_documents_limit"] = w_kw["search_documents_limit"]
+    else:
+        expected["search_documents_limit"] = 5
+
+    if "allow_mcp" in w_kw:
+        expected["allow_mcp"] = w_kw["allow_mcp"]
+    else:
+        expected["allow_mcp"] = False
+
+    inst = config_tools.SearchDocumentsToolConfig(
+        _installation_config=installation_config,
+        **w_kw,
+    )
+
+    found = inst.as_yaml
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
     "stem, override, which",
     [
         ("testing", None, "stem"),
@@ -851,6 +922,23 @@ def test_stdio_mctc_from_yaml(
             **exp_config,
         )
         assert stdio_mctc == expected
+
+
+@pytest.mark.parametrize("w_env", [{}, {"foo": "bar"}])
+def test_stdio_mctc_as_yaml(w_env):
+    stdio_mctc = config_tools.Stdio_MCP_ClientToolsetConfig(
+        command="cat",
+        args=["-"],
+        env=w_env,
+    )
+
+    found = stdio_mctc.as_yaml
+
+    assert found["kind"] == config_tools.Stdio_MCP_ClientToolsetConfig.kind
+    assert found["command"] == stdio_mctc.command
+    assert found["args"] == stdio_mctc.args
+    assert found["env"] == stdio_mctc.env
+    assert found["allowed_tools"] == stdio_mctc.allowed_tools
 
 
 @pytest.mark.parametrize("w_env", [{}, {"foo": "bar"}])
@@ -945,6 +1033,24 @@ def test_http_mctc_from_yaml(
             **exp_config,
         )
         assert http_mctc == expected
+
+
+@pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])
+@pytest.mark.parametrize("w_query_params", [{}, HTTP_MCP_QUERY_PARAMS])
+def test_http_mctc_as_yaml(w_query_params, w_headers):
+    http_mctc = config_tools.HTTP_MCP_ClientToolsetConfig(
+        url=HTTP_MCP_URL,
+        headers=w_headers,
+        query_params=w_query_params,
+    )
+
+    found = http_mctc.as_yaml
+
+    assert found["kind"] == config_tools.HTTP_MCP_ClientToolsetConfig.kind
+    assert found["url"] == http_mctc.url
+    assert found["query_params"] == http_mctc.query_params
+    assert found["headers"] == http_mctc.headers
+    assert found["allowed_tools"] == http_mctc.allowed_tools
 
 
 @pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])
@@ -1060,6 +1166,24 @@ def test_sse_mctc_from_yaml(
             **exp_config,
         )
         assert sse_mctc == expected
+
+
+@pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])
+@pytest.mark.parametrize("w_query_params", [{}, HTTP_MCP_QUERY_PARAMS])
+def test_sse_mctc_as_yaml(w_query_params, w_headers):
+    sse_mctc = config_tools.SSE_MCP_ClientToolsetConfig(
+        url=HTTP_MCP_URL,
+        headers=w_headers,
+        query_params=w_query_params,
+    )
+
+    found = sse_mctc.as_yaml
+
+    assert found["kind"] == config_tools.SSE_MCP_ClientToolsetConfig.kind
+    assert found["url"] == sse_mctc.url
+    assert found["query_params"] == sse_mctc.query_params
+    assert found["headers"] == sse_mctc.headers
+    assert found["allowed_tools"] == sse_mctc.allowed_tools
 
 
 @pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])

@@ -169,6 +169,48 @@ class RoomConfig:
             ) from exc
 
     @property
+    def as_yaml(self) -> dict:
+        result = {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "allow_mcp": self.allow_mcp,
+            "agent": self.agent_config.as_yaml,
+        }
+
+        if self._order is not None:
+            result["_order"] = self._order
+
+        if self.welcome_message:
+            result["welcome_message"] = self.welcome_message
+
+        if self.suggestions:
+            result["suggestions"] = self.suggestions
+
+        if self._logo_image:
+            result["logo_image"] = self._logo_image
+
+        if self.quizzes:
+            result["quizzes"] = [quiz.as_yaml for quiz in self.quizzes]
+
+        if self._agui_feature_names:
+            result["agui_feature_names"] = list(self._agui_feature_names)
+
+        if self.tool_configs:
+            result["tools"] = [tc.as_yaml for tc in self.tool_configs.values()]
+
+        if self.mcp_client_toolset_configs:
+            result["mcp_client_toolsets"] = {
+                key: mctc.as_yaml
+                for key, mctc in self.mcp_client_toolset_configs.items()
+            }
+
+        if self.skills:
+            result["skills"] = self.skills.as_yaml
+
+        return result
+
+    @property
     def sort_key(self):
         if self._order is not None:
             return self._order

@@ -322,7 +322,7 @@ def extra_agent_capability(patched_agent_capabilities):
 def test__apply_agent_config_template(temp_dir, config_dict, expected):
     template_ac = mock.Mock(spec_set=["id", "as_yaml"])
     template_ac.id = TEMPLATE_AGENT_ID
-    template_ac.as_yaml = {"key": "from_template"}
+    template_ac.as_yaml = {"key": "from_template", "kind": "omit-me"}
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.agent_configs = [template_ac]
     config_path = temp_dir / "test.yaml"
@@ -1070,7 +1070,9 @@ def test_factoryagentconfig_as_yaml(
     kw,
 ):
     kw = copy.deepcopy(kw)
-    expected = copy.deepcopy(kw)
+    expected = copy.deepcopy(kw) | {
+        "kind": config_agents.FactoryAgentConfig.kind,
+    }
 
     if "extra_config" not in expected:
         expected["extra_config"] = {}

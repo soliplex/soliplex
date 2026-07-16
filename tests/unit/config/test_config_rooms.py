@@ -22,6 +22,9 @@ from tests.unit.config import test_config_tools as test_tools
 NoRaise = contextlib.nullcontext()
 
 
+OLLAMA_BASE_URL = "http://ollama.example.com:11434"
+
+_ORDER = "explicitly_ordered"
 ROOM_ID = "test-room"
 ROOM_NAME = "Test Room"
 ROOM_DESCRIPTION = "This room is for testing"
@@ -50,6 +53,12 @@ description: "{ROOM_DESCRIPTION}"
 agent:
     model_name: "{test_agents.MODEL_NAME}"
     system_prompt: "{test_agents.SYSTEM_PROMPT}"
+"""
+
+W__ORDER_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {"_order": _ORDER}
+W__ORDER_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+_order: {_ORDER}
 """
 
 W_NON_HR_SKILLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
@@ -257,6 +266,11 @@ allow_mcp: true
             None,
         ),
         (
+            W__ORDER_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(W__ORDER_ROOM_CONFIG_KW),
+            None,
+        ),
+        (
             W_NON_HR_SKILLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_NON_HR_SKILLS_ROOM_CONFIG_KW),
             None,
@@ -396,9 +410,78 @@ def test_roomconfig_from_yaml(
             assert len(warned) == 0
 
 
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        BARE_ROOM_CONFIG_KW.copy(),
+        W__ORDER_ROOM_CONFIG_KW.copy(),
+        W_NON_HR_SKILLS_ROOM_CONFIG_KW.copy(),
+        W_HR_SKILLS_ROOM_CONFIG_KW.copy(),
+        W_NON_HR_TOOLS_ROOM_CONFIG_KW.copy(),
+        FULL_ROOM_CONFIG_KW.copy(),
+    ],
+)
+def test_roomconfig_as_yaml(temp_dir, installation_config, w_kw):
+    yaml_file = temp_dir / "room" / "test-room" / "room_config.yaml"
+
+    installation_config.get_environment.side_effect = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+    }.get
+    w_kw["agent_config"]._installation_config = installation_config
+
+    inst = config_rooms.RoomConfig(
+        **w_kw,
+        _config_path=yaml_file,
+        _installation_config=installation_config,
+    )
+
+    expected = {
+        "id": w_kw["id"],
+        "name": w_kw["name"],
+        "description": w_kw["description"],
+        "allow_mcp": inst.allow_mcp,
+        "agent": inst.agent_config.as_yaml,
+    }
+
+    if "_order" in w_kw:
+        expected["_order"] = w_kw["_order"]
+
+    if "welcome_message" in w_kw:
+        expected["welcome_message"] = w_kw["welcome_message"]
+
+    if "suggestions" in w_kw:
+        expected["suggestions"] = w_kw["suggestions"]
+
+    if "logo_image" in w_kw:
+        expected["logo_image"] = w_kw["logo_image"]
+
+    if "quizzes" in w_kw:
+        expected["quizzes"] = [quiz.as_yaml for quiz in w_kw["quizzes"]]
+
+    if "_agui_feature_names" in w_kw:
+        expected["agui_feature_names"] = w_kw["_agui_feature_names"]
+
+    if "tool_configs" in w_kw:
+        expected["tools"] = [
+            tc.as_yaml for tc in w_kw["tool_configs"].values()
+        ]
+
+    if "mcp_client_toolset_configs" in w_kw:
+        expected["mcp_client_toolsets"] = {
+            key: mctc.as_yaml
+            for key, mctc in w_kw["mcp_client_toolset_configs"].items()
+        }
+
+    if inst.skills:
+        expected["skills"] = inst.skills.as_yaml
+
+    found = inst.as_yaml
+
+    assert found == expected
+
+
 @pytest.mark.parametrize("w_order", [False, True])
 def test_roomconfig_sort_key(w_order):
-    _ORDER = "explicitly_ordered"
 
     room_config_kw = BARE_ROOM_CONFIG_KW.copy()
 

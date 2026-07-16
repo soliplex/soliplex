@@ -14,7 +14,5 @@ tools:
   - tool_name: "soliplex.tools.rag.search_documents"
     rag_lancedb_stem: "rag"
     search_documents_limit: 7
-    # Apply HR config overrides local to this room
-    #haiku_rag_config: "./haiku.rag.yaml"
 
 allow_mcp: false
