@@ -84,11 +84,14 @@ def _apply_agent_config_template(
             raise InvalidAgentTemplateID(template_id, config_path)
 
         template_config = ic_agent_configs_map[template_id]
+        tc_yaml_no_kind = {
+            key: value
+            for key, value in template_config.as_yaml.items()
+            if key != "kind"
+        }
 
         config_dict = (
-            template_config.as_yaml
-            | config_dict
-            | {"_template_id": template_id}
+            tc_yaml_no_kind | config_dict | {"_template_id": template_id}
         )
 
     return config_dict
@@ -365,6 +368,7 @@ class FactoryAgentConfig:
     @property
     def as_yaml(self) -> dict:
         return {
+            "kind": self.kind,
             "id": self.id,
             "factory_name": self.factory_name,
             "with_agent_config": self.with_agent_config,

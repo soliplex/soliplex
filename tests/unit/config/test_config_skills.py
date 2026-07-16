@@ -1,5 +1,7 @@
 import contextlib
+import copy
 import dataclasses
+import pathlib
 import warnings
 from unittest import mock
 
@@ -98,6 +100,7 @@ model_name: "{ROOM_SKILLS_MODEL_NAME}"
 installation_skill_names:
     - "{SKILL_NAME}"
 """
+
 W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
     "model_name": ROOM_SKILLS_MODEL_NAME,
     "installation_skill_names": ["bogus"],
@@ -106,6 +109,108 @@ W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
 model_name: "{ROOM_SKILLS_MODEL_NAME}"
 installation_skill_names:
     - "bogus"
+"""
+
+HR_RAG_SKILL_STEM = "test-foo"
+HR_RAG_SKILL_CONFIG_KW = {
+    "kind": config_skills.HR_RAG_SkillConfig.kind,
+    "rag_lancedb_stem": HR_RAG_SKILL_STEM,
+}
+HR_RAG_SKILL_CONFIG_YAML = f"""
+  - kind: "{config_skills.HR_RAG_SkillConfig.kind}"
+    rag_lancedb_stem: "{HR_RAG_SKILL_STEM}"
+"""
+
+HR_ANALYSIS_SKILL_STEM = "test-bar"
+HR_ANALYSIS_SKILL_CONFIG_KW = {
+    "kind": config_skills.HR_Analysis_SkillConfig.kind,
+    "rag_lancedb_stem": HR_ANALYSIS_SKILL_STEM,
+}
+HR_ANALYSIS_SKILL_CONFIG_YAML = f"""
+  - kind: "{config_skills.HR_Analysis_SkillConfig.kind}"
+    rag_lancedb_stem: "{HR_ANALYSIS_SKILL_STEM}"
+"""
+
+BOGUS_RAG_SKILL_STEM = "test-baz"
+BOGUS_RAG_SKILL_CONFIG_KW = {
+    "kind": "BOGUS",
+    "rag_lancedb_stem": BOGUS_RAG_SKILL_STEM,
+}
+
+BWRAP_SANDBOX_SKILL_ID = "test-bwrap-sandbox-id"
+BWRAP_SANDBOX_DEFAULT_ENVIRONMENT = "test-environment"
+BWRAP_SANDBOX_EXEC_TIMEOUT_SECS = 60
+
+BWRAP_SANDBOX_SKILL_CONFIG_KW = {
+    "id": BWRAP_SANDBOX_SKILL_ID,
+    "default_environment": BWRAP_SANDBOX_DEFAULT_ENVIRONMENT,
+}
+BWRAP_SANDBOX_SKILL_CONFIG_YAML = f"""\
+  - kind: "{sk_bwrap_sandbox.SKILL_NAME}"
+    id: "{BWRAP_SANDBOX_SKILL_ID}"
+    default_environment: "{BWRAP_SANDBOX_DEFAULT_ENVIRONMENT}"
+"""
+
+W_ALLOWED_ENV_BWSB_SKILL_CONFIG_KW = BWRAP_SANDBOX_SKILL_CONFIG_KW | {
+    "allowed_environments": [BWRAP_SANDBOX_DEFAULT_ENVIRONMENT],
+}
+W_ALLOWED_ENV_BWSB_SKILL_CONFIG_YAML = f"""\
+{BWRAP_SANDBOX_SKILL_CONFIG_YAML}
+    allowed_environments:
+      - "{BWRAP_SANDBOX_DEFAULT_ENVIRONMENT}"
+"""
+
+W_SANDBOX_CONFIG_BWSB_SKILL_CONFIG_KW = BWRAP_SANDBOX_SKILL_CONFIG_KW | {
+    "sandbox_config": {
+        "execution_timeout_seconds": BWRAP_SANDBOX_EXEC_TIMEOUT_SECS,
+    },
+}
+W_SANDBOX_CONFIG_BWSB_SKILL_CONFIG_YAML = f"""\
+{BWRAP_SANDBOX_SKILL_CONFIG_YAML}
+    sandbox_config:
+      execution_timeout_seconds: {BWRAP_SANDBOX_EXEC_TIMEOUT_SECS}
+"""
+
+BS_VOLUME_PATH = "/path/to/host/volume/dir"
+W_VOLUMES_BWSB_SKILL_CONFIG_KW = BWRAP_SANDBOX_SKILL_CONFIG_KW | {
+    "volumes": {
+        "test_volume": bs_models.VolumeInfo(
+            host_path=pathlib.Path(BS_VOLUME_PATH),
+            writable=False,
+        ),
+    },
+}
+W_VOLUMES_BWSB_SKILL_CONFIG_YAML = f"""\
+{BWRAP_SANDBOX_SKILL_CONFIG_YAML}
+    volumes:
+      test_volume:
+        host_path: "{BS_VOLUME_PATH}"
+        writable: False
+"""
+
+W_SKILL_CONFIGS_ROOM_SKILLS_CONFIG_KW = {
+    "model_name": ROOM_SKILLS_MODEL_NAME,
+    "skill_configs": [
+        HR_RAG_SKILL_CONFIG_KW
+        | {
+            "kind": config_skills.HR_RAG_SkillConfig.kind,
+        },
+        HR_ANALYSIS_SKILL_CONFIG_KW
+        | {
+            "kind": config_skills.HR_Analysis_SkillConfig.kind,
+        },
+        BWRAP_SANDBOX_SKILL_CONFIG_KW
+        | {
+            "kind": sk_bwrap_sandbox.SKILL_NAME,
+        },
+    ],
+}
+W_SKILL_CONFIGS_ROOM_SKILLS_CONFIG_YAML = f"""\
+model_name: "{ROOM_SKILLS_MODEL_NAME}"
+skill_configs:
+{HR_RAG_SKILL_CONFIG_YAML}
+{HR_ANALYSIS_SKILL_CONFIG_YAML}
+{BWRAP_SANDBOX_SKILL_CONFIG_YAML}
 """
 
 TEST_ROOM_ID = "test_room_id"
@@ -790,6 +895,43 @@ def test_hr_rag_skillconfig_from_yaml(
         assert inst.haiku_rag_config is installation_config.haiku_rag_config
 
 
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        {"rag_lancedb_override_path": None},
+        {"rag_lancedb_stem": "test_rag"},
+    ],
+)
+def test_hr_rag_skillconfig_as_yaml(
+    temp_dir,
+    installation_config,
+    lancedb,
+    w_kw,
+):
+    db_rag_dir = temp_dir / "db" / "rag"
+    db_rag_dir.mkdir(parents=True)
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_dir)}
+    installation_config.get_environment = ic_environ.get
+
+    expected = {"kind": config_skills.HR_RAG_SkillConfig.kind}
+
+    if "rag_lancedb_override_path" in w_kw:
+        w_kw["rag_lancedb_override_path"] = lancedb
+        expected["rag_lancedb_override_path"] = lancedb
+    else:
+        expected["rag_lancedb_stem"] = w_kw["rag_lancedb_stem"]
+
+    inst = config_skills.HR_RAG_SkillConfig(
+        _installation_config=installation_config,
+        **w_kw,
+    )
+
+    found = inst.as_yaml
+
+    assert found == expected
+
+
 def test_hr_analysis_skillconfig_metadata(
     installation_config,
     haiku_rag_config,
@@ -868,9 +1010,41 @@ def test_hr_analysis_skillconfig_from_yaml(
         assert inst.haiku_rag_config is installation_config.haiku_rag_config
 
 
-TEST_SKILL_CONFIG_ID = "test-bwrap-sandbox-id"
-TEST_DEFAULT_ENVIRONMENT = "test-environment"
-TEST_EXEC_TIMEOUT_SECS = 60
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        {"rag_lancedb_override_path": None},
+        {"rag_lancedb_stem": "test_rag"},
+    ],
+)
+def test_hr_analysis_skillconfig_as_yaml(
+    temp_dir,
+    installation_config,
+    lancedb,
+    w_kw,
+):
+    db_rag_dir = temp_dir / "db" / "rag"
+    db_rag_dir.mkdir(parents=True)
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_dir)}
+    installation_config.get_environment = ic_environ.get
+
+    expected = {"kind": config_skills.HR_Analysis_SkillConfig.kind}
+
+    if "rag_lancedb_override_path" in w_kw:
+        w_kw["rag_lancedb_override_path"] = lancedb
+        expected["rag_lancedb_override_path"] = lancedb
+    else:
+        expected["rag_lancedb_stem"] = w_kw["rag_lancedb_stem"]
+
+    inst = config_skills.HR_Analysis_SkillConfig(
+        _installation_config=installation_config,
+        **w_kw,
+    )
+
+    found = inst.as_yaml
+
+    assert found == expected
 
 
 @pytest.mark.parametrize(
@@ -883,14 +1057,19 @@ TEST_EXEC_TIMEOUT_SECS = 60
         ),
         ({}, contextlib.nullcontext(0)),
         (
-            {
-                "id": TEST_SKILL_CONFIG_ID,
-                "default_environment": TEST_DEFAULT_ENVIRONMENT,
-                "allowed_environments": [TEST_DEFAULT_ENVIRONMENT],
-                "sandbox_config": {
-                    "execution_timeout_seconds": TEST_EXEC_TIMEOUT_SECS,
-                },
-            },
+            BWRAP_SANDBOX_SKILL_CONFIG_KW,
+            contextlib.nullcontext(0),
+        ),
+        (
+            W_ALLOWED_ENV_BWSB_SKILL_CONFIG_KW,
+            contextlib.nullcontext(0),
+        ),
+        (
+            W_SANDBOX_CONFIG_BWSB_SKILL_CONFIG_KW,
+            contextlib.nullcontext(0),
+        ),
+        (
+            W_VOLUMES_BWSB_SKILL_CONFIG_KW,
             contextlib.nullcontext(0),
         ),
     ],
@@ -903,11 +1082,25 @@ def test_bwrapsandboxskillconfig_from_yaml(
 ):
     config_path = temp_dir / "config_file.yaml"
 
+    vol_map = w_config.get("volumes")
+    if vol_map:
+        volumes_kw = {
+            "volumes": {
+                key: {
+                    "host_path": str(value.host_path),
+                    "writable": value.writable,
+                }
+                for key, value in w_config["volumes"].items()
+            }
+        }
+    else:
+        volumes_kw = {}
+
     with expectation as expected:
         inst = config_skills.BwrapSandboxSkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
-            config_dict=w_config.copy(),
+            config_dict=w_config.copy() | volumes_kw,
         )
 
     if not isinstance(expected, pytest.ExceptionInfo):
@@ -940,6 +1133,70 @@ def test_bwrapsandboxskillconfig_from_yaml(
         else:
             assert "allowed_environments" not in inst.extra_parameters
 
+        if "volumes" in w_config:
+            assert inst.volumes == w_config["volumes"]
+        else:
+            assert inst.volumes == {}
+
+
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        {},
+        BWRAP_SANDBOX_SKILL_CONFIG_KW.copy(),
+        W_ALLOWED_ENV_BWSB_SKILL_CONFIG_KW.copy(),
+        W_SANDBOX_CONFIG_BWSB_SKILL_CONFIG_KW.copy(),
+        W_VOLUMES_BWSB_SKILL_CONFIG_KW.copy(),
+    ],
+)
+def test_bwrapsandboxskillconfig_as_yaml(
+    temp_dir,
+    installation_config,
+    w_kw,
+):
+    config_path = temp_dir / "room_config.yaml"
+
+    expected = {"kind": config_skills.BwrapSandboxSkillConfig.kind}
+
+    if "id" in w_kw:
+        expected["id"] = w_kw["id"]
+
+    if "default_environment" in w_kw:
+        expected["default_environment"] = w_kw["default_environment"]
+    else:
+        expected["default_environment"] = "bare"
+
+    if "allowed_environments" in w_kw:
+        expected["allowed_environments"] = w_kw["allowed_environments"]
+
+    if "sandbox_config" in w_kw:
+        sc = w_kw["sandbox_config"] = bs_config.Config(
+            **w_kw.pop("sandbox_config"),
+            config_file_path=config_path,
+        )
+
+        # 'as_yaml' output should not include 'config_file_path'
+        expected["sandbox_config"] = {
+            key: value
+            for key, value in sc.model_dump().items()
+            if key != "config_file_path"
+        }
+
+    if "volumes" in w_kw:
+        expected["volumes"] = {
+            key: {
+                "host_path": str(value.host_path),
+                "writable": value.writable,
+            }
+            for key, value in w_kw["volumes"].items()
+        }
+
+    inst = config_skills.BwrapSandboxSkillConfig(**w_kw)
+
+    found = inst.as_yaml
+
+    assert found == expected
+
 
 def test_bwrapsandboxskillconfig_agui_feature_names():
     bssc = config_skills.BwrapSandboxSkillConfig()
@@ -966,13 +1223,11 @@ def test_bwrapsandboxskillconfig_skill(
     installation_config = mock.create_autospec(
         config_installation.InstallationConfig
     )
+    kwargs = BWRAP_SANDBOX_SKILL_CONFIG_KW | {
+        "allowed_environments": w_allowed_environments
+    }
     bssc = config_skills.BwrapSandboxSkillConfig(
-        id=TEST_SKILL_CONFIG_ID,
-        default_environment=TEST_DEFAULT_ENVIRONMENT,
-        allowed_environments=w_allowed_environments,
-        sandbox_config=bs_config.Config(
-            execution_timeout_seconds=TEST_EXEC_TIMEOUT_SECS,
-        ),
+        **kwargs,
         volumes=w_volumes,
         _installation_config=installation_config,
     )
@@ -1072,13 +1327,19 @@ def test_extractskillconfigs(
         (
             BARE_ROOM_SKILLS_CONFIG_YAML,
             contextlib.nullcontext(
-                BARE_ROOM_SKILLS_CONFIG_KW,
+                BARE_ROOM_SKILLS_CONFIG_KW.copy(),
             ),
         ),
         (
             W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
             contextlib.nullcontext(
-                W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW,
+                W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW.copy(),
+            ),
+        ),
+        (
+            W_SKILL_CONFIGS_ROOM_SKILLS_CONFIG_YAML,
+            contextlib.nullcontext(
+                W_SKILL_CONFIGS_ROOM_SKILLS_CONFIG_KW.copy(),
             ),
         ),
     ],
@@ -1106,7 +1367,16 @@ def test_roomskillsconfig_from_yaml(
         assert expected.value._config_path == config_path
 
     else:
-        expected = config_skills.RoomSkillsConfig(**expected)
+        exp_kw = copy.deepcopy(expected)
+
+        if "skill_configs" in exp_kw:
+            exp_kw["_skill_configs"] = config_skills.extract_skill_configs(
+                installation_config=installation_config,
+                config_path=config_path,
+                config_dict=exp_kw,
+            )
+
+        expected = config_skills.RoomSkillsConfig(**exp_kw)
         expected = dataclasses.replace(
             expected,
             _installation_config=installation_config,
@@ -1114,6 +1384,44 @@ def test_roomskillsconfig_from_yaml(
         )
 
         assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        BARE_ROOM_SKILLS_CONFIG_KW.copy(),
+        W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW.copy(),
+        W_SKILL_CONFIGS_ROOM_SKILLS_CONFIG_KW.copy(),
+    ],
+)
+def test_roomskillsconfig_as_yaml(
+    installation_config,
+    config_path,
+    w_kw,
+):
+    expected = BARE_ROOM_SKILLS_CONFIG_KW.copy()
+
+    if "installation_skill_names" in w_kw:
+        expected["installation_skill_names"] = w_kw["installation_skill_names"]
+
+    if "skill_configs" in w_kw:
+        to_crack = copy.deepcopy(w_kw)
+        skill_configs = config_skills.extract_skill_configs(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=to_crack,
+        )
+        w_kw["_skill_configs"] = skill_configs
+        del w_kw["skill_configs"]
+        expected["skill_configs"] = [
+            sc.as_yaml for sc in skill_configs.values()
+        ]
+
+    inst = config_skills.RoomSkillsConfig(**w_kw)
+
+    found = inst.as_yaml
+
+    assert found == expected
 
 
 def test_roomskillsconfig_skill_configs(installation_config):

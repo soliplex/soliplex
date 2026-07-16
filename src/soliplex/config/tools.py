@@ -229,6 +229,21 @@ class ToolConfig:
             ) from exc
 
     @property
+    def as_yaml(self) -> dict:
+        result = {
+            "tool_name": self.tool_name,
+            "allow_mcp": self.allow_mcp,
+        }
+
+        if self.agui_feature_names:
+            result["agui_feature_names"] = list(self.agui_feature_names)
+
+        if self._ai_tool_params is not None:
+            result["ai_tool_params"] = self._ai_tool_params.as_yaml
+
+        return result
+
+    @property
     def kind(self):
         _, kind = self.tool_name.rsplit(".", 1)
         return kind
@@ -326,6 +341,21 @@ class SearchDocumentsToolConfig(ToolConfig, config_rag._RAGConfigBase):
 
         return instance
 
+    @property
+    def as_yaml(self) -> dict:
+        result = super().as_yaml
+
+        if self.rag_lancedb_stem is not None:
+            result["rag_lancedb_stem"] = self.rag_lancedb_stem
+        else:
+            result["rag_lancedb_override_path"] = (
+                self.rag_lancedb_override_path
+            )
+
+        result["search_documents_limit"] = self.search_documents_limit
+
+        return result
+
     def get_extra_parameters(self) -> dict:
         local = {
             "search_documents_limit": self.search_documents_limit,
@@ -406,6 +436,10 @@ class Stdio_MCP_ClientToolsetConfig:
             ) from exc
 
     @property
+    def as_yaml(self) -> dict:
+        return {"kind": self.kind} | self.toolset_params
+
+    @property
     def toolset_params(self) -> dict:
         return {
             "command": self.command,
@@ -461,6 +495,10 @@ class _Remote_MCP_ClientToolsetConfig:
                 f"{cls.kind}_mcptc",
                 config_dict,
             ) from exc
+
+    @property
+    def as_yaml(self) -> dict:
+        return {"kind": self.kind} | self.toolset_params
 
     @property
     def toolset_params(self) -> dict:
