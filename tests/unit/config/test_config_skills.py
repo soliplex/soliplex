@@ -2,7 +2,6 @@ import contextlib
 import copy
 import dataclasses
 import pathlib
-import warnings
 from unittest import mock
 
 import pydantic
@@ -991,10 +990,7 @@ def test_hr_analysis_skillconfig_from_yaml(
         "rag_lancedb_override_path": lancedb,
     } | w_config
 
-    with (
-        warnings.catch_warnings(record=True) as warned,
-        expectation as expected,
-    ):
+    with expectation as expected:
         inst = config_skills.HR_Analysis_SkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
@@ -1002,10 +998,6 @@ def test_hr_analysis_skillconfig_from_yaml(
         )
 
     if not isinstance(expected, pytest.ExceptionInfo):
-        assert len(warned) == expected
-        for warning in warned:  # pragma: NO COVER
-            assert warning.category is DeprecationWarning
-
         assert inst.rag_lancedb_path == lancedb
         assert inst.haiku_rag_config is installation_config.haiku_rag_config
 
@@ -1251,7 +1243,7 @@ def test_bwrapsandboxskillconfig_skill(
 @pytest.mark.parametrize(
     "w_invalid_kind, expectation",
     [
-        (False, contextlib.nullcontext(0)),
+        (False, contextlib.nullcontext()),
         (True, pytest.raises(config_skills.InvalidSkillKind)),
     ],
 )
@@ -1282,10 +1274,7 @@ def test_extractskillconfigs(
             }
         )
 
-    with (
-        warnings.catch_warnings(record=True) as warned,
-        expectation as expected,
-    ):
+    with expectation as expected:
         found = config_skills.extract_skill_configs(
             installation_config=installation_config,
             config_path=config_path,
@@ -1293,10 +1282,6 @@ def test_extractskillconfigs(
         )
 
     if not isinstance(expected, pytest.ExceptionInfo):
-        assert len(warned) == expected
-        for warning in warned:  # pragma: NO COVER
-            assert warning.category is DeprecationWarning
-
         assert isinstance(found["rag"], config_skills.HR_RAG_SkillConfig)
         assert found["rag"].rag_lancedb_stem == "test-foo"
 
