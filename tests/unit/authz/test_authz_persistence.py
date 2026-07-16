@@ -183,14 +183,16 @@ async def test_admin_user_crud(the_async_session):
     # '*_discriminator' methods, storing the canonical email JSONPath.
     aup = _admin_user_policy(the_async_session)
 
-    found = await aup.list_admin_users()
+    found = await aup.list_admin_user_discriminators()
 
     aup._audit.admin_users_listed.assert_called_once_with()
     aup._audit.admin_users_listed.reset_mock()
 
     assert found == []
 
-    await aup.add_admin_user(email=EMAIL)
+    email_discriminator = authz.token_field_json_path("email", EMAIL)
+
+    await aup.add_admin_user_discriminator(email_discriminator)
     user = await authz_persistence._find_admin_user_by_json_path(
         json_path=JSON_PATH,
         session=the_async_session,
@@ -200,14 +202,14 @@ async def test_admin_user_crud(the_async_session):
     aup._audit.admin_user_added.assert_called_once_with(JSON_PATH)
     aup._audit.admin_user_added.reset_mock()
 
-    found = await aup.list_admin_users()
+    found = await aup.list_admin_user_discriminators()
     assert found == [JSON_PATH]
 
     aup._audit.admin_users_listed.assert_called_once_with()
     aup._audit.admin_users_listed.reset_mock()
 
     with pytest.raises(authz.AdminUserExists):
-        await aup.add_admin_user(email=EMAIL)
+        await aup.add_admin_user_discriminator(email_discriminator)
 
     no_dupe = await authz_persistence._find_admin_user_by_json_path(
         json_path=JSON_PATH,
@@ -223,13 +225,13 @@ async def test_admin_user_crud(the_async_session):
     assert msg.startswith("Admin user already exists with json_path")
     aup._audit.admin_user_add_failed.reset_mock()
 
-    found = await aup.list_admin_users()
+    found = await aup.list_admin_user_discriminators()
     assert found == [JSON_PATH]
 
     aup._audit.admin_users_listed.assert_called_once_with()
     aup._audit.admin_users_listed.reset_mock()
 
-    await aup.remove_admin_user(email=EMAIL)
+    await aup.remove_admin_user_discriminator(email_discriminator)
     gone = await authz_persistence._find_admin_user_by_json_path(
         json_path=JSON_PATH,
         session=the_async_session,
@@ -239,14 +241,14 @@ async def test_admin_user_crud(the_async_session):
     aup._audit.admin_user_removed.assert_called_once_with(JSON_PATH)
     aup._audit.admin_user_removed.reset_mock()
 
-    found = await aup.list_admin_users()
+    found = await aup.list_admin_user_discriminators()
     assert found == []
 
     aup._audit.admin_users_listed.assert_called_once_with()
     aup._audit.admin_users_listed.reset_mock()
 
     with pytest.raises(authz.NoSuchAdminUser):
-        await aup.remove_admin_user(email=EMAIL)
+        await aup.remove_admin_user_discriminator(email_discriminator)
 
     ((args, kwargs),) = aup._audit.admin_user_remove_failed.call_args_list
     (arg,) = args
@@ -276,7 +278,9 @@ async def test_admin_user_check_admin_access(the_async_session):
     )
     aup._audit.admin_access_denied.reset_mock()
 
-    await aup.add_admin_user(email=EMAIL)
+    email_discriminator = authz.token_field_json_path("email", EMAIL)
+
+    await aup.add_admin_user_discriminator(email_discriminator)
 
     aup._audit.admin_user_added.assert_called_once_with(JSON_PATH)
     aup._audit.admin_user_added.reset_mock()
@@ -290,7 +294,7 @@ async def test_admin_user_check_admin_access(the_async_session):
     )
     aup._audit.admin_access_allowed.reset_mock()
 
-    await aup.remove_admin_user(email=EMAIL)
+    await aup.remove_admin_user_discriminator(email_discriminator)
 
     aup._audit.admin_user_removed.assert_called_once_with(JSON_PATH)
     aup._audit.admin_user_removed.reset_mock()
@@ -346,7 +350,7 @@ async def test_admin_user_check_admin_access_json_path(
     aup._audit.admin_access_denied.reset_mock()
 
     # A non-email admin surfaces as its raw JSONPath query, not an email.
-    listed = await aup.list_admin_users()
+    listed = await aup.list_admin_user_discriminators()
     assert listed == ['$[?$.role == "admin"]']
 
     aup._audit.admin_users_listed.assert_called_once_with()
