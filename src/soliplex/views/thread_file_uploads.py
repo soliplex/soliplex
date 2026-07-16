@@ -145,11 +145,6 @@ async def get_uploads_room_id_thread_thread_id_filename(
     "POST /v1/uploads/{room_id}/thread/{thread_id}/",
 )
 @router.post("/v1/uploads/{room_id}/thread/{thread_id}", status_code=204)
-@router.post(
-    "/v1/uploads/{room_id}/{thread_id}",
-    status_code=204,
-    deprecated=True,  # see #1137
-)
 async def post_uploads_room_id_thread_thread_id(
     room_id: str,
     thread_id: pydantic.UUID4,
