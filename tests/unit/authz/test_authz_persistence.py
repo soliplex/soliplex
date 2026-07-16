@@ -179,8 +179,6 @@ async def test_clear_admin_user_discriminators_empty(the_async_session):
 
 @pytest.mark.asyncio
 async def test_admin_user_crud(the_async_session):
-    # The deprecated 'email'-keyed aliases delegate to the
-    # '*_discriminator' methods, storing the canonical email JSONPath.
     aup = _admin_user_policy(the_async_session)
 
     found = await aup.list_admin_user_discriminators()
