@@ -211,26 +211,6 @@ class AdminUserPolicy(abc.ABC):
         """Remove all admin user discriminators from the admin users table."""
 
     @abc.abstractmethod
-    async def list_admin_users(self) -> list[str]:
-        """Deprecated alias for 'list_admin_user_discriminators'."""
-
-    @abc.abstractmethod
-    async def add_admin_user(self, email: str):
-        """Deprecated alias for 'add_admin_user_discriminator'.
-
-        Translates 'email' to the equivalent JSONPath expression,
-        '$[?$.email == "..."]', then delegates.
-        """
-
-    @abc.abstractmethod
-    async def remove_admin_user(self, email: str):
-        """Deprecated alias for 'remove_admin_user_discriminator'.
-
-        Translates 'email' to the equivalent JSONPath expression,
-        '$[?$.email == "..."]', then delegates.
-        """
-
-    @abc.abstractmethod
     async def check_admin_access(
         self,
         user_token: UserToken,

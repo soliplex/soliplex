@@ -161,28 +161,6 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
                 await session.delete(admin_user)
         self._audit.admin_users_cleared()
 
-    async def list_admin_users(self) -> list[str]:
-        """Deprecated alias for 'list_admin_user_discriminators'."""
-        return await self.list_admin_user_discriminators()
-
-    async def add_admin_user(self, email: str):
-        """Deprecated alias for 'add_admin_user_discriminator'.
-
-        Translates 'email' to the equivalent JSONPath expression,
-        '$[?$.email == "..."]', then delegates.
-        """
-        json_path = authz.token_field_json_path("email", email)
-        await self.add_admin_user_discriminator(json_path)
-
-    async def remove_admin_user(self, email: str):
-        """Deprecated alias for 'remove_admin_user_discriminator'.
-
-        Translates 'email' to the equivalent JSONPath expression,
-        '$[?$.email == "..."]', then delegates.
-        """
-        json_path = authz.token_field_json_path("email", email)
-        await self.remove_admin_user_discriminator(json_path)
-
     async def check_admin_access(
         self,
         user_token: authz.UserToken,
