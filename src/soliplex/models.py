@@ -268,7 +268,6 @@ class Room(pydantic.BaseModel):
     description: str
     welcome_message: str
     suggestions: list[str]
-    enable_attachments: bool | None = None  # Deprecated: #1133
     tools: ConfiguredTools
     mcp_client_toolsets: ConfiguredMCPClientToolsets
     skills: ConfiguredSkills
@@ -296,7 +295,6 @@ class Room(pydantic.BaseModel):
                 room_config.welcome_message or room_config.description
             ),
             suggestions=room_config.suggestions,
-            enable_attachments=room_config.enable_attachments,
             tools={
                 key: Tool.from_config(tool_config)
                 for (key, tool_config) in room_config.tool_configs.items()

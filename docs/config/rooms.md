@@ -75,9 +75,6 @@ A minimal room configuration must include the above elements, e.g.:
     - "Why is the sky blue?"
   ```
 
-- `enable_attachments`: DEPRECATED (a boolean, default `False`);  has
-  no effect.  [issue #1133]https://github.com/soliplex/soliplex/issues/1133)
-
 - `agui_feature_names` (list of strings); if set these values are added
   to the feature names defined on the room's agent, tools, and skills
   to create an aggregate set for the room.  Each name must resolve to a
