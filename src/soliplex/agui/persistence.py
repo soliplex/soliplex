@@ -7,14 +7,11 @@ import typing
 
 import logfire
 from ag_ui import core as agui_core
-from haiku.skills import agent as hs_agent
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui
-from soliplex import loggers
-from soliplex import rag_audit
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.agui import util as agui_util
@@ -948,61 +945,39 @@ async def finish_run(
 async def drive_agui_turn(
     *,
     adapter,
-    skill_toolset: hs_agent.SkillToolset | None,
     engine,
     user_name: str,
     room_id: str,
     thread_id: str,
     run_id: str,
-    claims: dict | None = None,
-    rag_db_paths: dict[str, str] | None = None,
     run_stream_kwargs: dict | None = None,
 ) -> collections.abc.AsyncIterator:
     """Drive one room-agent turn as an AG-UI event stream.
 
-    An async generator: for each event it records any RAG access (skill
-    retrievals surface as AG-UI activity events) and persists the event
-    (via :func:`save_single_event`), then yields it. Callers own
+    An async generator: for each event it persists the event (via
+    :func:`save_single_event`), then yields it. Callers own
     presentation (an SSE queue, or collecting the assistant text) and any
     post-run work such as :func:`finish_run`, usage capture, or title
     generation.
 
-    ``run_stream_kwargs`` is forwarded verbatim to
-    ``haiku.skills.agent.run_agui_stream`` (``deps``, ``conversation_id``,
-    ``on_complete``).
+    ``run_stream_kwargs`` is forwarded verbatim to the Pydantic AI adapter.
     """
-    auditor = rag_audit.RagAccessAuditor(
-        loggers.RAGAccessAuditLog(
-            claims=claims or {},
-            room_id=room_id,
-            thread_id=thread_id,
-            run_id=run_id,
-        ),
-        (rag_db_paths or {}).get,
-    )
+    event_stream = adapter.run_stream(**(run_stream_kwargs or {}))
+    compacted = agui.compact_event_stream(event_stream)
+    async for event in compacted:
+        try:
+            await save_single_event(
+                engine,
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                event=event,
+            )
+        except sqla_exc.SQLAlchemyError as sa_exc:
+            logfire.error(
+                "Error saving event: {error_message}",
+                error_message=str(sa_exc),
+            )
 
-    async with hs_agent.run_agui_stream(
-        adapter,
-        toolset=skill_toolset,
-        **(run_stream_kwargs or {}),
-    ) as event_stream:
-        compacted = agui.compact_event_stream(event_stream)
-        async for event in compacted:
-            auditor.handle(event)
-
-            try:
-                await save_single_event(
-                    engine,
-                    user_name=user_name,
-                    room_id=room_id,
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    event=event,
-                )
-            except sqla_exc.SQLAlchemyError as sa_exc:
-                logfire.error(
-                    "Error saving event: {error_message}",
-                    error_message=str(sa_exc),
-                )
-
-            yield event
+        yield event

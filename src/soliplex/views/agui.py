@@ -9,19 +9,16 @@ import pydantic
 import pydantic_ai
 from ag_ui import core as agui_core
 from fastapi import responses
-from haiku.skills import agent as hs_agent
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import agents
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
-from soliplex import rag_audit
 from soliplex import titles
 from soliplex import util
 from soliplex import views
@@ -554,8 +551,6 @@ async def drive_llm_stream(
     run_id: str,
     title_agent_config: config_agents.AgentConfig | None = None,
     messages: list[agui_core.Message] | None = None,
-    claims: authn.UserClaims | None = None,
-    rag_db_paths: dict[str, str] | None = None,
 ):
     """Primary consumer of LLM event stream
 
@@ -564,15 +559,6 @@ async def drive_llm_stream(
     Events are pushed to the queue (for the live SSE client) and
     saved to the database incrementally (for reconnect).
     """
-    auditor = rag_audit.RagAccessAuditor(
-        loggers.RAGAccessAuditLog(
-            claims=claims or {},
-            room_id=room_id,
-            thread_id=thread_id,
-            run_id=run_id,
-        ),
-        (rag_db_paths or {}).get,
-    )
     with logfire.span(
         "AG-UI event stream: {room_id}/{thread_id}/{run_id}",
         room_id=room_id,
@@ -587,8 +573,6 @@ async def drive_llm_stream(
             async for event in llm_stream:
                 event_list.append(event)
                 await event_queue.put(event)
-                auditor.handle(event)
-
                 try:
                     await agui_persistence.save_single_event(
                         sqla_engine,
@@ -673,18 +657,23 @@ async def stream_llm_events(event_queue: asyncio.Queue):
 
 async def init_agent_stream(
     *,
-    skill_toolset: hs_agent.SkillToolset | None,
     agui_adapter: ai_ag_ui.AGUIAdapter,
     run_stream_kwargs: dict,
     **drive_kwargs,
 ):
-    async with hs_agent.run_agui_stream(
-        agui_adapter,
-        toolset=skill_toolset,
-        **run_stream_kwargs,
-    ) as event_stream:
-        compacted = agui.compact_event_stream(event_stream)
-        await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
+    deps = run_stream_kwargs.get("deps")
+
+    async def with_final_state():
+        async for event in agui_adapter.run_stream(**run_stream_kwargs):
+            if (
+                deps is not None
+                and event.type == agui_core.EventType.RUN_FINISHED
+            ):
+                yield agui_core.StateSnapshotEvent(snapshot=deps.state)
+            yield event
+
+    compacted = agui.compact_event_stream(with_final_state())
+    await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
 
 
 def parse_last_event_id(header_value: str | None):
@@ -840,16 +829,6 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
-    skill_toolset = agents.find_skill_toolset(agent)
-
-    room_config = await the_installation.get_room_config(
-        room_id=room_id,
-        user=the_user_claims,
-        the_room_authz=the_room_authz,
-        the_logger=the_logger,
-    )
-    rag_db_paths = room_config.rag_db_paths
-
     # We use an unbounded queue here, so that the 'drive_llm_stream'
     # task completes even when the SSE stream gets cancelled due to a
     # client disconnect, thereby permitting the client to see the
@@ -863,7 +842,6 @@ async def post_room_agui_thread_id_run_id(
     bg_tasks = request.app.state.agui_background_tasks
     task = asyncio.create_task(
         init_agent_stream(
-            skill_toolset=skill_toolset,
             agui_adapter=agui_adapter,
             run_stream_kwargs=dict(
                 deps=agent_deps,
@@ -885,8 +863,6 @@ async def post_room_agui_thread_id_run_id(
             run_id=run_id,
             title_agent_config=title_agent_config,
             messages=agui_adapter.run_input.messages,
-            claims=the_user_claims,
-            rag_db_paths=rag_db_paths,
         )
     )
     bg_tasks.add(task)

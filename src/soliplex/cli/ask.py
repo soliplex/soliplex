@@ -13,7 +13,6 @@ from ag_ui import core as agui_core
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import agents
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -114,11 +113,6 @@ async def _run_ask(the_installation, room_id, prompt, claims) -> _AskResult:
         room_id=room_id,
         user=user,
     )
-    room_config = await the_installation.get_room_config(
-        room_id=room_id,
-        user=user,
-    )
-
     engine = installation._create_async_engine(
         the_installation.thread_persistence_dburi_async,
         json_serializer=util.serialize_sqla_json,
@@ -198,14 +192,11 @@ async def _run_ask(the_installation, room_id, prompt, claims) -> _AskResult:
         try:
             async for event in agui_persistence.drive_agui_turn(
                 adapter=adapter,
-                skill_toolset=agents.find_skill_toolset(agent),
                 engine=engine,
                 user_name=user_name,
                 room_id=room_id,
                 thread_id=thread_id,
                 run_id=run_id,
-                claims=claims,
-                rag_db_paths=room_config.rag_db_paths,
                 run_stream_kwargs=dict(
                     deps=deps,
                     conversation_id=thread_id,

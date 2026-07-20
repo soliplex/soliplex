@@ -1,39 +1,32 @@
 from __future__ import annotations
 
-import abc
 import dataclasses
 import typing
 
 import pydantic_ai
-from haiku.skills import agent as hs_agent
-from haiku.skills import prompts as hs_prompts
 from pydantic_ai import agent as ai_agent
+from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import tools as ai_tools
 from pydantic_ai import toolsets as ai_toolsets
 
 from soliplex import agui
 from soliplex import mcp_client
 from soliplex import models
+from soliplex.capabilities import RAGAccessAuditCapability
 from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 
 ToolConfigMap = dict[str, typing.Any]
 
 
-class SkillToolsetConfig(typing.Protocol):
-    """Contract for config.RoomSkillsConfig etc."""
+class CapabilityConfig(typing.Protocol):
+    """Room-specific native capabilities and their audit targets."""
 
     @property
-    @abc.abstractmethod
-    def skill_preambles(self) -> list[str]: ...
+    def capabilities(self) -> list[ai_capabilities.AbstractCapability]: ...
 
     @property
-    @abc.abstractmethod
-    def skill_toolset(self) -> hs_agent.SkillToolset: ...
-
-    @property
-    @abc.abstractmethod
-    def use_subagents(self) -> bool: ...
+    def rag_db_paths(self) -> dict[str, str]: ...
 
 
 @dataclasses.dataclass
@@ -63,7 +56,7 @@ class AgentFactory(typing.Protocol):
         *,
         tool_configs: ToolConfigMap,
         mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap,
-        skill_toolset_config: SkillToolsetConfig | None = None,
+        capability_config: CapabilityConfig | None = None,
     ) -> SoliplexAgent: ...
 
 
@@ -90,7 +83,7 @@ def get_default_agent_from_configs(
     agent_config: config_agents.AgentConfig,
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap,
-    skill_toolset_config: SkillToolsetConfig | None = None,
+    capability_config: CapabilityConfig | None = None,
 ) -> SoliplexAgent:
     """Build a Pydantic AI agent from a config"""
     model = config_agents.get_model_from_config(agent_config=agent_config)
@@ -103,29 +96,24 @@ def get_default_agent_from_configs(
         for mctc in mcp_client_toolset_configs.values()
     ]
 
-    agent_prompt = agent_config.get_system_prompt()
-
-    if skill_toolset_config is not None:
-        toolset = skill_toolset_config.skill_toolset
-        toolsets.append(toolset)
-        preamble = "\n\n".join(
-            [agent_prompt] + skill_toolset_config.skill_preambles
-        )
-        instructions = hs_prompts.build_system_prompt(
-            preamble=preamble,
-            skill_catalog=toolset.skill_catalog,
-            use_subagents=skill_toolset_config.use_subagents,
-        )
-    else:
-        instructions = agent_prompt
+    capabilities = list(agent_config.capabilities)
+    if capability_config is not None:
+        capabilities.extend(capability_config.capabilities)
+        if capability_config.rag_db_paths:
+            capabilities.append(
+                RAGAccessAuditCapability(
+                    id="soliplex-rag-access-audit",
+                    db_paths=capability_config.rag_db_paths,
+                )
+            )
 
     return pydantic_ai.Agent(
         model=model,
         model_settings=agent_config.model_settings,
         tools=tools,
         toolsets=toolsets,
-        instructions=instructions,
-        capabilities=agent_config.capabilities,
+        instructions=agent_config.get_system_prompt(),
+        capabilities=capabilities,
         deps_type=AgentDependencies,
         retries=agent_config.retries,
     )
@@ -136,7 +124,7 @@ def get_agent_from_configs(
     agent_config: config_agents.AgentConfig,
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap,
-    skill_toolset_config: SkillToolsetConfig | None = None,
+    capability_config: CapabilityConfig | None = None,
 ) -> SoliplexAgent:
     """Get or create an agent from the specified agent and tool configs."""
 
@@ -145,7 +133,7 @@ def get_agent_from_configs(
             agent_config=agent_config,
             tool_configs=tool_configs,
             mcp_client_toolset_configs=mcp_client_toolset_configs,
-            skill_toolset_config=skill_toolset_config,
+            capability_config=capability_config,
         )
 
     else:
@@ -153,14 +141,5 @@ def get_agent_from_configs(
         return agent_config.factory(
             tool_configs=tool_configs,
             mcp_client_toolset_configs=mcp_client_toolset_configs,
-            skill_toolset_config=skill_toolset_config,
+            capability_config=capability_config,
         )
-
-
-def find_skill_toolset(
-    agent: pydantic_ai.Agent,
-) -> hs_agent.SkillToolset | None:
-    for toolset in getattr(agent, "toolsets", ()):
-        if isinstance(toolset, hs_agent.SkillToolset):
-            return toolset
-    return None

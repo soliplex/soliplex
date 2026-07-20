@@ -5,8 +5,7 @@ from unittest import mock
 import pytest
 import yaml
 from haiku.rag import config as hr_config
-from haiku.rag.skills import rag as hr_skills_rag
-from haiku.skills import models as hs_models
+from haiku.rag.capabilities import rag as hr_rag
 
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
@@ -181,7 +180,6 @@ FULL_ROOM_CONFIG_KW = {
         ),
     },
     "skills": config_skills.RoomSkillsConfig(
-        model_name=test_skills.SKILL_MODEL_NAME,
         installation_skill_names=[test_skills.SKILL_NAME],
     ),
 }
@@ -224,7 +222,6 @@ mcp_client_toolsets:
       query_params:
         {test_tools.HTTP_MCP_QP_KEY}: "{test_tools.HTTP_MCP_QP_VALUE}"
 skills:
-    model_name: {test_skills.SKILL_MODEL_NAME}
     installation_skill_names:
         - "{test_skills.SKILL_NAME}"
 quizzes:
@@ -281,10 +278,8 @@ def test_roomconfig_from_yaml(
     config_yaml,
     expectation,
 ):
-    skill = mock.create_autospec(hs_models.Skill)
     skill_config = mock.create_autospec(
-        config_skills._SkillConfigModelBase,
-        skill=skill,
+        config_skills.FilesystemSkillConfig,
     )
 
     installation_config.skill_configs = {
@@ -467,7 +462,7 @@ def test_roomconfig_skill_configs_bare(installation_config):
 
 
 def test_roomconfig_skill_configs_w_hit(installation_config):
-    skill_config = mock.create_autospec(config_skills._SkillConfigModelBase)
+    skill_config = mock.create_autospec(config_skills.FilesystemSkillConfig)
     installation_config.skill_configs = {
         test_skills.SKILL_NAME: skill_config,
         "other_skill": object(),
@@ -508,11 +503,9 @@ def test_roomconfig_rag_db_paths_w_hit(temp_dir, installation_config):
     OVERRIDE_PATH = temp_dir / "rag.lancedb"
     OVERRIDE_PATH.mkdir()
 
-    class Test_HRSkill(config_skills._HR_SkillConfigBase):
-        name: str = "test-skill"
-
-    skill_config = Test_HRSkill(
+    skill_config = config_skills.HR_RAG_SkillConfig(
         rag_lancedb_override_path=OVERRIDE_PATH,
+        _haiku_rag_config=HR_CONFIG,
     )
     installation_config.skill_configs = {
         test_skills.SKILL_NAME: skill_config,
@@ -531,7 +524,7 @@ def test_roomconfig_rag_db_paths_w_hit(temp_dir, installation_config):
 
     found = room_config.rag_db_paths
 
-    assert found == {"test-skill": str(OVERRIDE_PATH)}
+    assert found == {"haiku-rag": str(OVERRIDE_PATH)}
 
 
 def test_roomconfig_has_sandbox_bare(installation_config):
@@ -579,8 +572,8 @@ def test_roomconfig_has_sandbox_w_hit(temp_dir, installation_config):
 @pytest.fixture
 def installation_config_w_skill(installation_config):
     skill_config = mock.create_autospec(
-        config_skills._SkillConfigModelBase,
-        agui_feature_names=[test_skills.SKILL_STATE_NAMESPACE],
+        config_skills.FilesystemSkillConfig,
+        agui_feature_names=(),
     )
     installation_config.skill_configs = {
         test_skills.SKILL_NAME: skill_config,
@@ -594,16 +587,13 @@ def installation_config_w_skill(installation_config):
         (BARE_ROOM_CONFIG_KW.copy(), ()),
         (
             W_NON_HR_SKILLS_ROOM_CONFIG_KW.copy(),
-            [
-                # from 'skills' via installation_config
-                test_skills.SKILL_STATE_NAMESPACE,
-            ],
+            [],
         ),
         (
             W_HR_SKILLS_ROOM_CONFIG_KW.copy(),
             [
                 # from 'skills' via local config
-                hr_skills_rag.STATE_NAMESPACE,
+                hr_rag.STATE_NAMESPACE,
             ],
         ),
         (
@@ -618,8 +608,6 @@ def installation_config_w_skill(installation_config):
             [
                 # from 'agent_config'
                 AGUI_FEATURE_NAME,
-                # from 'skills' via installation_config
-                test_skills.SKILL_STATE_NAMESPACE,
                 # from 'room_config'
                 EXTRA_AGUI_FEATURE_NAME,
             ],

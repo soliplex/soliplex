@@ -13,8 +13,8 @@ import typing
 import dotenv
 import yaml
 from haiku.rag import config as hr_config
-from haiku.skills import discovery as hs_discovery
-from haiku.skills import models as hs_models
+
+from soliplex.capabilities import discover_filesystem_capabilities
 
 from . import _utils
 from . import agents as config_agents
@@ -181,11 +181,13 @@ def resolve_environment_entry(
 def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
     fs_skill_configs = {}
 
-    fs_skills, validation_errors = hs_discovery.discover_from_paths(
+    capabilities, validation_errors = discover_filesystem_capabilities(
         i_config.filesystem_skills_paths,
     )
-    for fs_skill in fs_skills:
-        skill_config = config_skills.FilesystemSkillConfig.from_skill(fs_skill)
+    for capability in capabilities:
+        skill_config = config_skills.FilesystemSkillConfig.from_capability(
+            capability
+        )
 
         if skill_config.name not in fs_skill_configs:
             fs_skill_configs[skill_config.name] = skill_config
@@ -193,15 +195,8 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
     for validation_error in validation_errors:
         skill_path = validation_error.path
         skill_name = skill_path.name
-        message = str(validation_error)
-        skill_metadata = hs_models.SkillMetadata(
-            name=skill_name,
-            description=f"Invalid filesystem skill: {skill_path}",
-        )
-        fs_skill_configs[skill_name] = config_skills.FilesystemSkillConfig(
-            _skill_metadata=skill_metadata,
-            _skill_path=skill_path,
-            _validation_errors=[message],
+        fs_skill_configs[skill_name] = (
+            config_skills.FilesystemSkillConfig.from_path(skill_path)
         )
 
     return fs_skill_configs
@@ -244,33 +239,7 @@ def resolve_skill_configs(
 
 
 def _load_entrypoint_skill_configs(i_config) -> config_skills.SkillConfigMap:
-    i_config.resolve_environment()
-    ep_skill_configs = {}
-
-    for skill in hs_discovery.discover_from_entrypoints():
-        # Replace haiku-rag-based skills' 'config' with our own.
-        if skill.extras.get("db_path") is not None:
-            skill.reconfigure(
-                config=i_config.haiku_rag_config,
-                db_path=skill.extras["db_path"],
-            )
-
-        feature_name = skill.state_namespace
-        feature_registry = config_agui.AGUI_FEATURES_BY_NAME
-
-        if feature_name is not None and feature_name not in feature_registry:
-            feature_registry[feature_name] = config_agui.AGUI_Feature(
-                name=feature_name,
-                model_klass=skill.state_type,
-                source=config_agui.AGUI_FeatureSource.SERVER,
-            )
-
-        skill_config = config_skills.EntrypointSkillConfig.from_skill(skill)
-
-        if skill_config.name not in ep_skill_configs:
-            ep_skill_configs[skill_config.name] = skill_config
-
-    return ep_skill_configs
+    return {}
 
 
 class EnvironmentSourceType(enum.StrEnum):
@@ -1253,11 +1222,16 @@ class InstallationConfig:
 
     def reload_configurations(self):
         """Load all dependent configuration sets"""
-        self._available_filesystem_configs = _load_filesystem_skill_configs(
-            self,
+        self.resolve_environment()
+        self._available_filesystem_skill_configs = (
+            _load_filesystem_skill_configs(
+                self,
+            )
         )
-        self._available_entrypoint_configs = _load_entrypoint_skill_configs(
-            self,
+        self._available_entrypoint_skill_configs = (
+            _load_entrypoint_skill_configs(
+                self,
+            )
         )
         self._resolved_skill_configs = None
         self._oidc_auth_system_configs = self._load_oidc_auth_system_configs()

@@ -22,7 +22,7 @@ class _SandboxExecRecorder:
 
 @contextlib.contextmanager
 def audit_sandbox_exec(
-    state: typing.Any,
+    deps: typing.Any,
     *,
     action: str,
     environment: str | None,
@@ -31,9 +31,8 @@ def audit_sandbox_exec(
     """Bracket a sandbox ``run`` / ``run_python`` tool body, emitting one
     ``sandbox-exec`` data-change record.
 
-    ``state`` is the skill's ``SandboxState``: actor identity
-    (``preferred_username``) and run correlation (``room_id`` /
-    ``thread_id`` / ``run_id``) are taken from it. ``action`` is the audit
+    Actor identity and run correlation are taken directly from the room
+    agent dependencies. ``action`` is the audit
     action ('run' / 'run-python'); ``workdir`` is the per-run working
     directory whose data the execution may have changed (logged as a string).
 
@@ -43,11 +42,12 @@ def audit_sandbox_exec(
     the exception type, never its message) and re-raised; otherwise a success
     is recorded. The command / script body itself is never logged.
     """
+    user = getattr(deps, "user", None)
     audit = loggers.SandboxExecAuditLog(
-        claims={"preferred_username": state.preferred_username},
-        room_id=state.room_id,
-        thread_id=state.thread_id,
-        run_id=state.run_id,
+        claims=user.model_dump() if user is not None else {},
+        room_id=deps.room_id,
+        thread_id=deps.thread_id,
+        run_id=deps.run_id,
     )
     logged_workdir = str(workdir) if workdir is not None else None
     recorder = _SandboxExecRecorder()

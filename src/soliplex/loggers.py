@@ -540,6 +540,22 @@ class RAGAccessAuditLog(AuditLogWrapper):
             result_refs=result_refs,
         )
 
+    def retrieval_failed(
+        self,
+        db_path: str,
+        tool: str,
+        selector: typing.Any,
+        reason: str,
+    ):
+        self._failed(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_RETRIEVAL,
+            db_path=db_path,
+            tool=tool,
+            selector=selector,
+            reason=reason,
+        )
+
     def search(
         self, db_path: str, selector: typing.Any, result_refs: typing.Any
     ):

@@ -7,8 +7,6 @@ import pytest
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
 from bubble_sandbox import sandbox as bs_sandbox
-from haiku.skills import models as hs_models
-from haiku.skills import state as hs_state
 from pydantic_ai import toolsets as ai_toolsets
 
 from soliplex import loggers
@@ -32,14 +30,14 @@ ALL_ENVIRONMENTS = [ONE_ENVIRONMENT, ANOTHER_ENVIRONMENT]
 @pytest.fixture
 def ctx_w_deps():
     ctx = mock.Mock(spec_set=["deps"])
+    user = mock.Mock()
+    user.model_dump.return_value = {"preferred_username": USERNAME}
     ctx.deps = mock.Mock(
-        spec_set=["state"],
-        state=skills_bwrap_sandbox.SandboxState(
-            room_id=ROOM_ID,
-            thread_id=str(THREAD_ID),
-            run_id=str(RUN_ID),
-            preferred_username=USERNAME,
-        ),
+        spec_set=["room_id", "thread_id", "run_id", "user"],
+        room_id=ROOM_ID,
+        thread_id=str(THREAD_ID),
+        run_id=str(RUN_ID),
+        user=user,
     )
     return ctx
 
@@ -904,16 +902,12 @@ async def test_create_sandbox_toolset_run_python(
     ],
 )
 @mock.patch("soliplex.skills.bwrap_sandbox.create_sandbox_toolset")
-@mock.patch("haiku.skills.parser.parse_skill_md")
-def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig, i_config):
-    metadata = hs_models.SkillMetadata(
-        name="test-skill",
-        description="This is a test skill",
-    )
-    instructions = "You are a test"
-    psm.return_value = metadata, instructions
-    exp_path = pathlib.Path(skills_bwrap_sandbox.__file__).parent
-
+def test_create_bwrap_sandbox_capability(
+    csts,
+    w_kwargs,
+    w_iconfig,
+    i_config,
+):
     if w_iconfig:
         iconfig_kwargs = {"installation_config": i_config}
         exp_iconfig_args = iconfig_kwargs
@@ -921,25 +915,22 @@ def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig, i_config):
         iconfig_kwargs = {}
         exp_iconfig_args = {"installation_config": None}
 
-    skill = skills_bwrap_sandbox.create_bwrap_sandbox_skill(
+    capability = skills_bwrap_sandbox.create_bwrap_sandbox_capability(
         **w_kwargs,
         **iconfig_kwargs,
     )
 
-    assert isinstance(skill, hs_models.Skill)
-    assert skill.metadata == metadata
-    assert skill.instructions == instructions
-    assert skill.path == exp_path
-    assert skill.state_type is skills_bwrap_sandbox.STATE_TYPE
-    assert skill.state_namespace == skills_bwrap_sandbox.STATE_NAMESPACE
-    assert skill.deps_type is hs_state.SkillRunDeps
-
-    (toolset,) = skill.toolsets
-    assert toolset is csts.return_value
+    assert isinstance(capability, skills_bwrap_sandbox.SandboxCapability)
+    assert capability.id == w_kwargs.get(
+        "id", skills_bwrap_sandbox.CAPABILITY_NAME
+    )
+    assert capability.defer_loading is True
+    assert "sandbox" in capability.get_instructions().lower()
+    assert capability.get_toolset() is csts.return_value
 
     exp_toolset_kw = (
         {
-            "id": None,
+            "id": capability.id,
             "default_environment": "bare",
             "allowed_environments": None,
             "sandbox_config": None,

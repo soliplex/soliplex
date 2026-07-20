@@ -874,10 +874,10 @@ async def test_installation_get_agent_for_room(
 
     if w_room_skills:
         r_config.skills = mock.create_autospec(config_skills.RoomSkillsConfig)
-        exp_gafc_kwargs["skill_toolset_config"] = r_config.skills
+        exp_gafc_kwargs["capability_config"] = r_config.skills
     else:
         r_config.skills = None
-        exp_gafc_kwargs["skill_toolset_config"] = None
+        exp_gafc_kwargs["capability_config"] = None
 
     t_configs = r_config.tool_configs = {
         "test_tool": tc_config,
