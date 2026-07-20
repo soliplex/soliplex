@@ -63,16 +63,7 @@ class MissingSkillNames(KeyError):
 
 class SkillKind(enum.StrEnum):
     FILESYSTEM = "filesystem"
-    ENTRYPOINT = "entrypoint"
-
-
-class SkillMetadata(pydantic.BaseModel):
-    name: str
-    description: str
-    license: str | None = None
-    compatibility: str | None = None
-    metadata: dict[str, str] = pydantic.Field(default_factory=dict)
-    allowed_tools: list[str] = pydantic.Field(default_factory=list)
+    NATIVE = "native"
 
 
 class SkillConfig(typing.Protocol):
@@ -172,7 +163,7 @@ class _HaikuRAGCapabilityConfig(config_rag._RAGConfigBase):
     description: typing.ClassVar[str]
     state_namespace: typing.ClassVar[str]
     state_type: typing.ClassVar[type[pydantic.BaseModel]]
-    source: typing.ClassVar[SkillKind] = SkillKind.ENTRYPOINT
+    source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
 
     @classmethod
     def from_yaml(
@@ -269,7 +260,7 @@ class HR_Analysis_SkillConfig(_HaikuRAGCapabilityConfig):
 @dataclasses.dataclass(kw_only=True)
 class BwrapSandboxSkillConfig:
     kind: typing.ClassVar[str] = bwrap_sandbox.CAPABILITY_NAME
-    source: typing.ClassVar[SkillKind] = SkillKind.ENTRYPOINT
+    source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
     name: typing.ClassVar[str] = bwrap_sandbox.CAPABILITY_NAME
     description: typing.ClassVar[str] = (
         bwrap_sandbox.CAPABILITY_DESCRIPTION.strip()
@@ -541,6 +532,5 @@ __all__ = [
     "SkillConfigMap",
     "SkillConfigTypes",
     "SkillKind",
-    "SkillMetadata",
     "extract_skill_configs",
 ]

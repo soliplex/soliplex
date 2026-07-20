@@ -22,11 +22,6 @@ tools:
   - tool_name: "soliplex.tools.file_uploads.get_thread_file_upload"
 
 skills:
-
-# Requires installing 'haiku-skills-image-generation'
-# installation_skill_names:
-#   - "image-generation"
-
   skill_configs:
     - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"

@@ -363,7 +363,7 @@ authorization_dburi:
 # filesystem_skills_paths:
 #   - "./skills"
 #
-# ... but with no discovered skills enabled.
+# All discovered skills are enabled unless 'skill_configs' restricts them.
 #==========================================================================
 
 filesystem_skills_paths:
@@ -374,10 +374,6 @@ skill_configs:
     kind: "filesystem"
   - skill_name: "stanzas"
     kind: "filesystem"
-
-# Requires installing 'haiku-skills-image-generation'
-# - skill_name: "image-generation"
-#   kind: "entrypoint"
 
 #==========================================================================
 # Rooms configuration

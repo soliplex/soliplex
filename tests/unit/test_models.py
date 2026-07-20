@@ -477,7 +477,7 @@ def hr_rag_skill_config(temp_dir):
 def test_skill_from_config_w_hrrsc(hr_rag_skill_config):
     found = models.Skill.from_config(hr_rag_skill_config)
 
-    assert found.source == config_skills.SkillKind.ENTRYPOINT
+    assert found.source == config_skills.SkillKind.NATIVE
     assert found.name == hr_rag_skill_config.name
     assert found.description == hr_rag_skill_config.description
     assert found.license == hr_rag_skill_config.license
@@ -501,7 +501,7 @@ def bwrap_sandbox_skill_config(temp_dir):
 def test_skill_from_config_w_bwssc(bwrap_sandbox_skill_config):
     found = models.Skill.from_config(bwrap_sandbox_skill_config)
 
-    assert found.source == config_skills.SkillKind.ENTRYPOINT
+    assert found.source == config_skills.SkillKind.NATIVE
     assert found.name == bwrap_sandbox_skill_config.name
     assert found.description == bwrap_sandbox_skill_config.description
     assert found.license == bwrap_sandbox_skill_config.license
@@ -753,7 +753,6 @@ def room_ic():
         completion_paths=[],
         quizzes_paths=[],
         _available_filesystem_skill_configs={},
-        _available_entrypoint_skill_configs={},
         _resolved_skill_configs={},
     )
 
@@ -958,7 +957,6 @@ def bare_installation_config():
         completion_paths=[],
         quizzes_paths=[],
         _available_filesystem_skill_configs={},
-        _available_entrypoint_skill_configs={},
     )
 
 

@@ -13,7 +13,6 @@ from soliplex.skills import bwrap_sandbox
 
 SKILL_NAME = "test-skill"
 FILESYSTEM_SKILL_NAME = SKILL_NAME
-ENTRYPOINT_SKILL_NAME = "entrypoint-skill"
 SKILL_DESC = "This is a test capability"
 SKILL_MODEL_NAME = "removed-skill-model"
 SKILL_STATE_NAMESPACE = "removed-skill-state"
@@ -123,7 +122,7 @@ def test_haiku_rag_capability_config(
     assert capability.db_path == db_path
     assert capability.defer_loading is True
     assert config.agui_feature_names == (state_namespace,)
-    assert config.source is config_skills.SkillKind.ENTRYPOINT
+    assert config.source is config_skills.SkillKind.NATIVE
     assert config.license is None
     assert config.compatibility is None
     assert config.allowed_tools == []

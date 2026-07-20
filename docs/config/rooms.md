@@ -164,25 +164,22 @@ for configuring an agent.
 - `installation_skill_names` (a list of strings, default empty);  if set,
   names the installation skills which are enabled for the room.
 
-- `skill_configs` (a list of mappings, default empty); if set, configue
-  skills locally to the room.
+- `skill_configs` (a list of mappings, default empty); if set, configure
+  native capabilities locally for the room.
 
 E.g.:
 
   ```yaml
   skills:
     installation_skill_names:
-        - "bare-bones"           # a filesytem skill
-        - "image-generation"     # an entrypoint skill
+        - "bare-bones"           # a filesystem skill
 
     skill_configs:
 
-        - skill_name: "rag"
-          kind: "haiku.rag.skill.rag"
+        - kind: "haiku.rag.skills.rag"
           rag_lancedb_stem: "rag"
 
-        - skill_name: "analysis"
-          kind: "haiku.rag.skill.rag"
+        - kind: "haiku.rag.skills.analysis"
           rag_lancedb_stem: "rag"
   ```
 

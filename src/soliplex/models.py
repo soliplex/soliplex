@@ -135,10 +135,6 @@ class MCPClientToolset(pydantic.BaseModel):
 ConfiguredMCPClientToolsets = dict[str, MCPClientToolset]
 
 
-#
-# XXX See: https://github.com/ggozad/haiku.skills/issues/19
-# SkillAllowedTools = list[str] | None
-#
 SkillAllowedTools = str | None
 SkillMetadata = dict[str, typing.Any] | None
 

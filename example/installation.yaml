@@ -438,11 +438,11 @@ authorization_dburi:
 #
 # Each path can be either:
 #
-# - a directory containing its own 'SKILLS.md' file:  this directory
+# - a directory containing its own 'SKILL.md' file: this directory
 #   will be mapped as a single skill.
 #
 # - a directory whose immediate subdirectories will be treated as skills
-#   IFF they contain a `SKILLS.md` file.
+#   if they contain a `SKILL.md` file.
 #
 # Non-absolute paths will be evaluated relative to the installation directory.
 #
@@ -456,7 +456,7 @@ authorization_dburi:
 # skills_paths:
 # - "./skills"
 #
-# ... but with no discovered skills enabled.
+# All discovered skills are enabled unless 'skill_configs' restricts them.
 #
 # To disable all skilss, list a single, "null" path, e.g.:
 #
@@ -472,10 +472,6 @@ skill_configs:
     kind: "filesystem"
   - skill_name: "stanzas"
     kind: "filesystem"
-
-# Requires installing 'haiku-skills-image-generation'
-# - skill_name: "image-generation"
-#   kind: "entrypoint"
 
 #==========================================================================
 # Rooms configuration

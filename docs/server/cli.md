@@ -1119,7 +1119,7 @@ soliplex-cli audit quizzes example/
 
 ### `audit skills`
 
-List the Haiku skills declared in the installation configuration and
+List the Agent Skills declared in the installation configuration and
 run two complementary validation passes against them: (1) for each
 configured `skill_config`, surface any errors recorded at load time;
 (2) for each `SKILL.md`-bearing directory found under the configured

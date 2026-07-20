@@ -204,42 +204,20 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
 
 def resolve_skill_configs(
     explicit: typing.Iterable[dict],
-    available_fs: config_skills.SkillConfigMap,
-    available_ep: config_skills.SkillConfigMap,
+    available: config_skills.SkillConfigMap,
 ) -> config_skills.SkillConfigMap:
-    """Resolve the effective skill map from explicit config + availability.
-
-    Each kind (filesystem, entrypoint) is handled independently. If
-    'explicit' names any skill of that kind, it acts as a whitelist:
-    only the named skills are included. If 'explicit' names none of
-    that kind, the permissive default applies: every discovered skill
-    of that kind from the matching availability map is included.
-
-    Entrypoint skills go first in the union so that filesystem skills
-    win on name collision.
-    """
-    fs_skills = {}
-    ep_skills = {}
+    """Resolve enabled filesystem skills from discovered availability."""
+    selected = {}
 
     for entry in explicit:
+        if entry["kind"] != config_skills.SkillKind.FILESYSTEM:
+            raise ValueError(  # noqa: TRY003
+                f"Unsupported installation skill kind: {entry['kind']}"
+            )
         skill_name = entry["skill_name"]
-        if entry["kind"] == config_skills.SkillKind.FILESYSTEM:
-            fs_skills[skill_name] = available_fs[skill_name]
-        elif entry["kind"] == config_skills.SkillKind.ENTRYPOINT:
-            ep_skills[skill_name] = available_ep[skill_name]
-        else:  # pragma: NO COVER
-            pass
+        selected[skill_name] = available[skill_name]
 
-    if not fs_skills:
-        fs_skills = dict(available_fs)
-    if not ep_skills:
-        ep_skills = dict(available_ep)
-
-    return ep_skills | fs_skills
-
-
-def _load_entrypoint_skill_configs(i_config) -> config_skills.SkillConfigMap:
-    return {}
+    return selected or dict(available)
 
 
 class EnvironmentSourceType(enum.StrEnum):
@@ -618,8 +596,8 @@ class InstallationConfig:
 
         return self._agent_configs_map
 
-    # Path(s) to filesystm AI skills:  each item must be a single
-    # directory containing matching the spec:
+    # Path(s) to filesystem AI skills: each item must be a single
+    # directory matching the spec:
     # https://agentskills.io/specification
     #
     # or a directory whose subdirectories match that spec.
@@ -629,7 +607,6 @@ class InstallationConfig:
     filesystem_skills_paths: list[pathlib.Path] = None
 
     _available_filesystem_skill_configs: config_skills.SkillConfigMap = None
-    _available_entrypoint_skill_configs: config_skills.SkillConfigMap = None
     _skill_configs: list[dict] | None = None
     _resolved_skill_configs: config_skills.SkillConfigMap = None
 
@@ -645,23 +622,11 @@ class InstallationConfig:
         return self._available_filesystem_skill_configs.copy()
 
     @property
-    def available_entrypoint_skill_configs(
-        self,
-    ) -> config_skills.SkillConfigMap:
-        if self._available_entrypoint_skill_configs is None:
-            self._available_entrypoint_skill_configs = (
-                _load_entrypoint_skill_configs(self)
-            )
-
-        return self._available_entrypoint_skill_configs.copy()
-
-    @property
     def skill_configs(self) -> config_skills.SkillConfigMap:
         if self._resolved_skill_configs is None:
             self._resolved_skill_configs = resolve_skill_configs(
                 self._skill_configs or [],
                 self.available_filesystem_skill_configs,
-                self.available_entrypoint_skill_configs,
             )
 
         return self._resolved_skill_configs.copy()
@@ -1225,11 +1190,6 @@ class InstallationConfig:
         self.resolve_environment()
         self._available_filesystem_skill_configs = (
             _load_filesystem_skill_configs(
-                self,
-            )
-        )
-        self._available_entrypoint_skill_configs = (
-            _load_entrypoint_skill_configs(
                 self,
             )
         )
