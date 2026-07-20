@@ -91,14 +91,29 @@ async def test_capability_audits_native_search(audit_records, structured):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize(
-    "tool_def",
-    [
-        _tool_definition(name="rag_cite"),
-        _tool_definition(capability_id="other-capability"),
-    ],
-)
-async def test_capability_ignores_unrelated_tools(audit_records, tool_def):
+async def test_capability_audits_non_search_tool(audit_records):
+    capability = capability_audit.RAGAccessAuditCapability(
+        id="rag-audit",
+        db_paths={"haiku-rag": DB_PATH},
+    )
+    tool_def = _tool_definition(name="rag_cite")
+
+    await capability.after_tool_execute(
+        mock.Mock(deps=_tool_deps()),
+        call=_tool_call(tool_def.name),
+        tool_def=tool_def,
+        args={"chunk_ids": ["arbitrary-id"]},
+        result="result",
+    )
+
+    record = audit_records[-1]
+    assert record.tool == "rag_cite"
+    assert record.selector == {"chunk_ids": ["arbitrary-id"]}
+    assert record.result_refs == []
+
+
+@pytest.mark.anyio
+async def test_capability_ignores_unrelated_capability(audit_records):
     capability = capability_audit.RAGAccessAuditCapability(
         id="rag-audit",
         db_paths={"haiku-rag": DB_PATH},
@@ -106,8 +121,8 @@ async def test_capability_ignores_unrelated_tools(audit_records, tool_def):
 
     await capability.after_tool_execute(
         mock.Mock(deps=_tool_deps()),
-        call=_tool_call(tool_def.name),
-        tool_def=tool_def,
+        call=_tool_call(),
+        tool_def=_tool_definition(capability_id="other-capability"),
         args={},
         result="result",
     )
@@ -143,7 +158,7 @@ async def test_capability_audits_native_search_failure(audit_records):
 
 
 @pytest.mark.anyio
-async def test_capability_reraises_unrelated_tool_error(audit_records):
+async def test_capability_reraises_unrelated_capability_error(audit_records):
     capability = capability_audit.RAGAccessAuditCapability(
         id="rag-audit",
         db_paths={"haiku-rag": DB_PATH},
@@ -153,8 +168,8 @@ async def test_capability_reraises_unrelated_tool_error(audit_records):
     with pytest.raises(RuntimeError) as raised:
         await capability.on_tool_execute_error(
             mock.Mock(deps=_tool_deps()),
-            call=_tool_call("rag_cite"),
-            tool_def=_tool_definition(name="rag_cite"),
+            call=_tool_call(),
+            tool_def=_tool_definition(capability_id="other-capability"),
             args={},
             error=error,
         )

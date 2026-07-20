@@ -10,7 +10,6 @@ from pydantic_ai import tools as ai_tools
 from soliplex import loggers
 
 _CHUNK_REF = re.compile(r"^\[([^\]]+)\] \[rank", re.MULTILINE)
-_SEARCH_TOOLS = frozenset({"rag_search", "analysis_search"})
 
 
 def _result_refs(result: typing.Any) -> list[str]:
@@ -21,7 +20,7 @@ def _result_refs(result: typing.Any) -> list[str]:
 
 @dataclasses.dataclass
 class RAGAccessAuditCapability(ai_capabilities.AbstractCapability[typing.Any]):
-    """Audit native RAG capability searches without observing AG-UI events."""
+    """Audit native RAG capability tools without observing AG-UI events."""
 
     db_paths: dict[str, str]
 
@@ -46,7 +45,7 @@ class RAGAccessAuditCapability(ai_capabilities.AbstractCapability[typing.Any]):
     ) -> typing.Any:
         capability_id = tool_def.capability_id
         db_path = self.db_paths.get(capability_id or "")
-        if db_path is not None and tool_def.name in _SEARCH_TOOLS:
+        if db_path is not None:
             self._audit_log(ctx).retrieval(
                 db_path,
                 tool_def.name,
@@ -66,7 +65,7 @@ class RAGAccessAuditCapability(ai_capabilities.AbstractCapability[typing.Any]):
     ) -> typing.Any:
         capability_id = tool_def.capability_id
         db_path = self.db_paths.get(capability_id or "")
-        if db_path is not None and tool_def.name in _SEARCH_TOOLS:
+        if db_path is not None:
             self._audit_log(ctx).retrieval_failed(
                 db_path,
                 tool_def.name,
