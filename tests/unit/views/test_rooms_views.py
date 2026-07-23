@@ -691,6 +691,15 @@ async def test_get_chunk_visualization(
             assert record.selector == CHUNK_ID
             assert record.result_refs == [DOCUMENT_URI]
 
+            rag_w_chunk.visualize_chunk.assert_called_once_with(
+                chunk,
+                refs=None,
+                expand=False,
+            )
+            for rag in rags:
+                if rag is not rag_w_chunk:
+                    rag.visualize_chunk.assert_not_called()
+
         room_config.list_haiku_rag_client_kw.assert_called_once_with(
             include_source=True,
         )
