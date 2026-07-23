@@ -228,7 +228,7 @@ async def get_chunk_visualization(
     room_id: str,
     chunk_id: str,
     refs: str | None = None,
-    expand: bool = True,
+    expand: bool = False,
     the_installation: installation.Installation = depend_the_installation,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
