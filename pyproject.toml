@@ -25,17 +25,19 @@ dependencies = [
     "fastmcp >= 3.3.0, < 3.4",
     "fakeredis != 2.35.0",  # brownbag
     "greenlet",
-    "haiku.rag-slim >= 0.67, < 0.68",
-    "haiku-skills >= 0.18.0, < 0.19",
+    "haiku.rag-slim >= 0.67.3, < 0.68",
+    "haiku-skills >= 0.18.1, < 0.19",
     "idna >= 3.15",
     "itsdangerous",
     "joserfc >= 1.6.7, < 1.7",  # CVE-2026-48990
     "jsonpatch",
+    "mcp >= 1.27.2",  # CVE-2026-52870
     "pillow >= 12.3.0, < 12.4",  # PYSEC-2026-225{3,4,5,6,7}
     "python-jsonpath",  # RFC 9535 query support
     "python-multipart >= 0.0.31",  # Multiple CVEs
     "jwcrypto",
     "logfire[fastapi]",
+    "pyasn1 >= 0.6.4",  # PYSEC-2026-3456
     "pydantic-ai-slim[google] >= 1.102.0, < 2.0",  # CVE-2026-48782
     "pydantic-settings >= 2.14.2, < 2.15",  # GHSA-4xgf-cpjx-pc3j
     "pyjwt >= 2.13.0, < 2.14",  # PYSEC-2026-{175,177,178,179}
