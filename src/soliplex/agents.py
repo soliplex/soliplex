@@ -117,6 +117,18 @@ def get_default_agent_from_configs(
         if isinstance(capability, (RAGCapability, AnalysisCapability)):
             capability.vision = agent_config.multimodal
 
+    # A single model-facing capability loads eagerly so its tools are visible;
+    # multiple stay deferred so the model routes between them via
+    # load_capability. The audit capability is hook-only and always eager.
+    routing_capabilities = [
+        capability
+        for capability in capabilities
+        if not isinstance(capability, RAGAccessAuditCapability)
+    ]
+    defer_loading = len(routing_capabilities) > 1
+    for capability in routing_capabilities:
+        capability.defer_loading = defer_loading
+
     return pydantic_ai.Agent(
         model=model,
         model_settings=agent_config.model_settings,

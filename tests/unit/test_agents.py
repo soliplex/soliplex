@@ -310,6 +310,63 @@ def test_get_default_agent_aligns_rag_capability_vision(
     assert rag_capability.vision is multimodal
 
 
+@pytest.mark.parametrize(
+    "n_caps, w_audit, expected_defer",
+    [
+        (1, False, False),
+        (2, False, True),
+        (1, True, False),
+    ],
+)
+@mock.patch("soliplex.config.agents.get_model_from_config")
+@mock.patch("pydantic_ai.Agent")
+def test_get_default_agent_defers_only_with_multiple_capabilities(
+    agent_klass,
+    gmfc,
+    n_caps,
+    w_audit,
+    expected_defer,
+):
+    agent_config = mock.create_autospec(config_agents.AgentConfig)
+    agent_config.kind = "default"
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.model_settings = None
+    agent_config.retries = 3
+    agent_config.multimodal = False
+    agent_config.capabilities = []
+
+    caps = [
+        mock.create_autospec(ai_capabilities.AbstractCapability)
+        for _ in range(n_caps)
+    ]
+    capability_config = mock.Mock(
+        capabilities=caps,
+        rag_db_paths=(
+            {"haiku-rag": RAG_LANCEDB_OVERRIDE_PATH} if w_audit else {}
+        ),
+    )
+
+    agents.get_default_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs={},
+        mcp_client_toolset_configs={},
+        capability_config=capability_config,
+    )
+
+    for capability in caps:
+        assert capability.defer_loading is expected_defer
+
+    if w_audit:
+        built = agent_klass.call_args.kwargs["capabilities"]
+        (audit,) = [
+            capability
+            for capability in built
+            if getattr(capability, "id", None) == "soliplex-rag-access-audit"
+        ]
+        # The hook-only audit capability is never counted and stays eager.
+        assert audit.defer_loading is False
+
+
 @pytest.mark.parametrize("w_room_capabilities", [False, True])
 @mock.patch("soliplex.agents.get_default_agent_from_configs")
 def test_get_agent_from_configs_w_default_kind(
