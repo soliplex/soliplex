@@ -272,6 +272,44 @@ def test_get_default_agent_from_configs(
     assert akc_kw["deps_type"] is agents.AgentDependencies
 
 
+@pytest.mark.parametrize("multimodal", [False, True])
+@mock.patch("soliplex.config.agents.get_model_from_config")
+@mock.patch("pydantic_ai.Agent")
+def test_get_default_agent_aligns_rag_capability_vision(
+    agent_klass,
+    gmfc,
+    multimodal,
+    tmp_path,
+):
+    from haiku.rag.capabilities.rag import create_capability as create_rag
+    from haiku.rag.config.models import AppConfig
+
+    agent_config = mock.create_autospec(config_agents.AgentConfig)
+    agent_config.kind = "default"
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.model_settings = None
+    agent_config.retries = 3
+    agent_config.capabilities = []
+    agent_config.multimodal = multimodal
+
+    rag_capability = create_rag(
+        db_path=tmp_path / "kb.lancedb", config=AppConfig()
+    )
+    capability_config = mock.Mock(
+        capabilities=[rag_capability],
+        rag_db_paths={},
+    )
+
+    agents.get_default_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs={},
+        mcp_client_toolset_configs={},
+        capability_config=capability_config,
+    )
+
+    assert rag_capability.vision is multimodal
+
+
 @pytest.mark.parametrize("w_room_capabilities", [False, True])
 @mock.patch("soliplex.agents.get_default_agent_from_configs")
 def test_get_agent_from_configs_w_default_kind(

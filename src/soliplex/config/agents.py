@@ -154,6 +154,11 @@ class AgentConfig:
 
     model_settings: ai_settings.ModelSettings = None
 
+    # Declares whether this agent's model accepts image input. Gates whether
+    # RAG/analysis capabilities attach picture chunks to search results as
+    # images (the capabilities run on this agent's model, not haiku.rag's).
+    multimodal: bool = False
+
     _capability_configs: list[AgentCapabilityConfig] = _default_list_field()
 
     agui_feature_names: tuple[str] = ()

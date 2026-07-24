@@ -4,6 +4,8 @@ import dataclasses
 import typing
 
 import pydantic_ai
+from haiku.rag.capabilities import AnalysisCapability
+from haiku.rag.capabilities import RAGCapability
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import tools as ai_tools
@@ -106,6 +108,14 @@ def get_default_agent_from_configs(
                     db_paths=capability_config.rag_db_paths,
                 )
             )
+
+    # RAG/analysis capabilities attach picture chunks to search results as
+    # images only when the receiving model accepts them. That model is this
+    # agent's model, not haiku.rag's configured model, so gate on the room
+    # agent's declared multimodality.
+    for capability in capabilities:
+        if isinstance(capability, (RAGCapability, AnalysisCapability)):
+            capability.vision = agent_config.multimodal
 
     return pydantic_ai.Agent(
         model=model,
