@@ -415,6 +415,15 @@ def extract_agent_config(
     )
 
 
+# Strict OpenAI-compatible backends (some vLLM chat templates, e.g. Qwen's)
+# reject more than one leading system message. The agent prompt and each
+# capability's instructions map to one system message apiece, so have
+# pydantic-ai merge them for any endpoint that is not api.openai.com.
+_OPENAI_COMPAT_PROFILE = {
+    "openai_chat_supports_multiple_system_messages": False,
+}
+
+
 def get_model_from_config(
     *,
     agent_config: AgentConfig,
@@ -442,13 +451,20 @@ def get_model_from_config(
         return openai_models.OpenAIChatModel(
             model_name=agent_config.model_name,
             provider=provider,
+            profile=_OPENAI_COMPAT_PROFILE,
             **model_settings_kw,
         )
 
     else:
+        profile_kw = (
+            {"profile": _OPENAI_COMPAT_PROFILE}
+            if provider_kw.get("base_url")
+            else {}
+        )
         provider = openai_providers.OpenAIProvider(**provider_kw)
         return openai_models.OpenAIChatModel(
             model_name=agent_config.model_name,
             provider=provider,
+            **profile_kw,
             **model_settings_kw,
         )
