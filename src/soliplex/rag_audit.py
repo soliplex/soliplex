@@ -40,6 +40,3 @@ def audit_tool_access(
         )
         raise
     getattr(audit, audit_method)(db_path, selector, recorder.result_refs)
-
-
-__all__ = ["audit_tool_access"]

@@ -144,10 +144,3 @@ def discover_filesystem_capabilities(
                 errors.append(exc)
 
     return capabilities, errors
-
-
-__all__ = [
-    "FilesystemCapability",
-    "FilesystemCapabilityError",
-    "discover_filesystem_capabilities",
-]

@@ -14,7 +14,7 @@ from pydantic_ai import toolsets as ai_toolsets
 from soliplex import agui
 from soliplex import mcp_client
 from soliplex import models
-from soliplex.capabilities import RAGAccessAuditCapability
+from soliplex.capabilities import rag_audit as cap_rag_audit
 from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 
@@ -103,7 +103,7 @@ def get_default_agent_from_configs(
         capabilities.extend(capability_config.capabilities)
         if capability_config.rag_db_paths:
             capabilities.append(
-                RAGAccessAuditCapability(
+                cap_rag_audit.RAGAccessAuditCapability(
                     id="soliplex-rag-access-audit",
                     db_paths=capability_config.rag_db_paths,
                 )
@@ -123,7 +123,7 @@ def get_default_agent_from_configs(
     routing_capabilities = [
         capability
         for capability in capabilities
-        if not isinstance(capability, RAGAccessAuditCapability)
+        if not isinstance(capability, cap_rag_audit.RAGAccessAuditCapability)
     ]
     defer_loading = len(routing_capabilities) > 1
     for capability in routing_capabilities:

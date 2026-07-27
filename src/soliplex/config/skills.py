@@ -14,8 +14,7 @@ from haiku.rag.capabilities import analysis as hr_analysis
 from haiku.rag.capabilities import rag as hr_rag
 from pydantic_ai import capabilities as ai_capabilities
 
-from soliplex.capabilities import FilesystemCapability
-from soliplex.capabilities import discover_filesystem_capabilities
+from soliplex.capabilities import filesystem as cap_fs
 from soliplex.config import agui as config_agui
 from soliplex.skills import bwrap_sandbox
 
@@ -115,7 +114,7 @@ class SkillConfig(typing.Protocol):
 
 @dataclasses.dataclass(kw_only=True)
 class FilesystemSkillConfig:
-    _capability: FilesystemCapability
+    _capability: cap_fs.FilesystemCapability
     _validation_errors: list[str] = _default_list_field()
 
     source: typing.ClassVar[SkillKind] = SkillKind.FILESYSTEM
@@ -124,16 +123,16 @@ class FilesystemSkillConfig:
     agui_feature_names: typing.ClassVar[tuple[str, ...]] = ()
 
     @classmethod
-    def from_capability(cls, capability: FilesystemCapability):
+    def from_capability(cls, capability: cap_fs.FilesystemCapability):
         return cls(_capability=capability)
 
     @classmethod
     def from_path(cls, capability_path: pathlib.Path):
-        capabilities, errors = discover_filesystem_capabilities(
+        capabilities, errors = cap_fs.discover_filesystem_capabilities(
             [capability_path]
         )
         if errors:
-            placeholder = FilesystemCapability(
+            placeholder = cap_fs.FilesystemCapability(
                 id=capability_path.name,
                 description=(
                     f"Invalid filesystem capability: {capability_path}"
@@ -150,7 +149,7 @@ class FilesystemSkillConfig:
         return cls.from_capability(capability)
 
     @property
-    def capability(self) -> FilesystemCapability:
+    def capability(self) -> cap_fs.FilesystemCapability:
         return self._capability
 
     @property
@@ -662,19 +661,3 @@ class RoomSkillsConfig:
             isinstance(config, BwrapSandboxSkillConfig)
             for config in self.skill_configs.values()
         )
-
-
-__all__ = [
-    "BwrapSandboxSkillConfig",
-    "FilesystemSkillConfig",
-    "HR_Analysis_SkillConfig",
-    "HR_RAG_SkillConfig",
-    "InvalidSkillKind",
-    "MissingSkillNames",
-    "RoomSkillsConfig",
-    "SKILL_CONFIG_CLASSES_BY_KIND",
-    "SkillConfigMap",
-    "SkillConfigTypes",
-    "SkillKind",
-    "extract_skill_configs",
-]

@@ -14,7 +14,7 @@ import dotenv
 import yaml
 from haiku.rag import config as hr_config
 
-from soliplex.capabilities import discover_filesystem_capabilities
+from soliplex.capabilities import filesystem as cap_fs
 
 from . import _utils
 from . import agents as config_agents
@@ -181,7 +181,7 @@ def resolve_environment_entry(
 def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
     fs_skill_configs = {}
 
-    capabilities, validation_errors = discover_filesystem_capabilities(
+    capabilities, validation_errors = cap_fs.discover_filesystem_capabilities(
         i_config.filesystem_skills_paths,
     )
     for capability in capabilities:

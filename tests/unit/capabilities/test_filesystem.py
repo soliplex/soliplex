@@ -7,8 +7,7 @@ from pydantic_ai.messages import TextPart
 from pydantic_ai.messages import ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 
-from soliplex.capabilities import FilesystemCapabilityError
-from soliplex.capabilities import discover_filesystem_capabilities
+from soliplex.capabilities import filesystem as cap_fs
 
 
 def _write_skill(
@@ -31,7 +30,7 @@ def test_discover_single_capability_path(temp_dir):
     path = temp_dir / "test-capability"
     _write_skill(path)
 
-    capabilities, errors = discover_filesystem_capabilities([path])
+    capabilities, errors = cap_fs.discover_filesystem_capabilities([path])
 
     assert errors == []
     (capability,) = capabilities
@@ -49,7 +48,7 @@ def test_discover_capability_children_ignores_unrelated_entries(temp_dir):
     (temp_dir / "plain.txt").write_text("not a capability")
     (temp_dir / "empty").mkdir()
 
-    capabilities, errors = discover_filesystem_capabilities([temp_dir])
+    capabilities, errors = cap_fs.discover_filesystem_capabilities([temp_dir])
 
     assert errors == []
     assert [capability.id for capability in capabilities] == ["alpha", "beta"]
@@ -58,7 +57,7 @@ def test_discover_capability_children_ignores_unrelated_entries(temp_dir):
 def test_discover_missing_path(temp_dir):
     path = temp_dir / "missing"
 
-    capabilities, errors = discover_filesystem_capabilities([path])
+    capabilities, errors = cap_fs.discover_filesystem_capabilities([path])
 
     assert capabilities == []
     assert len(errors) == 1
@@ -91,7 +90,7 @@ def test_discover_reports_invalid_skill_files(temp_dir, text, message):
     path.mkdir()
     (path / "SKILL.md").write_text(text)
 
-    capabilities, errors = discover_filesystem_capabilities([path])
+    capabilities, errors = cap_fs.discover_filesystem_capabilities([path])
 
     assert capabilities == []
     assert len(errors) == 1
@@ -108,7 +107,7 @@ def test_discover_reports_read_error(temp_dir, monkeypatch):
 
     monkeypatch.setattr(pathlib.Path, "read_text", fail_read)
 
-    capabilities, errors = discover_filesystem_capabilities([path])
+    capabilities, errors = cap_fs.discover_filesystem_capabilities([path])
 
     assert capabilities == []
     assert "unreadable" in str(errors[0])
@@ -118,7 +117,7 @@ def test_discover_reports_read_error(temp_dir, monkeypatch):
 async def test_capability_uses_native_deferred_loading(temp_dir):
     path = temp_dir / "test-capability"
     _write_skill(path)
-    capabilities, _ = discover_filesystem_capabilities([path])
+    capabilities, _ = cap_fs.discover_filesystem_capabilities([path])
     requests = []
 
     def model_function(messages, info):
@@ -144,7 +143,7 @@ async def test_capability_uses_native_deferred_loading(temp_dir):
 
 
 def test_filesystem_capability_error_retains_path(temp_dir):
-    error = FilesystemCapabilityError("bad", temp_dir)
+    error = cap_fs.FilesystemCapabilityError("bad", temp_dir)
 
     assert error.path == temp_dir
     assert str(error) == "bad"

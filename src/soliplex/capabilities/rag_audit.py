@@ -73,6 +73,3 @@ class RAGAccessAuditCapability(ai_capabilities.AbstractCapability[typing.Any]):
                 type(error).__name__,
             )
         raise error
-
-
-__all__ = ["RAGAccessAuditCapability"]

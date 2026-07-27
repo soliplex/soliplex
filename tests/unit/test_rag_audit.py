@@ -7,7 +7,7 @@ from pydantic_ai import tools as ai_tools
 
 from soliplex import loggers
 from soliplex import rag_audit
-from soliplex.capabilities import rag_audit as capability_audit
+from soliplex.capabilities import rag_audit as cap_audit
 
 USER_EMAIL = "x@a.test"
 ROOM_ID = "room-1"
@@ -56,7 +56,7 @@ def _tool_call(name="rag_search"):
 @pytest.mark.anyio
 @pytest.mark.parametrize("structured", [False, True])
 async def test_capability_audits_native_search(audit_records, structured):
-    capability = capability_audit.RAGAccessAuditCapability(
+    capability = cap_audit.RAGAccessAuditCapability(
         id="rag-audit",
         db_paths={"haiku-rag": DB_PATH},
     )
@@ -92,7 +92,7 @@ async def test_capability_audits_native_search(audit_records, structured):
 
 @pytest.mark.anyio
 async def test_capability_audits_non_search_tool(audit_records):
-    capability = capability_audit.RAGAccessAuditCapability(
+    capability = cap_audit.RAGAccessAuditCapability(
         id="rag-audit",
         db_paths={"haiku-rag": DB_PATH},
     )
@@ -114,7 +114,7 @@ async def test_capability_audits_non_search_tool(audit_records):
 
 @pytest.mark.anyio
 async def test_capability_ignores_unrelated_capability(audit_records):
-    capability = capability_audit.RAGAccessAuditCapability(
+    capability = cap_audit.RAGAccessAuditCapability(
         id="rag-audit",
         db_paths={"haiku-rag": DB_PATH},
     )
@@ -132,7 +132,7 @@ async def test_capability_ignores_unrelated_capability(audit_records):
 
 @pytest.mark.anyio
 async def test_capability_audits_native_search_failure(audit_records):
-    capability = capability_audit.RAGAccessAuditCapability(
+    capability = cap_audit.RAGAccessAuditCapability(
         id="rag-audit",
         db_paths={"haiku-rag": DB_PATH},
     )
@@ -159,7 +159,7 @@ async def test_capability_audits_native_search_failure(audit_records):
 
 @pytest.mark.anyio
 async def test_capability_reraises_unrelated_capability_error(audit_records):
-    capability = capability_audit.RAGAccessAuditCapability(
+    capability = cap_audit.RAGAccessAuditCapability(
         id="rag-audit",
         db_paths={"haiku-rag": DB_PATH},
     )

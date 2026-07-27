@@ -9,7 +9,7 @@ from haiku.rag import config as hr_config
 from haiku.rag.capabilities import analysis as hr_analysis
 from haiku.rag.capabilities import rag as hr_rag
 
-from soliplex.capabilities import FilesystemCapability
+from soliplex.capabilities import filesystem as cap_fs
 from soliplex.config import agui as config_agui
 from soliplex.config import exceptions as config_exc
 from soliplex.config import skills as config_skills
@@ -23,7 +23,7 @@ SKILL_STATE_NAMESPACE = "removed-skill-state"
 
 
 def _filesystem_capability(path):
-    return FilesystemCapability(
+    return cap_fs.FilesystemCapability(
         id=path.name,
         description=SKILL_DESC,
         defer_loading=True,

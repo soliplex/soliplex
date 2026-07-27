@@ -13,7 +13,7 @@ from haiku.rag.capabilities import rag as hr_rag
 from soliplex import agui
 from soliplex import authz
 from soliplex import models
-from soliplex.capabilities import FilesystemCapability
+from soliplex.capabilities import filesystem as cap_fs
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import completions as config_completions
@@ -434,7 +434,7 @@ def test_mcp_client_toolset_from_config_w_sse():
 @pytest.fixture
 def filesystem_skill_config(temp_dir):
     skill_path = temp_dir / "skills" / SKILL_NAME
-    capability = FilesystemCapability(
+    capability = cap_fs.FilesystemCapability(
         id=SKILL_NAME,
         description=SKILL_DESC,
         defer_loading=True,
