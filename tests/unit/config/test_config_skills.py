@@ -1,5 +1,8 @@
+import importlib.metadata
+import types
 from unittest import mock
 
+import pydantic
 import pytest
 from bubble_sandbox import models as bs_models
 from haiku.rag import config as hr_config
@@ -7,6 +10,7 @@ from haiku.rag.capabilities import analysis as hr_analysis
 from haiku.rag.capabilities import rag as hr_rag
 
 from soliplex.capabilities import FilesystemCapability
+from soliplex.config import agui as config_agui
 from soliplex.config import exceptions as config_exc
 from soliplex.config import skills as config_skills
 from soliplex.skills import bwrap_sandbox
@@ -336,3 +340,116 @@ def test_empty_room_skills_config(installation_config):
     assert config.capabilities == []
     assert config.rag_db_paths == {}
     assert config.has_sandbox is False
+
+
+class _FakeEntryPoint:
+    def __init__(self, name, target):
+        self.name = name
+        self._target = target
+
+    def load(self):
+        return self._target
+
+
+class _FakeState(pydantic.BaseModel):
+    pass
+
+
+def _stateful_module():
+    return types.SimpleNamespace(
+        STATE_NAMESPACE="entrypoint-test",
+        STATE_TYPE=_FakeState,
+        DESCRIPTION="A test capability",
+        create_capability=lambda defer_loading, **params: {
+            "defer_loading": defer_loading,
+            "params": params,
+        },
+    )
+
+
+def _stateless_module():
+    return types.SimpleNamespace(
+        create_capability=lambda defer_loading, **params: {
+            "defer_loading": defer_loading,
+            "params": params,
+        },
+    )
+
+
+def _patch_entry_points(monkeypatch, mapping):
+    eps = [_FakeEntryPoint(name, target) for name, target in mapping.items()]
+    monkeypatch.setattr(importlib.metadata, "entry_points", lambda group: eps)
+
+
+def test_entrypoint_capability_registered_kind():
+    assert (
+        config_skills.SKILL_CONFIG_CLASSES_BY_KIND["entrypoint"]
+        is config_skills.EntrypointCapabilityConfig
+    )
+
+
+def test_entrypoint_capability_config_stateful(
+    monkeypatch, installation_config, temp_dir
+):
+    _patch_entry_points(monkeypatch, {"my-cap": _stateful_module()})
+    config = config_skills.EntrypointCapabilityConfig.from_yaml(
+        installation_config,
+        temp_dir / "room.yaml",
+        {"kind": "entrypoint", "name": "my-cap", "foo": "bar"},
+    )
+
+    assert config.name == "my-cap"
+    assert config.description == "A test capability"
+    assert config.state_namespace == "entrypoint-test"
+    assert config.state_type is _FakeState
+    assert config.agui_feature_names == ("entrypoint-test",)
+    assert config.source is config_skills.SkillKind.ENTRYPOINT
+    assert config.license is None
+    assert config.compatibility is None
+    assert config.allowed_tools == []
+    assert config.metadata == {}
+    assert config.extra_parameters == {"foo": "bar"}
+    assert config.as_yaml == {
+        "kind": "entrypoint",
+        "name": "my-cap",
+        "foo": "bar",
+    }
+    assert config.capability == {
+        "defer_loading": True,
+        "params": {"foo": "bar"},
+    }
+    assert "entrypoint-test" in config_agui.AGUI_FEATURES_BY_NAME
+
+
+def test_entrypoint_capability_config_stateless(
+    monkeypatch, installation_config, temp_dir
+):
+    _patch_entry_points(monkeypatch, {"plain": _stateless_module()})
+    config = config_skills.EntrypointCapabilityConfig.from_yaml(
+        installation_config,
+        temp_dir / "room.yaml",
+        {"kind": "entrypoint", "name": "plain"},
+    )
+
+    assert config.description == ""
+    assert config.state_namespace is None
+    assert config.state_type is None
+    assert config.agui_feature_names == ()
+    assert config.extra_parameters == {}
+    assert config.capability == {"defer_loading": True, "params": {}}
+
+
+def test_entrypoint_capability_config_unknown_entry_point(
+    monkeypatch, installation_config, temp_dir
+):
+    _patch_entry_points(monkeypatch, {"other": _stateless_module()})
+    with pytest.raises(config_exc.FromYamlException) as raised:
+        config_skills.EntrypointCapabilityConfig.from_yaml(
+            installation_config,
+            temp_dir / "room.yaml",
+            {"kind": "entrypoint", "name": "missing"},
+        )
+
+    assert isinstance(
+        raised.value.__cause__, config_skills.UnknownCapabilityEntryPoint
+    )

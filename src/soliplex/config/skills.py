@@ -2,6 +2,8 @@ from __future__ import annotations  # forward refs in typing decls
 
 import dataclasses
 import enum
+import functools
+import importlib.metadata
 import pathlib
 import typing
 
@@ -64,6 +66,39 @@ class MissingSkillNames(KeyError):
 class SkillKind(enum.StrEnum):
     FILESYSTEM = "filesystem"
     NATIVE = "native"
+    ENTRYPOINT = "entrypoint"
+
+
+CAPABILITY_ENTRY_POINT_GROUP = "soliplex.capabilities"
+
+
+class UnknownCapabilityEntryPoint(KeyError):
+    def __init__(self, *, name: str, available: typing.Sequence[str]):
+        self.name = name
+        self.available = available
+        super().__init__(
+            f"No capability entry point named {name!r} in group "
+            f"'{CAPABILITY_ENTRY_POINT_GROUP}'; available: {list(available)}",
+        )
+
+
+def _load_capability_entry_point(name: str):
+    """Resolve a `soliplex.capabilities` entry point to its module/object.
+
+    The target exposes `create_capability(defer_loading=..., **params)` and,
+    for stateful capabilities, module-level `STATE_NAMESPACE` / `STATE_TYPE`
+    (and an optional `DESCRIPTION`).
+    """
+    entry_points = importlib.metadata.entry_points(
+        group=CAPABILITY_ENTRY_POINT_GROUP,
+    )
+    for entry_point in entry_points:
+        if entry_point.name == name:
+            return entry_point.load()
+    raise UnknownCapabilityEntryPoint(
+        name=name,
+        available=[ep.name for ep in entry_points],
+    )
 
 
 class SkillConfig(typing.Protocol):
@@ -369,6 +404,113 @@ class BwrapSandboxSkillConfig:
         return result
 
 
+@dataclasses.dataclass(kw_only=True)
+class EntrypointCapabilityConfig:
+    """A capability from a third-party `soliplex.capabilities` entry point.
+
+    Mounted room-side via `{kind: entrypoint, name: <entry-point>, ...params}`.
+    Extra keys are forwarded to the package's `create_capability`.
+    """
+
+    kind: typing.ClassVar[str] = "entrypoint"
+    source: typing.ClassVar[SkillKind] = SkillKind.ENTRYPOINT
+
+    _installation_config: InstallationConfig = None  # noqa F821 cycles
+    _config_path: pathlib.Path | None = None
+
+    name: str
+    params: dict[str, typing.Any] = _default_dict_field()
+
+    def __post_init__(self) -> None:
+        # Register the capability's typed AG-UI state feature so the room can
+        # synthesize default state (like the native-capability loop).
+        namespace = self.state_namespace
+        if namespace is not None:
+            config_agui.AGUI_FEATURES_BY_NAME.setdefault(
+                namespace,
+                config_agui.AGUI_Feature(
+                    name=namespace,
+                    model_klass=self.state_type,
+                    source=config_agui.AGUI_FeatureSource.SERVER,
+                ),
+            )
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,  # noqa F821 cycles
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        params = dict(config_dict)
+        params.pop("kind", None)
+        name = params.pop("name", None)
+        try:
+            return cls(
+                name=name,
+                params=params,
+                _installation_config=installation_config,
+                _config_path=config_path,
+            )
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                "entrypoint",
+                config_dict,
+            ) from exc
+
+    @functools.cached_property
+    def _module(self):
+        return _load_capability_entry_point(self.name)
+
+    @property
+    def capability(self) -> ai_capabilities.AbstractCapability:
+        return self._module.create_capability(
+            defer_loading=True, **self.params
+        )
+
+    @property
+    def description(self) -> str:
+        return getattr(self._module, "DESCRIPTION", "") or ""
+
+    @property
+    def state_namespace(self) -> str | None:
+        return getattr(self._module, "STATE_NAMESPACE", None)
+
+    @property
+    def state_type(self) -> type[pydantic.BaseModel] | None:
+        return getattr(self._module, "STATE_TYPE", None)
+
+    @property
+    def agui_feature_names(self) -> tuple[str, ...]:
+        namespace = self.state_namespace
+        return (namespace,) if namespace is not None else ()
+
+    @property
+    def as_yaml(self) -> dict:
+        return {"kind": self.kind, "name": self.name, **self.params}
+
+    @property
+    def license(self) -> None:
+        return None
+
+    @property
+    def compatibility(self) -> None:
+        return None
+
+    @property
+    def allowed_tools(self) -> list[str]:
+        return []
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {}
+
+    @property
+    def extra_parameters(self) -> dict[str, typing.Any]:
+        return dict(self.params)
+
+
 for feature_name, model in (
     (hr_rag.STATE_NAMESPACE, hr_rag.RAGState),
     (hr_analysis.STATE_NAMESPACE, hr_analysis.AnalysisState),
@@ -386,6 +528,7 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
         HR_RAG_SkillConfig,
         HR_Analysis_SkillConfig,
         BwrapSandboxSkillConfig,
+        EntrypointCapabilityConfig,
     ]
 }
 
@@ -394,6 +537,7 @@ SkillConfigTypes = (
     | HR_RAG_SkillConfig
     | HR_Analysis_SkillConfig
     | BwrapSandboxSkillConfig
+    | EntrypointCapabilityConfig
 )
 SkillConfigMap = dict[str, SkillConfigTypes]
 
