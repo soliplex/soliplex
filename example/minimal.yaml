@@ -372,6 +372,8 @@ filesystem_skills_paths:
 skill_configs:
   - skill_name: "bare-bones"
     kind: "filesystem"
+  - skill_name: "stanzas"
+    kind: "filesystem"
 
 # Requires installing 'haiku-skills-image-generation'
 # - skill_name: "image-generation"
@@ -392,7 +394,7 @@ room_paths:
   - "./rooms/joker"
   - "./rooms/faux"
   - "./rooms/quiztest"
-  - "./rooms/skillstest"
+  - "./rooms/stanzas"
   - "./rooms/feedback"
   - "./rooms/bwrap_sandbox"
 

@@ -44,7 +44,14 @@ repos:
       - id: pymarkdown
         args:
           - "scan"
-        exclude: ^ios/Runner/Assets\.xcassets/
+        # The 'stanzas' poem files are verbatim source texts, not prose we
+        # own: the skill's whole promise is byte-exact quoting, so their
+        # whitespace must not be reflowed to satisfy markdown rules.
+        exclude: |
+          (?x)^(
+            ios/Runner/Assets\.xcassets/
+            |example/skills/stanzas/resources/
+          )
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7
