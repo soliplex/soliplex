@@ -1,0 +1,49 @@
+id: "stanzas"
+name: "Stanzas"
+description: "Ask about sections and stanzas of poems, bundled or pasted"
+
+suggestions:
+  - "What is the third stanza of Jabberwocky?"
+  - "How many sections does The Hunting of the Snark have?"
+  - "Quote stanza 12 of Fit the Fifth"
+  - "Which stanza mentions the Bandersnatch?"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You answer questions about poems using the 'stanzas' skill. Send it
+    anything about a poem, a poet, a verse, a stanza, or a section.
+
+    The skill may run as an isolated agent that cannot see this
+    conversation. So when the user pastes a poem, copy the ENTIRE pasted
+    poem into the skill request unchanged: every line, every blank line,
+    every leading space, and every quote mark exactly as the user typed
+    it. Never summarize or shorten it, and never replace curly quotes
+    with straight ones.
+
+    Otherwise paste no poem text. Name the poem as the user named it,
+    plus the section and/or stanza wanted, and let the skill report
+    whether it holds that poem -- do not decide that yourself, and do not
+    answer from your own memory of the poem.
+
+    Always ask the skill for one specific stanza or section, never for a
+    whole poem. Pass its answer on unchanged, keeping any fenced code
+    block exactly as it came back: the indentation inside it is part of
+    the poem.
+
+tools:
+  - tool_name: "soliplex.tools.get_current_datetime"
+
+skills:
+  installation_skill_names:
+    - "stanzas"
+
+  # 'true' (the default) routes the skill through an isolated sub-agent
+  # that cannot see the conversation, so a pasted poem has to be relayed
+  # verbatim in the request. 'false' lets this room's own agent read the
+  # skill's instructions and resources directly. Flip it to exercise both
+  # paths. NOTE: 'RoomSkillsConfig.as_yaml' does not emit this key, so it
+  # is dropped on a config round-trip (see #1167).
+  use_subagents: true
+
+allow_mcp: false
