@@ -117,6 +117,7 @@ class FilesystemSkillConfig:
     _capability: cap_fs.FilesystemCapability
     _validation_errors: list[str] = _default_list_field()
 
+    kind: typing.ClassVar[str] = SkillKind.FILESYSTEM
     source: typing.ClassVar[SkillKind] = SkillKind.FILESYSTEM
     state_type: typing.ClassVar[None] = None
     state_namespace: typing.ClassVar[None] = None

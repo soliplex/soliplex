@@ -51,6 +51,7 @@ def test_filesystem_skill_config_properties(temp_dir):
     assert config.description == SKILL_DESC
     assert config.path == path
     assert config.errors == []
+    assert config.kind == "filesystem"
     assert config.source is config_skills.SkillKind.FILESYSTEM
     assert config.state_type is None
     assert config.state_namespace is None
