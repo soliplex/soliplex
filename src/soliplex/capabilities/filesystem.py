@@ -1,15 +1,23 @@
 import dataclasses
 import pathlib
 import re
+import shlex
+import sys
 import typing
 
+import anyio
 import pydantic
 import yaml
+from pydantic_ai import ModelRetry
 from pydantic_ai import capabilities as ai_capabilities
+from pydantic_ai import toolsets as ai_toolsets
 
 _SKILL_FILENAME = "SKILL.md"
 _FRONTMATTER_DELIMITER = "---"
 _NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_RESOURCES_DIRNAME = "resources"
+_SCRIPTS_DIRNAME = "scripts"
+_SCRIPT_TIMEOUT_SECONDS = 60
 
 
 class FilesystemCapabilityError(ValueError):
@@ -42,13 +50,85 @@ class _CapabilityMetadata(pydantic.BaseModel):
 
 @dataclasses.dataclass
 class FilesystemCapability(ai_capabilities.AbstractCapability[typing.Any]):
-    """Deferred instructions loaded from an Agent Skills ``SKILL.md`` file."""
+    """Deferred instructions loaded from an Agent Skills ``SKILL.md`` file.
+
+    Bundled ``resources/`` files and ``scripts/`` are exposed as tools.
+    Scripts run unsandboxed as the server user: installing a capability
+    directory is the trust decision, the model only chooses arguments.
+    """
 
     instructions: str
     path: pathlib.Path
 
     def get_instructions(self) -> str:
         return self.instructions
+
+    def get_toolset(self) -> ai_toolsets.AbstractToolset | None:
+        tools = []
+        if (self.path / _RESOURCES_DIRNAME).is_dir():
+            tools.append(self.read_resource)
+        if (self.path / _SCRIPTS_DIRNAME).is_dir():
+            tools.append(self.run_script)
+        if not tools:
+            return None
+        return ai_toolsets.FunctionToolset(tools)
+
+    def _confined(self, dirname: str, value: str) -> pathlib.Path:
+        root = (self.path / dirname).resolve()
+        target = (self.path / value).resolve()
+        if not target.is_relative_to(root):
+            raise ModelRetry(  # noqa: TRY003
+                f"'{value}' is not under '{dirname}/'"
+            )
+        return target
+
+    async def read_resource(self, path: str) -> str:
+        """Read a bundled resource file.
+
+        ``path`` is relative to the capability directory and must point
+        below ``resources/``, e.g. ``resources/jabberwocky.md``.
+        """
+        target = self._confined(_RESOURCES_DIRNAME, path)
+        if not target.is_file():
+            raise ModelRetry(f"No such resource: '{path}'")  # noqa: TRY003
+        return target.read_text(encoding="utf-8")
+
+    async def run_script(self, script: str, arguments: str = "") -> str:
+        """Run a bundled script and return its output.
+
+        ``script`` is relative to the capability directory and must point
+        below ``scripts/``, e.g. ``scripts/poem.py``. ``arguments`` is a
+        single shell-style string of command-line arguments.
+        """
+        target = self._confined(_SCRIPTS_DIRNAME, script)
+        if not target.is_file():
+            raise ModelRetry(f"No such script: '{script}'")  # noqa: TRY003
+        try:
+            argv = shlex.split(arguments)
+        except ValueError as exc:
+            raise ModelRetry(  # noqa: TRY003
+                f"Malformed arguments: {exc}"
+            ) from exc
+
+        try:
+            with anyio.fail_after(_SCRIPT_TIMEOUT_SECONDS):
+                completed = await anyio.run_process(
+                    [sys.executable, str(target), *argv],
+                    cwd=self.path,
+                    check=False,
+                )
+        except TimeoutError:
+            return (
+                f"TIMED OUT: '{script}' exceeded "
+                f"{_SCRIPT_TIMEOUT_SECONDS} seconds"
+            )
+
+        parts = [completed.stdout.decode("utf-8", errors="replace")]
+        if stderr := completed.stderr.decode("utf-8", errors="replace"):
+            parts.append(stderr)
+        if completed.returncode:
+            parts.append(f"exit status: {completed.returncode}")
+        return "\n".join(parts)
 
 
 def _parse_skill_file(
