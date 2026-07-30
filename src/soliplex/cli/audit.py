@@ -241,8 +241,7 @@ def _missing_env_vars(the_installation: installation.Installation) -> dict:
     try:
         the_installation.resolve_environment()
     except config_installation.MissingEnvVars as exc:
-        missing = exc.env_vars.split(",")
-        return {"missing_env_vars": missing}
+        return {"missing_env_vars": exc.failed}
     return {}
 
 

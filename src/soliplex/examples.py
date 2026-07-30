@@ -122,6 +122,11 @@ class _FauxRunResult:
         return ai_usage.RunUsage()
 
 
+class FailingOnRequest(ValueError):
+    def __init__(self):
+        super().__init__("failing on request")
+
+
 @dataclasses.dataclass
 class FauxAgent:
     agent_config: config_agents.FactoryAgentConfig
@@ -158,7 +163,7 @@ class FauxAgent:
                     prompt = ups[-1].content
 
         if prompt == "fail":
-            raise ValueError("failing on request")  # noqa: TRY003
+            raise FailingOnRequest()
 
         return _FauxRunResult(output="I don't know!")
 
@@ -205,7 +210,7 @@ class FauxAgent:
                     ),
                 )
                 if up.content == "fail":
-                    raise ValueError("failing on request")  # noqa: TRY003
+                    raise FailingOnRequest()
 
             await asyncio.sleep(random.uniform(0.5, 2.0))
 
