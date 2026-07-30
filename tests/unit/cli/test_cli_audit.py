@@ -364,30 +364,31 @@ def test__missing_secrets(
 
 
 @pytest.mark.parametrize(
-    "w_missing_env_vars, exp_missing",
+    "w_missing",
     [
-        (None, None),
-        ("ALPHA", ["ALPHA"]),
-        ("ALPHA,BETA", ["ALPHA", "BETA"]),
+        None,
+        ["ALPHA"],
+        ["ALPHA", "BETA"],
     ],
 )
 @mock.patch("soliplex.installation.Installation.resolve_environment")
 def test__missing_env_vars(
     resolve_environment,
     the_installation,
-    w_missing_env_vars,
-    exp_missing,
+    w_missing,
 ):
-    if w_missing_env_vars is not None:
-        resolve_environment.side_effect = config_installation.MissingEnvVars(
-            w_missing_env_vars,
-            [ValueError()],
+    if w_missing is not None:
+        resolve_environment.side_effect = (
+            config_installation.MissingEnvVars.from_failed(
+                w_missing,
+                [ValueError()],
+            )
         )
 
     found = cli_audit._missing_env_vars(the_installation)
 
-    if exp_missing is not None:
-        assert found == {"missing_env_vars": exp_missing}
+    if w_missing is not None:
+        assert found == {"missing_env_vars": w_missing}
     else:
         assert found == {}
 

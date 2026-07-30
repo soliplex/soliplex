@@ -1214,21 +1214,21 @@ RESOLVED = {"name": "RESOLVED", "value": "resolved"}
             [UNRESOLVED],
             (None, False),
             pytest.raises(config_installation.MissingEnvVars),
-            "UNRESOLVED",
+            ["UNRESOLVED"],
             None,
         ),
         (
             [UNRESOLVED, UNRESOLVED_MOAR],
             (None, False),
             pytest.raises(config_installation.MissingEnvVars),
-            "UNRESOLVED,UNRESOLVED_MOAR",
+            ["UNRESOLVED", "UNRESOLVED_MOAR"],
             None,
         ),
         (
             [UNRESOLVED, UNRESOLVED_MOAR],
             ({"UNRESOLVED": "via_dotenv"}, False),
             pytest.raises(config_installation.MissingEnvVars),
-            "UNRESOLVED_MOAR",
+            ["UNRESOLVED_MOAR"],
             None,
         ),
         (
@@ -1242,7 +1242,7 @@ RESOLVED = {"name": "RESOLVED", "value": "resolved"}
             [UNRESOLVED],
             ({"UNRESOLVED": "via_dotenv"}, True),
             pytest.raises(config_installation.MissingEnvVars),
-            "UNRESOLVED",
+            ["UNRESOLVED"],
             None,
         ),
         (
@@ -1289,7 +1289,7 @@ def test_installationconfig_resolve_environment(
         i_config.resolve_environment()
 
     if expected is not None:
-        assert expected.value.env_vars == exp_missing
+        assert expected.value.failed == exp_missing
     else:
         assert i_config.environment == exp_env
 
@@ -2639,7 +2639,7 @@ def test_resolve_skill_configs_whitelist():
 
 
 def test_resolve_skill_configs_rejects_non_filesystem_kind():
-    with pytest.raises(ValueError, match="Unsupported installation skill"):
+    with pytest.raises(config_installation.UnsupportedInstallationSkillKind):
         config_installation.resolve_skill_configs(
             [{"kind": "entrypoint", "skill_name": "old-style"}],
             {},

@@ -8,8 +8,8 @@ import typing
 import anyio
 import pydantic
 import yaml
-from pydantic_ai import ModelRetry
 from pydantic_ai import capabilities as ai_capabilities
+from pydantic_ai import exceptions as ai_exc
 from pydantic_ai import toolsets as ai_toolsets
 
 _SKILL_FILENAME = "SKILL.md"
@@ -28,6 +28,73 @@ class FilesystemCapabilityError(ValueError):
         super().__init__(message)
 
 
+class No_YAML_Frontmatter(FilesystemCapabilityError):
+    def __init__(self, path: pathlib.Path):
+        super().__init__(
+            f"{_SKILL_FILENAME} must start with YAML frontmatter",
+            path,
+        )
+
+
+class Invalid_YAML_Frontmatter(FilesystemCapabilityError):
+    def __init__(self, path: pathlib.Path):
+        super().__init__(
+            f"{_SKILL_FILENAME} has no closing frontmatter delimiter",
+            path,
+        )
+
+
+class CapabilityNameMismatch(FilesystemCapabilityError):
+    def __init__(self, skill_path: pathlib.Path, cap_name: str):
+        self.cap_name = cap_name
+        super().__init__(
+            f"Capability name '{cap_name}' does not match directory "
+            f"name '{skill_path.name}'",
+            skill_path,
+        )
+
+
+class SkillHasNoInstructions(FilesystemCapabilityError):
+    def __init__(self, skill_path: pathlib.Path):
+        super().__init__(
+            f"{_SKILL_FILENAME} contains no instructions",
+            skill_path,
+        )
+
+
+class InvalidCapabilityName(ValueError):
+    def __init__(self, name):
+        self.name = name
+        super().__init__(
+            "name must contain lowercase letters, numbers, and single "
+            "hyphens only"
+        )
+
+
+class MissingCapabilityFile(ai_exc.ModelRetry):
+    def __init__(self, dirname, filename):
+        self.dirname = dirname
+        self.filename = filename
+        super().__init__(f"'{filename}' is not under '{dirname}/'")
+
+
+class NoSuchResource(ai_exc.ModelRetry):
+    def __init__(self, path):
+        self.path = path
+        super().__init__(f"No such resource: '{path}'")
+
+
+class NoSuchScript(ai_exc.ModelRetry):
+    def __init__(self, path):
+        self.path = path
+        super().__init__(f"No such script: '{path}'")
+
+
+class MalformedScriptArguments(ai_exc.ModelRetry):
+    def __init__(self, exc):
+        super().__init__(f"Malformed arguments: {exc}")
+
+
 class _CapabilityMetadata(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="ignore")
 
@@ -41,10 +108,8 @@ class _CapabilityMetadata(pydantic.BaseModel):
     @classmethod
     def validate_name(cls, value: str) -> str:
         if not _NAME_PATTERN.fullmatch(value):
-            raise ValueError(  # noqa: TRY003
-                "name must contain lowercase letters, numbers, and single "
-                "hyphens only"
-            )
+            raise InvalidCapabilityName(value)
+
         return value
 
 
@@ -76,10 +141,10 @@ class FilesystemCapability(ai_capabilities.AbstractCapability[typing.Any]):
     def _confined(self, dirname: str, value: str) -> pathlib.Path:
         root = (self.path / dirname).resolve()
         target = (self.path / value).resolve()
+
         if not target.is_relative_to(root):
-            raise ModelRetry(  # noqa: TRY003
-                f"'{value}' is not under '{dirname}/'"
-            )
+            raise MissingCapabilityFile(dirname, value)
+
         return target
 
     async def read_resource(self, path: str) -> str:
@@ -89,8 +154,10 @@ class FilesystemCapability(ai_capabilities.AbstractCapability[typing.Any]):
         below ``resources/``, e.g. ``resources/jabberwocky.md``.
         """
         target = self._confined(_RESOURCES_DIRNAME, path)
+
         if not target.is_file():
-            raise ModelRetry(f"No such resource: '{path}'")  # noqa: TRY003
+            raise NoSuchResource(path)
+
         return target.read_text(encoding="utf-8")
 
     async def run_script(self, script: str, arguments: str = "") -> str:
@@ -101,14 +168,13 @@ class FilesystemCapability(ai_capabilities.AbstractCapability[typing.Any]):
         single shell-style string of command-line arguments.
         """
         target = self._confined(_SCRIPTS_DIRNAME, script)
+
         if not target.is_file():
-            raise ModelRetry(f"No such script: '{script}'")  # noqa: TRY003
+            raise NoSuchScript(script)
         try:
             argv = shlex.split(arguments)
         except ValueError as exc:
-            raise ModelRetry(  # noqa: TRY003
-                f"Malformed arguments: {exc}"
-            ) from exc
+            raise MalformedScriptArguments(exc) from exc
 
         try:
             with anyio.fail_after(_SCRIPT_TIMEOUT_SECONDS):
@@ -142,10 +208,7 @@ def _parse_skill_file(
 
     lines = text.splitlines()
     if not lines or lines[0].strip() != _FRONTMATTER_DELIMITER:
-        raise FilesystemCapabilityError(  # noqa: TRY003
-            f"{_SKILL_FILENAME} must start with YAML frontmatter",
-            skill_path,
-        )
+        raise No_YAML_Frontmatter(skill_path)
 
     try:
         end = next(
@@ -154,10 +217,7 @@ def _parse_skill_file(
             if line.strip() == _FRONTMATTER_DELIMITER
         )
     except StopIteration as exc:
-        raise FilesystemCapabilityError(  # noqa: TRY003
-            f"{_SKILL_FILENAME} has no closing frontmatter delimiter",
-            skill_path,
-        ) from exc
+        raise Invalid_YAML_Frontmatter(skill_path) from exc
 
     try:
         metadata = _CapabilityMetadata.model_validate(
@@ -167,18 +227,11 @@ def _parse_skill_file(
         raise FilesystemCapabilityError(str(exc), skill_path) from exc
 
     if metadata.name != skill_path.name:
-        raise FilesystemCapabilityError(  # noqa: TRY003
-            f"Capability name '{metadata.name}' does not match directory "
-            f"name '{skill_path.name}'",
-            skill_path,
-        )
+        raise CapabilityNameMismatch(skill_path, cap_name=metadata.name)
 
     instructions = "\n".join(lines[end + 1 :]).strip()
     if not instructions:
-        raise FilesystemCapabilityError(  # noqa: TRY003
-            f"{_SKILL_FILENAME} contains no instructions",
-            skill_path,
-        )
+        raise SkillHasNoInstructions(skill_path)
 
     return FilesystemCapability(
         id=metadata.name,
