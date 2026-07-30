@@ -246,11 +246,11 @@ Please see [this page](skills.md) for documentation on AI skills.
 
 Each path can be either:
 
-- a directory containing its own `SKILLS.md` file:  this
+- a directory containing its own `SKILL.md` file: this
   directory will be mapped as a single skill.
 
 - a directory whose immediate subdirectories will be treated as skills
-  IFF they contain a `SKILLS.md` file.
+  if they contain a `SKILL.md` file.
 
 Non-absolute paths will be evaluated relative to the installation directory.
 
@@ -273,21 +273,19 @@ filesystem_skills_paths:
   -
 ```
 
-## Enabling Skill Configurations
+## Selecting Skill Configurations
 
-To enable discovered filesystem or entrypoint skills, add them to the
-`skill_configs` stanza of the installation configuration.  E.g.:
+All discovered filesystem skills are enabled by default. If `skill_configs`
+contains any entries, it acts as a whitelist. For example:
 
 ```yaml
 skill_configs:
   - skill_name: "bare-bones"
     kind: "filesystem"
-  - skill_name: "image-generation"
-    kind: "entrypoint"
 ```
 
-Discovered skills which are not mentioned in this stanza cannot be
-referenced by other parts of the configuration, e.g. rooms.
+With this configuration, discovered skills other than `bare-bones` cannot
+be referenced by other parts of the configuration, such as rooms.
 
 ## Sandbox Configuration
 

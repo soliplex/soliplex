@@ -38,25 +38,13 @@ during installation load:
 
 Importing `soliplex.config.skills` (which happens transitively
 whenever `soliplex.config` is imported) registers Soliplex's own
-built-in features. As of this writing, that includes the
-`bwrap-sandbox` skill's state namespace, registered with
-`source=server`.
+built-in features. As of this writing, that includes the RAG and analysis
+capability state namespaces, registered with `source=server`.
 
 These registrations happen at module-import time and are present
 before any installation YAML is parsed.
 
-### 2. Entrypoint Skill Discovery
-
-When an `InstallationConfig` is loaded,
-`_load_entrypoint_skill_configs` walks every Haiku skill discovered
-via Python entry points. For each skill whose `state_namespace` is
-set, it adds an entry to the registry using `skill.state_type` as
-`model_klass` and `server` as `source` -- but only if the
-`state_namespace` is **not already present** in the registry. This
-makes entrypoint discovery a no-op for features that have already
-been registered by other means.
-
-### 3. The `meta.agui_features` YAML Stanza
+### 2. The `meta.agui_features` YAML Stanza
 
 Finally, the
 [`meta.agui_features`](meta.md#registering-ag-ui-feature-classes)
@@ -65,9 +53,9 @@ stanza of the installation YAML is processed by
 `AGUI_Feature` which is **unconditionally** written into the
 registry, overwriting any earlier entry with the same `name`.
 
-This ordering means installation YAML wins over both built-in
-registrations and entrypoint discovery, so site operators can
-override the default `model_klass` or `source` for any feature
+This ordering means installation YAML wins over built-in registrations,
+so site operators can override the default `model_klass` or `source` for
+any feature
 shipped by Soliplex or by an installed skill package.
 
 ## How the Application Uses the Registry After Startup
@@ -117,7 +105,7 @@ type-safe client code.
 
 `InstallationConfigMeta.as_yaml` walks the registry to emit a
 `meta.agui_features` block recording every registered feature
-(including those that arrived via paths #1 and #2 above). This is
+(including those that arrived via path #1 above). This is
 used by `soliplex-cli` export commands so that a fully expanded
 configuration can be written back to disk.
 
@@ -135,7 +123,7 @@ configuration can be written back to disk.
   deploying; each room's aggregate feature names are listed with
   `OK` or `UNREGISTERED`.
 
-- Plugin authors who want to register a feature have two options:
-  ship it as an entrypoint skill (path #2 above), or document a
+- Extension authors who want to register a feature can register it when
+  their configuration module is imported or document a
   `meta.agui_features` entry that operators can paste into their
-  installation YAML (path #3).
+  installation YAML (path #2).

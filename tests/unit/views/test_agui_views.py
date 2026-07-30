@@ -1337,84 +1337,6 @@ async def test_drive_llm_stream_save_event_error(
 
 
 @pytest.mark.asyncio
-@mock.patch("soliplex.views.agui.titles.maybe_generate_title")
-@mock.patch("soliplex.agui.persistence.finish_run")
-@mock.patch("soliplex.agui.persistence.save_single_event")
-@mock.patch("soliplex.views.agui.logfire")
-async def test_drive_llm_stream_audits_rag_access(logfire, sse, fr, mgt):
-    """A skill tool-call / result pair emits a rag-access audit record."""
-    import logging
-
-    records = []
-    handler = logging.Handler()
-    handler.emit = records.append
-    audit_logger = logging.getLogger(loggers.SOLIPLEX_AUDIT_LOGGER_NAME)
-    audit_logger.setLevel(logging.DEBUG)
-    audit_logger.addHandler(handler)
-
-    def _activity(activity_type, content):
-        return agui_core.ActivitySnapshotEvent(
-            type=agui_core.EventType.ACTIVITY_SNAPSHOT,
-            message_id="m1",
-            activity_type=activity_type,
-            content=content,
-            replace=False,
-        )
-
-    async def event_iter():
-        yield _activity(
-            "skill_tool_call",
-            {
-                "skill": "rag",
-                "tool_name": "search",
-                "tool_call_id": "t1",
-                "args": '{"query": "x"}',
-            },
-        )
-        yield _activity(
-            "skill_tool_result",
-            {
-                "skill": "rag",
-                "tool_name": "search",
-                "tool_call_id": "t1",
-                "result": "[c1] [rank 1 of 1]\nContent:\nx",
-            },
-        )
-
-    try:
-        await agui_views.drive_llm_stream(
-            event_iter(),
-            sqla_engine=mock.AsyncMock(spec_set=()),
-            event_queue=asyncio.Queue(),
-            user_name=USER_NAME,
-            room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID_STR,
-            run_id=TEST_RUN_ID_STR,
-            claims={"email": "x@example.com"},
-            rag_db_paths={"rag": "/db.lancedb"},
-        )
-    finally:
-        audit_logger.removeHandler(handler)
-
-    scope_key = loggers.SOLIPLEX_AUDIT_LOGGER_SCOPE_EXTRA
-    rag_records = [
-        record
-        for record in records
-        if record.__dict__.get(scope_key) == loggers.AuditLogScopes.RAG_ACCESS
-    ]
-    assert len(rag_records) == 1
-    record = rag_records[0]
-    assert record.action == loggers.AUDIT_RAG_ACTION_RETRIEVAL
-    assert record.db_path == "/db.lancedb"
-    assert record.tool == "search"
-    assert record.selector == {"query": "x"}
-    assert record.result_refs == ["c1"]
-    assert record.room_id == TEST_ROOM_ID
-    assert record.thread_id == TEST_THREAD_ID_STR
-    assert record.run_id == TEST_RUN_ID_STR
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("num_events", [0, 1, 10, 100])
 async def test_stream_llm_events(num_events):
     expected = [
@@ -1442,10 +1364,10 @@ async def test_stream_llm_events(num_events):
 @pytest.mark.asyncio
 @mock.patch("soliplex.views.agui.drive_llm_stream")
 @mock.patch("soliplex.agui.compact_event_stream")
-@mock.patch("soliplex.views.agui.hs_agent.run_agui_stream")
-async def test_init_agent_stream_without_skills(rags, ces, dls):
+async def test_init_agent_stream_adds_final_state(ces, dls):
     adapter = mock.MagicMock()
-    run_stream_kwargs = {"deps": object(), "on_complete": object()}
+    deps = mock.Mock(state={"rag": {"citations": ["c1"]}})
+    run_stream_kwargs = {"deps": deps, "on_complete": object()}
     drive_kwargs = {
         "sqla_engine": object(),
         "event_queue": asyncio.Queue(),
@@ -1457,64 +1379,34 @@ async def test_init_agent_stream_without_skills(rags, ces, dls):
         "messages": [],
     }
 
-    merged_stream = object()
-    rags_cm = mock.AsyncMock()
-    rags_cm.__aenter__.return_value = merged_stream
-    rags.return_value = rags_cm
+    async def events():
+        yield agui_core.RunStartedEvent(
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+        )
+        yield agui_core.RunFinishedEvent(
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+        )
+
+    adapter.run_stream.return_value = events()
+    ces.side_effect = lambda stream: stream
 
     await agui_views.init_agent_stream(
-        skill_toolset=None,
         agui_adapter=adapter,
         run_stream_kwargs=run_stream_kwargs,
         **drive_kwargs,
     )
 
-    rags.assert_called_once_with(adapter, toolset=None, **run_stream_kwargs)
-    ces.assert_called_once_with(merged_stream)
-    dls.assert_awaited_once_with(llm_stream=ces.return_value, **drive_kwargs)
-
-
-@pytest.mark.asyncio
-@mock.patch("soliplex.views.agui.drive_llm_stream")
-@mock.patch("soliplex.agui.compact_event_stream")
-@mock.patch("soliplex.views.agui.hs_agent.run_agui_stream")
-async def test_init_agent_stream_with_skills(rags, ces, dls):
-    from haiku.skills import agent as hs_agent
-
-    skill_ts = mock.create_autospec(hs_agent.SkillToolset)
-    adapter = mock.MagicMock()
-    run_stream_kwargs = {"deps": object(), "on_complete": object()}
-    drive_kwargs = {
-        "sqla_engine": object(),
-        "event_queue": asyncio.Queue(),
-        "user_name": USER_NAME,
-        "room_id": TEST_ROOM_ID,
-        "thread_id": TEST_THREAD_ID_STR,
-        "run_id": TEST_RUN_ID_STR,
-        "title_agent_config": None,
-        "messages": [],
-    }
-
-    # run_agui_stream returns an async context manager
-    merged_stream = object()
-    rags_cm = mock.AsyncMock()
-    rags_cm.__aenter__.return_value = merged_stream
-    rags.return_value = rags_cm
-
-    await agui_views.init_agent_stream(
-        skill_toolset=skill_ts,
-        agui_adapter=adapter,
-        run_stream_kwargs=run_stream_kwargs,
-        **drive_kwargs,
-    )
-
-    rags.assert_called_once_with(
-        adapter, toolset=skill_ts, **run_stream_kwargs
-    )
-    rags_cm.__aenter__.assert_awaited_once()
-    rags_cm.__aexit__.assert_awaited_once()
-    ces.assert_called_once_with(merged_stream)
-    dls.assert_awaited_once_with(llm_stream=ces.return_value, **drive_kwargs)
+    stream = dls.await_args.kwargs["llm_stream"]
+    found = [event async for event in stream]
+    adapter.run_stream.assert_called_once_with(**run_stream_kwargs)
+    assert [event.type for event in found] == [
+        agui_core.EventType.RUN_STARTED,
+        agui_core.EventType.STATE_SNAPSHOT,
+        agui_core.EventType.RUN_FINISHED,
+    ]
+    assert found[1].snapshot == deps.state
 
 
 @pytest.mark.asyncio
@@ -1534,7 +1426,6 @@ async def test_init_agent_stream_with_skills(rags, ces, dls):
 @mock.patch("soliplex.views.agui.stream_llm_events")
 @mock.patch("soliplex.views.agui.init_agent_stream")
 @mock.patch("soliplex.agui.persistence.capture_usage_after_stream")
-@mock.patch("soliplex.agents.find_skill_toolset")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
 @mock.patch("soliplex.views.agui.logfire")
@@ -1542,7 +1433,6 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     logfire,
     cura,
     aga,
-    fst,
     cuas,
     ias,
     sle,
@@ -1560,8 +1450,6 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     USER_PROFILE = models.UserProfile(**AUTH_USER)
     agent = object()
     cura.return_value = (USER_PROFILE, agent)
-
-    exp_skill_toolset = fst.return_value
 
     state = mock.Mock()
     global_agui_bg_tasks = state.agui_background_tasks = set()
@@ -1652,13 +1540,10 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert sle.call_args_list[0].kwargs == {}
         (event_queue,) = sle.call_args_list[0].args
 
-        fst.assert_called_once_with(agent)
-
         # asyncio.task starts 'init_agent_stream' right away.
         exp_title_config = the_installation.get_title_agent_config.return_value
         ias.assert_called_once()
         ias_kwargs = ias.call_args_list[0].kwargs
-        assert ias_kwargs["skill_toolset"] is exp_skill_toolset
         assert ias_kwargs["agui_adapter"] is exp_adapter
         assert ias_kwargs["sqla_engine"] is sqla_engine
         assert ias_kwargs["event_queue"] is event_queue
@@ -1668,10 +1553,6 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert ias_kwargs["run_id"] == TEST_RUN_ID_STR
         assert ias_kwargs["title_agent_config"] is exp_title_config
         assert ias_kwargs["messages"] is exp_adapter.run_input.messages
-        assert ias_kwargs["claims"] is THE_USER_CLAIMS
-        exp_room_config = the_installation.get_room_config.return_value
-        assert ias_kwargs["rag_db_paths"] is exp_room_config.rag_db_paths
-
         # Verify run_stream_kwargs contains deps, conversation_id,
         # and on_complete
         rsk = ias_kwargs["run_stream_kwargs"]

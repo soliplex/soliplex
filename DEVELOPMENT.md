@@ -221,7 +221,6 @@ See `pyproject.toml` for authoritative version constraints.
 - FastMCP -- Model Context Protocol
 - ag-ui-protocol -- AG-UI event protocol
 - SQLModel / aiosqlite -- database ORM
-- haiku-skills -- Haiku skills framework
 
 ## Environment variables
 

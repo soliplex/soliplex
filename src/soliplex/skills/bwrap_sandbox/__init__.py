@@ -1,16 +1,14 @@
+import dataclasses
 import json
 import pathlib
 import typing
 import uuid
 
-import pydantic
 import pydantic_ai
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
 from bubble_sandbox import sandbox as bs_sandbox
-from haiku.skills import models as hs_models
-from haiku.skills import parser as hs_parser
-from haiku.skills import state as hs_state
+from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import toolsets as ai_toolests
 
 from soliplex import loggers
@@ -18,29 +16,14 @@ from soliplex import sandbox_audit
 
 VolumeName = typing.Literal["thread"] | typing.Literal["room"]
 
-SKILL_NAME = "bubble-sandbox"
-SKILL_DESCRIPTION = """\
+CAPABILITY_NAME = "bubble-sandbox"
+CAPABILITY_DESCRIPTION = """\
 Write and execute Python code in a bubblewrap sandbox
 """
-SKILL_METADATA = hs_models.SkillMetadata(
-    name=SKILL_NAME,
-    description=SKILL_DESCRIPTION,
-)
 
 
 EnvironmentInfo = dict[str, str]
 
-
-class SandboxState(pydantic.BaseModel):
-    room_id: str | None = None
-    thread_id: str | None = None
-    run_id: str | None = None
-    # Actor identity for auditing sandbox data changes.
-    preferred_username: str | None = None
-
-
-STATE_TYPE = SandboxState
-STATE_NAMESPACE = SKILL_NAME
 
 LIST_ENVIRONMENTS_DESCRIPTION = """
 Return a list of information about available sandbox environments
@@ -403,9 +386,9 @@ def create_sandbox_toolset(
             return []
 
         else:
-            state = ctx.deps.state
-            room_id = state.room_id or ""
-            thread_id = state.thread_id or ""
+            deps = ctx.deps
+            room_id = deps.room_id or ""
+            thread_id = deps.thread_id or ""
 
             return await skill_list_volume_files(
                 volume=volume,
@@ -428,32 +411,32 @@ def create_sandbox_toolset(
         environment_name: str = None,
         timeout: float = None,  # seconds
     ) -> str:
-        state = ctx.deps.state
+        deps = ctx.deps
         workdir = get_workdir(
             workdirs_path,
-            state.room_id or "",
-            state.thread_id or "",
-            state.run_id or "",
+            deps.room_id or "",
+            deps.thread_id or "",
+            deps.run_id or "",
         )
 
         extra_volumes = get_extra_volumes(
             rooms_upload_path,
             threads_upload_path,
-            state.room_id or "",
-            state.thread_id or "",
+            deps.room_id or "",
+            deps.thread_id or "",
         )
 
         with sandbox_audit.audit_sandbox_exec(
-            state,
+            deps,
             action=loggers.AUDIT_SANDBOX_ACTION_RUN,
             environment=environment_name,
             workdir=workdir,
         ) as access:
             ref = write_transcript(
                 transcripts_path,
-                state.room_id or "",
-                state.thread_id or "",
-                state.run_id or "",
+                deps.room_id or "",
+                deps.thread_id or "",
+                deps.run_id or "",
                 content=(
                     command
                     if isinstance(command, str)
@@ -480,32 +463,32 @@ def create_sandbox_toolset(
         environment_name: str = None,
         timeout: float = None,  # seconds
     ) -> str:
-        state = ctx.deps.state
+        deps = ctx.deps
         workdir = get_workdir(
             workdirs_path,
-            state.room_id or "",
-            state.thread_id or "",
-            state.run_id or "",
+            deps.room_id or "",
+            deps.thread_id or "",
+            deps.run_id or "",
         )
 
         extra_volumes = get_extra_volumes(
             rooms_upload_path,
             threads_upload_path,
-            state.room_id or "",
-            state.thread_id or "",
+            deps.room_id or "",
+            deps.thread_id or "",
         )
 
         with sandbox_audit.audit_sandbox_exec(
-            state,
+            deps,
             action=loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
             environment=environment_name,
             workdir=workdir,
         ) as access:
             ref = write_transcript(
                 transcripts_path,
-                state.room_id or "",
-                state.thread_id or "",
-                state.run_id or "",
+                deps.room_id or "",
+                deps.thread_id or "",
+                deps.run_id or "",
                 content=script,
                 suffix=".py",
             )
@@ -524,8 +507,39 @@ def create_sandbox_toolset(
     return toolset
 
 
-def create_bwrap_sandbox_skill(
-    id: str = None,
+def _instructions() -> str:
+    text = (pathlib.Path(__file__).parent / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    return text.split("---", 2)[-1].strip()
+
+
+@dataclasses.dataclass
+class SandboxCapability(ai_capabilities.AbstractCapability[typing.Any]):
+    default_environment: str = "bare"
+    allowed_environments: AllowedEnvironments = None
+    sandbox_config: bs_config.Config | None = None
+    volumes: bs_models.VolumeMap | None = None
+    max_retries: int = 1
+    installation_config: typing.Any = None
+
+    def get_instructions(self) -> str:
+        return _instructions()
+
+    def get_toolset(self) -> ai_toolests.FunctionToolset:
+        return create_sandbox_toolset(
+            id=self.id,
+            default_environment=self.default_environment,
+            allowed_environments=self.allowed_environments,
+            sandbox_config=self.sandbox_config,
+            volumes=self.volumes,
+            max_retries=self.max_retries,
+            installation_config=self.installation_config,
+        )
+
+
+def create_bwrap_sandbox_capability(
+    id: str | None = None,
     *,
     default_environment: str = "bare",
     allowed_environments: AllowedEnvironments = None,
@@ -533,28 +547,15 @@ def create_bwrap_sandbox_skill(
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
     installation_config=None,  # noqa F821 cycles
-) -> hs_models.Skill:
-
-    skill_path = pathlib.Path(__file__).parent
-    skill_md_path = skill_path / "SKILL.md"
-    metadata, instructions = hs_parser.parse_skill_md(skill_md_path)
-
-    toolset = create_sandbox_toolset(
-        id=id,
+) -> SandboxCapability:
+    return SandboxCapability(
+        id=id or CAPABILITY_NAME,
+        description=CAPABILITY_DESCRIPTION.strip(),
+        defer_loading=True,
         default_environment=default_environment,
         allowed_environments=allowed_environments,
         sandbox_config=sandbox_config,
         volumes=volumes,
         max_retries=max_retries,
         installation_config=installation_config,
-    )
-
-    return hs_models.Skill(
-        metadata=metadata,
-        instructions=instructions,
-        path=skill_path,
-        toolsets=[toolset],
-        state_type=STATE_TYPE,
-        state_namespace=STATE_NAMESPACE,
-        deps_type=hs_state.SkillRunDeps,
     )

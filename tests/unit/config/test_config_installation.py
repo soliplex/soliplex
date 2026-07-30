@@ -9,7 +9,6 @@ import _test_middleware
 import pytest
 import yaml
 from haiku.rag import config as hr_config_module
-from haiku.skills import models as hs_models
 
 from soliplex import secrets
 from soliplex.config import agents as config_agents
@@ -564,10 +563,6 @@ W_SKILLS_PATHS_INSTALLATION_CONFIG_KW = {
             "kind": "filesystem",
             "skill_name": test_skills.FILESYSTEM_SKILL_NAME,
         },
-        {
-            "kind": "entrypoint",
-            "skill_name": test_skills.ENTRYPOINT_SKILL_NAME,
-        },
     ],
 }
 W_SKILLS_PATHS_INSTALLATION_CONFIG_YAML = f"""\
@@ -578,8 +573,6 @@ filesystem_skills_paths:
 skill_configs:
     - kind: "filesystem"
       skill_name: "{test_skills.FILESYSTEM_SKILL_NAME}"
-    - kind: "entrypoint"
-      skill_name: "{test_skills.ENTRYPOINT_SKILL_NAME}"
 """
 
 W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW = {
@@ -2447,6 +2440,7 @@ name: {skill_name}
 name: {skill_name}
 description: Describing {skill_name}
 ---
+Follow the instructions for {skill_name}.
 """
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
@@ -2497,6 +2491,7 @@ name: {skill_name}
 name: {skill_name}
 description: Describing {skill_name} in {skills_path}
 ---
+Follow the instructions for {skill_name}.
 """
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
@@ -2548,128 +2543,19 @@ def test_installationconfig_avl_fs_skill_configs_w_existing():
     assert found["skill_2"] == SC_2
 
 
-@mock.patch("haiku.skills.discovery.discover_from_entrypoints")
-def test_installationconfig_avl_ep_skill_configs_wo_existing(
-    dfe,
-    patched_soliplex_config,
-    patched_agui_features,
-    temp_dir,
-):
-    STATE_NAMESPACE = "test-state-namespace"
-
-    class DerivedFeatureModel(agui_features.EmptyFeatureModel):
-        pass
-
-    ic_hr_config_file = temp_dir / "haiku.rag.yaml"
-    ic_hr_config_file.write_text("environment: installation")
-    db_path = temp_dir / "test.lancedb"
-
-    ep_skill_1 = mock.create_autospec(hs_models.Skill)
-    ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    ep_skill_1.metadata.name = "foo"
-    ep_skill_1.state_namespace = STATE_NAMESPACE
-    ep_skill_1.state_type = agui_features.EmptyFeatureModel
-    ep_skill_1.extras = {
-        "db_path": db_path,
-    }
-
-    ep_skill_2 = mock.create_autospec(hs_models.Skill)
-    ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    ep_skill_2.metadata.name = "bar"
-    ep_skill_2.state_namespace = STATE_NAMESPACE
-    ep_skill_2.state_type = DerivedFeatureModel
-    ep_skill_2.extras = {}
-
-    dfe.return_value = [ep_skill_1, ep_skill_2]
-
-    kw = BARE_INSTALLATION_CONFIG_KW.copy() | {
-        "_haiku_rag_config_file": ic_hr_config_file,
-    }
-    i_config = config_installation.InstallationConfig(**kw)
-
-    found = i_config.available_entrypoint_skill_configs
-
-    assert found["foo"].name == "foo"
-    assert found["bar"].name == "bar"
-
-    ep_skill_1.reconfigure.assert_called_once_with(
-        db_path=db_path,
-        config=i_config.haiku_rag_config,
-    )
-
-    # First registration wins
-    registered = patched_agui_features[STATE_NAMESPACE]
-    assert registered.name == STATE_NAMESPACE
-    assert registered.model_klass is agui_features.EmptyFeatureModel
-
-
-@mock.patch("haiku.skills.discovery.discover_from_entrypoints")
-def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(
-    dfe,
-    patched_soliplex_config,
-    patched_agui_features,
-):
-    ep_skill_1 = mock.create_autospec(hs_models.Skill)
-    ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    ep_skill_1.metadata.name = test_skills.SKILL_NAME
-    skill_desc_1 = f"{test_skills.SKILL_DESC} (from ep_skill_1)"
-    ep_skill_1.metadata.description = skill_desc_1
-    ep_skill_1.extras = {}
-
-    ep_skill_2 = mock.create_autospec(hs_models.Skill)
-    ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    ep_skill_2.metadata.name = test_skills.SKILL_NAME
-    skill_desc_2 = f"{test_skills.SKILL_DESC} (from ep_skill_2)"
-    ep_skill_2.metadata.description = skill_desc_2
-    ep_skill_2.extras = {}
-
-    dfe.return_value = [ep_skill_1, ep_skill_2]
-
-    kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    i_config = config_installation.InstallationConfig(**kw)
-
-    found = i_config.available_entrypoint_skill_configs
-
-    assert found[test_skills.SKILL_NAME].description == skill_desc_1
-
-
-@mock.patch("haiku.skills.discovery.discover_from_entrypoints")
-def test_installationconfig_avl_ep_skill_configs_w_existing(
-    dfe,
-    patched_soliplex_config,
-):
-    SC_1, SC_2 = object(), object()
-    existing = {"skill_1": SC_1, "skill_2": SC_2}
-
-    kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    kw["_available_entrypoint_skill_configs"] = existing
-    i_config = config_installation.InstallationConfig(**kw)
-
-    found = i_config.available_entrypoint_skill_configs
-
-    assert found["skill_1"] == SC_1
-    assert found["skill_2"] == SC_2
-
-
 def test_installationconfig_skill_configs_permissive_default():
-    # With no '_skill_configs' set and both availability maps populated,
-    # every discovered skill is included.
+    # With no '_skill_configs' set, every discovered skill is included.
     fs_skill = object()
-    ep_skill = object()
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_available_filesystem_skill_configs"] = {
         test_skills.FILESYSTEM_SKILL_NAME: fs_skill,
-    }
-    kw["_available_entrypoint_skill_configs"] = {
-        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
     }
 
     i_config = config_installation.InstallationConfig(**kw)
 
     assert i_config.skill_configs == {
         test_skills.FILESYSTEM_SKILL_NAME: fs_skill,
-        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
     }
 
 
@@ -2677,7 +2563,7 @@ def test_installationconfig_skill_configs_empty_availability(
     no_skill_discovery,
 ):
     # Sanity check: no whitelist + no discovered skills → empty map, and
-    # the loaders are consulted exactly once each via the cached property.
+    # the loader is consulted exactly once via the cached property.
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
 
     i_config = config_installation.InstallationConfig(**kw)
@@ -2686,17 +2572,12 @@ def test_installationconfig_skill_configs_empty_availability(
     no_skill_discovery[
         "_load_filesystem_skill_configs"
     ].assert_called_once_with(i_config)
-    no_skill_discovery[
-        "_load_entrypoint_skill_configs"
-    ].assert_called_once_with(i_config)
 
 
-def test_installationconfig_skill_configs_w_fs_whitelist():
-    # Filesystem whitelist suppresses non-listed fs skills but leaves
-    # entrypoint skills permissive.
+def test_installationconfig_skill_configs_w_whitelist():
+    # A filesystem whitelist suppresses non-listed filesystem skills.
     fs_skill = object()
     other_fs = object()
-    ep_skill = object()
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_skill_configs"] = [
@@ -2706,16 +2587,10 @@ def test_installationconfig_skill_configs_w_fs_whitelist():
         test_skills.SKILL_NAME: fs_skill,
         "other-fs-skill": other_fs,
     }
-    kw["_available_entrypoint_skill_configs"] = {
-        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
-    }
 
     i_config = config_installation.InstallationConfig(**kw)
 
-    assert i_config.skill_configs == {
-        test_skills.SKILL_NAME: fs_skill,
-        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
-    }
+    assert i_config.skill_configs == {test_skills.SKILL_NAME: fs_skill}
 
 
 def test_installationconfig_skill_configs_memoized():
@@ -2730,119 +2605,51 @@ def test_installationconfig_skill_configs_memoized():
 
 
 def test_resolve_skill_configs_empty():
-    # Empty explicit + empty availability → empty result. Exercises the
-    # permissive-default branch for both kinds (no whitelist → copy
-    # availability), which is empty here.
-    assert config_installation.resolve_skill_configs([], {}, {}) == {}
+    assert config_installation.resolve_skill_configs([], {}) == {}
 
 
-def test_resolve_skill_configs_permissive_default_returns_all_available():
+def test_resolve_skill_configs_permissive_default_returns_available():
     fs_skill_a = object()
     fs_skill_b = object()
-    ep_skill = object()
     available_fs = {"fs-a": fs_skill_a, "fs-b": fs_skill_b}
-    available_ep = {"ep": ep_skill}
 
     resolved = config_installation.resolve_skill_configs(
         [],
         available_fs,
-        available_ep,
     )
 
     assert resolved == {
         "fs-a": fs_skill_a,
         "fs-b": fs_skill_b,
-        "ep": ep_skill,
     }
 
 
-def test_resolve_skill_configs_fs_whitelist_leaves_ep_permissive():
+def test_resolve_skill_configs_whitelist():
     named_fs = object()
     other_fs = object()
-    ep_skill = object()
     explicit = [{"kind": "filesystem", "skill_name": "named-fs"}]
     available_fs = {"named-fs": named_fs, "other-fs": other_fs}
-    available_ep = {"ep": ep_skill}
 
     resolved = config_installation.resolve_skill_configs(
         explicit,
         available_fs,
-        available_ep,
     )
 
-    # 'other-fs' is suppressed by the fs whitelist; 'ep' rides the
-    # permissive default because no entrypoint entry appeared in explicit.
-    assert resolved == {"named-fs": named_fs, "ep": ep_skill}
+    assert resolved == {"named-fs": named_fs}
 
 
-def test_resolve_skill_configs_ep_whitelist_leaves_fs_permissive():
-    fs_skill = object()
-    named_ep = object()
-    other_ep = object()
-    explicit = [{"kind": "entrypoint", "skill_name": "named-ep"}]
-    available_fs = {"fs": fs_skill}
-    available_ep = {"named-ep": named_ep, "other-ep": other_ep}
-
-    resolved = config_installation.resolve_skill_configs(
-        explicit,
-        available_fs,
-        available_ep,
-    )
-
-    assert resolved == {"fs": fs_skill, "named-ep": named_ep}
-
-
-def test_resolve_skill_configs_filters_by_kind():
-    fs_skill = object()
-    ep_skill = object()
-    available_fs = {test_skills.FILESYSTEM_SKILL_NAME: fs_skill}
-    available_ep = {test_skills.ENTRYPOINT_SKILL_NAME: ep_skill}
-    explicit = [
-        {
-            "kind": "filesystem",
-            "skill_name": test_skills.FILESYSTEM_SKILL_NAME,
-        },
-        {
-            "kind": "entrypoint",
-            "skill_name": test_skills.ENTRYPOINT_SKILL_NAME,
-        },
-    ]
-
-    resolved = config_installation.resolve_skill_configs(
-        explicit,
-        available_fs,
-        available_ep,
-    )
-
-    assert resolved == {
-        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
-        test_skills.FILESYSTEM_SKILL_NAME: fs_skill,
-    }
-
-
-def test_resolve_skill_configs_filesystem_wins_on_name_conflict():
-    fs_skill = object()
-    ep_skill = object()
-    shared = "shared-name"
-    explicit = [
-        {"kind": "entrypoint", "skill_name": shared},
-        {"kind": "filesystem", "skill_name": shared},
-    ]
-
-    resolved = config_installation.resolve_skill_configs(
-        explicit,
-        {shared: fs_skill},
-        {shared: ep_skill},
-    )
-
-    assert resolved == {shared: fs_skill}
+def test_resolve_skill_configs_rejects_non_filesystem_kind():
+    with pytest.raises(ValueError, match="Unsupported installation skill"):
+        config_installation.resolve_skill_configs(
+            [{"kind": "entrypoint", "skill_name": "old-style"}],
+            {},
+        )
 
 
 def test_resolve_skill_configs_unknown_skill_raises():
     with pytest.raises(KeyError):
         config_installation.resolve_skill_configs(
             [{"kind": "filesystem", "skill_name": "missing"}],
-            {},
             {},
         )
 
@@ -2973,7 +2780,6 @@ def test_installationconfig_reload_configurations(temp_dir):
     kw["_room_configs"] = existing
     kw["_completion_configs"] = existing
     kw["_available_filesystem_skill_configs"] = {}
-    kw["_available_entrypoint_skill_configs"] = {}
     kw["_skill_configs"] = ()
     kw["_resolved_skill_configs"] = {"stale": object()}
     i_config = config_installation.InstallationConfig(
@@ -2991,7 +2797,6 @@ def test_installationconfig_reload_configurations(temp_dir):
         mock.patch.multiple(
             config_installation,
             _load_filesystem_skill_configs=mock.DEFAULT,
-            _load_entrypoint_skill_configs=mock.DEFAULT,
         ) as config_patch,
     ):
         i_config.reload_configurations()
@@ -3011,18 +2816,10 @@ def test_installationconfig_reload_configurations(temp_dir):
     )
 
     assert (
-        i_config._available_filesystem_configs
+        i_config._available_filesystem_skill_configs
         is config_patch["_load_filesystem_skill_configs"].return_value
     )
     config_patch["_load_filesystem_skill_configs"].assert_called_once_with(
-        i_config,
-    )
-
-    assert (
-        i_config._available_entrypoint_configs
-        is config_patch["_load_entrypoint_skill_configs"].return_value
-    )
-    config_patch["_load_entrypoint_skill_configs"].assert_called_once_with(
         i_config,
     )
 

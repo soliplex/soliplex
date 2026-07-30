@@ -17,7 +17,6 @@ import subprocess
 import sys
 
 import pytest
-from haiku.skills import discovery as hs_discovery
 from skills_ref import validator as skill_validator
 
 # 'tests/unit/skills/test_stanzas_skill.py' -> parents[3] is the repo root.
@@ -54,6 +53,11 @@ def _verse(lines):
     return lines[lines.index("---") + 1 :]
 
 
+def _resources(skill_root):
+    """The resource files the 'read_resource' tool serves."""
+    return sorted((skill_root / "resources").glob("*.md"))
+
+
 def test_skill_metadata_passes_the_reference_validator(skill_root):
     errors = skill_validator.validate(skill_root)
 
@@ -61,13 +65,13 @@ def test_skill_metadata_passes_the_reference_validator(skill_root):
 
 
 def test_every_discovered_resource_is_a_catalogued_poem(skill_root):
-    resources = hs_discovery.discover_resources(skill_root)
+    resources = _resources(skill_root)
 
     lines = _run_poem("list")
 
     assert lines[0] == f"POEMS: {len(resources)}"
     assert [line.split(" | ")[0] for line in lines[1:]] == sorted(
-        pathlib.Path(path).stem for path in resources
+        path.stem for path in resources
     )
 
 
@@ -205,7 +209,7 @@ def test_a_poet_with_two_poems_is_reported_as_ambiguous():
 
 
 def test_an_unknown_poem_reports_not_found_with_the_catalog(skill_root):
-    resources = hs_discovery.discover_resources(skill_root)
+    resources = _resources(skill_root)
 
     lines = _run_poem("stanza", "clerihew", "--stanza", "1")
 

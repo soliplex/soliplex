@@ -8,7 +8,6 @@ import typing
 import pydantic
 from ag_ui import core as agui_core
 from haiku.rag.store.models import chunk as hr_chunk
-from haiku.skills import models as hs_models
 
 from soliplex import agui
 from soliplex import authz
@@ -136,16 +135,12 @@ class MCPClientToolset(pydantic.BaseModel):
 ConfiguredMCPClientToolsets = dict[str, MCPClientToolset]
 
 
-#
-# XXX See: https://github.com/ggozad/haiku.skills/issues/19
-# SkillAllowedTools = list[str] | None
-#
 SkillAllowedTools = str | None
 SkillMetadata = dict[str, typing.Any] | None
 
 
 class Skill(pydantic.BaseModel):
-    source: hs_models.SkillSource | None = None
+    source: config_skills.SkillKind | None = None
     name: str
     description: str
     license: str | None

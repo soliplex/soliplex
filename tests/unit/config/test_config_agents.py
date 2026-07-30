@@ -1146,6 +1146,7 @@ def test_extract_agent_configs(
     [
         (config_agents.LLMProviderType.OLLAMA, OLLAMA_PROVIDER_KW),
         (config_agents.LLMProviderType.OPENAI, OPENAI_PROVIDER_KW),
+        (config_agents.LLMProviderType.OPENAI, {"api_key": API_KEY}),
         (config_agents.LLMProviderType.GOOGLE, GOOGLE_PROVIDER_KW),
     ],
 )
@@ -1196,17 +1197,16 @@ def test_get_model_from_config(
 
     elif provider_type == config_agents.LLMProviderType.OPENAI:
         assert model is oai_model_klass.return_value
+        expected_kw = {}
         if w_model_settings:
-            oai_model_klass.assert_called_once_with(
-                model_name=MODEL,
-                settings=w_model_settings,
-                provider=oai_provider_klass.return_value,
-            )
-        else:
-            oai_model_klass.assert_called_once_with(
-                model_name=MODEL,
-                provider=oai_provider_klass.return_value,
-            )
+            expected_kw["settings"] = w_model_settings
+        if llm_provider_kw.get("base_url"):
+            expected_kw["profile"] = config_agents._OPENAI_COMPAT_PROFILE
+        oai_model_klass.assert_called_once_with(
+            model_name=MODEL,
+            provider=oai_provider_klass.return_value,
+            **expected_kw,
+        )
         oai_provider_klass.assert_called_once_with(**llm_provider_kw)
 
         oll_provider_klass.assert_not_called()
@@ -1215,17 +1215,14 @@ def test_get_model_from_config(
 
     else:
         assert model is oai_model_klass.return_value
+        expected_kw = {"profile": config_agents._OPENAI_COMPAT_PROFILE}
         if w_model_settings:
-            oai_model_klass.assert_called_once_with(
-                model_name=MODEL,
-                settings=w_model_settings,
-                provider=oll_provider_klass.return_value,
-            )
-        else:
-            oai_model_klass.assert_called_once_with(
-                model_name=MODEL,
-                provider=oll_provider_klass.return_value,
-            )
+            expected_kw["settings"] = w_model_settings
+        oai_model_klass.assert_called_once_with(
+            model_name=MODEL,
+            provider=oll_provider_klass.return_value,
+            **expected_kw,
+        )
         oll_provider_klass.assert_called_once_with(**llm_provider_kw)
 
         oai_provider_klass.assert_not_called()

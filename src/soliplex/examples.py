@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import random
 import typing
@@ -11,7 +12,6 @@ import pydantic_ai
 from ag_ui import core as agui_core
 from pydantic_ai import messages as ai_messages
 from pydantic_ai import output as ai_output
-from pydantic_ai import result as ai_result
 from pydantic_ai import run as ai_run
 from pydantic_ai import tools as ai_tools
 from pydantic_ai import usage as ai_usage
@@ -33,7 +33,7 @@ def joker_agent_factory(
     agent_config,
     tool_configs: config_tools.ToolConfigMap = None,
     mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = None,
-    skill_toolset_config: agents.SkillToolsetConfig | None = None,
+    capability_config: agents.CapabilityConfig | None = None,
 ):
     installation_config = agent_config._installation_config
 
@@ -127,7 +127,7 @@ class FauxAgent:
     agent_config: config_agents.FactoryAgentConfig
     tool_configs: config_tools.ToolConfigMap = None
     mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = None
-    skill_toolset_config: agents.SkillToolsetConfig | None = None
+    capability_config: agents.CapabilityConfig | None = None
 
     output_type = None
 
@@ -276,28 +276,30 @@ class FauxAgent:
         # usage_limits=usage_limits,
         # usage=usage,
         **kwargs,
-    ) -> ai_result.AgentEventStream[NativeEvent]:
-        return ai_result.AgentEventStream(
-            self._run_stream_events(
+    ) -> typing.AsyncContextManager[typing.AsyncIterator[NativeEvent]]:
+        @contextlib.asynccontextmanager
+        async def event_stream():
+            yield self._run_stream_events(
                 output_type=output_type,
                 message_history=message_history,
                 deferred_tool_results=deferred_tool_results,
                 deps=deps,
             )
-        )
+
+        return event_stream()
 
 
 def faux_agent_factory(
     agent_config: config_agents.FactoryAgentConfig,
     tool_configs: config_tools.ToolConfigMap = None,
     mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = None,
-    skill_toolset_config: agents.SkillToolsetConfig | None = None,
+    capability_config: agents.CapabilityConfig | None = None,
 ):
     return FauxAgent(
         agent_config=agent_config,
         tool_configs=tool_configs,
         mcp_client_toolset_configs=mcp_client_toolset_configs,
-        skill_toolset_config=skill_toolset_config,
+        capability_config=capability_config,
     )
 
 

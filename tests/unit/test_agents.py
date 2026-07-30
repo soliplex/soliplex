@@ -174,14 +174,8 @@ def test_make_mcp_client_toolset(
 
 
 @pytest.mark.parametrize("w_capabilities", [False, True])
-@pytest.mark.parametrize(
-    "w_room_skills, preambles",
-    [
-        (False, None),
-        (True, []),
-        (True, [DOMAIN_PREAMBLE]),
-    ],
-)
+@pytest.mark.parametrize("w_room_capabilities", [False, True])
+@pytest.mark.parametrize("w_rag_audit", [False, True])
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
 @mock.patch.object(
     mcp_client,
@@ -189,17 +183,15 @@ def test_make_mcp_client_toolset(
     _FAKE_TOOLSET_FACTORY_BY_KIND,
 )
 @mock.patch("soliplex.config.agents.get_model_from_config")
-@mock.patch("haiku.skills.prompts.build_system_prompt")
 @mock.patch("pydantic_ai.Agent")
 def test_get_default_agent_from_configs(
     agent_klass,
-    build_system_prompt,
     gmfc,
     tool_configs_tools,
     mcp_ct_configs_tools,
     w_model_settings,
-    w_room_skills,
-    preambles,
+    w_rag_audit,
+    w_room_capabilities,
     w_capabilities,
 ):
     agent_config = mock.create_autospec(config_agents.AgentConfig)
@@ -210,9 +202,10 @@ def test_get_default_agent_from_configs(
 
     if w_capabilities:
         capability = mock.create_autospec(ai_capabilities.AbstractCapability)
-        exp_capabilities = agent_config.capabilities = [capability]
+        agent_config.capabilities = [capability]
     else:
-        exp_capabilities = agent_config.capabilities = []
+        agent_config.capabilities = []
+    exp_capabilities = list(agent_config.capabilities)
 
     tool_configs = {tc.tool_id: tc for (tc, _) in tool_configs_tools}
     exp_tools = [tool for (_, tool) in tool_configs_tools]
@@ -224,20 +217,20 @@ def test_get_default_agent_from_configs(
     exp_toolsets = [tool for (_, tool) in mcp_ct_configs_tools]
 
     kwargs = {}
-
-    room_skills = mock.create_autospec(agents.SkillToolsetConfig)
-    room_skills.skill_preambles = preambles
-
-    if w_room_skills:
-        kwargs["skill_toolset_config"] = room_skills
-        exp_toolsets.append(room_skills.skill_toolset)
-        exp_instructions = build_system_prompt.return_value
-        if preambles:
-            exp_preamble = f"{SYSTEM_PROMPT}\n\n{DOMAIN_PREAMBLE}"
-        else:
-            exp_preamble = SYSTEM_PROMPT
+    if w_room_capabilities:
+        room_capability = mock.create_autospec(
+            ai_capabilities.AbstractCapability
+        )
+        capability_config = mock.Mock(
+            capabilities=[room_capability],
+            rag_db_paths=(
+                {"haiku-rag": RAG_LANCEDB_OVERRIDE_PATH} if w_rag_audit else {}
+            ),
+        )
+        kwargs["capability_config"] = capability_config
+        exp_capabilities.append(room_capability)
     else:
-        exp_instructions = SYSTEM_PROMPT
+        kwargs["capability_config"] = None
 
     found = agents.get_default_agent_from_configs(
         agent_config=agent_config,
@@ -258,18 +251,16 @@ def test_get_default_agent_from_configs(
     assert akc_kw["model"] is gmfc.return_value
     gmfc.assert_called_once_with(agent_config=agent_config)
 
-    assert akc_kw["instructions"] == exp_instructions
-    assert akc_kw["capabilities"] == exp_capabilities
+    assert akc_kw["instructions"] == SYSTEM_PROMPT
+    found_capabilities = akc_kw["capabilities"]
+    if w_room_capabilities and w_rag_audit:
+        audit_capability = found_capabilities.pop()
+        assert audit_capability.id == "soliplex-rag-access-audit"
+        assert audit_capability.db_paths == {
+            "haiku-rag": RAG_LANCEDB_OVERRIDE_PATH
+        }
+    assert found_capabilities == exp_capabilities
     assert akc_kw["retries"] == exp_retries
-
-    if w_room_skills:
-        build_system_prompt.assert_called_once_with(
-            preamble=exp_preamble,
-            skill_catalog=room_skills.skill_toolset.skill_catalog,
-            use_subagents=room_skills.use_subagents,
-        )
-    else:
-        build_system_prompt.assert_not_called()
 
     assert akc_kw["model_settings"] == w_model_settings
 
@@ -281,13 +272,108 @@ def test_get_default_agent_from_configs(
     assert akc_kw["deps_type"] is agents.AgentDependencies
 
 
-@pytest.mark.parametrize("w_room_skills", [False, True])
+@pytest.mark.parametrize("multimodal", [False, True])
+@mock.patch("soliplex.config.agents.get_model_from_config")
+@mock.patch("pydantic_ai.Agent")
+def test_get_default_agent_aligns_rag_capability_vision(
+    agent_klass,
+    gmfc,
+    multimodal,
+    tmp_path,
+):
+    from haiku.rag.capabilities.rag import create_capability as create_rag
+    from haiku.rag.config.models import AppConfig
+
+    agent_config = mock.create_autospec(config_agents.AgentConfig)
+    agent_config.kind = "default"
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.model_settings = None
+    agent_config.retries = 3
+    agent_config.capabilities = []
+    agent_config.multimodal = multimodal
+
+    rag_capability = create_rag(
+        db_path=tmp_path / "kb.lancedb", config=AppConfig()
+    )
+    capability_config = mock.Mock(
+        capabilities=[rag_capability],
+        rag_db_paths={},
+    )
+
+    agents.get_default_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs={},
+        mcp_client_toolset_configs={},
+        capability_config=capability_config,
+    )
+
+    assert rag_capability.vision is multimodal
+
+
+@pytest.mark.parametrize(
+    "n_caps, w_audit, expected_defer",
+    [
+        (1, False, False),
+        (2, False, True),
+        (1, True, False),
+    ],
+)
+@mock.patch("soliplex.config.agents.get_model_from_config")
+@mock.patch("pydantic_ai.Agent")
+def test_get_default_agent_defers_only_with_multiple_capabilities(
+    agent_klass,
+    gmfc,
+    n_caps,
+    w_audit,
+    expected_defer,
+):
+    agent_config = mock.create_autospec(config_agents.AgentConfig)
+    agent_config.kind = "default"
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.model_settings = None
+    agent_config.retries = 3
+    agent_config.multimodal = False
+    agent_config.capabilities = []
+
+    caps = [
+        mock.create_autospec(ai_capabilities.AbstractCapability)
+        for _ in range(n_caps)
+    ]
+    capability_config = mock.Mock(
+        capabilities=caps,
+        rag_db_paths=(
+            {"haiku-rag": RAG_LANCEDB_OVERRIDE_PATH} if w_audit else {}
+        ),
+    )
+
+    agents.get_default_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs={},
+        mcp_client_toolset_configs={},
+        capability_config=capability_config,
+    )
+
+    for capability in caps:
+        assert capability.defer_loading is expected_defer
+
+    if w_audit:
+        built = agent_klass.call_args.kwargs["capabilities"]
+        (audit,) = [
+            capability
+            for capability in built
+            if getattr(capability, "id", None) == "soliplex-rag-access-audit"
+        ]
+        # The hook-only audit capability is never counted and stays eager.
+        assert audit.defer_loading is False
+
+
+@pytest.mark.parametrize("w_room_capabilities", [False, True])
 @mock.patch("soliplex.agents.get_default_agent_from_configs")
 def test_get_agent_from_configs_w_default_kind(
     gdafc,
     tool_configs_tools,
     mcp_ct_configs_tools,
-    w_room_skills,
+    w_room_capabilities,
 ):
     agent_config = mock.create_autospec(config_agents.AgentConfig)
     agent_config.id = ROOM_ID
@@ -302,11 +388,11 @@ def test_get_agent_from_configs_w_default_kind(
 
     kwargs = {}
 
-    if w_room_skills:
-        room_skills = mock.create_autospec(agents.SkillToolsetConfig)
-        kwargs["skill_toolset_config"] = room_skills
+    if w_room_capabilities:
+        capability_config = mock.create_autospec(agents.CapabilityConfig)
+        kwargs["capability_config"] = capability_config
     else:
-        kwargs["skill_toolset_config"] = None
+        kwargs["capability_config"] = None
 
     found = agents.get_agent_from_configs(
         agent_config=agent_config,
@@ -325,8 +411,8 @@ def test_get_agent_from_configs_w_default_kind(
     )
 
 
-@pytest.mark.parametrize("w_room_skills", [False, True])
-def test_get_agent_from_configs_w_python_kind(w_room_skills):
+@pytest.mark.parametrize("w_room_capabilities", [False, True])
+def test_get_agent_from_configs_w_python_kind(w_room_capabilities):
     agent_config = mock.create_autospec(config_agents.FactoryAgentConfig)
     agent_config.kind = "factory"
     agent_config.id = ROOM_ID
@@ -337,13 +423,13 @@ def test_get_agent_from_configs_w_python_kind(w_room_skills):
     mcpcts = mock.create_autospec(config_tools.MCP_ClientToolsetConfig)
     mcpcts_configs = {"test_mcpcts": mcpcts}
 
-    room_skills = mock.create_autospec(agents.SkillToolsetConfig)
     kwargs = {}
 
-    if w_room_skills:
-        kwargs["skill_toolset_config"] = room_skills
+    if w_room_capabilities:
+        capability_config = mock.create_autospec(agents.CapabilityConfig)
+        kwargs["capability_config"] = capability_config
     else:
-        kwargs["skill_toolset_config"] = None
+        kwargs["capability_config"] = None
 
     found = agents.get_agent_from_configs(
         agent_config=agent_config,
@@ -359,35 +445,3 @@ def test_get_agent_from_configs_w_python_kind(w_room_skills):
         mcp_client_toolset_configs=mcpcts_configs,
         **kwargs,
     )
-
-
-# -- find_skill_toolset ------------------------------------------------
-
-
-def test_find_skill_toolset_returns_none_when_absent():
-    agent = mock.MagicMock()
-    agent.toolsets = [mock.MagicMock(), mock.MagicMock()]
-
-    found = agents.find_skill_toolset(agent)
-
-    assert found is None
-
-
-def test_find_skill_toolset_returns_none_without_toolsets_attr():
-    agent = object()
-
-    found = agents.find_skill_toolset(agent)
-
-    assert found is None
-
-
-def test_find_skill_toolset_returns_skill_toolset():
-    from haiku.skills import agent as hs_agent
-
-    skill_ts = mock.create_autospec(hs_agent.SkillToolset)
-    agent = mock.MagicMock()
-    agent.toolsets = [mock.MagicMock(), skill_ts]
-
-    found = agents.find_skill_toolset(agent)
-
-    assert found is skill_ts

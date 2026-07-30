@@ -7,7 +7,6 @@ import pydantic_ai
 import pytest
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import messages as ai_messages
-from pydantic_ai import result as ai_result
 from pydantic_ai import run as ai_run
 from pydantic_ai import usage as ai_usage
 from pydantic_ai.models import openai as openai_models
@@ -280,9 +279,12 @@ async def test_run_stream_events_handles_history_without_user_prompt(
     assert events[-1].result == "I don't know!"
 
 
-def test_run_stream_events_returns_event_stream(faux_agent):
+@pytest.mark.anyio
+async def test_run_stream_events_returns_event_stream(faux_agent):
     history = [_user_request("hi")]
 
     stream = faux_agent.run_stream_events(message_history=history)
+    async with stream as events:
+        collected = [event async for event in events]
 
-    assert isinstance(stream, ai_result.AgentEventStream)
+    assert collected[-1].result == "I don't know!"

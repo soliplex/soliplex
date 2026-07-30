@@ -8,11 +8,7 @@ description: >-
   canto, or a fit. It works on a poem pasted into the conversation, and on a
   small bundled anthology of well-known poems: ask what it holds, or name a
   poem and it will say whether it has it. It quotes and analyses existing
-  poems; it does not write new ones. This skill may not see the conversation:
-  if the user pasted a poem, copy the ENTIRE poem into the request unchanged -
-  every line, blank line, leading space and quote mark exactly as typed - then
-  state the question. Otherwise name the poem and the stanza or section
-  wanted, and paste no poem text. Never ask for a whole poem.
+  poems; it does not write new ones.
 ---
 
 # Stanzas
@@ -23,23 +19,21 @@ write new verse, and do not supply lines from memory.
 
 ## Your tools
 
-You have one tool for reading files. It is named either `read_resource` or
-`read_skill_resource`. Use whichever one you have. Its `path` argument is
-always one of the paths listed under "Available resources", and always starts
-with `resources/`. If your tool also needs a `skill_name`, it is `stanzas`.
+`read_resource` reads a bundled poem file. Its `path` argument always
+starts with `resources/`.
 
-You have one tool for running scripts. It is named either `run_script` or
-`run_skill_script`. Use whichever one you have. Its `script` argument is
-always `scripts/poem.py`.
+`run_script` runs a bundled script. Its `script` argument is always
+`scripts/poem.py`, and its `arguments` argument is one string holding the
+command line.
 
 Prefer `scripts/poem.py`. It counts sections and stanzas for you and returns
 the exact lines. Read a poem file yourself ONLY if the script fails twice.
 
 ## The bundled poems
 
-Every bundled poem is one file under `resources/`, and every file is listed
-for you under "Available resources". Each one carries its own title, poet and
-year at the top, between two `---` lines.
+Every bundled poem is one file under `resources/`, named `<id>.md` after the
+id in the first column of `scripts/poem.py list`. Each one carries its own
+title, poet and year at the top, between two `---` lines.
 
 Run `scripts/poem.py list` to see the poems with their poets, years, and
 section and stanza counts. Do that when you are asked what poems are

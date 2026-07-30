@@ -1,44 +1,30 @@
 from __future__ import annotations  # forward refs in typing decls
 
 import dataclasses
+import enum
+import functools
+import importlib.metadata
 import pathlib
 import typing
 
 import pydantic
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
-from haiku.rag.skills import analysis as hr_skills_analysis
-from haiku.rag.skills import rag as hr_skills_rag
-from haiku.skills import agent as hs_agent
-from haiku.skills import discovery as hs_discovery
-from haiku.skills import models as hs_models
-from pydantic_ai import models as ai_models
+from haiku.rag.capabilities import analysis as hr_analysis
+from haiku.rag.capabilities import rag as hr_rag
+from pydantic_ai import capabilities as ai_capabilities
 
+from soliplex.capabilities import filesystem as cap_fs
 from soliplex.config import agui as config_agui
-from soliplex.skills import bwrap_sandbox as sk_bwrap_sandbox
+from soliplex.skills import bwrap_sandbox
 
 from . import _utils
-from . import agents as config_agents
 from . import exceptions as config_exc
 from . import rag as config_rag
 
-_default_list_field = _utils._default_list_field
 _default_dict_field = _utils._default_dict_field
+_default_list_field = _utils._default_list_field
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
-
-
-# ============================================================================
-#   Skill configuration types
-# ============================================================================
-
-
-class OnlyOneOfModelNameAgentConfig(ValueError):
-    def __init__(self, _config_path):
-        self._config_path = _config_path
-        super().__init__(
-            f"Pass only one of 'model_name' and 'agent_config' "
-            f"(configured in {_config_path})"
-        )
 
 
 class InvalidSkillKind(KeyError):
@@ -76,224 +62,143 @@ class MissingSkillNames(KeyError):
         )
 
 
-SkillKind = hs_models.SkillSource
-SkillStateType = type[pydantic.BaseModel] | None
+class SkillKind(enum.StrEnum):
+    FILESYSTEM = "filesystem"
+    NATIVE = "native"
+    ENTRYPOINT = "entrypoint"
+
+
+CAPABILITY_ENTRY_POINT_GROUP = "soliplex.capabilities"
+
+
+class UnknownCapabilityEntryPoint(KeyError):
+    def __init__(self, *, name: str, available: typing.Sequence[str]):
+        self.name = name
+        self.available = available
+        super().__init__(
+            f"No capability entry point named {name!r} in group "
+            f"'{CAPABILITY_ENTRY_POINT_GROUP}'; available: {list(available)}",
+        )
+
+
+def _load_capability_entry_point(name: str):
+    """Resolve a `soliplex.capabilities` entry point to its module/object.
+
+    The target exposes `create_capability(defer_loading=..., **params)` and,
+    for stateful capabilities, module-level `STATE_NAMESPACE` / `STATE_TYPE`
+    (and an optional `DESCRIPTION`).
+    """
+    entry_points = importlib.metadata.entry_points(
+        group=CAPABILITY_ENTRY_POINT_GROUP,
+    )
+    for entry_point in entry_points:
+        if entry_point.name == name:
+            return entry_point.load()
+    raise UnknownCapabilityEntryPoint(
+        name=name,
+        available=[ep.name for ep in entry_points],
+    )
+
+
+class SkillConfig(typing.Protocol):
+    name: str
+    description: str
+    source: str | None
+    state_type: None
+    state_namespace: None
+    agui_feature_names: tuple[str, ...]
+
+    @property
+    def capability(self) -> ai_capabilities.AbstractCapability: ...
 
 
 @dataclasses.dataclass(kw_only=True)
-class _SkillConfigModelBase:
-    """Base for configuration for an agent skill."""
+class FilesystemSkillConfig:
+    _capability: cap_fs.FilesystemCapability
+    _validation_errors: list[str] = _default_list_field()
 
-    model_name: str | None = None
-    agent_config: config_agents.AgentConfig | None = None
+    kind: typing.ClassVar[str] = SkillKind.FILESYSTEM
+    source: typing.ClassVar[SkillKind] = SkillKind.FILESYSTEM
+    state_type: typing.ClassVar[None] = None
+    state_namespace: typing.ClassVar[None] = None
+    agui_feature_names: typing.ClassVar[tuple[str, ...]] = ()
 
-    _config_path: pathlib.Path | None = None
+    @classmethod
+    def from_capability(cls, capability: cap_fs.FilesystemCapability):
+        return cls(_capability=capability)
 
-    def __post_init__(self):
-        if self.model_name is not None and self.agent_config is not None:
-            raise OnlyOneOfModelNameAgentConfig(
-                _config_path=self._config_path,
+    @classmethod
+    def from_path(cls, capability_path: pathlib.Path):
+        capabilities, errors = cap_fs.discover_filesystem_capabilities(
+            [capability_path]
+        )
+        if errors:
+            placeholder = cap_fs.FilesystemCapability(
+                id=capability_path.name,
+                description=(
+                    f"Invalid filesystem capability: {capability_path}"
+                ),
+                defer_loading=True,
+                instructions="Invalid filesystem capability.",
+                path=capability_path,
             )
-
-    @property
-    def model_or_name(self) -> ai_models.Model | str | None:
-        if self.agent_config is not None:
-            return config_agents.get_model_from_config(
-                agent_config=self.agent_config,
+            return cls(
+                _capability=placeholder,
+                _validation_errors=[str(error) for error in errors],
             )
-        if self.model_name is not None:
-            return self.model_name
-
-        return None
+        (capability,) = capabilities
+        return cls.from_capability(capability)
 
     @property
-    def extra_parameters(self) -> dict[str, typing.Any]:
-        return {}
-
-
-class _SkillPropertiesFromMetadata(typing.Protocol):
-    @property
-    def skill_metadata(self) -> hs_models.SkillMetadata:
-        return self._skill_metadata
+    def capability(self) -> cap_fs.FilesystemCapability:
+        return self._capability
 
     @property
     def name(self) -> str:
-        return self._skill_metadata.name
+        assert self._capability.id is not None
+        return self._capability.id
 
     @property
     def description(self) -> str:
-        return self._skill_metadata.description
+        return self._capability.description or ""
 
     @property
-    def license(self) -> str | None:
-        return self._skill_metadata.license
-
-    @property
-    def compatibility(self) -> str | None:
-        return self._skill_metadata.compatibility
-
-    @property
-    def allowed_tools(self) -> str:
-        return self._skill_metadata.allowed_tools
-
-    @property
-    def metadata(self) -> dict:
-        return self._skill_metadata.metadata
-
-
-@dataclasses.dataclass(kw_only=True)
-class _DiscoveredSkillConfigBase(
-    _SkillConfigModelBase,
-    _SkillPropertiesFromMetadata,
-):
-    """Configuration for an agent skill discovered by the installation"""
-
-    kind: typing.ClassVar[hs_models.SkillSource]  # quasi- @abstractproperty
-
-    _skill_metadata: hs_models.SkillMetadata
-    _skill: hs_models.Skill = None
-    state_namespace: str | None = None
-    state_type: SkillStateType = None
-
-    @property
-    def source(self) -> hs_models.SkillSource | None:
-        return self.kind
-
-    @classmethod
-    def from_skill(cls, skill: hs_models.Skill):
-        return cls(
-            _skill_metadata=skill.metadata,
-            _skill=skill,
-            state_type=skill.state_type,
-            state_namespace=skill.state_namespace,
-        )
-
-    @property
-    def agui_feature_names(self) -> tuple[str]:
-        if self.state_namespace is not None:
-            return (self.state_namespace,)
-        else:
-            return ()
-
-    @property
-    def skill(self) -> hs_models.Skill:
-        if self._skill is not None:
-            return self._skill
-
-        return hs_models.Skill(
-            source=self.kind,
-            metadata=self._skill_metadata,
-            state_type=self.state_type,
-            state_namespace=self.state_namespace,
-            model=self.model_or_name,
-        )
-
-
-@dataclasses.dataclass(kw_only=True)
-class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
-    """Configuration for an agent skill loaded from a filesystem directory"""
-
-    kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.FILESYSTEM
-
-    _skill_path: pathlib.Path
-    _validation_errors: list[str] = _default_list_field()
-
-    @classmethod
-    def from_skill(cls, skill: hs_models.Skill):
-        return cls(
-            _skill_metadata=skill.metadata,
-            _skill=skill,
-            _skill_path=skill.path,
-            state_type=skill.state_type,
-            state_namespace=skill.state_namespace,
-        )
-
-    @classmethod
-    def from_path(cls, skill_path: pathlib.Path):
-        """Parse a skill from its 'SKILLS.md', capturing validation errors
-
-        Used in CLI's '--list-skills', where we want to display those
-        errors.
-
-        'skill_path' must be the path for a single filesystem skill.
-        """
-        skills, validation_errors = hs_discovery.discover_from_paths(
-            [skill_path],
-        )
-        if validation_errors:
-            skill_metadata = hs_models.SkillMetadata(
-                name=skill_path.name,
-                description=f"Invalid filesystem skill: {skill_path}",
-            )
-            return cls(
-                _skill_path=skill_path,
-                _skill_metadata=skill_metadata,
-                _validation_errors=[str(ve) for ve in validation_errors],
-            )
-        else:
-            (skill,) = skills
-            result = cls.from_skill(skill)
-            result._skill_path = skill_path
-            return result
-
-    @property
-    def path(self) -> pathlib.Path | None:
-        return self._skill_path
+    def path(self) -> pathlib.Path:
+        return self._capability.path
 
     @property
     def errors(self) -> list[str]:
         return self._validation_errors
 
     @property
-    def skill(self) -> hs_models.Skill:
-        if self._skill is not None:
-            return self._skill
-
-        return hs_models.Skill(
-            source=self.kind,
-            metadata=self._skill_metadata,
-            path=self._skill_path,
-            state_type=self.state_type,
-            state_namespace=self.state_namespace,
-            model=self.model_or_name,
-        )
+    def license(self) -> None:
+        return None
 
     @property
-    def extra_parameters(self) -> dict[str, typing.Any]:
-        return {"path": self._skill_path}
+    def compatibility(self) -> None:
+        return None
+
+    @property
+    def allowed_tools(self) -> list[str]:
+        return []
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {}
+
+    @property
+    def extra_parameters(self) -> dict[str, pathlib.Path]:
+        return {"path": self.path}
 
 
 @dataclasses.dataclass(kw_only=True)
-class EntrypointSkillConfig(_DiscoveredSkillConfigBase):
-    """Configuration for an agent skill loaded from an entrypoint"""
-
-    kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
-
-
-@dataclasses.dataclass(kw_only=True)
-class _HR_SkillConfigBase(
-    config_rag._RAGConfigBase,
-    _SkillPropertiesFromMetadata,
-):
-    """Base class for 'haiku-rag' skll configs"""
-
-    source: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
-
-    @property
-    def _skill_metadata(self) -> hs_models.SkillMetadata:
-        return self._hr_skill_module.skill_metadata()
-
-    @property
-    def state_namespace(self) -> str:
-        return self._hr_skill_module.STATE_NAMESPACE
-
-    @property
-    def state_type(self) -> type[pydantic.BaseModel]:
-        return self._hr_skill_module.STATE_TYPE
-
-    @property
-    def agui_feature_names(self):
-        return [self.state_namespace]
+class _HaikuRAGCapabilityConfig(config_rag._RAGConfigBase):
+    capability_factory: typing.ClassVar[typing.Callable]
+    capability_name: typing.ClassVar[str]
+    description: typing.ClassVar[str]
+    state_namespace: typing.ClassVar[str]
+    state_type: typing.ClassVar[type[pydantic.BaseModel]]
+    source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
 
     @classmethod
     def from_yaml(
@@ -303,37 +208,59 @@ class _HR_SkillConfigBase(
         config_dict: dict,
     ):
         try:
-            _kind = config_dict.pop("kind", None)
+            config_dict.pop("kind", None)
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
-
             return cls(**config_dict)
         except Exception as exc:
             raise config_exc.FromYamlException(
                 config_path,
-                cls._hr_skill_module.STATE_NAMESPACE,
+                cls.state_namespace,
                 config_dict,
             ) from exc
 
     @property
+    def name(self) -> str:
+        return self.capability_name
+
+    @property
+    def capability(self) -> ai_capabilities.AbstractCapability:
+        return type(self).capability_factory(
+            db_path=self.rag_lancedb_path,
+            config=self.haiku_rag_config,
+            defer_loading=True,
+        )
+
+    @property
+    def agui_feature_names(self) -> tuple[str, ...]:
+        return (self.state_namespace,)
+
+    @property
     def as_yaml(self) -> dict:
         result = {"kind": self.kind}
-
         if self.rag_lancedb_stem is not None:
             result["rag_lancedb_stem"] = self.rag_lancedb_stem
         else:
             result["rag_lancedb_override_path"] = (
                 self.rag_lancedb_override_path
             )
-
         return result
 
     @property
-    def skill(self) -> hs_models.Skill:
-        return self._hr_skill_module.create_skill(
-            db_path=self.rag_lancedb_path,
-            config=self.haiku_rag_config,
-        )
+    def license(self) -> None:
+        return None
+
+    @property
+    def compatibility(self) -> None:
+        return None
+
+    @property
+    def allowed_tools(self) -> list[str]:
+        return []
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {}
 
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:
@@ -341,42 +268,48 @@ class _HR_SkillConfigBase(
 
 
 @dataclasses.dataclass(kw_only=True)
-class HR_RAG_SkillConfig(_HR_SkillConfigBase):
-    """Configuration for an agent skill from 'haiku.rag.skills.rag"""
-
-    kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rag"
-    _hr_skill_module = hr_skills_rag
-
-
-@dataclasses.dataclass(kw_only=True)
-class HR_Analysis_SkillConfig(_HR_SkillConfigBase):
-    """Configuration for an agent skill from 'haiku.rag.skills.analysis"""
-
-    kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.analysis"
-    _hr_skill_module = hr_skills_analysis
-
-
-@dataclasses.dataclass(kw_only=True)
-class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
-    """Configuration for the bubblewrap sandbox skill."""
-
-    kind: typing.ClassVar[str] = sk_bwrap_sandbox.SKILL_NAME
-    source: typing.ClassVar[str] = SkillKind.ENTRYPOINT
-
-    _skill_metadata: hs_models.SkillMetadata = dataclasses.field(
-        default_factory=lambda: sk_bwrap_sandbox.SKILL_METADATA,
-        repr=False,
-        compare=False,
+class HR_RAG_SkillConfig(_HaikuRAGCapabilityConfig):
+    kind: typing.ClassVar[str] = "haiku.rag.skills.rag"
+    capability_factory = hr_rag.create_capability
+    capability_name = "rag"
+    description = (
+        "Search the haiku.rag knowledge base and cite evidence for grounded "
+        "answers."
     )
+    state_namespace = hr_rag.STATE_NAMESPACE
+    state_type = hr_rag.RAGState
+
+
+@dataclasses.dataclass(kw_only=True)
+class HR_Analysis_SkillConfig(_HaikuRAGCapabilityConfig):
+    kind: typing.ClassVar[str] = "haiku.rag.skills.analysis"
+    capability_factory = hr_analysis.create_capability
+    capability_name = "rag-analysis"
+    description = (
+        "Analyze the haiku.rag corpus with search and sandboxed Python code."
+    )
+    state_namespace = hr_analysis.STATE_NAMESPACE
+    state_type = hr_analysis.AnalysisState
+
+
+@dataclasses.dataclass(kw_only=True)
+class BwrapSandboxSkillConfig:
+    kind: typing.ClassVar[str] = bwrap_sandbox.CAPABILITY_NAME
+    source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
+    name: typing.ClassVar[str] = bwrap_sandbox.CAPABILITY_NAME
+    description: typing.ClassVar[str] = (
+        bwrap_sandbox.CAPABILITY_DESCRIPTION.strip()
+    )
+    state_type: typing.ClassVar[None] = None
+    state_namespace: typing.ClassVar[None] = None
+    agui_feature_names: typing.ClassVar[tuple[str, ...]] = ()
+
     _installation_config: InstallationConfig = None  # noqa F821 cycles
     _config_path: pathlib.Path | None = None
 
-    state_type: SkillStateType = sk_bwrap_sandbox.STATE_TYPE
-    state_namespace: str | None = sk_bwrap_sandbox.STATE_NAMESPACE
-
     id: str | None = None
     default_environment: str = "bare"
-    allowed_environments: sk_bwrap_sandbox.AllowedEnvironments = None
+    allowed_environments: bwrap_sandbox.AllowedEnvironments = None
     sandbox_config: bs_config.Config = None
     volumes: bs_models.VolumeMap = _default_dict_field()
 
@@ -388,29 +321,35 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
         config_dict: dict,
     ):
         try:
-            _kind = config_dict.pop("kind", None)
+            config_dict.pop("kind", None)
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
-
-            sandbox_config_dict = config_dict.pop("sandbox_config", {})
             config_dict["sandbox_config"] = bs_config.Config(
                 config_file_path=config_path,
-                **sandbox_config_dict,
+                **config_dict.pop("sandbox_config", {}),
             )
-
-            volumes_dict = config_dict.pop("volumes", {})
             config_dict["volumes"] = {
                 key: bs_models.VolumeInfo(**value)
-                for key, value in volumes_dict.items()
+                for key, value in config_dict.pop("volumes", {}).items()
             }
-
             return cls(**config_dict)
         except Exception as exc:
             raise config_exc.FromYamlException(
                 config_path,
-                "bwrap-sandbox",
+                "bubble-sandbox",
                 config_dict,
             ) from exc
+
+    @property
+    def capability(self) -> bwrap_sandbox.SandboxCapability:
+        return bwrap_sandbox.create_bwrap_sandbox_capability(
+            id=self.id,
+            default_environment=self.default_environment,
+            allowed_environments=self.allowed_environments,
+            sandbox_config=self.sandbox_config,
+            volumes=self.volumes,
+            installation_config=self._installation_config,
+        )
 
     @property
     def as_yaml(self) -> dict:
@@ -418,21 +357,19 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
             "kind": self.kind,
             "default_environment": self.default_environment,
         }
-
         if self.id is not None:
             result["id"] = self.id
-
         if self.allowed_environments is not None:
             result["allowed_environments"] = self.allowed_environments
-
         if self.sandbox_config is not None:
-            sc = self.sandbox_config
+            config = self.sandbox_config
             result["sandbox_config"] = {
-                "environments_pathname": sc.environments_pathname,
-                "execution_timeout_seconds": sc.execution_timeout_seconds,
-                "max_output_chars": sc.max_output_chars,
+                "environments_pathname": config.environments_pathname,
+                "execution_timeout_seconds": (
+                    config.execution_timeout_seconds
+                ),
+                "max_output_chars": config.max_output_chars,
             }
-
         if self.volumes:
             result["volumes"] = {
                 key: {
@@ -441,110 +378,200 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
                 }
                 for key, value in self.volumes.items()
             }
-
         return result
 
     @property
-    def agui_feature_names(self) -> tuple[str]:
-        return (sk_bwrap_sandbox.STATE_NAMESPACE,)
+    def license(self) -> None:
+        return None
 
     @property
-    def skill(self) -> hs_models.Skill:
-        skill = sk_bwrap_sandbox.create_bwrap_sandbox_skill(
-            id=self.id,
-            default_environment=self.default_environment,
-            allowed_environments=self.allowed_environments,
-            sandbox_config=self.sandbox_config,
-            volumes=self.volumes,
-            installation_config=self._installation_config,
-        )
-        skill._factory = sk_bwrap_sandbox.create_bwrap_sandbox_skill
-        return skill
+    def compatibility(self) -> None:
+        return None
+
+    @property
+    def allowed_tools(self) -> list[str]:
+        return []
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {}
 
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:
         result = {"default_environment": self.default_environment}
-
         if self.allowed_environments is not None:
             result["allowed_environments"] = self.allowed_environments
-
         return result
 
 
-feature_registry = config_agui.AGUI_FEATURES_BY_NAME
-feature_registry[sk_bwrap_sandbox.STATE_NAMESPACE] = config_agui.AGUI_Feature(
-    name=sk_bwrap_sandbox.STATE_NAMESPACE,
-    model_klass=sk_bwrap_sandbox.STATE_TYPE,
-    source=config_agui.AGUI_FeatureSource.SERVER,
-)
+@dataclasses.dataclass(kw_only=True)
+class EntrypointCapabilityConfig:
+    """A capability from a third-party `soliplex.capabilities` entry point.
+
+    Mounted room-side via `{kind: entrypoint, name: <entry-point>, ...params}`.
+    Extra keys are forwarded to the package's `create_capability`.
+    """
+
+    kind: typing.ClassVar[str] = "entrypoint"
+    source: typing.ClassVar[SkillKind] = SkillKind.ENTRYPOINT
+
+    _installation_config: InstallationConfig = None  # noqa F821 cycles
+    _config_path: pathlib.Path | None = None
+
+    name: str
+    params: dict[str, typing.Any] = _default_dict_field()
+
+    def __post_init__(self) -> None:
+        # Register the capability's typed AG-UI state feature so the room can
+        # synthesize default state (like the native-capability loop).
+        namespace = self.state_namespace
+        if namespace is not None:
+            config_agui.AGUI_FEATURES_BY_NAME.setdefault(
+                namespace,
+                config_agui.AGUI_Feature(
+                    name=namespace,
+                    model_klass=self.state_type,
+                    source=config_agui.AGUI_FeatureSource.SERVER,
+                ),
+            )
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,  # noqa F821 cycles
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        params = dict(config_dict)
+        params.pop("kind", None)
+        name = params.pop("name", None)
+        try:
+            return cls(
+                name=name,
+                params=params,
+                _installation_config=installation_config,
+                _config_path=config_path,
+            )
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                "entrypoint",
+                config_dict,
+            ) from exc
+
+    @functools.cached_property
+    def _module(self):
+        return _load_capability_entry_point(self.name)
+
+    @property
+    def capability(self) -> ai_capabilities.AbstractCapability:
+        return self._module.create_capability(
+            defer_loading=True, **self.params
+        )
+
+    @property
+    def description(self) -> str:
+        return getattr(self._module, "DESCRIPTION", "") or ""
+
+    @property
+    def state_namespace(self) -> str | None:
+        return getattr(self._module, "STATE_NAMESPACE", None)
+
+    @property
+    def state_type(self) -> type[pydantic.BaseModel] | None:
+        return getattr(self._module, "STATE_TYPE", None)
+
+    @property
+    def agui_feature_names(self) -> tuple[str, ...]:
+        namespace = self.state_namespace
+        return (namespace,) if namespace is not None else ()
+
+    @property
+    def as_yaml(self) -> dict:
+        return {"kind": self.kind, "name": self.name, **self.params}
+
+    @property
+    def license(self) -> None:
+        return None
+
+    @property
+    def compatibility(self) -> None:
+        return None
+
+    @property
+    def allowed_tools(self) -> list[str]:
+        return []
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {}
+
+    @property
+    def extra_parameters(self) -> dict[str, typing.Any]:
+        return dict(self.params)
+
+
+for feature_name, model in (
+    (hr_rag.STATE_NAMESPACE, hr_rag.RAGState),
+    (hr_analysis.STATE_NAMESPACE, hr_analysis.AnalysisState),
+):
+    config_agui.AGUI_FEATURES_BY_NAME[feature_name] = config_agui.AGUI_Feature(
+        name=feature_name,
+        model_klass=model,
+        source=config_agui.AGUI_FeatureSource.SERVER,
+    )
 
 
 SKILL_CONFIG_CLASSES_BY_KIND = {
     klass.kind: klass
     for klass in [
-        FilesystemSkillConfig,
-        EntrypointSkillConfig,
         HR_RAG_SkillConfig,
         HR_Analysis_SkillConfig,
         BwrapSandboxSkillConfig,
+        EntrypointCapabilityConfig,
     ]
 }
 
 SkillConfigTypes = (
     FilesystemSkillConfig
-    | EntrypointSkillConfig
     | HR_RAG_SkillConfig
     | HR_Analysis_SkillConfig
     | BwrapSandboxSkillConfig
+    | EntrypointCapabilityConfig
 )
 SkillConfigMap = dict[str, SkillConfigTypes]
-SkillMap = dict[str, hs_models.Skill]
 
 
 def extract_skill_configs(
     installation_config: InstallationConfig,  # noqa F821 cycles
     config_path: pathlib.Path,
     config_dict: dict,
-):
+) -> SkillConfigMap:
     skill_configs = {}
-
-    for s_config in config_dict.pop("skill_configs", ()):
-        kind = s_config.get("kind")
+    for config in config_dict.pop("skill_configs", ()):
+        kind = config.get("kind")
         try:
-            sc_klass = SKILL_CONFIG_CLASSES_BY_KIND[kind]
+            config_class = SKILL_CONFIG_CLASSES_BY_KIND[kind]
         except KeyError:
             raise InvalidSkillKind(
                 invalid_skill_kind=kind,
                 available_skill_kinds=SKILL_CONFIG_CLASSES_BY_KIND.keys(),
                 _config_path=config_path,
             ) from None
-
-        skill_config = sc_klass.from_yaml(
+        skill_config = config_class.from_yaml(
             installation_config,
             config_path,
-            s_config,
+            config,
         )
         skill_configs[skill_config.name] = skill_config
-
     return skill_configs
 
 
 @dataclasses.dataclass(kw_only=True)
-class RoomSkillsConfig(_SkillConfigModelBase):
-    """Configure skills in a room"""
+class RoomSkillsConfig:
+    """Select native capabilities for a room."""
 
-    #
-    # Use skills defined in the installation, identified by name
-    #
     installation_skill_names: list[str] = _default_list_field()
-
-    #
-    # Run skills as isolated sub-agents (the default) or expose their tools
-    # directly to the room's agent.
-    #
-    use_subagents: bool = True
-
-    # Set by `from_yaml` factory
     _skill_configs: SkillConfigMap = _default_dict_field()
     _installation_config: InstallationConfig = (  # noqa F821 cycles
         _no_repr_no_compare_none()
@@ -552,22 +579,18 @@ class RoomSkillsConfig(_SkillConfigModelBase):
     _config_path: pathlib.Path = None
 
     @staticmethod
-    def _check_skill_configs(
+    def _check_installation_skills(
         installation_config: InstallationConfig,  # noqa F821 cycles
         config_path: pathlib.Path,
         config_dict: dict,
-    ):
-        config_skill_names = set(
-            config_dict.get("installation_skill_names", ())
-        )
-        installation_skill_names = set(installation_config.skill_configs)
-        missing_skill_names = config_skill_names - installation_skill_names
-
-        if missing_skill_names:
+    ) -> None:
+        requested = set(config_dict.get("installation_skill_names", ()))
+        available = set(installation_config.skill_configs)
+        if missing := requested - available:
             raise MissingSkillNames(
                 _config_path=config_path,
-                missing_skill_names=missing_skill_names,
-                available_skill_names=installation_skill_names,
+                missing_skill_names=missing,
+                available_skill_names=available,
             )
 
     @classmethod
@@ -578,26 +601,21 @@ class RoomSkillsConfig(_SkillConfigModelBase):
         config_dict: dict,
     ):
         try:
-            cls._check_skill_configs(
+            cls._check_installation_skills(
                 installation_config,
                 config_path,
                 config_dict,
             )
-
             config_dict["_skill_configs"] = extract_skill_configs(
-                installation_config=installation_config,
-                config_path=config_path,
-                config_dict=config_dict,
+                installation_config,
+                config_path,
+                config_dict,
             )
-
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
-
             return cls(**config_dict)
-
         except config_exc.FromYamlException:  # pragma: NO COVER
             raise
-
         except Exception as exc:
             raise config_exc.FromYamlException(
                 config_path,
@@ -607,104 +625,40 @@ class RoomSkillsConfig(_SkillConfigModelBase):
 
     @property
     def as_yaml(self) -> dict:
-        result = {"model_name": self.model_name}
-
+        result = {}
         if self.installation_skill_names:
             result["installation_skill_names"] = self.installation_skill_names
-
-        sc_map = [sc.as_yaml for sc in self._skill_configs.values()]
-
-        if sc_map:
-            result["skill_configs"] = sc_map
-
+        if self._skill_configs:
+            result["skill_configs"] = [
+                config.as_yaml for config in self._skill_configs.values()
+            ]
         return result
 
     @property
     def skill_configs(self) -> SkillConfigMap:
-        ic_skill_configs = self._installation_config.skill_configs
+        installation_configs = self._installation_config.skill_configs
         return {
-            skill_name: ic_skill_configs[skill_name]
-            for skill_name in self.installation_skill_names
-        } | (self._skill_configs)
+            name: installation_configs[name]
+            for name in self.installation_skill_names
+        } | self._skill_configs
 
     @property
-    def skills(self) -> SkillMap:
-        return {
-            name: skill_config.skill
-            for name, skill_config in self.skill_configs.items()
-        }
+    def capabilities(self) -> list[ai_capabilities.AbstractCapability]:
+        return [config.capability for config in self.skill_configs.values()]
 
     @property
     def rag_db_paths(self) -> dict[str, str]:
-        """Map each haiku-rag skill's name to the LanceDB path it reads."""
-        return {
-            skill_config.name: str(skill_config.rag_lancedb_path)
-            for skill_config in self.skill_configs.values()
-            if isinstance(skill_config, _HR_SkillConfigBase)
-        }
+        paths = {}
+        for config in self.skill_configs.values():
+            if isinstance(config, _HaikuRAGCapabilityConfig):
+                capability = config.capability
+                assert capability.id is not None
+                paths[capability.id] = str(config.rag_lancedb_path)
+        return paths
 
     @property
     def has_sandbox(self) -> bool:
-        """Does the room have the sandbox skill?"""
         return any(
-            skill_config
-            for skill_config in self.skill_configs.values()
-            if isinstance(skill_config, BwrapSandboxSkillConfig)
+            isinstance(config, BwrapSandboxSkillConfig)
+            for config in self.skill_configs.values()
         )
-
-    @property
-    def skill_preambles(self) -> list[str]:
-        preambles = []
-
-        rag_skill_configs = [
-            skill_config
-            for skill_config in self.skill_configs.values()
-            if isinstance(skill_config, config_rag._RAGConfigBase)
-        ]
-
-        for rag_skill_config in rag_skill_configs:
-            skill_hr_config = rag_skill_config.haiku_rag_config
-            prompt = skill_hr_config.prompts.domain_preamble
-            preambles.append(prompt)
-
-        return [preamble for preamble in preambles if preamble]
-
-    @property
-    def skill_toolset(self) -> hs_agent.SkillToolset:
-        skill_map = self.skills
-        return SoliplexSkillToolset(
-            skills=skill_map.values(),
-            skill_model=self.model_or_name,
-            use_subagents=self.use_subagents,
-        )
-
-
-class SoliplexSkillToolset(hs_agent.SkillToolset):
-    """SkillToolset that injects run context into skill states.
-
-    Copies ``room_id``, ``thread_id`` and ``run_id`` from the outer
-    agent's deps into the sandbox skill namespace so that sub-agent
-    tools can resolve workdirs and upload volumes, plus the acting
-    user's ``preferred_username`` so sandbox data-change events can be
-    attributed to them.
-    """
-
-    async def for_run(self, ctx):
-        result = await super().for_run(ctx)
-        deps = ctx.deps
-
-        sandbox_ns = self.get_namespace(
-            sk_bwrap_sandbox.STATE_NAMESPACE,
-        )
-        if sandbox_ns is not None:
-            sandbox_ns.room_id = getattr(deps, "room_id", None)
-            sandbox_ns.thread_id = getattr(deps, "thread_id", None)
-            sandbox_ns.run_id = getattr(deps, "run_id", None)
-            user = getattr(deps, "user", None)
-            sandbox_ns.preferred_username = getattr(
-                user,
-                "preferred_username",
-                None,
-            )
-
-        return result

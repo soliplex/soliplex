@@ -15,8 +15,9 @@ TRANSCRIPT = "/transcripts/room-1/thread-1/run-1/abc123.py"
 
 
 def _state():
+    user = SimpleNamespace(model_dump=lambda: {"preferred_username": USERNAME})
     return SimpleNamespace(
-        preferred_username=USERNAME,
+        user=user,
         room_id=ROOM_ID,
         thread_id=THREAD_ID,
         run_id=RUN_ID,

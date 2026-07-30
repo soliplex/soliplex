@@ -13,8 +13,8 @@ import typing
 import dotenv
 import yaml
 from haiku.rag import config as hr_config
-from haiku.skills import discovery as hs_discovery
-from haiku.skills import models as hs_models
+
+from soliplex.capabilities import filesystem as cap_fs
 
 from . import _utils
 from . import agents as config_agents
@@ -181,11 +181,13 @@ def resolve_environment_entry(
 def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
     fs_skill_configs = {}
 
-    fs_skills, validation_errors = hs_discovery.discover_from_paths(
+    capabilities, validation_errors = cap_fs.discover_filesystem_capabilities(
         i_config.filesystem_skills_paths,
     )
-    for fs_skill in fs_skills:
-        skill_config = config_skills.FilesystemSkillConfig.from_skill(fs_skill)
+    for capability in capabilities:
+        skill_config = config_skills.FilesystemSkillConfig.from_capability(
+            capability
+        )
 
         if skill_config.name not in fs_skill_configs:
             fs_skill_configs[skill_config.name] = skill_config
@@ -193,15 +195,8 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
     for validation_error in validation_errors:
         skill_path = validation_error.path
         skill_name = skill_path.name
-        message = str(validation_error)
-        skill_metadata = hs_models.SkillMetadata(
-            name=skill_name,
-            description=f"Invalid filesystem skill: {skill_path}",
-        )
-        fs_skill_configs[skill_name] = config_skills.FilesystemSkillConfig(
-            _skill_metadata=skill_metadata,
-            _skill_path=skill_path,
-            _validation_errors=[message],
+        fs_skill_configs[skill_name] = (
+            config_skills.FilesystemSkillConfig.from_path(skill_path)
         )
 
     return fs_skill_configs
@@ -209,68 +204,20 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
 
 def resolve_skill_configs(
     explicit: typing.Iterable[dict],
-    available_fs: config_skills.SkillConfigMap,
-    available_ep: config_skills.SkillConfigMap,
+    available: config_skills.SkillConfigMap,
 ) -> config_skills.SkillConfigMap:
-    """Resolve the effective skill map from explicit config + availability.
-
-    Each kind (filesystem, entrypoint) is handled independently. If
-    'explicit' names any skill of that kind, it acts as a whitelist:
-    only the named skills are included. If 'explicit' names none of
-    that kind, the permissive default applies: every discovered skill
-    of that kind from the matching availability map is included.
-
-    Entrypoint skills go first in the union so that filesystem skills
-    win on name collision.
-    """
-    fs_skills = {}
-    ep_skills = {}
+    """Resolve enabled filesystem skills from discovered availability."""
+    selected = {}
 
     for entry in explicit:
+        if entry["kind"] != config_skills.SkillKind.FILESYSTEM:
+            raise ValueError(  # noqa: TRY003
+                f"Unsupported installation skill kind: {entry['kind']}"
+            )
         skill_name = entry["skill_name"]
-        if entry["kind"] == config_skills.SkillKind.FILESYSTEM:
-            fs_skills[skill_name] = available_fs[skill_name]
-        elif entry["kind"] == config_skills.SkillKind.ENTRYPOINT:
-            ep_skills[skill_name] = available_ep[skill_name]
-        else:  # pragma: NO COVER
-            pass
+        selected[skill_name] = available[skill_name]
 
-    if not fs_skills:
-        fs_skills = dict(available_fs)
-    if not ep_skills:
-        ep_skills = dict(available_ep)
-
-    return ep_skills | fs_skills
-
-
-def _load_entrypoint_skill_configs(i_config) -> config_skills.SkillConfigMap:
-    i_config.resolve_environment()
-    ep_skill_configs = {}
-
-    for skill in hs_discovery.discover_from_entrypoints():
-        # Replace haiku-rag-based skills' 'config' with our own.
-        if skill.extras.get("db_path") is not None:
-            skill.reconfigure(
-                config=i_config.haiku_rag_config,
-                db_path=skill.extras["db_path"],
-            )
-
-        feature_name = skill.state_namespace
-        feature_registry = config_agui.AGUI_FEATURES_BY_NAME
-
-        if feature_name is not None and feature_name not in feature_registry:
-            feature_registry[feature_name] = config_agui.AGUI_Feature(
-                name=feature_name,
-                model_klass=skill.state_type,
-                source=config_agui.AGUI_FeatureSource.SERVER,
-            )
-
-        skill_config = config_skills.EntrypointSkillConfig.from_skill(skill)
-
-        if skill_config.name not in ep_skill_configs:
-            ep_skill_configs[skill_config.name] = skill_config
-
-    return ep_skill_configs
+    return selected or dict(available)
 
 
 class EnvironmentSourceType(enum.StrEnum):
@@ -649,8 +596,8 @@ class InstallationConfig:
 
         return self._agent_configs_map
 
-    # Path(s) to filesystm AI skills:  each item must be a single
-    # directory containing matching the spec:
+    # Path(s) to filesystem AI skills: each item must be a single
+    # directory matching the spec:
     # https://agentskills.io/specification
     #
     # or a directory whose subdirectories match that spec.
@@ -660,7 +607,6 @@ class InstallationConfig:
     filesystem_skills_paths: list[pathlib.Path] = None
 
     _available_filesystem_skill_configs: config_skills.SkillConfigMap = None
-    _available_entrypoint_skill_configs: config_skills.SkillConfigMap = None
     _skill_configs: list[dict] | None = None
     _resolved_skill_configs: config_skills.SkillConfigMap = None
 
@@ -676,23 +622,11 @@ class InstallationConfig:
         return self._available_filesystem_skill_configs.copy()
 
     @property
-    def available_entrypoint_skill_configs(
-        self,
-    ) -> config_skills.SkillConfigMap:
-        if self._available_entrypoint_skill_configs is None:
-            self._available_entrypoint_skill_configs = (
-                _load_entrypoint_skill_configs(self)
-            )
-
-        return self._available_entrypoint_skill_configs.copy()
-
-    @property
     def skill_configs(self) -> config_skills.SkillConfigMap:
         if self._resolved_skill_configs is None:
             self._resolved_skill_configs = resolve_skill_configs(
                 self._skill_configs or [],
                 self.available_filesystem_skill_configs,
-                self.available_entrypoint_skill_configs,
             )
 
         return self._resolved_skill_configs.copy()
@@ -1253,11 +1187,11 @@ class InstallationConfig:
 
     def reload_configurations(self):
         """Load all dependent configuration sets"""
-        self._available_filesystem_configs = _load_filesystem_skill_configs(
-            self,
-        )
-        self._available_entrypoint_configs = _load_entrypoint_skill_configs(
-            self,
+        self.resolve_environment()
+        self._available_filesystem_skill_configs = (
+            _load_filesystem_skill_configs(
+                self,
+            )
         )
         self._resolved_skill_configs = None
         self._oidc_auth_system_configs = self._load_oidc_auth_system_configs()

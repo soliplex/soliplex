@@ -1,4 +1,3 @@
-import contextlib
 import datetime
 from types import SimpleNamespace
 from unittest import mock
@@ -1380,16 +1379,12 @@ def _event(name):
     return SimpleNamespace(type=name)
 
 
-def _fake_run_agui_stream(events):
-    @contextlib.asynccontextmanager
-    async def cm(adapter, *, toolset=None, **run_kwargs):
-        async def gen():
-            for event in events:
-                yield event
+def _adapter(events):
+    async def gen():
+        for event in events:
+            yield event
 
-        yield gen()
-
-    return cm
+    return SimpleNamespace(run_stream=lambda **kwargs: gen())
 
 
 @pytest.fixture
@@ -1412,24 +1407,15 @@ async def test_drive_agui_turn_persists_and_yields(
         saved.append(kwargs["event"])
 
     monkeypatch.setattr(agui_persistence, "save_single_event", fake_save)
-    monkeypatch.setattr(
-        agui_persistence.hs_agent,
-        "run_agui_stream",
-        _fake_run_agui_stream(events),
-    )
-
     collected = [
         event
         async for event in agui_persistence.drive_agui_turn(
-            adapter=None,
-            skill_toolset=None,
+            adapter=_adapter(events),
             engine=object(),
             user_name="u",
             room_id="r",
             thread_id="t",
             run_id="x",
-            claims={},
-            rag_db_paths={},
         )
     ]
 
@@ -1449,17 +1435,10 @@ async def test_drive_agui_turn_swallows_save_errors(
 
     monkeypatch.setattr(agui_persistence, "logfire", mock.Mock())
     monkeypatch.setattr(agui_persistence, "save_single_event", boom)
-    monkeypatch.setattr(
-        agui_persistence.hs_agent,
-        "run_agui_stream",
-        _fake_run_agui_stream(events),
-    )
-
     collected = [
         event
         async for event in agui_persistence.drive_agui_turn(
-            adapter=None,
-            skill_toolset=None,
+            adapter=_adapter(events),
             engine=object(),
             user_name="u",
             room_id="r",
