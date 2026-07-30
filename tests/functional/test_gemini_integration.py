@@ -10,7 +10,7 @@ These tests validate the Gemini provider works end-to-end with:
 All tests require GEMINI_API_KEY to be set and are marked with
 @pytest.mark.needs_llm to allow skipping in CI environments.
 
-Uses pytest-anyio with close_cached_httpx_client fixture to properly
+Uses pytest-anyio with the close_httpx_clients fixture to properly
 manage httpx client lifecycle and prevent "Event loop is closed" errors.
 
 See: https://github.com/pydantic/pydantic-ai/blob/main/tests/conftest.py
@@ -23,9 +23,9 @@ import uuid
 from unittest import mock
 
 import httpx
-import pydantic_ai.models
 import pytest
 from fastapi import testclient
+from pydantic_ai.providers import google as google_providers
 
 from soliplex import agents
 from soliplex import main
@@ -52,28 +52,36 @@ def anyio_backend():
 
 
 @pytest.fixture
-async def close_cached_httpx_client(anyio_backend, monkeypatch):
-    """Track and close cached httpx clients created during each test.
+async def close_httpx_clients(anyio_backend, monkeypatch):
+    """Track and close httpx clients created during each test.
 
     This fixture prevents "Event loop is closed" errors by explicitly
-    closing httpx clients before the event loop is torn down.
+    closing httpx clients before the event loop is torn down. The
+    provider owns the client it creates and closes it on exit, but
+    these tests build agents without entering the agent context, so
+    nothing else closes them.
+
+    Patch the name on the provider module rather than on
+    ``pydantic_ai.models``: providers bind it at import time via
+    ``from pydantic_ai.models import create_async_http_client``, so
+    patching the definition site would not be seen.
 
     Adapted from pydantic-ai's test suite:
     https://github.com/pydantic/pydantic-ai/blob/main/tests/conftest.py
     """
     created_clients: set[httpx.AsyncClient] = set()
 
-    original_cached_func = pydantic_ai.models.cached_async_http_client
+    original_factory = google_providers.create_async_http_client
 
-    def tracked_cached_async_http_client(*args, **kwargs):
-        client = original_cached_func(*args, **kwargs)
+    def tracked_create_async_http_client(*args, **kwargs):
+        client = original_factory(*args, **kwargs)
         created_clients.add(client)
         return client
 
     monkeypatch.setattr(
-        pydantic_ai.models,
-        "cached_async_http_client",
-        tracked_cached_async_http_client,
+        google_providers,
+        "create_async_http_client",
+        tracked_create_async_http_client,
     )
 
     yield
@@ -97,7 +105,7 @@ def gemini_room_config():
 
 
 @pytest.fixture
-def gemini_agent(gemini_room_config, close_cached_httpx_client):
+def gemini_agent(gemini_room_config, close_httpx_clients):
     """Get the gemini_flash agent configured for testing.
 
     Uses function scope to ensure fresh httpx clients per test,
@@ -352,9 +360,7 @@ async def test_gemini_agent_configuration(gemini_agent):
 
 @pytest.mark.anyio
 @pytest.mark.needs_llm
-async def test_gemini_safety_filter(
-    gemini_room_config, close_cached_httpx_client
-):
+async def test_gemini_safety_filter(gemini_room_config, close_httpx_clients):
     """Verify graceful handling of safety filter rejection.
 
     This test mocks the model to simulate a safety filter rejection
@@ -390,7 +396,7 @@ async def test_gemini_safety_filter(
 
 
 @pytest.fixture
-def gemini_app(close_cached_httpx_client):
+def gemini_app(close_httpx_clients):
     config_routing.register_default_routers()
     app = main.create_app("example/functest_w_gemini.yaml", no_auth_mode=True)
     config_routing.add_registered_routers(app)
