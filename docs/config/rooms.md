@@ -186,8 +186,8 @@ E.g.:
 #### Default Skill Configuration Kinds
 
 Soliplex provides two such skill configuration classes by default:
-one of kind `haiku.rag.skill.rag` and one of kind
-`haiku.rag.skill.analysis`.  Both of these configurations have options for
+one of kind `haiku.rag.skills.rag` and one of kind
+`haiku.rag.skills.analysis`.  Both of these configurations have options for
 configuring the RAG database and RAG client:
 
 - One of the following (exactly one must be provided):
@@ -206,7 +206,7 @@ configuring the RAG database and RAG client:
   values from this file are overlaid on the the installation configuration's
   `haiku_rag_config`.
 
-Skill configurations with the `kind` of `"haiku.rag.skill.rag"` give the
+Skill configurations with the `kind` of `"haiku.rag.skills.rag"` give the
 agent the following RAG tools:
 
 - `"search"` — semantic document search with multi-query expansion.
