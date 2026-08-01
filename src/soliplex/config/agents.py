@@ -295,6 +295,7 @@ class AgentConfig:
             "retries": self.retries,
             "system_prompt": prompt,
             "model_settings": self.model_settings,
+            "multimodal": self.multimodal,
             "provider_type": str(self.provider_type),
             "provider_base_url": provider_base_url,
             "provider_key": self.provider_key,  # "secret:SECRET_NAME"

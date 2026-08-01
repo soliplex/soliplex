@@ -140,6 +140,18 @@ model_settings:
         {MODEL_SETTING_EXTRA_BODY_NAME}: {MODEL_SETTING_EXTRA_BODY_VALUE}
 """
 
+W_MULTIMODAL_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    provider_type="ollama",
+    multimodal=True,
+)
+W_MULTIMODAL_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+multimodal: true
+"""
+
 
 W_PROMPT_FILE_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
@@ -461,6 +473,10 @@ def test_agentconfig_ctor(installation_config, kw):
         (
             W_MODEL_SETTINGS_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_MODEL_SETTINGS_AGENT_CONFIG_KW.copy()),
+        ),
+        (
+            W_MULTIMODAL_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(W_MULTIMODAL_AGENT_CONFIG_KW.copy()),
         ),
         (
             W_PROMPT_FILE_AGENT_CONFIG_YAML,
@@ -874,6 +890,8 @@ def test_agentconfig_capabilities(w_kwargs, expected):
         W_PROVIDER_KW_AGENT_CONFIG_KW.copy(),
         W_RETRIES_AGENT_CONFIG_KW.copy(),
         W_PROMPT_FILE_AGENT_CONFIG_KW.copy(),
+        W_MULTIMODAL_AGENT_CONFIG_KW.copy(),
+        W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW.copy(),
     ],
 )
 def test_agentconfig_as_yaml(
@@ -910,6 +928,7 @@ def test_agentconfig_as_yaml(
     )
 
     expected["provider_key"] = agent_config_kw.get("provider_key")
+    expected["multimodal"] = agent_config_kw.get("multimodal", False)
 
     aconfig = config_agents.AgentConfig(**agent_config_kw)
 
