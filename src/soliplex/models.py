@@ -609,6 +609,7 @@ class SearchHit(pydantic.BaseModel):
     document_id: str
     document_uri: str
     document_title: str
+    document_meta: dict[str, typing.Any] = {}
     headings: list[str]
     page_numbers: list[int]
     labels: list[str]

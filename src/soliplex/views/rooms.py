@@ -385,6 +385,7 @@ async def get_search(
                     document_id=hit.document_id,
                     document_uri=hit.document_uri,
                     document_title=hit.document_title,
+                    document_meta=hit.document_meta,
                     headings=hit.headings,
                     page_numbers=hit.page_numbers,
                     labels=hit.labels,

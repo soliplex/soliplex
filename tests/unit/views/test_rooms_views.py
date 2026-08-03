@@ -837,9 +837,11 @@ async def test_get_search(
                 f"documents/document-{i_source}"
             ),
             document_title=f"Test Document #{i_source}",
-            headings=[f"test-heading-{i_source}"],
-            page_numbers=[i_source],
+            document_meta={"foo": "bar"},
+            page_numbers=[100 - i_source],
+            headings=[f"Test Heading #{i_source}"],
             labels=[f"test-label-{i_source}"],
+            image_data={f"img-{i_source:03}": "abcdef0123456789"},
         )
         for i_source, source in enumerate(sources)
     ]
@@ -920,6 +922,7 @@ async def test_get_search(
             assert f_hit.document_id == exp_result.document_id
             assert f_hit.document_uri == exp_result.document_uri
             assert f_hit.document_title == exp_result.document_title
+            assert f_hit.document_meta == exp_result.document_meta
             assert f_hit.headings == exp_result.headings
             assert f_hit.page_numbers == exp_result.page_numbers
             assert f_hit.labels == exp_result.labels
