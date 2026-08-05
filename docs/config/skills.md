@@ -34,11 +34,11 @@ option to configure or suppress this feature.
 Discovered entrypoint skills can be queried using the
 `InstallationConfig.available_entrypoint_skill_configs` attribute.
 
-## Enabling Available Skills
+## Selecting Available Skills
 
-Skills discovered using either of these mechanisms are "available",
-but not enabled by default.  To enable one or more skills, use the
-[`skill_configs` stanza](installation.md#enabling-skill-configurations)
+All discovered skills are enabled by default. To restrict an installation
+to selected skills, use the
+[`skill_configs` stanza](installation.md#selecting-skill-configurations)
 in the installation configuration file.
 
 ## Configuring Room-Specific Skills
