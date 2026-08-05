@@ -240,18 +240,19 @@ filesystem_skills_paths:
   -
 ```
 
-## Enabling Skill Configurations
+## Selecting Skill Configurations
 
-To enable discovered filesystem or entrypoint skills, add them to the
-`skill_configs` stanza of the installation configuration.  E.g.:
+All discovered filesystem skills are enabled by default. If `skill_configs`
+contains any entries, it acts as a whitelist. For example:
 
 ```yaml
 skill_configs:
   - skill_name: "bare-bones"
     kind: "filesystem"
-  - skill_name: "image-generation"
-    kind: "entrypoint"
 ```
+
+With this configuration, discovered skills other than `bare-bones` cannot
+be referenced by other parts of the configuration, such as rooms.
 
 Discovered skills which are not mentioned in this stanza cannot be
 referenced by other parts of the configuration, e.g. rooms.
