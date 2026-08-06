@@ -58,18 +58,32 @@ class MissingEnvVar(ValueError):
 
 
 class MissingEnvVars(ExceptionGroup, ValueError):
+    failed = ()
+
     def __init__(self, env_vars, excs):
-        self.env_vars = env_vars
         super().__init__(
             f"Environment variables cannot be resolved: {env_vars}",
             excs,
         )
+
+    @classmethod
+    def from_failed(cls, failed, excs):
+        msg = ",".join(failed)
+        inst = cls(msg, excs)
+        inst.failed = failed
+        return inst
 
 
 class UnknownEnvironmentVariable(KeyError):
     def __init__(self, env_var):
         self.env_var = env_var
         super().__init__(f"Unknown environment variable '{env_var}'")
+
+
+class UnsupportedInstallationSkillKind(ValueError):
+    def __init__(self, kind):
+        self.kind = kind
+        super().__init__(f"Unsupported installation skill kind: {kind}")
 
 
 # ============================================================================
@@ -211,9 +225,7 @@ def resolve_skill_configs(
 
     for entry in explicit:
         if entry["kind"] != config_skills.SkillKind.FILESYSTEM:
-            raise ValueError(  # noqa: TRY003
-                f"Unsupported installation skill kind: {entry['kind']}"
-            )
+            raise UnsupportedInstallationSkillKind(entry["kind"])
         skill_name = entry["skill_name"]
         selected[skill_name] = available[skill_name]
 
@@ -508,7 +520,9 @@ class InstallationConfig:
                 failed.append(exc.env_var)
 
         if excs:
-            raise MissingEnvVars(",".join(failed), excs)  # noqa: TRY301
+            # 'BaseExceeptionGroup.__new__' *requires* a 'str' for the
+            # first agument
+            raise MissingEnvVars.from_failed(failed, excs)
 
         self.environment = {
             key: resolve_file_prefix(value, self._config_path)
