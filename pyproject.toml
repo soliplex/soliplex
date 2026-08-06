@@ -20,7 +20,7 @@ dependencies = [
     "alembic >= 1.18.4, < 1.19",
     "authlib",
     "bubble-sandbox >= 0.10.0, < 0.11",
-    "cryptography >= 49.0.0",  # GHSA-537c-gmf6-5ccf
+    "cryptography >= 50.0.0",  # PYSEC-2026-3552
     "fastapi",
     "fastmcp >= 3.3.0, < 3.4",
     "fakeredis != 2.35.0",  # brownbag
