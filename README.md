@@ -106,6 +106,26 @@ most users. To run Soliplex from a checkout of this repository instead, see:
 - [Client Setup](docs/client.md) -- run the Flutter web client.
 - [Docker Deployment](docs/docker.md) -- run the full stack with Docker Compose.
 
+## Documentation
+
+The full documentation set lives in [`docs/`](docs/) and is published as a
+[Zensical site](https://soliplex.github.io/soliplex/):
+
+> **Tip:** the same documentation is also available as the `soliplex-docs`
+> Agent Skill, so a skills-compatible agent can answer questions straight from
+> it -- see the [Quickstart](#quickstart) above.
+
+- [Overview](docs/overview.md)
+- [Prerequisites](docs/prerequisites.md)
+- [Server Setup](docs/server/index.md) and
+  [CLI Reference](docs/server/cli.md)
+- [Client Setup](docs/client.md)
+- [Docker Deployment](docs/docker.md)
+- [RAG Database](docs/rag.md)
+- [Documentation Skill](docs/docs-skill.md)
+- [Configuration](docs/config/)
+- [Usage](docs/usage.md)
+
 ## Configuration
 
 Soliplex is configured by a tree of YAML files rooted at an
@@ -128,26 +148,6 @@ Soliplex is configured by a tree of YAML files rooted at an
 - [Logfire](docs/config/logfire.md),
   [Console logging](docs/config/logging.md),
   [SQLAlchemy DBURIs](docs/config/dburis.md)
-
-## Documentation
-
-The full documentation set lives in [`docs/`](docs/) and is published as a
-[Zensical site](https://soliplex.github.io/soliplex/):
-
-> **Tip:** the same documentation is also available as the `soliplex-docs`
-> Agent Skill, so a skills-compatible agent can answer questions straight from
-> it -- see the [Quickstart](#quickstart) above.
-
-- [Overview](docs/overview.md)
-- [Prerequisites](docs/prerequisites.md)
-- [Server Setup](docs/server/index.md) and
-  [CLI Reference](docs/server/cli.md)
-- [Client Setup](docs/client.md)
-- [Docker Deployment](docs/docker.md)
-- [RAG Database](docs/rag.md)
-- [Documentation Skill](docs/docs-skill.md)
-- [Configuration](docs/config/)
-- [Usage](docs/usage.md)
 
 ## Development
 
