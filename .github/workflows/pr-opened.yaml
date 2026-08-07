@@ -1,22 +1,39 @@
 name: Notify Slack on New PR
 
+# Use `pull_request_target` rather than `pull_request` so the run happens in
+# the context of the base repository and can therefore see
+# `secrets.SLACK_NOTIFY_URL`. Fork PRs get no secrets at all under
+# `pull_request`, so this job failed for every external contribution (#1199).
+#
+# That is only safe because this job never checks out or executes any code
+# from the pull request: it reads event metadata and nothing else. Do not add
+# a checkout of `github.event.pull_request.head.sha` here.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened]
+
+permissions: {}
 
 jobs:
   notify:
     runs-on: ubuntu-latest
+    env:
+      # A real newline; `toJSON` below escapes it as `\n` in the payload.
+      NEWLINE: "\n"
     steps:
       - name: Send Slack notification when new PR is opened
         uses: slackapi/slack-github-action@v3
         with:
           webhook: ${{ secrets.SLACK_NOTIFY_URL }}
           webhook-type: incoming-webhook
+          # The PR title and author login are attacker-controlled, and this
+          # job now runs with secrets in scope. Build the message with
+          # `format` and let `toJSON` emit it as a single, correctly escaped
+          # JSON string instead of splicing raw text into the payload.
           payload: |
             {
               "channel": "#soliplex",
               "username": "soliplex",
-              "text": ":bell: New Pull Request by *${{ github.event.pull_request.user.login }}*:\n*${{ github.event.pull_request.title }}*\n${{ github.event.pull_request.html_url }}",
+              "text": ${{ toJSON(format(':bell: New Pull Request by *{0}*:{3}*{1}*{3}{2}', github.event.pull_request.user.login, github.event.pull_request.title, github.event.pull_request.html_url, env.NEWLINE)) }},
               "icon_emoji": ":ghost:"
             }
