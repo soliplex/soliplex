@@ -30,9 +30,48 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      # A push that creates a branch carries no usable base ('before' is all
+      # zeros), and the action then scans the whole repository history --
+      # failing CI on pre-existing commits rather than on the change under
+      # review (#1204). Pin the range explicitly instead.
+      #
+      # 'pull_request' and 'workflow_dispatch' skip this step, leaving both
+      # outputs empty: the pull-request path already scans just the diff,
+      # and a manual dispatch keeps the full-history scan for one-off audits.
+      - name: Determine push scan range
+        id: range
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SHA: ${{ github.sha }}
+        run: |
+          base="$BEFORE"
+          if [ -z "$base" ] \
+             || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            # Newly created branch: scan what it adds over the default.
+            base="origin/$DEFAULT_BRANCH"
+          fi
+          base_sha="$(git rev-parse --verify --quiet "${base}^{commit}" || true)"
+          head_sha="$(git rev-parse --verify "${SHA}^{commit}")"
+          if [ -z "$base_sha" ]; then
+            echo "Could not resolve '$base'; leaving the range unset."
+          elif [ "$base_sha" = "$head_sha" ]; then
+            echo "No new commits relative to '$base'; skipping the scan."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Scanning ${base_sha}..${head_sha}"
+            echo "base=$base_sha" >> "$GITHUB_OUTPUT"
+            echo "head=$head_sha" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: TruffleHog scan
+        if: steps.range.outputs.skip != 'true'
         uses: trufflesecurity/trufflehog@main
         with:
+          base: ${{ steps.range.outputs.base }}
+          head: ${{ steps.range.outputs.head }}
           extra_args: --only-verified
 
       # Slack notification lives in 'ci-failure-notify.yaml', which only
