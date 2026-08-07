@@ -52,24 +52,37 @@ jobs:
       # runners have few cores, so 'auto' is portable here (locally, '-n 8'
       # on a 16-core box is faster -- see README "Running tests").
       - name: Run unit tests with coverage
-        run: uv run py.test -s -n auto ${{ matrix.pytest-args }}
+        run: |
+          set -o pipefail
+          uv run py.test -s -n auto ${{ matrix.pytest-args }} 2>&1 \
+            | tee unit-tests.log
 
       # Functional tests run serially: they share on-disk state (e.g. the
       # 'sandbox/workdirs' tree, keyed by a constant room id) and
       # module-scoped app fixtures, so xdist workers race each other.
       - name: Run functional tests
-        run: uv run py.test -s --no-cov -m "not needs_llm" tests/functional/
+        run: |
+          set -o pipefail
+          uv run py.test -s --no-cov -m "not needs_llm" tests/functional/ 2>&1 \
+            | tee functional-tests.log
 
-      - name: Notify Slack on failure
+      # Slack notification lives in 'ci-failure-notify.yaml', which only
+      # links to this run (see #1203), so record what failed here.
+      - name: Summarize failures
         if: failure()
-        uses: slackapi/slack-github-action@v3
-        with:
-          webhook: ${{ secrets.SLACK_NOTIFY_URL }}
-          webhook-type: incoming-webhook
-          payload: |
-            {
-              "channel": "#soliplex",
-              "username": "soliplex",
-              "text": ":x: ${{ github.workflow }} failed on ${{ github.head_ref }}:\n${{ github.event.head_commit.message }}\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "icon_emoji": ":ghost:"
-            }
+        run: |
+          {
+            echo "## Python ${{ matrix.python-version }} failed"
+            echo
+            for log in unit-tests.log functional-tests.log; do
+              [ -f "$log" ] || continue
+              echo "<details><summary>$log (last 50 lines)</summary>"
+              echo
+              echo '```'
+              tail -n 50 "$log"
+              echo '```'
+              echo
+              echo "</details>"
+              echo
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

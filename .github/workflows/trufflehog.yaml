@@ -1,9 +1,20 @@
 name: TruffleHog Secrets Scan
 
+# The 'push' and 'pull_request' triggers deliberately overlap: 'push'
+# covers every branch (this repo uses release branches extensively), and
+# 'pull_request' adds fork-generated PRs, whose commits are never pushed to
+# this repository. A same-repo PR branch therefore scans twice; the scan is
+# cheap, so that is preferred over leaving fork PRs unscanned (#1203).
+#
+# 'pull_request' (never 'pull_request_target') is what makes this safe: the
+# job checks out untrusted code, so it must run without secrets and with a
+# read-only token. Do not add secrets to this workflow -- failure
+# notification lives in 'ci-failure-notify.yaml'.
 on:
   push:
     branches:
       - '**'
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -24,21 +35,16 @@ jobs:
         with:
           extra_args: --only-verified
 
-  notify-failure:
-    runs-on: ubuntu-latest
-    needs: [trufflehog]
-    if: failure()
-    timeout-minutes: 2
-    steps:
-      - name: Notify Slack on failure
-        uses: slackapi/slack-github-action@v3
-        with:
-          webhook: ${{ secrets.SLACK_NOTIFY_URL }}
-          webhook-type: incoming-webhook
-          payload: |
-            {
-              "channel": "#soliplex",
-              "username": "soliplex",
-              "text": ":rotating_light: ${{ github.workflow }} failed on ${{ github.head_ref || github.ref_name }}:\n${{ github.event.head_commit.message }}\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "icon_emoji": ":ghost:"
-            }
+      # Slack notification lives in 'ci-failure-notify.yaml', which only
+      # links to this run (see #1203). The action reports its findings to
+      # stdout rather than to a file we control, so point at the step log
+      # instead of restating the detectors here.
+      - name: Summarize TruffleHog findings
+        if: failure()
+        run: |
+          {
+            echo "## TruffleHog: verified secrets detected"
+            echo
+            echo "See the **TruffleHog scan** step log in this run for the"
+            echo "matched detectors and their locations."
+          } >> "$GITHUB_STEP_SUMMARY"
