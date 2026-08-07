@@ -45,21 +45,32 @@ jobs:
         run: uv sync --frozen --group dev
 
       - name: Check formatting
-        run: uv run ruff format --check
+        run: |
+          set -o pipefail
+          uv run ruff format --check 2>&1 | tee ruff-format.log
 
       - name: Run ruff linter
-        run: uv run ruff check
+        run: |
+          set -o pipefail
+          uv run ruff check 2>&1 | tee ruff-check.log
 
-      - name: Notify Slack on failure
+      # Slack notification lives in 'ci-failure-notify.yaml', which only
+      # links to this run (see #1203), so record what failed here.
+      - name: Summarize failures
         if: failure()
-        uses: slackapi/slack-github-action@v3
-        with:
-          webhook: ${{ secrets.SLACK_NOTIFY_URL }}
-          webhook-type: incoming-webhook
-          payload: |
-            {
-              "channel": "#soliplex",
-              "username": "soliplex",
-              "text": ":x: ${{ github.workflow }} failed on ${{ github.head_ref }}:\n${{ github.event.head_commit.message }}\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "icon_emoji": ":ghost:"
-            }
+        run: |
+          {
+            echo "## Linting failed"
+            echo
+            for log in ruff-format.log ruff-check.log; do
+              [ -f "$log" ] || continue
+              echo "<details><summary>$log</summary>"
+              echo
+              echo '```'
+              tail -n 100 "$log"
+              echo '```'
+              echo
+              echo "</details>"
+              echo
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

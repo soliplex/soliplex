@@ -1,9 +1,20 @@
 name: Gitleaks Secret Scan
 
+# The 'push' and 'pull_request' triggers deliberately overlap: 'push'
+# covers every branch (this repo uses release branches extensively), and
+# 'pull_request' adds fork-generated PRs, whose commits are never pushed to
+# this repository. A same-repo PR branch therefore scans twice; the scan is
+# cheap, so that is preferred over leaving fork PRs unscanned (#1203).
+#
+# 'pull_request' (never 'pull_request_target') is what makes this safe: the
+# job checks out untrusted code, so it must run without secrets and with a
+# read-only token. Do not add secrets to this workflow -- failure
+# notification lives in 'ci-failure-notify.yaml'.
 on:
   push:
     branches:
       - '**'
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -27,29 +38,28 @@ jobs:
         with:
           args: detect --source=/github/workspace --config=/github/workspace/.gitleaks.toml --no-git --verbose --redact --report-format json --report-path /github/workspace/gitleaks-report.json
 
-      - name: Parse Gitleaks report
-        id: parse-report
+      # Slack notification lives in 'ci-failure-notify.yaml', which only
+      # links to this run (see #1203), so record the findings here. The
+      # report is generated with '--redact', and only the location fields
+      # are surfaced, so no secret material reaches the summary.
+      - name: Summarize Gitleaks findings
         if: steps.gitleaks.outcome == 'failure'
         run: |
-          if [ -f gitleaks-report.json ]; then
-            FILES=$(jq -r '[.[].File] | unique | .[]' gitleaks-report.json | head -10 | tr '\n' ', ' | sed 's/,$//')
-            echo "matched_files=$FILES" >> $GITHUB_OUTPUT
-          else
-            echo "matched_files=unknown" >> $GITHUB_OUTPUT
-          fi
+          {
+            echo "## Gitleaks: potential secrets detected"
+            echo
+            if [ -f gitleaks-report.json ]; then
+              echo "| File | Rule | Line |"
+              echo "| --- | --- | --- |"
+              jq -r '.[0:50][] | "| \(.File) | \(.RuleID) | \(.StartLine) |"' \
+                gitleaks-report.json
+              echo
+              echo "Total findings: $(jq -r 'length' gitleaks-report.json)"
+            else
+              echo "No report file was produced; see the job log."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if secrets found
         if: steps.gitleaks.outcome == 'failure'
         run: exit 1
-
-      - name: Notify Slack on failure
-        if: failure()
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY_URL }}
-          SLACK_CHANNEL: soliplex
-          SLACK_USERNAME: gitleaks-ci
-          SLACK_ICON_EMOJI: ':rotating_light:'
-          SLACK_COLOR: danger
-          SLACK_TITLE: Gitleaks Secret Scan Failed
-          SLACK_MESSAGE: 'Potential secrets detected on ${{ github.ref_name }} in: ${{ steps.parse-report.outputs.matched_files }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n $GITHUB_OUTPUT'

@@ -1,0 +1,46 @@
+name: Notify Slack on CI failure
+
+# The workflows listed below check out untrusted pull-request code, so they
+# must never hold `secrets.SLACK_NOTIFY_URL` (#1203). They also see no
+# secrets at all when triggered by a fork PR, which made their inline Slack
+# steps fail rather than notify (#1199).
+#
+# `workflow_run` always runs in the base-repository context with secrets
+# available, whatever repository the triggering run came from, so the
+# notification lives here instead. It links to the failing run; the run's
+# own step summary carries the details.
+on:
+  workflow_run:
+    workflows:
+      - "Gitleaks Secret Scan"
+      - "TruffleHog Secrets Scan"
+      - "Python tests/coverage"
+      - "Python linting"
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  notify:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      # A real newline; `toJSON` below escapes it as `\n` in the payload.
+      NEWLINE: "\n"
+    steps:
+      - name: Send Slack notification for the failed run
+        uses: slackapi/slack-github-action@v3
+        with:
+          webhook: ${{ secrets.SLACK_NOTIFY_URL }}
+          webhook-type: incoming-webhook
+          # The branch name and run title come from the contributor's fork,
+          # so build the message with `format` and let `toJSON` emit it as a
+          # single, correctly escaped JSON string.
+          payload: |
+            {
+              "channel": "#soliplex",
+              "username": "soliplex",
+              "text": ${{ toJSON(format(':x: *{0}* failed on `{1}`:{4}{2}{4}{3}', github.event.workflow_run.name, github.event.workflow_run.head_branch, github.event.workflow_run.display_title, github.event.workflow_run.html_url, env.NEWLINE)) }},
+              "icon_emoji": ":ghost:"
+            }
