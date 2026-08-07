@@ -2,6 +2,17 @@
 
 An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface.
 
+## Overview
+
+Soliplex is a self-hosted, full-stack RAG/AI system: a FastAPI backend
+(a thin configuration and authentication layer around
+[pydantic-ai](https://ai.pydantic.dev/)), a hardened
+[Flutter client](https://github.com/soliplex/frontend), and a terminal UI.
+
+See the [Overview](docs/overview.md) for what Soliplex is, when (and when not)
+to use it, how it compares to alternatives, and the full feature and
+architecture breakdown.
+
 ## Quickstart
 
 The fastest way to stand up and run your own Soliplex is to let a
@@ -78,17 +89,6 @@ and then *"What is a Soliplex installation?"*
 > The remainder of this README covers running Soliplex from a source checkout
 > and developing on the backend itself. If you only want to *use* Soliplex,
 > the two skills above are all you need.
-
-## Overview
-
-Soliplex is a self-hosted, full-stack RAG/AI system: a FastAPI backend
-(a thin configuration and authentication layer around
-[pydantic-ai](https://ai.pydantic.dev/)), a hardened
-[Flutter client](https://github.com/soliplex/frontend), and a terminal UI.
-
-See the [Overview](docs/overview.md) for what Soliplex is, when (and when not)
-to use it, how it compares to alternatives, and the full feature and
-architecture breakdown.
 
 ## Running from source
 
