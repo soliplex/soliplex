@@ -281,10 +281,9 @@ class RoomConfig:
 
         for source, cfg in candidates:
             if isinstance(cfg, config_rag.RAGConfigProtocol):
-                hr_config = getattr(cfg, "haiku_rag_config", None)
                 hrc_kw = {
                     "db_path": cfg.rag_lancedb_path,
-                    "config": hr_config,
+                    "config": cfg.haiku_rag_config,
                     "read_only": True,
                 }
 
