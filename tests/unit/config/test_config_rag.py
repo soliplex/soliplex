@@ -99,6 +99,8 @@ def test__rcb_ctor(
         rcb_config = config_rag._RAGConfigBase(**kw)
 
     if isinstance(ctor_which, str):
+        assert isinstance(rcb_config, config_rag.RAGConfigProtocol)
+
         if ctor_which == "stem":
             expected = from_stem
         else:

@@ -8,6 +8,7 @@ from . import _utils
 from . import agents as config_agents
 from . import exceptions as config_exc
 from . import quizzes as config_quizzes
+from . import rag as config_rag
 from . import skills as config_skills
 from . import tools as config_tools
 
@@ -279,9 +280,8 @@ class RoomConfig:
         )
 
         for source, cfg in candidates:
-            hr_config = getattr(cfg, "haiku_rag_config", None)
-
-            if hr_config is not None:
+            if isinstance(cfg, config_rag.RAGConfigProtocol):
+                hr_config = getattr(cfg, "haiku_rag_config", None)
                 hrc_kw = {
                     "db_path": cfg.rag_lancedb_path,
                     "config": hr_config,

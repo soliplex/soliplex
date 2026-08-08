@@ -1,7 +1,9 @@
 from __future__ import annotations  # forward refs in typing decls
 
+import abc
 import dataclasses
 import pathlib
+import typing
 
 from haiku.rag import config as hr_config
 
@@ -37,6 +39,23 @@ class RagDbFileNotFound(ValueError):
             f"RAG DB file not found: {rag_db_filename} "
             f"(configured in {_config_path})"
         )
+
+
+@typing.runtime_checkable
+class RAGConfigProtocol(typing.Protocol):
+    """Expose a single haiku-rag configuration and lancedb path"""
+
+    @property
+    @abc.abstractmethod
+    def haiku_rag_config(self) -> hr_config.AppConfig:
+        """Populate a haiku-rag config object w/ room-level overrides"""
+        ...
+
+    @property
+    @abc.abstractmethod
+    def rag_lancedb_path(self) -> pathlib.Path:
+        """Compute the path for the room's RAG rag_lancedb_path database"""
+        ...
 
 
 @dataclasses.dataclass(kw_only=True)
