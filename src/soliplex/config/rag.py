@@ -43,13 +43,18 @@ class RagDbFileNotFound(ValueError):
 
 @typing.runtime_checkable
 class RAGConfigProtocol(typing.Protocol):
-    """Expose a single haiku-rag configuration and lancedb path"""
+    """Expose a haiku-rag configuration"""
 
     @property
     @abc.abstractmethod
     def haiku_rag_config(self) -> hr_config.AppConfig:
         """Populate a haiku-rag config object w/ room-level overrides"""
         ...
+
+
+@typing.runtime_checkable
+class SingleRAGDatabaseProtocol(typing.Protocol):
+    """Expose a single lancedb path"""
 
     @property
     @abc.abstractmethod
@@ -58,31 +63,28 @@ class RAGConfigProtocol(typing.Protocol):
         ...
 
 
+@typing.runtime_checkable
+class MultipleRAGDatabasesProtocol(typing.Protocol):
+    """Expose a list of lancedb paths"""
+
+    @property
+    @abc.abstractmethod
+    def rag_lancedb_paths(self) -> list[pathlib.Path]:
+        """Compute the paths for the room's RAG rag_lancedb_path databases"""
+        ...
+
+
 @dataclasses.dataclass(kw_only=True)
 class _RAGConfigBase:
-    # Set in '__post_init__' below
-    _rag_lancedb_path: pathlib.Path = None
+    """Base class for configs which expose a 'haiku_rag_config' property"""
 
-    # One of these two options must be specified
-    rag_lancedb_stem: str = None
-    rag_lancedb_override_path: str = None
+    _haiku_rag_config: hr_config.AppConfig | None = None
 
     # Normally set via subclass 'from_yaml'
     _installation_config: InstallationConfig = (  # noqa F821 cycle
         _utils._no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
-    _haiku_rag_config: hr_config.AppConfig | None = None
-
-    def __post_init__(self):
-        exclusive_required = [
-            self.rag_lancedb_stem,
-            self.rag_lancedb_override_path,
-        ]
-        passed = list(filter(None, exclusive_required))
-
-        if len(list(passed)) != 1:
-            raise RagDbExactlyOneOfStemOrOverride(self._config_path)
 
     @property
     def haiku_rag_config(self) -> hr_config.AppConfig:
@@ -116,9 +118,34 @@ class _RAGConfigBase:
 
         return self._haiku_rag_config
 
+
+@dataclasses.dataclass(kw_only=True)
+class _RAGDatabaseBase:
+    """Base class for configs which expose a 'rag_lancedb_path' property"""
+
+    # One of these two options must be specified
+    rag_lancedb_stem: str = None
+    rag_lancedb_override_path: str = None
+
+    # Normally set via subclass 'from_yaml'
+    _installation_config: InstallationConfig = (  # noqa F821 cycle
+        _utils._no_repr_no_compare_none()
+    )
+    _config_path: pathlib.Path = None
+
+    def __post_init__(self):
+        exclusive_required = [
+            self.rag_lancedb_stem,
+            self.rag_lancedb_override_path,
+        ]
+        passed = list(filter(None, exclusive_required))
+
+        if len(list(passed)) != 1:
+            raise RagDbExactlyOneOfStemOrOverride(self._config_path)
+
     @property
     def rag_lancedb_path(self) -> pathlib.Path:
-        """Compute the path for the room's RAG rag_lancedb_path database"""
+        """Compute the path for the database"""
         if self.rag_lancedb_override_path is not None:
             rsop = self.rag_lancedb_override_path
 
@@ -153,3 +180,14 @@ class _RAGConfigBase:
         return {
             "rag_lancedb_path": rag_lancedb_path,
         }
+
+
+@dataclasses.dataclass(kw_only=True)
+class _MultiRAGDatabasesBase:
+    """Base class for configs which expose a 'rag_lancedb_paths' property"""
+
+    db_configs: list[SingleRAGDatabaseProtocol] = _utils._default_list_field()
+
+    @property
+    def rag_lancedb_paths(self):
+        return [cfg.rag_lancedb_path for cfg in self.db_configs]
