@@ -133,6 +133,7 @@ def test_haiku_rag_capability_config(
     assert config.allowed_tools == []
     assert config.metadata == {}
     assert config.extra_parameters == {"rag_lancedb_path": db_path}
+    assert config.rag_lancedb_override_path == db_path
     assert config.as_yaml == {
         "kind": config.kind,
         "rag_lancedb_override_path": str(db_path),

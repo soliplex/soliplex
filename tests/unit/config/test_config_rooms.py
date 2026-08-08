@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import pathlib
 from unittest import mock
 
 import pytest
@@ -69,7 +70,7 @@ skills:
         - "{test_skills.SKILL_NAME}"
 """
 
-LANCE_DB_OVERRIDE_PATH = "/tmp/rag.lancedb"
+LANCE_DB_OVERRIDE_PATH = pathlib.Path("/tmp/rag.lancedb")
 
 W_HR_SKILLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
     "skills": config_skills.RoomSkillsConfig(

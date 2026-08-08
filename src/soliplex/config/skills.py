@@ -209,6 +209,16 @@ class _HaikuRAGCapabilityConfig(config_rag._RAGConfigBase):
     ):
         try:
             config_dict.pop("kind", None)
+
+            rldb_override_path = config_dict.pop(
+                "rag_lancedb_override_path",
+                None,
+            )
+            if rldb_override_path is not None:
+                config_dict["rag_lancedb_override_path"] = pathlib.Path(
+                    rldb_override_path
+                )
+
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
             return cls(**config_dict)
@@ -241,7 +251,7 @@ class _HaikuRAGCapabilityConfig(config_rag._RAGConfigBase):
         if self.rag_lancedb_stem is not None:
             result["rag_lancedb_stem"] = self.rag_lancedb_stem
         else:
-            result["rag_lancedb_override_path"] = (
+            result["rag_lancedb_override_path"] = str(
                 self.rag_lancedb_override_path
             )
         return result
