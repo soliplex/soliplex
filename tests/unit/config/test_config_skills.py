@@ -1,3 +1,4 @@
+import contextlib
 import importlib.metadata
 import types
 from unittest import mock
@@ -168,6 +169,83 @@ def test_haiku_rag_capability_config_wraps_yaml_errors(
             temp_dir / "room.yaml",
             {"kind": config_skills.HR_RAG_SkillConfig.kind},
         )
+
+
+@pytest.mark.parametrize(
+    "config_class, capability_class, state_namespace, extra_kw, expectation",
+    [
+        (
+            config_skills.HR_MultiRAG_Search_SkillConfig,
+            config_skills.HR_MultiRAG_Search_Capability,
+            hr_rag.STATE_NAMESPACE,
+            {},
+            contextlib.nullcontext(),
+        ),
+        (
+            config_skills.HR_MultiRAG_Analysis_SkillConfig,
+            config_skills.HR_MultiRAG_Analysis_Capability,
+            hr_analysis.STATE_NAMESPACE,
+            {},
+            contextlib.nullcontext(),
+        ),
+        (
+            config_skills.HR_MultiRAG_Search_SkillConfig,
+            config_skills.HR_MultiRAG_Search_Capability,
+            hr_rag.STATE_NAMESPACE,
+            {"foo": "bar"},
+            pytest.raises(config_exc.FromYamlException),
+        ),
+    ],
+)
+def test_haiku_multi_rag_capability_config(
+    temp_dir,
+    installation_config,
+    config_class,
+    capability_class,
+    state_namespace,
+    extra_kw,
+    expectation,
+):
+    db_path = temp_dir / "rag.lancedb"
+    db_path.mkdir()
+    config_path = temp_dir / "room.yaml"
+
+    with expectation as expected:
+        config = config_class.from_yaml(
+            installation_config,
+            config_path,
+            {
+                "kind": config_class.kind,
+                "db_configs": [
+                    {"rag_lancedb_override_path": str(db_path)},
+                ],
+            }
+            | extra_kw,
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        capability = config.capability
+        assert isinstance(capability, capability_class)
+        assert capability.db_paths == [db_path]
+        assert capability.defer_loading is True
+        assert config.name == config_class.capability_name
+        assert config.agui_feature_names == (state_namespace,)
+        assert config.source is config_skills.SkillKind.NATIVE
+        assert config.license is None
+        assert config.compatibility is None
+        assert config.allowed_tools == []
+        assert config.metadata == {}
+        assert config.extra_parameters == {"rag_lancedb_paths": [db_path]}
+
+        (db_config,) = config.db_configs
+        assert db_config.rag_lancedb_override_path == db_path
+
+        assert config.as_yaml == {
+            "kind": config.kind,
+            "db_configs": [
+                {"rag_lancedb_override_path": str(db_path)},
+            ],
+        }
 
 
 def test_bwrap_sandbox_config_from_yaml(installation_config, temp_dir):

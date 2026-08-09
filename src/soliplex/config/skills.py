@@ -10,6 +10,7 @@ import typing
 import pydantic
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
+from haiku.rag import config as hr_config
 from haiku.rag.capabilities import analysis as hr_analysis
 from haiku.rag.capabilities import rag as hr_rag
 from pydantic_ai import capabilities as ai_capabilities
@@ -300,6 +301,180 @@ class HR_Analysis_SkillConfig(_HaikuRAGCapabilityConfig):
     capability_name = "rag-analysis"
     description = (
         "Analyze the haiku.rag corpus with search and sandboxed Python code."
+    )
+    state_namespace = hr_analysis.STATE_NAMESPACE
+    state_type = hr_analysis.AnalysisState
+
+
+@dataclasses.dataclass(kw_only=True)
+class _HaikuMultiRAGCapabilityConfig(
+    config_rag._RAGConfigBase,
+    config_rag._MultiRAGDatabasesBase,
+):
+    capability_factory: typing.ClassVar[typing.Callable]
+    capability_name: typing.ClassVar[str]
+    description: typing.ClassVar[str]
+    state_namespace: typing.ClassVar[str]
+    state_type: typing.ClassVar[type[pydantic.BaseModel]]
+    source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,  # noqa F821 cycles
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            config_dict.pop("kind", None)
+
+            yaml_db_configs = config_dict.pop("db_configs", [])
+            db_configs = config_dict["db_configs"] = []
+
+            for yaml_db_config in yaml_db_configs:
+                db_configs.append(
+                    config_rag.RAGDatabaseConfig.from_yaml(
+                        installation_config=installation_config,
+                        config_path=config_path,
+                        config_dict=yaml_db_config,
+                    )
+                )
+
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+            return cls(**config_dict)
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                cls.state_namespace,
+                config_dict,
+            ) from exc
+
+    @property
+    def name(self) -> str:
+        return self.capability_name
+
+    @property
+    def capability(self) -> ai_capabilities.AbstractCapability:
+        return type(self).capability_factory(
+            db_paths=self.rag_lancedb_paths,
+            config=self.haiku_rag_config,
+            defer_loading=True,
+        )
+
+    @property
+    def agui_feature_names(self) -> tuple[str, ...]:
+        return (self.state_namespace,)
+
+    @property
+    def as_yaml(self) -> dict:
+        return {
+            "kind": self.kind,
+            "db_configs": [db_config.as_yaml for db_config in self.db_configs],
+        }
+
+    @property
+    def license(self) -> None:
+        return None
+
+    @property
+    def compatibility(self) -> None:
+        return None
+
+    @property
+    def allowed_tools(self) -> list[str]:
+        return []
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {}
+
+    @property
+    def extra_parameters(self) -> dict[str, typing.Any]:
+        return {
+            "rag_lancedb_paths": self.rag_lancedb_paths,
+        }
+
+
+@dataclasses.dataclass(kw_only=True)
+class HR_MultiRAG_Search_Capability:
+    """Placeholder for search over multiple RAG dbs + rerank"""
+
+    db_paths: list[pathlib.Path] = _utils._default_list_field()
+    defer_loading: bool = False
+
+
+def create_multirag_search_capability(
+    db_paths: list[pathlib.Path] | None = None,
+    config: hr_config.AppConfig | None = None,
+    *,
+    defer_loading: bool = True,
+    request_limit: int | None = 20,
+    vision: bool | None = None,
+) -> HR_MultiRAG_Search_Capability:
+    """Create a native Pydantic AI RAG capability.
+
+    ``vision`` gates whether picture chunks are attached to search results as
+    images, and should reflect the model the hosting agent actually runs.
+    Defaults to ``config.qa.model.vision``.
+    """
+    return HR_MultiRAG_Search_Capability(
+        db_paths=db_paths,
+        defer_loading=defer_loading,
+    )
+
+
+@dataclasses.dataclass(kw_only=True)
+class HR_MultiRAG_Search_SkillConfig(_HaikuMultiRAGCapabilityConfig):
+    kind: typing.ClassVar[str] = "haiku.rag.skills.multirag"
+    # capability_factory = hr_rag.create_capability
+    capability_factory = create_multirag_search_capability  # placeholder
+    capability_name = "multirag"
+    description = (
+        "Search the haiku.rag knowledge base and cite evidence for grounded "
+        "answers using multiple RAG databases."
+    )
+    state_namespace = hr_rag.STATE_NAMESPACE
+    state_type = hr_rag.RAGState
+
+
+@dataclasses.dataclass(kw_only=True)
+class HR_MultiRAG_Analysis_Capability:
+    """Placeholder for analysis over multiple RAG dbs + rerank"""
+
+    db_paths: list[pathlib.Path] = _utils._default_list_field()
+    defer_loading: bool = False
+
+
+def create_multirag_analysis_capability(
+    db_paths: list[pathlib.Path] | None = None,
+    config: hr_config.AppConfig | None = None,
+    *,
+    defer_loading: bool = True,
+    request_limit: int | None = 20,
+    vision: bool | None = None,
+) -> HR_MultiRAG_Analysis_Capability:
+    """Create a native Pydantic AI RAG capability.
+
+    ``vision`` gates whether picture chunks are attached to search results as
+    images, and should reflect the model the hosting agent actually runs.
+    Defaults to ``config.qa.model.vision``.
+    """
+    return HR_MultiRAG_Analysis_Capability(
+        db_paths=db_paths,
+        defer_loading=defer_loading,
+    )
+
+
+@dataclasses.dataclass(kw_only=True)
+class HR_MultiRAG_Analysis_SkillConfig(_HaikuMultiRAGCapabilityConfig):
+    kind: typing.ClassVar[str] = "haiku.rag.skills.multirag-analysis"
+    # capability_factory = hr_analysis.create_capability
+    capability_factory = create_multirag_analysis_capability  # placeholder
+    capability_name = "multirag-analysis"
+    description = (
+        "Analyze the haiku.rag corpus with search and sandboxed Python code "
+        "using multiple RAG databases."
     )
     state_namespace = hr_analysis.STATE_NAMESPACE
     state_type = hr_analysis.AnalysisState

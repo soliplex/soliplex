@@ -8,7 +8,7 @@ import typing
 from haiku.rag import config as hr_config
 
 from . import _utils
-from . import exceptions
+from . import exceptions as config_exc
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -96,7 +96,7 @@ class _RAGConfigBase:
         """
         if self._haiku_rag_config is None:
             if self._config_path is None:
-                raise exceptions.NoConfigPath()
+                raise config_exc.NoConfigPath()
 
             base_config = self._installation_config.haiku_rag_config
 
@@ -183,10 +183,53 @@ class _RAGDatabaseBase:
 
 
 @dataclasses.dataclass(kw_only=True)
+class RAGDatabaseConfig(_RAGDatabaseBase):
+    """Database config held as part of a larger skill / tool config"""
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,  # noqa F821 cycles
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            rldb_override_path = config_dict.pop(
+                "rag_lancedb_override_path",
+                None,
+            )
+            if rldb_override_path is not None:
+                config_dict["rag_lancedb_override_path"] = pathlib.Path(
+                    rldb_override_path
+                )
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+
+            return cls(**config_dict)
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                "rag_database_config",
+                config_dict,
+            ) from exc
+
+    @property
+    def as_yaml(self) -> dict[str, typing.Any]:
+        result = {}
+        if self.rag_lancedb_stem is not None:
+            result["rag_lancedb_stem"] = self.rag_lancedb_stem
+        else:
+            result["rag_lancedb_override_path"] = str(
+                self.rag_lancedb_override_path
+            )
+        return result
+
+
+@dataclasses.dataclass(kw_only=True)
 class _MultiRAGDatabasesBase:
     """Base class for configs which expose a 'rag_lancedb_paths' property"""
 
-    db_configs: list[SingleRAGDatabaseProtocol] = _utils._default_list_field()
+    db_configs: list[RAGDatabaseConfig] = _utils._default_list_field()
 
     @property
     def rag_lancedb_paths(self):

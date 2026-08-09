@@ -202,6 +202,103 @@ def test__rdb_ctor(
             assert w_missing["rag_lancedb_path"].startswith("MISSING:")
 
 
+@pytest.mark.parametrize(
+    "w_kw, db_path_parent, db_path_name, expectation",
+    [
+        (
+            {},
+            None,
+            None,
+            pytest.raises(config_exc.FromYamlException),
+        ),
+        (
+            {"rag_lancedb_stem": "stem"},
+            "DB_RAG_PATH",
+            "stem.lancedb",
+            contextlib.nullcontext(),
+        ),
+        (
+            {"rag_lancedb_override_path": "override.lancedb"},
+            "TEMP_DIR",
+            "override.lancedb",
+            contextlib.nullcontext(),
+        ),
+    ],
+)
+def test_rdc_from_yaml(
+    temp_dir,
+    db_rag_path,
+    installation_config,
+    w_kw,
+    db_path_parent,
+    db_path_name,
+    expectation,
+):
+    w_kw = w_kw.copy()
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+
+    if db_path_parent == "DB_RAG_PATH":
+        exp_path = db_rag_path / db_path_name
+    elif db_path_parent == "TEMP_DIR":
+        exp_path = temp_dir / db_path_name
+        w_kw["rag_lancedb_override_path"] = str(temp_dir / "override.lancedb")
+    else:
+        exp_path = None
+
+    if exp_path is not None:
+        exp_path.mkdir()
+
+    with expectation as expected:
+        found = config_rag.RAGDatabaseConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=temp_dir,
+            config_dict=w_kw,
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert found.rag_lancedb_path == exp_path
+
+
+@pytest.mark.parametrize(
+    "w_kw, db_path_parent, db_path_name",
+    [
+        ({"rag_lancedb_stem": "stem"}, "DB_RAG_PATH", "stem.lancedb"),
+        (
+            {"rag_lancedb_override_path": "override.lancedb"},
+            "TEMP_DIR",
+            "override.lancedb",
+        ),
+    ],
+)
+def test_rdc_as_yaml(
+    temp_dir,
+    db_rag_path,
+    w_kw,
+    db_path_parent,
+    db_path_name,
+):
+    expected = w_kw.copy()
+    w_kw = w_kw.copy()
+
+    if db_path_parent == "DB_RAG_PATH":
+        exp_path = db_rag_path / db_path_name
+    else:  # TEMP_DIR
+        exp_path = temp_dir / db_path_name
+        real_override_path = temp_dir / "override.lancedb"
+        w_kw["rag_lancedb_override_path"] = real_override_path
+        expected["rag_lancedb_override_path"] = str(real_override_path)
+
+    exp_path.mkdir()
+
+    rdc = config_rag.RAGDatabaseConfig(**w_kw)
+
+    found = rdc.as_yaml
+
+    assert found == expected
+
+
 def test__mrdb_ctor_wo_db_configs():
     mrdb_config = config_rag._MultiRAGDatabasesBase()
 
@@ -209,14 +306,31 @@ def test__mrdb_ctor_wo_db_configs():
     assert mrdb_config.rag_lancedb_paths == []
 
 
-def test__mrdb_ctor_w_db_configs(db_rag_path):
-    db_override_path = db_rag_path / "test.lancedb"
+def test__mrdb_ctor_w_db_configs(installation_config, temp_dir, db_rag_path):
+    db_override_path = temp_dir / "override.lancedb"
     db_override_path.mkdir()
+    db_stem_path = db_rag_path / "stem.lancedb"
+    db_stem_path.mkdir()
 
-    db_config = config_rag._RAGDatabaseBase(
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+
+    w_override = config_rag.RAGDatabaseConfig(
         rag_lancedb_override_path=db_override_path,
+        _installation_config=installation_config,
+        _config_path=temp_dir,
     )
-    mrdb_config = config_rag._MultiRAGDatabasesBase(db_configs=[db_config])
+    w_stem = config_rag.RAGDatabaseConfig(
+        rag_lancedb_stem="stem",
+        _installation_config=installation_config,
+        _config_path=temp_dir,
+    )
+    mrdb_config = config_rag._MultiRAGDatabasesBase(
+        db_configs=[w_override, w_stem],
+    )
 
     assert isinstance(mrdb_config, config_rag.MultipleRAGDatabasesProtocol)
-    assert mrdb_config.rag_lancedb_paths == [db_override_path]
+    assert mrdb_config.rag_lancedb_paths == [
+        db_override_path,
+        db_stem_path,
+    ]
