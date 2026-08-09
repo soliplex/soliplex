@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 
+from soliplex.config import exceptions as config_exc
 from soliplex.config import secrets as config_secrets
 
 NoRaise = contextlib.nullcontext()
@@ -32,24 +33,45 @@ def test_envvarsecretsource_ctor(w_params, exp_env_var_name):
     assert source.extra_arguments == {"env_var_name": exp_env_var_name}
 
 
+@pytest.mark.parametrize(
+    "w_kind_kw, expectation",
+    [
+        ({}, contextlib.nullcontext()),
+        (
+            {"kind": config_secrets.EnvVarSecretSource.kind},
+            contextlib.nullcontext(),
+        ),
+        (
+            {"kind": "BOGUS"},
+            pytest.raises(config_exc.FromYamlException),
+        ),
+    ],
+)
 @pytest.mark.parametrize("yaml_config", [{}, {"env_var_name": ENV_VAR_NAME}])
-def test_envvarsecretsource_from_yaml(temp_dir, yaml_config):
+def test_envvarsecretsource_from_yaml(
+    temp_dir,
+    yaml_config,
+    w_kind_kw,
+    expectation,
+):
     config_path = temp_dir / "installation.yaml"
     yaml_config["secret_name"] = SECRET_NAME
 
-    source = config_secrets.EnvVarSecretSource.from_yaml(
-        config_path, yaml_config
-    )
+    with expectation as expected:
+        source = config_secrets.EnvVarSecretSource.from_yaml(
+            config_path, yaml_config | w_kind_kw
+        )
 
-    assert source._config_path == config_path
-    assert source.secret_name == SECRET_NAME
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert source._config_path == config_path
+        assert source.secret_name == SECRET_NAME
 
-    exp_env_var_name = (
-        ENV_VAR_NAME if "env_var_name" in yaml_config else SECRET_NAME
-    )
+        exp_env_var_name = (
+            ENV_VAR_NAME if "env_var_name" in yaml_config else SECRET_NAME
+        )
 
-    assert source.env_var_name == exp_env_var_name
-    assert source.extra_arguments == {"env_var_name": exp_env_var_name}
+        assert source.env_var_name == exp_env_var_name
+        assert source.extra_arguments == {"env_var_name": exp_env_var_name}
 
 
 @pytest.mark.parametrize("has_ev", [False, True])
@@ -72,19 +94,40 @@ def test_envvarsecretsource_as_yaml(has_ev):
     assert found == expected
 
 
+@pytest.mark.parametrize(
+    "w_kind_kw, expectation",
+    [
+        ({}, contextlib.nullcontext()),
+        (
+            {"kind": config_secrets.FilePathSecretSource.kind},
+            contextlib.nullcontext(),
+        ),
+        (
+            {"kind": "BOGUS"},
+            pytest.raises(config_exc.FromYamlException),
+        ),
+    ],
+)
 @pytest.mark.parametrize("file_path", ["/path/to/file", "./file"])
-def test_filepathsecretsource_from_yaml(temp_dir, file_path):
+def test_filepathsecretsource_from_yaml(
+    temp_dir,
+    file_path,
+    w_kind_kw,
+    expectation,
+):
     config_path = temp_dir / "installation.yaml"
     yaml_config = {"secret_name": SECRET_NAME, "file_path": file_path}
 
-    source = config_secrets.FilePathSecretSource.from_yaml(
-        config_path, yaml_config
-    )
+    with expectation as expected:
+        source = config_secrets.FilePathSecretSource.from_yaml(
+            config_path, yaml_config | w_kind_kw
+        )
 
-    assert source._config_path == config_path
-    assert source.secret_name == SECRET_NAME
-    assert source.file_path == file_path
-    assert source.extra_arguments == {"file_path": file_path}
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert source._config_path == config_path
+        assert source.secret_name == SECRET_NAME
+        assert source.file_path == file_path
+        assert source.extra_arguments == {"file_path": file_path}
 
 
 def test_filepathsecretsource_as_yaml():
@@ -107,20 +150,55 @@ def test_filepathsecretsource_as_yaml():
 
 
 @pytest.mark.parametrize(
-    "w_args, exp_command_line",
+    "w_kind_kw, expectation",
     [
-        ((), COMMAND),
-        (["-a", "foo"], f"{COMMAND} -a foo"),
+        ({}, contextlib.nullcontext()),
+        (
+            {"kind": config_secrets.SubprocessSecretSource.kind},
+            contextlib.nullcontext(),
+        ),
+        (
+            {"kind": "BOGUS"},
+            pytest.raises(config_exc.FromYamlException),
+        ),
     ],
 )
-def test_subprocess_secret_source_command_line(w_args, exp_command_line):
-    source = config_secrets.SubprocessSecretSource(
-        secret_name=SECRET_NAME,
-        command=COMMAND,
-        args=w_args,
-    )
-    assert source.command_line == exp_command_line
-    assert source.extra_arguments == {"command_line": exp_command_line}
+@pytest.mark.parametrize(
+    "command, args",
+    [
+        ("/bin/true", ()),
+        ("/bin/ls", ("-laF",)),
+    ],
+)
+def test_subprocesssecretsource_from_yaml(
+    temp_dir,
+    command,
+    args,
+    w_kind_kw,
+    expectation,
+):
+    config_path = temp_dir / "installation.yaml"
+    yaml_config = {"secret_name": SECRET_NAME, "command": command}
+
+    if args:
+        exp_args = yaml_config["args"] = args
+        exp_command_line = f"{command} {' '.join(args)}"
+    else:
+        exp_args = ()
+        exp_command_line = command
+
+    with expectation as expected:
+        source = config_secrets.SubprocessSecretSource.from_yaml(
+            config_path,
+            yaml_config | w_kind_kw,
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert source._config_path == config_path
+        assert source.secret_name == SECRET_NAME
+        assert source.command == command
+        assert source.args == exp_args
+        assert source.extra_arguments == {"command_line": exp_command_line}
 
 
 @pytest.mark.parametrize(
@@ -152,18 +230,47 @@ def test_subprocesssecretsource_as_yaml(w_args):
 
 
 @pytest.mark.parametrize(
+    "w_kind_kw, expectation",
+    [
+        ({}, contextlib.nullcontext()),
+        (
+            {"kind": config_secrets.RandomCharsSecretSource.kind},
+            contextlib.nullcontext(),
+        ),
+        (
+            {"kind": "BOGUS"},
+            pytest.raises(config_exc.FromYamlException),
+        ),
+    ],
+)
+@pytest.mark.parametrize(
     "kwargs, exp_nc",
     [
         ({}, 32),
         ({"n_chars": 17}, 17),
     ],
 )
-def test_randomcharssecretsource_extra_args(kwargs, exp_nc):
-    source = config_secrets.RandomCharsSecretSource(
-        secret_name=SECRET_NAME, **kwargs
-    )
+def test_randomsharssecretsource_from_yaml(
+    temp_dir,
+    kwargs,
+    exp_nc,
+    w_kind_kw,
+    expectation,
+):
+    config_path = temp_dir / "installation.yaml"
+    yaml_config = {"secret_name": SECRET_NAME} | kwargs
 
-    assert source.extra_arguments == {"n_chars": exp_nc}
+    with expectation as expected:
+        source = config_secrets.RandomCharsSecretSource.from_yaml(
+            config_path,
+            yaml_config | w_kind_kw,
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert source._config_path == config_path
+        assert source.secret_name == SECRET_NAME
+        assert source.n_chars == exp_nc
+        assert source.extra_arguments == {"n_chars": exp_nc}
 
 
 @pytest.mark.parametrize(
