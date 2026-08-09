@@ -30,6 +30,16 @@ class UnknownAppRoutingGroup(KeyError):
         )
 
 
+class AppRouterOperationKindMismatch(ValueError):
+    def __init__(self, found_kind, expected_kind):
+        self.found_kind = found_kind
+        self.expected_kind = expected_kind
+        super().__init__(
+            "App router operation kind mismatch: "
+            f"found '{found_kind}', expected '{expected_kind}'"
+        )
+
+
 @dataclasses.dataclass(kw_only=True)
 class APIRouterKwargs:
     prefix: str | None = "/api"
@@ -60,6 +70,25 @@ class _AppRouterOperationBase:
     kind: typing.ClassVar[str]
     group_name: str
 
+    @classmethod
+    def _check_kind(cls, kind):
+        if kind not in (None, cls.kind):
+            raise AppRouterOperationKindMismatch(kind, cls.kind)
+
+    @classmethod
+    def from_yaml(cls, config_dict, config_path):
+        try:
+            kind = config_dict.pop("kind", None)
+            cls._check_kind(kind)
+            config_dict["_config_path"] = config_path
+            return cls(**config_dict)
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                f"app_router_op:{cls.kind}",
+                config_dict,
+            ) from exc
+
     @property
     def as_yaml(self) -> dict[str, typing.Any]:
         return {
@@ -75,6 +104,9 @@ class AddAppRouter(_AppRouterOperationBase, APIRouterKwargs):
     kind: typing.ClassVar[str] = "add"
     router_name: _utils.DottedName  # importable
     replace_existing: bool = False
+
+    # Set in '_AppRouterOperationBase.from_yaml' above
+    _config_path: pathlib.Path = None
 
     @property
     def as_yaml(self) -> dict[str, typing.Any]:
@@ -108,6 +140,9 @@ class DeleteAppRouter(_AppRouterOperationBase):
     kind: typing.ClassVar[str] = "delete"
     require_existing: bool = True
 
+    # Set in '_AppRouterOperationBase.from_yaml' above
+    _config_path: pathlib.Path = None
+
     @property
     def as_yaml(self) -> dict[str, typing.Any]:
         return super().as_yaml | {
@@ -131,6 +166,28 @@ class ClearAppRouters:
 
     kind: typing.ClassVar[str] = "clear"
 
+    # Set in 'from_yaml' below
+    _config_path: pathlib.Path = None
+
+    @classmethod
+    def _check_kind(cls, kind):
+        if kind not in (None, cls.kind):
+            raise AppRouterOperationKindMismatch(kind, cls.kind)
+
+    @classmethod
+    def from_yaml(cls, config_dict, config_path):
+        try:
+            kind = config_dict.pop("kind", None)
+            cls._check_kind(kind)
+            config_dict["_config_path"] = config_path
+            return cls(**config_dict)
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                f"app_router_op:{cls.kind}",
+                config_dict,
+            ) from exc
+
     @property
     def as_yaml(self) -> dict[str, typing.Any]:
         return {"kind": self.kind}
@@ -142,40 +199,11 @@ class ClearAppRouters:
 AppRouterOperations = AddAppRouter | DeleteAppRouter | ClearAppRouters
 
 
-def _validate_app_router_operation_kind(config_path, config_dict):
-    kind = config_dict.pop("kind", None)
-    if kind not in ("add", "delete", "clear"):
-        raise config_exc.FromYamlException(
-            config_path,
-            "app_router",
-            config_dict,
-        )
-    return kind
-
-
-def app_router_operation_from_yaml(
-    config_path: pathlib.Path,
-    config_dict: dict,
-):
-    try:
-        kind = _validate_app_router_operation_kind(config_path, config_dict)
-
-        if kind == "add":
-            return AddAppRouter(**config_dict)
-        elif kind == "delete":
-            return DeleteAppRouter(**config_dict)
-        else:  # config_dict["kind"] == "clear":
-            return ClearAppRouters()
-
-    except config_exc.FromYamlException:
-        raise
-
-    except Exception as exc:
-        raise config_exc.FromYamlException(
-            config_path,
-            "app_router",
-            config_dict,
-        ) from exc
+APP_ROUTER_OPERATIONS_BY_KIND = {
+    AddAppRouter.kind: AddAppRouter,
+    DeleteAppRouter.kind: DeleteAppRouter,
+    ClearAppRouters.kind: ClearAppRouters,
+}
 
 
 _DEFAULT_KWARGS = APIRouterKwargs().router_kwargs

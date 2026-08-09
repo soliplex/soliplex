@@ -857,13 +857,14 @@ class InstallationConfig:
                 for mwc_yaml in config_dict.get("middleware_stack", ())
             ]
 
-            config_dict["app_router_operations"] = [
-                config_routing.app_router_operation_from_yaml(
-                    config_path,
-                    ar_yaml,
-                )
-                for ar_yaml in config_dict.get("app_router_operations", ())
-            ]
+            aro_klasses_by_kind = config_routing.APP_ROUTER_OPERATIONS_BY_KIND
+            aros, aros_cfg = config_dict.pop("app_router_operations", []), []
+
+            for aro in aros:
+                klass = aro_klasses_by_kind[aro["kind"]]
+                aros_cfg.append(klass.from_yaml(aro, config_path))
+
+            config_dict["app_router_operations"] = aros_cfg
 
             secret_configs = [
                 config_secrets.SecretConfig.from_yaml(

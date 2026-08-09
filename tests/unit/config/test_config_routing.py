@@ -58,6 +58,39 @@ def soliplex_test_router():
 
 
 @pytest.mark.parametrize(
+    "config_dict, expectation",
+    [
+        (
+            {
+                "kind": "add",
+                "group_name": GROUP_NAME,
+                "router_name": ROUTER_NAME,
+            },
+            contextlib.nullcontext(config_routing.AddAppRouter),
+        ),
+        (
+            {
+                "group_name": GROUP_NAME,
+                "router_name": ROUTER_NAME,
+            },
+            contextlib.nullcontext(config_routing.AddAppRouter),
+        ),
+        ({}, pytest.raises(config_exc.FromYamlException)),
+        ({"kind": "bogus"}, pytest.raises(config_exc.FromYamlException)),
+    ],
+)
+def test_addapprouter_from_yaml(temp_dir, config_dict, expectation):
+    with expectation as expected:
+        found = config_routing.AddAppRouter.from_yaml(
+            config_path=temp_dir,
+            config_dict=config_dict,
+        )
+
+    if isinstance(expected, type):
+        assert isinstance(found, expected)
+
+
+@pytest.mark.parametrize(
     "router_kw, exp_router_kw",
     [
         ({}, DEFAULT_KW),
@@ -157,6 +190,32 @@ def test_addapprouter_apply(
 
 
 @pytest.mark.parametrize(
+    "config_dict, expectation",
+    [
+        (
+            {"group_name": GROUP_NAME},
+            contextlib.nullcontext(config_routing.DeleteAppRouter),
+        ),
+        (
+            {"kind": "delete", "group_name": GROUP_NAME},
+            contextlib.nullcontext(config_routing.DeleteAppRouter),
+        ),
+        ({}, pytest.raises(config_exc.FromYamlException)),
+        ({"kind": "bogus"}, pytest.raises(config_exc.FromYamlException)),
+    ],
+)
+def test_deleteapprouter_from_yaml(temp_dir, config_dict, expectation):
+    with expectation as expected:
+        found = config_routing.DeleteAppRouter.from_yaml(
+            config_path=temp_dir,
+            config_dict=config_dict,
+        )
+
+    if isinstance(expected, type):
+        assert isinstance(found, expected)
+
+
+@pytest.mark.parametrize(
     "require_kw, exp_require",
     [
         ({}, {"require_existing": True}),
@@ -218,7 +277,30 @@ def test_deleteapprouter_apply(
         assert GROUP_NAME not in patched_app_routers
 
 
-def test_clearapprouteras_yaml():
+@pytest.mark.parametrize(
+    "config_dict, expectation",
+    [
+        ({}, contextlib.nullcontext(config_routing.ClearAppRouters)),
+        (
+            {"kind": "clear"},
+            contextlib.nullcontext(config_routing.ClearAppRouters),
+        ),
+        ({"nonesuch": True}, pytest.raises(config_exc.FromYamlException)),
+        ({"kind": "bogus"}, pytest.raises(config_exc.FromYamlException)),
+    ],
+)
+def test_clearapprouters_from_yaml(temp_dir, config_dict, expectation):
+    with expectation as expected:
+        found = config_routing.ClearAppRouters.from_yaml(
+            config_path=temp_dir,
+            config_dict=config_dict,
+        )
+
+    if isinstance(expected, type):
+        assert isinstance(found, expected)
+
+
+def test_clearapprouters_as_yaml():
     clear_op = config_routing.ClearAppRouters()
 
     found = clear_op.as_yaml
@@ -236,63 +318,6 @@ def test_clearapprouters_apply(patched_app_routers, w_existing):
     operation.apply()
 
     assert len(patched_app_routers) == 0
-
-
-@pytest.mark.parametrize(
-    "w_kind, expectation",
-    [
-        ("add", contextlib.nullcontext()),
-        ("delete", contextlib.nullcontext()),
-        ("clear", contextlib.nullcontext()),
-        ("bogus", pytest.raises(config_exc.FromYamlException)),
-    ],
-)
-def test__validate_app_router_operation_kind(temp_dir, w_kind, expectation):
-    config_dict = {"kind": w_kind}
-    with expectation as expected:
-        found = config_routing._validate_app_router_operation_kind(
-            config_path=temp_dir,
-            config_dict=config_dict,
-        )
-
-    if expected is None:
-        assert found == w_kind
-
-
-@pytest.mark.parametrize(
-    "config_dict, expectation",
-    [
-        (
-            {
-                "kind": "add",
-                "group_name": GROUP_NAME,
-                "router_name": ROUTER_NAME,
-            },
-            contextlib.nullcontext(config_routing.AddAppRouter),
-        ),
-        (
-            {"kind": "delete", "group_name": GROUP_NAME},
-            contextlib.nullcontext(config_routing.DeleteAppRouter),
-        ),
-        (
-            {"kind": "clear"},
-            contextlib.nullcontext(config_routing.ClearAppRouters),
-        ),
-        ({}, pytest.raises(config_exc.FromYamlException)),
-        ({"kind": "bogus"}, pytest.raises(config_exc.FromYamlException)),
-        ({"kind": "add"}, pytest.raises(config_exc.FromYamlException)),
-        ({"kind": "delete"}, pytest.raises(config_exc.FromYamlException)),
-    ],
-)
-def test_app_router_operation_from_yaml(temp_dir, config_dict, expectation):
-    with expectation as expected:
-        found = config_routing.app_router_operation_from_yaml(
-            config_path=temp_dir,
-            config_dict=config_dict,
-        )
-
-    if isinstance(expected, type):
-        assert isinstance(found, expected)
 
 
 @mock.patch("soliplex.config._utils._from_dotted_name")
