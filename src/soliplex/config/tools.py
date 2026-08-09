@@ -403,6 +403,16 @@ def extract_tool_configs(
     return tool_configs
 
 
+class MCP_ClientToolsetKindMismatch(ValueError):
+    def __init__(self, found_kind, expected_kind):
+        self.found_kind = found_kind
+        self.expected_kind = expected_kind
+        super().__init__(
+            "MCP client toolset kind mismatch: "
+            f"found '{found_kind}', expected '{expected_kind}'"
+        )
+
+
 @dataclasses.dataclass(kw_only=True)
 class Stdio_MCP_ClientToolsetConfig:
     """Configure an MCP client toolset which runs as a subprocess"""
@@ -421,6 +431,11 @@ class Stdio_MCP_ClientToolsetConfig:
     _config_path: pathlib.Path = None
 
     @classmethod
+    def _check_kind(cls, kind):
+        if kind not in (None, cls.kind):
+            raise MCP_ClientToolsetKindMismatch(kind, cls.kind)
+
+    @classmethod
     def from_yaml(
         cls,
         installation_config: InstallationConfig,  # noqa F821 cycle
@@ -428,6 +443,8 @@ class Stdio_MCP_ClientToolsetConfig:
         config_dict: dict[str, typing.Any],
     ):
         try:
+            kind = config_dict.pop("kind", None)
+            cls._check_kind(kind)
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
 
@@ -482,6 +499,11 @@ class _Remote_MCP_ClientToolsetConfig:
     _config_path: pathlib.Path = None
 
     @classmethod
+    def _check_kind(cls, kind):
+        if kind not in (None, cls.kind):
+            raise MCP_ClientToolsetKindMismatch(kind, cls.kind)
+
+    @classmethod
     def from_yaml(
         cls,
         installation_config: InstallationConfig,  # noqa F821 cycle
@@ -489,6 +511,8 @@ class _Remote_MCP_ClientToolsetConfig:
         config_dict: dict[str, typing.Any],
     ):
         try:
+            kind = config_dict.pop("kind", None)
+            cls._check_kind(kind)
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
 
