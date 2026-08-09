@@ -198,6 +198,20 @@ class ToolConfig:
     )
     _config_path: pathlib.Path = None
 
+    @staticmethod
+    def _adjust_yaml_agui_feature_names(config_dict):
+        agui_feature_names = config_dict.pop("agui_feature_names", ())
+        config_dict["agui_feature_names"] = tuple(agui_feature_names)
+
+    @staticmethod
+    def _adjust_yaml_ai_tool_params(config_dict, config_path):
+        ai_tool_params = config_dict.pop("ai_tool_params", None)
+        if ai_tool_params is not None:
+            config_dict["_ai_tool_params"] = AIToolParams.from_yaml(
+                config_path=config_path,
+                config_dict=ai_tool_params,
+            )
+
     @classmethod
     def from_yaml(
         cls,
@@ -209,15 +223,8 @@ class ToolConfig:
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
 
-            agui_feature_names = config_dict.pop("agui_feature_names", ())
-            config_dict["agui_feature_names"] = tuple(agui_feature_names)
-
-            ai_tool_params = config_dict.pop("ai_tool_params", None)
-            if ai_tool_params is not None:
-                config_dict["_ai_tool_params"] = AIToolParams.from_yaml(
-                    config_path=config_path,
-                    config_dict=ai_tool_params,
-                )
+            cls._adjust_yaml_agui_feature_names(config_dict)
+            cls._adjust_yaml_ai_tool_params(config_dict, config_path)
 
             return cls(**config_dict)
         except config_exc.FromYamlException:  # pragma: NO COVER
@@ -334,6 +341,9 @@ class SearchDocumentsToolConfig(
         try:
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
+
+            cls._adjust_yaml_agui_feature_names(config_dict)
+            cls._adjust_yaml_ai_tool_params(config_dict, config_path)
 
             instance = cls(**config_dict)
         except Exception as exc:
