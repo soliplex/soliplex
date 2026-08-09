@@ -314,7 +314,11 @@ _, SDTC_TOOL_KIND = SDTC_TOOL_NAME.rsplit(".", 1)
 
 
 @dataclasses.dataclass(kw_only=True)
-class SearchDocumentsToolConfig(ToolConfig, config_rag._RAGConfigBase):
+class SearchDocumentsToolConfig(
+    ToolConfig,
+    config_rag._RAGConfigBase,
+    config_rag._RAGDatabaseBase,
+):
     kind: str = SDTC_TOOL_KIND
     tool_name: str = SDTC_TOOL_NAME
 
@@ -362,7 +366,7 @@ class SearchDocumentsToolConfig(ToolConfig, config_rag._RAGConfigBase):
         }
         return (
             super().get_extra_parameters()
-            | config_rag._RAGConfigBase.get_extra_parameters(self)
+            | config_rag._RAGDatabaseBase.get_extra_parameters(self)
             | local
         )
 

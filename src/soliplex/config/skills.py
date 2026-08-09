@@ -192,7 +192,10 @@ class FilesystemSkillConfig:
 
 
 @dataclasses.dataclass(kw_only=True)
-class _HaikuRAGCapabilityConfig(config_rag._RAGConfigBase):
+class _HaikuRAGCapabilityConfig(
+    config_rag._RAGConfigBase,
+    config_rag._RAGDatabaseBase,
+):
     capability_factory: typing.ClassVar[typing.Callable]
     capability_name: typing.ClassVar[str]
     description: typing.ClassVar[str]
