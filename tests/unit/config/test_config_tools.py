@@ -167,6 +167,28 @@ W_OVERRIDE_SDTC_CONFIG_YAML = """
     rag_lancedb_override_path: "/path/to/rag.lancedb"
 """
 
+W_AGUI_FEATURE_NAME_SDTC_CONFIG_KW = {
+    "rag_lancedb_override_path": "/path/to/rag.lancedb",
+    "agui_feature_names": (TOOL_AGUI_FEATURE_NAME,),
+}
+W_AGUI_FEATURE_NAME_SDTC_CONFIG_YAML = f"""
+    rag_lancedb_override_path: "/path/to/rag.lancedb"
+    agui_feature_names:
+      - {TOOL_AGUI_FEATURE_NAME}
+"""
+
+W_AI_TOOL_PARAMS_SDTC_CONFIG_KW = {
+    "rag_lancedb_override_path": "/path/to/rag.lancedb",
+    "allow_mcp": True,
+    "_ai_tool_params": config_tools.AIToolParams(**TOOL_AITP_KWARGS),
+}
+W_AI_TOOL_PARAMS_SDTC_CONFIG_YAML = """
+    rag_lancedb_override_path: "/path/to/rag.lancedb"
+    allow_mcp: true
+    ai_tool_params:
+        takes_ctx: true
+"""
+
 # This one raises
 BOGUS_STDIO_MCTC_CONFIG_YAML = ""
 # ... as does this one
@@ -305,6 +327,8 @@ def test_aitp_from_yaml(
     config_yaml,
     exp_config,
 ):
+    exp_config = copy.deepcopy(exp_config)
+
     config_dir = temp_dir / "rooms" / "test_room"
     config_dir.mkdir(parents=True)
 
@@ -423,6 +447,8 @@ def test_toolconfig_from_yaml(
     config_yaml,
     exp_config,
 ):
+    exp_config = copy.deepcopy(exp_config)
+
     config_dir = temp_dir / "rooms" / "test_room"
     config_dir.mkdir(parents=True)
 
@@ -762,6 +788,14 @@ def test_sdtc_ctor(installation_config, temp_dir):
         (BOGUS_SDTC_CONFIG_YAML, None),
         (W_STEM_SDTC_CONFIG_YAML, W_STEM_SDTC_CONFIG_KW),
         (W_OVERRIDE_SDTC_CONFIG_YAML, W_OVERRIDE_SDTC_CONFIG_KW),
+        (
+            W_AGUI_FEATURE_NAME_SDTC_CONFIG_YAML,
+            W_AGUI_FEATURE_NAME_SDTC_CONFIG_KW,
+        ),
+        (
+            W_AI_TOOL_PARAMS_SDTC_CONFIG_YAML,
+            W_AI_TOOL_PARAMS_SDTC_CONFIG_KW,
+        ),
     ],
 )
 def test_sdtc_from_yaml(
@@ -770,6 +804,8 @@ def test_sdtc_from_yaml(
     config_yaml,
     exp_config,
 ):
+    exp_config = copy.deepcopy(exp_config)
+
     db_rag_dir = temp_dir / "db" / "rag"
     db_rag_dir.mkdir(parents=True)
 
@@ -796,6 +832,13 @@ def test_sdtc_from_yaml(
         assert exc.value._config_path == config_path
 
     else:
+        aitp = exp_config.pop("_ai_tool_params", None)
+        if aitp is not None:
+            exp_config["_ai_tool_params"] = dataclasses.replace(
+                aitp,
+                _config_path=config_path,
+            )
+
         sdt_config = config_tools.SearchDocumentsToolConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
@@ -910,6 +953,8 @@ def test_stdio_mctc_from_yaml(
     config_yaml,
     exp_config,
 ):
+    exp_config = copy.deepcopy(exp_config)
+
     config_dir = temp_dir / "rooms" / "test_room"
     config_dir.mkdir(parents=True)
 
@@ -1022,6 +1067,8 @@ def test_http_mctc_from_yaml(
     config_yaml,
     exp_config,
 ):
+    exp_config = copy.deepcopy(exp_config)
+
     config_dir = temp_dir / "rooms" / "test_room"
     config_dir.mkdir(parents=True)
 
@@ -1156,6 +1203,8 @@ def test_sse_mctc_from_yaml(
     config_yaml,
     exp_config,
 ):
+    exp_config = copy.deepcopy(exp_config)
+
     config_dir = temp_dir / "rooms" / "test_room"
     config_dir.mkdir(parents=True)
 
