@@ -169,6 +169,11 @@ W_OVERRIDE_SDTC_CONFIG_YAML = """
 
 # This one raises
 BOGUS_STDIO_MCTC_CONFIG_YAML = ""
+# ... as does this one
+BOGUS_KIND_STDIO_MCTC_CONFIG_YAML = """
+    kind: "bogus"
+    command: "cat"
+"""
 
 BARE_STDIO_MCTC_CONFIG_KW = {
     "command": "cat",
@@ -187,7 +192,8 @@ FULL_STDIO_MCTC_CONFIG_KW = {
         "some_tool",
     ],
 }
-FULL_STDIO_MCTC_CONFIG_YAML = """
+FULL_STDIO_MCTC_CONFIG_YAML = f"""
+    kind: "{config_tools.Stdio_MCP_ClientToolsetConfig.kind}"
     command: "cat"
     args:
        - "-a"
@@ -199,6 +205,11 @@ FULL_STDIO_MCTC_CONFIG_YAML = """
 
 # This one raises
 BOGUS_HTTP_MCTC_CONFIG_YAML = ""
+# ... as does this one
+BOGUS_KIND_HTTP_MCTC_CONFIG_YAML = """
+    kind: "bogus"
+    url: "https://example.com/api"
+"""
 
 BARE_HTTP_MCTC_CONFIG_KW = {
     "url": "https://example.com/api",
@@ -219,7 +230,8 @@ FULL_HTTP_MCTC_CONFIG_KW = {
         "some_tool",
     ],
 }
-FULL_HTTP_MCTC_CONFIG_YAML = """
+FULL_HTTP_MCTC_CONFIG_YAML = f"""
+    kind: "{config_tools.HTTP_MCP_ClientToolsetConfig.kind}"
     url: "https://example.com/api"
     headers:
         Authorization: "Bearer DEADBEEF"
@@ -231,6 +243,11 @@ FULL_HTTP_MCTC_CONFIG_YAML = """
 
 # This one raises
 BOGUS_SSE_MCTC_CONFIG_YAML = ""
+# ... as does this one
+BOGUS_KIND_SSE_MCTC_CONFIG_YAML = """
+    kind: "bogus"
+    url: "https://example.com/sse"
+"""
 
 BARE_SSE_MCTC_CONFIG_KW = {
     "url": "https://example.com/sse",
@@ -251,7 +268,8 @@ FULL_SSE_MCTC_CONFIG_KW = {
         "some_tool",
     ],
 }
-FULL_SSE_MCTC_CONFIG_YAML = """
+FULL_SSE_MCTC_CONFIG_YAML = f"""
+    kind: "{config_tools.SSE_MCP_ClientToolsetConfig.kind}"
     url: "https://example.com/sse"
     headers:
         Authorization: "Bearer DEADBEEF"
@@ -881,6 +899,7 @@ def test_sdtc_get_extra_parameters_w_missing_file(
     "config_yaml, exp_config",
     [
         (BOGUS_STDIO_MCTC_CONFIG_YAML, None),
+        (BOGUS_KIND_STDIO_MCTC_CONFIG_YAML, None),
         (BARE_STDIO_MCTC_CONFIG_YAML, BARE_STDIO_MCTC_CONFIG_KW),
         (FULL_STDIO_MCTC_CONFIG_YAML, FULL_STDIO_MCTC_CONFIG_KW),
     ],
@@ -992,6 +1011,7 @@ def test_stdio_mctc_tool_kwargs(installation_config, w_env):
     "config_yaml, exp_config",
     [
         (BOGUS_HTTP_MCTC_CONFIG_YAML, None),
+        (BOGUS_KIND_HTTP_MCTC_CONFIG_YAML, None),
         (BARE_HTTP_MCTC_CONFIG_YAML, BARE_HTTP_MCTC_CONFIG_KW),
         (FULL_HTTP_MCTC_CONFIG_YAML, FULL_HTTP_MCTC_CONFIG_KW),
     ],
@@ -1125,6 +1145,7 @@ def test_http_mctc_tool_kwargs(
     "config_yaml, exp_config",
     [
         (BOGUS_SSE_MCTC_CONFIG_YAML, None),
+        (BOGUS_KIND_SSE_MCTC_CONFIG_YAML, None),
         (BARE_SSE_MCTC_CONFIG_YAML, BARE_SSE_MCTC_CONFIG_KW),
         (FULL_SSE_MCTC_CONFIG_YAML, FULL_SSE_MCTC_CONFIG_KW),
     ],
