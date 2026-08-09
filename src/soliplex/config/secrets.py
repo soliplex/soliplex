@@ -6,6 +6,7 @@ import re
 import typing
 
 from . import _utils
+from . import exceptions as config_exc
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
@@ -29,6 +30,16 @@ class NotASecret(ValueError):
         )
 
 
+class SecretSourceKindMismatch(ValueError):
+    def __init__(self, found_kind, expected_kind):
+        self.found_kind = found_kind
+        self.expected_kind = expected_kind
+        super().__init__(
+            "Secret source kind mismatch: "
+            f"found '{found_kind}', expected '{expected_kind}'"
+        )
+
+
 def strip_secret_prefix(config_str: str) -> str:
     if not config_str.startswith(SECRET_PREFIX):
         raise NotASecret(config_str)
@@ -38,9 +49,24 @@ def strip_secret_prefix(config_str: str) -> str:
 
 class _BaseSecretSource:
     @classmethod
+    def _check_kind(cls, kind):
+        if kind not in (None, cls.kind):
+            raise SecretSourceKindMismatch(kind, cls.kind)
+
+    @classmethod
     def from_yaml(cls, config_path: pathlib.Path, config_dict: dict):
-        config_dict["_config_path"] = config_path
-        return cls(**config_dict)
+        try:
+            kind = config_dict.pop("kind", None)
+            cls._check_kind(kind)
+            config_dict["_config_path"] = config_path
+            return cls(**config_dict)
+
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                f"secret_source:{cls.kind}",
+                config_dict,
+            ) from exc
 
     @property
     def as_yaml(self) -> dict:
@@ -56,7 +82,12 @@ class EnvVarSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "env_var"
     secret_name: str
     env_var_name: str | None = None
+
+    # Set in '_BaseSecretSource.from_yaml' above
     _config_path: pathlib.Path = None
+
+    # Set by `InstallationConfig.__post_init__`, because the IC instance
+    # does not exist yet when our `from_yaml` is called.
     _installation_config: InstallationConfig = (  # noqa F821 cycles
         _no_repr_no_compare_none()
     )
@@ -75,7 +106,12 @@ class FilePathSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "file_path"
     secret_name: str
     file_path: str
+
+    # Set in '_BaseSecretSource.from_yaml' above
     _config_path: pathlib.Path = None
+
+    # Set by `InstallationConfig.__post_init__`, because the IC instance
+    # does not exist yet when our `from_yaml` is called.
     _installation_config: InstallationConfig = (  # noqa F821 cycles
         _no_repr_no_compare_none()
     )
@@ -91,7 +127,12 @@ class SubprocessSecretSource(_BaseSecretSource):
     secret_name: str
     command: str
     args: list[str] | tuple[str] = ()
+
+    # Set in '_BaseSecretSource.from_yaml' above
     _config_path: pathlib.Path = None
+
+    # Set by `InstallationConfig.__post_init__`, because the IC instance
+    # does not exist yet when our `from_yaml` is called.
     _installation_config: InstallationConfig = (  # noqa F821 cycles
         _no_repr_no_compare_none()
     )
@@ -120,7 +161,12 @@ class RandomCharsSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "random_chars"
     secret_name: str
     n_chars: int = 32
+
+    # Set in '_BaseSecretSource.from_yaml' above
     _config_path: pathlib.Path = None
+
+    # Set by `InstallationConfig.__post_init__`, because the IC instance
+    # does not exist yet when our `from_yaml` is called.
     _installation_config: InstallationConfig = (  # noqa F821 cycles
         _no_repr_no_compare_none()
     )
@@ -159,9 +205,14 @@ class SecretConfig:
 
     # Set in 'from_yaml' below
     _config_path: pathlib.Path = None
+
+    # Set by `InstallationConfig.__post_init__`, because the IC instance
+    # does not exist yet when our `from_yaml` is called.
     _installation_config: InstallationConfig = (  # noqa F821 cycles
         _no_repr_no_compare_none()
     )
+
+    # Set by 'soliplex.secrets.get_secret'
     _resolved: str = None
 
     def __post_init__(self):
@@ -187,7 +238,7 @@ class SecretConfig:
 
         for source_config in source_configs:
             source_config["secret_name"] = config_dict["secret_name"]
-            source_kind = source_config.pop("kind")
+            source_kind = source_config.get("kind")
             source_klass = SourceClassesByKind[source_kind]
             source_inst = source_klass.from_yaml(config_path, source_config)
             sources.append(source_inst)
