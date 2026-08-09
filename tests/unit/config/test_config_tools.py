@@ -392,6 +392,38 @@ def test_aitp_as_yaml(ctor_kwargs):
     assert found == expected
 
 
+def _round_trip_aitp(config_path, config_dict):
+    """Reload an 'AIToolParams' from its own dump.
+
+    'from_yaml' pops the dotted-name keys ('prepare', 'args_validator',
+    ...) out of the mapping it is handed, storing them under their
+    underscore-prefixed fields, hence the copies.
+    """
+    klass = config_tools.AIToolParams
+    original = klass.from_yaml(config_path, copy.deepcopy(config_dict))
+    reloaded = klass.from_yaml(config_path, copy.deepcopy(original.as_yaml))
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_AI_TOOL_PARAMS_YAML,
+        FULL_AI_TOOL_PARAMS_YAML,
+    ],
+)
+def test_aitp_as_yaml_round_trips(temp_dir, config_yaml):
+    config_path = temp_dir / "room_config.yaml"
+
+    original, reloaded = _round_trip_aitp(
+        config_path,
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
+
+
 @pytest.mark.parametrize(
     "ctor_kwargs",
     [
@@ -515,6 +547,56 @@ def test_toolconfig_as_yaml(
     found = inst.as_yaml
 
     assert found == expected
+
+
+def _round_trip_config(
+    config_class,
+    installation_config,
+    config_path,
+    config_dict,
+):
+    """Reload an installation-scoped tool config from its own dump.
+
+    Shared by 'ToolConfig' / 'SearchDocumentsToolConfig' (whose
+    'from_yaml' pops 'agui_feature_names' and 'ai_tool_params') and by
+    the MCP toolset configs (whose 'from_yaml' pops 'kind'), hence the
+    copies.
+    """
+    original = config_class.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = config_class.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_TOOL_CONFIG_PARAMS_YAML,
+        W_AGUI_FEATURE_NAME_TOOL_CONFIG_PARAMS_YAML,
+        W_AI_TOOL_PARAMS_TOOL_CONFIG_PARAMS_YAML,
+    ],
+)
+def test_toolconfig_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    original, reloaded = _round_trip_config(
+        config_tools.ToolConfig,
+        installation_config,
+        temp_dir / "room_config.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
 
 
 def test_toolconfig_kind():
@@ -896,6 +978,30 @@ def test_sdtc_as_yaml(temp_dir, installation_config, w_kw):
 
 
 @pytest.mark.parametrize(
+    "config_yaml",
+    [
+        W_STEM_SDTC_CONFIG_YAML,
+        W_OVERRIDE_SDTC_CONFIG_YAML,
+        W_AGUI_FEATURE_NAME_SDTC_CONFIG_YAML,
+        W_AI_TOOL_PARAMS_SDTC_CONFIG_YAML,
+    ],
+)
+def test_sdtc_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    original, reloaded = _round_trip_config(
+        config_tools.SearchDocumentsToolConfig,
+        installation_config,
+        temp_dir / "room_config.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
+
+
+@pytest.mark.parametrize(
     "stem, override, which",
     [
         ("testing", None, "stem"),
@@ -1003,6 +1109,29 @@ def test_stdio_mctc_as_yaml(w_env):
     assert found["args"] == stdio_mctc.args
     assert found["env"] == stdio_mctc.env
     assert found["allowed_tools"] == stdio_mctc.allowed_tools
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_STDIO_MCTC_CONFIG_YAML,
+        FULL_STDIO_MCTC_CONFIG_YAML,
+    ],
+)
+def test_stdio_mctc_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    original, reloaded = _round_trip_config(
+        config_tools.Stdio_MCP_ClientToolsetConfig,
+        installation_config,
+        temp_dir / "installation.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
+    assert reloaded.toolset_params == original.toolset_params
 
 
 @pytest.mark.parametrize("w_env", [{}, {"foo": "bar"}])
@@ -1118,6 +1247,29 @@ def test_http_mctc_as_yaml(w_query_params, w_headers):
     assert found["query_params"] == http_mctc.query_params
     assert found["headers"] == http_mctc.headers
     assert found["allowed_tools"] == http_mctc.allowed_tools
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_HTTP_MCTC_CONFIG_YAML,
+        FULL_HTTP_MCTC_CONFIG_YAML,
+    ],
+)
+def test_http_mctc_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    original, reloaded = _round_trip_config(
+        config_tools.HTTP_MCP_ClientToolsetConfig,
+        installation_config,
+        temp_dir / "installation.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
+    assert reloaded.toolset_params == original.toolset_params
 
 
 @pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])
@@ -1254,6 +1406,29 @@ def test_sse_mctc_as_yaml(w_query_params, w_headers):
     assert found["query_params"] == sse_mctc.query_params
     assert found["headers"] == sse_mctc.headers
     assert found["allowed_tools"] == sse_mctc.allowed_tools
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_SSE_MCTC_CONFIG_YAML,
+        FULL_SSE_MCTC_CONFIG_YAML,
+    ],
+)
+def test_sse_mctc_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    original, reloaded = _round_trip_config(
+        config_tools.SSE_MCP_ClientToolsetConfig,
+        installation_config,
+        temp_dir / "installation.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
+    assert reloaded.toolset_params == original.toolset_params
 
 
 @pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])

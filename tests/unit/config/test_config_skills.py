@@ -1,3 +1,4 @@
+import copy
 import importlib.metadata
 import types
 from unittest import mock
@@ -158,6 +159,63 @@ def test_haiku_rag_capability_config_with_stem(
     }
 
 
+def _round_trip_hr_skill(
+    config_class,
+    installation_config,
+    config_path,
+    config_dict,
+):
+    """Reload a haiku.rag skill config from its own dump."""
+    original = config_class.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = config_class.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_class",
+    [
+        config_skills.HR_RAG_SkillConfig,
+        config_skills.HR_Analysis_SkillConfig,
+    ],
+)
+@pytest.mark.parametrize("w_stem", [False, True])
+def test_haiku_rag_capability_config_as_yaml_round_trips(
+    temp_dir,
+    installation_config,
+    config_class,
+    w_stem,
+):
+    db_path = temp_dir / "example.lancedb"
+    db_path.mkdir()
+    config_dict = {"kind": config_class.kind}
+
+    if w_stem:
+        config_dict["rag_lancedb_stem"] = "example"
+    else:
+        # 'from_yaml' parses this into a 'pathlib.Path' and 'as_yaml'
+        # stringifies it again.
+        config_dict["rag_lancedb_override_path"] = str(db_path)
+
+    original, reloaded = _round_trip_hr_skill(
+        config_class,
+        installation_config,
+        temp_dir / "room.yaml",
+        config_dict,
+    )
+
+    assert reloaded == original
+    assert reloaded.rag_lancedb_path == original.rag_lancedb_path
+
+
 def test_haiku_rag_capability_config_wraps_yaml_errors(
     installation_config,
     temp_dir,
@@ -225,6 +283,55 @@ def test_bwrap_sandbox_config_minimal(installation_config):
         "default_environment": "bare",
     }
     assert config.extra_parameters == {"default_environment": "bare"}
+
+
+def _round_trip_bwrap_skill(installation_config, config_path, config_dict):
+    """Reload a 'BwrapSandboxSkillConfig' from its own dump."""
+    klass = config_skills.BwrapSandboxSkillConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize("w_full", [False, True])
+def test_bwrap_sandbox_config_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    w_full,
+):
+    config_dict = {"kind": bwrap_sandbox.CAPABILITY_NAME}
+
+    if w_full:
+        config_dict |= {
+            "id": "sandbox-id",
+            "default_environment": "python",
+            "allowed_environments": ["python"],
+            "sandbox_config": {"max_output_chars": 1234},
+            "volumes": {
+                "data": {
+                    "host_path": str(temp_dir / "volume"),
+                    "writable": False,
+                },
+            },
+        }
+
+    original, reloaded = _round_trip_bwrap_skill(
+        installation_config,
+        temp_dir / "room.yaml",
+        config_dict,
+    )
+
+    assert reloaded == original
+    assert reloaded.extra_parameters == original.extra_parameters
 
 
 def test_bwrap_sandbox_config_wraps_yaml_errors(
@@ -344,6 +451,64 @@ def test_empty_room_skills_config(installation_config):
     assert config.has_sandbox is False
 
 
+def _round_trip_room_skills(installation_config, config_path, config_dict):
+    """Reload a 'RoomSkillsConfig' from its own dump.
+
+    'from_yaml' drains 'skill_configs' out of the mapping it is handed
+    (via 'extract_skill_configs'), hence the copies.
+    """
+    klass = config_skills.RoomSkillsConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize("w_installation_skills", [False, True])
+def test_room_skills_config_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    w_installation_skills,
+):
+    filesystem = config_skills.FilesystemSkillConfig.from_capability(
+        _filesystem_capability(temp_dir / SKILL_NAME)
+    )
+    installation_config.skill_configs = {SKILL_NAME: filesystem}
+    db_path = temp_dir / "rag.lancedb"
+    db_path.mkdir()
+    config_dict = {
+        "skill_configs": [
+            {
+                "kind": config_skills.HR_RAG_SkillConfig.kind,
+                "rag_lancedb_override_path": str(db_path),
+            },
+            {"kind": bwrap_sandbox.CAPABILITY_NAME},
+        ],
+    }
+
+    if w_installation_skills:
+        config_dict["installation_skill_names"] = [SKILL_NAME]
+
+    original, reloaded = _round_trip_room_skills(
+        installation_config,
+        temp_dir / "room.yaml",
+        config_dict,
+    )
+
+    assert reloaded == original
+    assert reloaded.skill_configs == original.skill_configs
+    assert reloaded.rag_db_paths == original.rag_db_paths
+    assert reloaded.has_sandbox == original.has_sandbox
+
+
 class _FakeEntryPoint:
     def __init__(self, name, target):
         self.name = name
@@ -439,6 +604,47 @@ def test_entrypoint_capability_config_stateless(
     assert config.agui_feature_names == ()
     assert config.extra_parameters == {}
     assert config.capability == {"defer_loading": True, "params": {}}
+
+
+def _round_trip_entrypoint_skill(
+    installation_config,
+    config_path,
+    config_dict,
+):
+    """Reload an 'EntrypointCapabilityConfig' from its own dump."""
+    klass = config_skills.EntrypointCapabilityConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize("w_params", [{}, {"foo": "bar"}])
+def test_entrypoint_capability_config_as_yaml_round_trips(
+    monkeypatch,
+    installation_config,
+    temp_dir,
+    w_params,
+):
+    _patch_entry_points(monkeypatch, {"my-cap": _stateful_module()})
+    config_dict = {"kind": "entrypoint", "name": "my-cap"} | w_params
+
+    original, reloaded = _round_trip_entrypoint_skill(
+        installation_config,
+        temp_dir / "room.yaml",
+        config_dict,
+    )
+
+    assert reloaded == original
+    assert reloaded.extra_parameters == original.extra_parameters
 
 
 def test_entrypoint_capability_config_unknown_entry_point(

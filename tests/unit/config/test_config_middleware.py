@@ -78,6 +78,30 @@ def test_middlewareconfig_from_yaml(
         assert found == expected
 
 
+@pytest.mark.xfail(strict=True, reason="#1189")
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_MWCONFIG_YAML,
+        W_NEEDS_ICONFIG_MWCONFIG_YAML,
+        W_EXTRA_PARAMS_MWCONFIG_YAML,
+    ],
+)
+def test_middlewareconfig_as_yaml_round_trips(config_yaml):
+    # 'MiddlewareConfig' has no 'as_yaml' at all, so the dump below
+    # raises 'AttributeError'. That makes the round trip the last
+    # executable statement in the test: anything after it would go
+    # uncovered while the xfail stands.
+    #
+    # When it lands, 'as_yaml' has to reverse '_from_dotted_name':
+    # 'from_yaml' resolves 'app_factory' to the callable itself, so the
+    # dump must render it back to a dotted name via '_utils._dotted_name'.
+    klass = config_middleware.MiddlewareConfig
+    original = klass.from_yaml(copy.deepcopy(yaml.safe_load(config_yaml)))
+
+    assert klass.from_yaml(copy.deepcopy(original.as_yaml)) == original
+
+
 @pytest.mark.parametrize(
     "config_kw, expected",
     [

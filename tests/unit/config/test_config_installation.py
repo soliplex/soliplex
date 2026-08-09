@@ -1,6 +1,7 @@
 import contextlib
 import copy
 import dataclasses
+import operator
 import pathlib
 from unittest import mock
 
@@ -115,7 +116,7 @@ W_FULL_META_INSTALLATION_CONFIG_KW = {
         "secret_sources": [
             config_meta.SecretSourceMeta(
                 config_klass=config_secrets.EnvVarSecretSource,
-                registered_func=test_meta.SECRET_SOURCE_FUNC,
+                registered_func=test_meta.secret_source_func,
             ),
         ],
     },
@@ -836,6 +837,78 @@ def test_sandboxconfig_as_yaml(temp_dir, w_kw):
     found = inst.as_yaml
 
     assert found == expected
+
+
+def _round_trip_sandbox_config(config_path, config_dict, reload_path=None):
+    """Reload a 'SandboxConfig' from its own dump.
+
+    'from_yaml' renames the public keys onto the underscore-prefixed
+    fields it stores them in, hence the copies.
+
+    'reload_path' defaults to 'config_path'; pass a path in a different
+    directory to check that the dump is location-independent, which is
+    the whole reason 'as_yaml' emits resolved absolute paths.
+    """
+    klass = config_installation.SandboxConfig
+    original = klass.from_yaml(config_path, copy.deepcopy(config_dict))
+
+    if reload_path is None:
+        reload_path = config_path
+
+    reloaded = klass.from_yaml(reload_path, copy.deepcopy(original.as_yaml))
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        WO_WORKDIRS_PATH_SANDBOX_CONFIG_YAML,
+        W_WORKDIRS_PATH_SANDBOX_CONFIG_YAML,
+        W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_YAML,
+    ],
+)
+def test_sandboxconfig_as_yaml_round_trips(temp_dir, config_yaml):
+    original, reloaded = _round_trip_sandbox_config(
+        temp_dir / "installation.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    # Deliberately not 'reloaded == original': 'as_yaml' emits *resolved
+    # absolute* paths where the original holds the relative strings a
+    # human wrote, so all three underscore-prefixed fields differ.
+    # Re-joining an absolute path against the config dir is idempotent,
+    # so the properties that actually drive behavior are equal.
+    assert reloaded.environments_path == original.environments_path
+    assert reloaded.workdirs_path == original.workdirs_path
+    assert reloaded.transcripts_path == original.transcripts_path
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        WO_WORKDIRS_PATH_SANDBOX_CONFIG_YAML,
+        W_WORKDIRS_PATH_SANDBOX_CONFIG_YAML,
+        W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_YAML,
+    ],
+)
+def test_sandboxconfig_as_yaml_round_trips_from_other_dir(
+    temp_dir,
+    config_yaml,
+):
+    # Reloading in place cannot tell a resolved dump from an unresolved
+    # one -- both re-resolve against the same directory. Reloading from
+    # somewhere else is what pins down why 'as_yaml' resolves at all:
+    # the dumped config must still name the original directories.
+    original, reloaded = _round_trip_sandbox_config(
+        temp_dir / "installation.yaml",
+        yaml.safe_load(config_yaml),
+        temp_dir / "elsewhere" / "installation.yaml",
+    )
+
+    assert reloaded.environments_path == original.environments_path
+    assert reloaded.workdirs_path == original.workdirs_path
+    assert reloaded.transcripts_path == original.transcripts_path
 
 
 @pytest.mark.parametrize("w_config_path", [False, True])
@@ -1831,7 +1904,7 @@ def test_installationconfig_from_yaml(
     config_yaml,
     expected_kw,
 ):
-    patched_soliplex_config["test_secret_func"] = test_meta.SECRET_SOURCE_FUNC
+    patched_soliplex_config["test_secret_func"] = test_meta.secret_source_func
     config_path = temp_dir / "installation.yaml"
     config_path.write_text(config_yaml)
 
@@ -2193,6 +2266,168 @@ def test_installationconfig_as_yaml(
     found = installation_config.as_yaml
 
     assert found == expected
+
+
+def _round_trip_installation_config(config_path, config_dict):
+    """Reload an 'InstallationConfig' from its own dump.
+
+    'from_yaml' drains most of its nested stanzas out of the mapping it
+    is handed, hence the copies.
+    """
+    klass = config_installation.InstallationConfig
+    original = klass.from_yaml(config_path, copy.deepcopy(config_dict))
+    reloaded = klass.from_yaml(config_path, copy.deepcopy(original.as_yaml))
+
+    return original, reloaded
+
+
+# Everything 'as_yaml' currently round-trips correctly. Excluded on
+# purpose:
+#
+# - 'meta', because 'InstallationConfigMeta.as_yaml' deliberately dumps
+#   registry state rather than the 'meta:' stanza; covered by
+#   'test_config_meta.py'.
+# - 'sandbox_config', whose raw fields differ by design (resolved paths);
+#   covered below and by the 'SandboxConfig' tests above.
+# - everything the round trip currently loses, which is listed in the
+#   xfail below.
+INSTALLATION_STATE_ATTRS = (
+    "id",
+    "environment",
+    "filesystem_skills_paths",
+    "oidc_paths",
+    "room_paths",
+    "completion_paths",
+    "quizzes_paths",
+    "rooms_upload_path",
+    "threads_upload_path",
+    "title_agent_config_id",
+    "app_router_operations",
+    "agent_configs",
+    "secrets",
+    "logfire_config",
+)
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_INSTALLATION_CONFIG_YAML,
+        W_BARE_META_INSTALLATION_CONFIG_YAML,
+        W_SECRETS_INSTALLATION_CONFIG_YAML,
+        W_ENVIRONMENT_LIST_INSTALLATION_CONFIG_YAML,
+        W_ENVIRONMENT_MAPPING_INSTALLATION_CONFIG_YAML,
+        W_HR_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
+        W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
+        W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
+        W_SKILLS_PATHS_INSTALLATION_CONFIG_YAML,
+        W_OIDC_PATHS_INSTALLATION_CONFIG_YAML,
+        W_ROOM_PATHS_INSTALLATION_CONFIG_YAML,
+        W_COMPLETION_PATHS_INSTALLATION_CONFIG_YAML,
+        W_QUIZZES_PATHS_INSTALLATION_CONFIG_YAML,
+        W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
+        W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
+        W_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
+        W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_YAML,
+        W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_YAML,
+        W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
+        W_TP_DBURI_INSTALLATION_CONFIG_YAML,
+        W_RA_DBURI_INSTALLATION_CONFIG_YAML,
+    ],
+)
+def test_installationconfig_as_yaml_round_trips(
+    temp_dir,
+    patched_soliplex_config,
+    patched_tool_registries,
+    patched_mcp_toolset_configs,
+    patched_mcp_tool_wrappers,
+    patched_skill_configs,
+    patched_secret_getters,
+    patched_app_routers,
+    config_yaml,
+):
+    patched_soliplex_config["test_secret_func"] = test_meta.secret_source_func
+    get_state = operator.attrgetter(*INSTALLATION_STATE_ATTRS)
+
+    original, reloaded = _round_trip_installation_config(
+        temp_dir / "installation.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    assert get_state(reloaded) == get_state(original)
+
+
+def test_installationconfig_as_yaml_round_trips_sandbox_config(temp_dir):
+    # The nested 'SandboxConfig' compares unequal field-for-field, since
+    # its 'as_yaml' resolves the paths; the state that drives behavior is
+    # the resolved properties.
+    original, reloaded = _round_trip_installation_config(
+        temp_dir / "installation.yaml",
+        yaml.safe_load(W_SANDBOX_INSTALLATION_CONFIG_YAML),
+    )
+
+    found = reloaded.sandbox_config
+    expected = original.sandbox_config
+
+    assert found.environments_path == expected.environments_path
+    assert found.workdirs_path == expected.workdirs_path
+    assert found.transcripts_path == expected.transcripts_path
+
+
+@pytest.mark.xfail(strict=True, reason="#1186")
+@pytest.mark.parametrize(
+    "config_yaml, state_attrs",
+    [
+        # Both DB URIs fall through to the in-memory SQLite defaults, so
+        # a round-tripped installation silently stops persisting.
+        (
+            W_TP_DBURI_INSTALLATION_CONFIG_YAML,
+            (
+                "thread_persistence_dburi_sync",
+                "thread_persistence_dburi_async",
+            ),
+        ),
+        (
+            W_RA_DBURI_INSTALLATION_CONFIG_YAML,
+            ("authorization_dburi_sync", "authorization_dburi_async"),
+        ),
+        # 'logging_config_file' is stringified unconditionally, so an
+        # unset one dumps as the literal "None" and reloads as a path.
+        (BARE_INSTALLATION_CONFIG_YAML, ("logging_config_file",)),
+        (
+            W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
+            ("logging_headers_map", "logging_claims_map"),
+        ),
+        # The whole ASGI middleware stack is dropped, because
+        # 'MiddlewareConfig' has no 'as_yaml' to render the elements
+        # with (companion issue #1189).
+        (
+            W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_YAML,
+            ("middleware_stack",),
+        ),
+    ],
+)
+def test_installationconfig_as_yaml_round_trips_w_lost_state(
+    temp_dir,
+    patched_soliplex_config,
+    patched_tool_registries,
+    patched_mcp_toolset_configs,
+    patched_mcp_tool_wrappers,
+    patched_skill_configs,
+    patched_secret_getters,
+    config_yaml,
+    state_attrs,
+):
+    # 'attrgetter' rather than a loop of asserts: these all fail today,
+    # and a loop that never completes leaves its exit branch uncovered.
+    get_state = operator.attrgetter(*state_attrs)
+
+    original, reloaded = _round_trip_installation_config(
+        temp_dir / "installation.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    assert get_state(reloaded) == get_state(original)
 
 
 @pytest.mark.parametrize(

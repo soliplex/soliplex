@@ -10,8 +10,13 @@ import yaml
 
 from soliplex import authz
 from soliplex.config import _utils
+from soliplex.config import agents as config_agents
+from soliplex.config import agui as config_agui
 from soliplex.config import exceptions as config_exc
 from soliplex.config import meta as config_meta
+from soliplex.config import secrets as config_secrets
+from soliplex.config import skills as config_skills
+from soliplex.config import tools as config_tools
 
 BOGUS_ICMETA_YAML = """\
 meta:
@@ -129,12 +134,16 @@ meta:
       - "_test_metaconfig.DummyAgentConfig"
 """
 
-SECRET_SOURCE_FUNC = lambda source: "SEEKRIT"  # noqa E731
+
+def secret_source_func(source):  # pragma: NO COVER (registered, not called)
+    return "SEEKRIT"
+
+
 W_SECRET_SOURCE_ICMETA_KW = BARE_ICMETA_KW | {
     "secret_sources": [
         config_meta.SecretSourceMeta(
             config_klass=_test_metaconfig.DummySecretSource,
-            registered_func=SECRET_SOURCE_FUNC,
+            registered_func=secret_source_func,
         ),
     ],
 }
@@ -205,7 +214,7 @@ FULL_ICMETA_KW = {
     "secret_sources": [
         config_meta.SecretSourceMeta(
             config_klass=_test_metaconfig.DummySecretSource,
-            registered_func=SECRET_SOURCE_FUNC,
+            registered_func=secret_source_func,
         ),
     ],
     "jsonpath_functions": [
@@ -677,7 +686,7 @@ def test_installationconfigmeta_from_yaml(
     config_yaml,
     expected_kw,
 ):
-    patched_soliplex_config["test_secret_func"] = SECRET_SOURCE_FUNC
+    patched_soliplex_config["test_secret_func"] = secret_source_func
     expected_kw = copy.deepcopy(expected_kw)
 
     yaml_file = temp_dir / "config.yaml"
@@ -781,7 +790,7 @@ def test_installationconfigmeta_from_yaml(
         if config_dict_meta and "secret_sources" in config_dict_meta:
             ss_klass = _test_metaconfig.DummySecretSource
             assert patched_secret_getters == {
-                ss_klass.kind: SECRET_SOURCE_FUNC
+                ss_klass.kind: secret_source_func
             }
             assert patched_secret_sources == {ss_klass.kind: ss_klass}
 
@@ -823,7 +832,7 @@ def test_installationconfigmeta_as_yaml(
     w_secret_reg,
     w_jsonpath,
 ):
-    patched_soliplex_config["test_secret_func"] = SECRET_SOURCE_FUNC
+    patched_soliplex_config["test_secret_func"] = secret_source_func
 
     expected = copy.deepcopy(BARE_ICMETA_KW)
 
@@ -899,6 +908,132 @@ def test_installationconfigmeta_as_yaml(
     found = icmeta.as_yaml
 
     assert found == expected
+
+
+def _registry_snapshot():
+    """Copy every registry 'InstallationConfigMeta' writes into."""
+    return {
+        "agui_features": dict(config_agui.AGUI_FEATURES_BY_NAME),
+        "tool_configs": dict(
+            config_tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME,
+        ),
+        "mcp_toolset_configs": dict(
+            config_tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND,
+        ),
+        "mcp_tool_wrappers": dict(
+            config_tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME,
+        ),
+        "skill_configs": dict(config_skills.SKILL_CONFIG_CLASSES_BY_KIND),
+        "agent_capabilities": dict(
+            config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME,
+        ),
+        "agent_configs": dict(config_agents.AGENT_CONFIG_CLASSES_BY_KIND),
+        "secret_getters": dict(config_secrets.SECRET_GETTERS_BY_KIND),
+        "jsonpath_functions": dict(authz.registered_jsonpath_functions()),
+    }
+
+
+def _clear_registries():
+    """Empty every registry 'InstallationConfigMeta' writes into.
+
+    Registration is purely additive, so without this a dump that dropped
+    a whole category would still appear to round-trip: the entries from
+    the first load would still be sitting in the registry. Clearing
+    between the dump and the reload is what makes the assertion mean
+    "'as_yaml' emitted everything needed to rebuild the registries".
+    """
+    config_agui.AGUI_FEATURES_BY_NAME.clear()
+    config_tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME.clear()
+    config_tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND.clear()
+    config_tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME.clear()
+    config_skills.SKILL_CONFIG_CLASSES_BY_KIND.clear()
+    config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME.clear()
+    config_agents.AGENT_CONFIG_CLASSES_BY_KIND.clear()
+    config_secrets.SECRET_GETTERS_BY_KIND.clear()
+
+    # Drop only the config-supplied filters, leaving the RFC 9535
+    # built-ins the environment needs.
+    function_extensions = authz.the_jsonpath_environment.function_extensions
+    for name in authz.registered_jsonpath_functions():
+        del function_extensions[name]
+
+
+def _round_trip_icmeta_registries(config_path, config_dict):
+    """Round-trip a metaconfig, snapshotting the registries each time.
+
+    Unlike every other config class, the state under test here is the
+    *global registries*, not the instance fields: 'as_yaml' deliberately
+    dumps the software-level registry contents rather than the (possibly
+    empty) 'meta:' stanza it was loaded from. That asymmetry is correct
+    under the "same application state" criterion, so what has to hold is
+    that reloading a dump into empty registries rebuilds them exactly --
+    and that a second cycle changes nothing further.
+
+    'from_yaml' mutates the mapping it is handed, hence the copies.
+    """
+    klass = config_meta.InstallationConfigMeta
+
+    original = klass.from_yaml(config_path, copy.deepcopy(config_dict))
+    after_load = _registry_snapshot()
+    dumped = copy.deepcopy(original.as_yaml)
+
+    _clear_registries()
+    reloaded = klass.from_yaml(config_path, dumped)
+    after_first = _registry_snapshot()
+    dumped_again = copy.deepcopy(reloaded.as_yaml)
+
+    _clear_registries()
+    klass.from_yaml(config_path, dumped_again)
+    after_second = _registry_snapshot()
+
+    return after_load, after_first, after_second
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_ICMETA_YAML,
+        W_AGUI_FEATURES_ICMETA_YAML,
+        W_TOOL_CONFIGS_ICMETA_YAML,
+        W_MCP_TOOLSET_CONFIGS_ICMETA_YAML,
+        W_SKILL_CONFIGS_ICMETA_YAML,
+        W_AGENT_CAPABILITY_ICMETA_YAML,
+        W_AGENT_CONFIGS_ICMETA_YAML,
+        W_SECRET_SOURCE_ICMETA_YAML,
+        W_JSONPATH_FUNCTIONS_ICMETA_YAML,
+        FULL_ICMETA_YAML,
+    ],
+)
+def test_installationconfigmeta_as_yaml_round_trips_registries(
+    patched_soliplex_config,
+    patched_agui_features,
+    patched_tool_configs,
+    patched_mcp_toolset_configs,
+    patched_mcp_tool_wrappers,
+    patched_skill_configs,
+    patched_agent_capabilities,
+    patched_agent_configs,
+    patched_secret_getters,
+    patched_jsonpath_functions,
+    temp_dir,
+    config_yaml,
+):
+    # The dumped dotted name for the getter is not the one the YAML was
+    # written with -- 'as_yaml' renders it from the function's own
+    # '__module__' / '__name__', so 'soliplex.config.test_secret_func'
+    # comes back as 'test_config_meta.secret_source_func'. Both resolve
+    # to the same object, which is exactly the "same application state,
+    # not identical mapping" criterion.
+    patched_soliplex_config["test_secret_func"] = secret_source_func
+    config_dict = yaml.safe_load(config_yaml)["meta"]
+
+    after_load, after_first, after_second = _round_trip_icmeta_registries(
+        temp_dir / "installation.yaml",
+        config_dict,
+    )
+
+    assert after_first == after_load
+    assert after_second == after_first
 
 
 def test_installationconfigmeta_postinit_registers_tool_configs(

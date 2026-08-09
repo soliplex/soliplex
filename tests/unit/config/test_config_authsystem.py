@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 import pathlib
 import ssl
@@ -261,6 +262,50 @@ def test_authsystem_from_yaml_w_oid_cpp(
     )
 
     assert found == expected
+
+
+@pytest.mark.xfail(strict=True, reason="#1188")
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_AUTHSYSTEM_CONFIG_YAML,
+        W_SCOPE_AUTHSYSTEM_CONFIG_YAML,
+        # 'oidc_client_pem_path' is absolutized against the config dir on
+        # load; re-joining an absolute path is idempotent, so a dump of
+        # the resolved path should still round-trip.
+        W_PEM_AUTHSYSTEM_CONFIG_YAML,
+        W_OIDC_CPP_REL_CONFIG_YAML,
+        # 'client_secret' holds a marker, not a resolved value, so the
+        # dump must emit the marker rather than 'oauth_client_kwargs''
+        # resolved secret.
+        W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_YAML,
+    ],
+)
+def test_authsystem_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    # 'OIDCAuthSystemConfig' has no 'as_yaml' at all, so the dump below
+    # raises 'AttributeError'. That makes the round trip the last
+    # executable statement in the test: anything after it would go
+    # uncovered while the xfail stands.
+    config_path = temp_dir / "config.yaml"
+    klass = config_authsystem.OIDCAuthSystemConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(yaml.safe_load(config_yaml)),
+    )
+
+    assert (
+        klass.from_yaml(
+            installation_config,
+            config_path,
+            copy.deepcopy(original.as_yaml),
+        )
+        == original
+    )
 
 
 def test_authsystem_server_metadata_url():

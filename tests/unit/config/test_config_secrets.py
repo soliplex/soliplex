@@ -1,4 +1,5 @@
 import contextlib
+import copy
 from unittest import mock
 
 import pytest
@@ -94,6 +95,37 @@ def test_envvarsecretsource_as_yaml(has_ev):
     assert found == expected
 
 
+def _round_trip_secret_source(source_class, config_path, config_dict):
+    """Reload a secret source from its own dump.
+
+    'from_yaml' pops 'kind' out of the mapping it is handed, hence the
+    copies.
+    """
+    original = source_class.from_yaml(
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = source_class.from_yaml(
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize("w_params", [{}, {"env_var_name": ENV_VAR_NAME}])
+def test_envvarsecretsource_as_yaml_round_trips(temp_dir, w_params):
+    config_dict = {"secret_name": SECRET_NAME} | w_params
+
+    original, reloaded = _round_trip_secret_source(
+        config_secrets.EnvVarSecretSource,
+        temp_dir / "installation.yaml",
+        config_dict,
+    )
+
+    assert reloaded == original
+
+
 @pytest.mark.parametrize(
     "w_kind_kw, expectation",
     [
@@ -147,6 +179,19 @@ def test_filepathsecretsource_as_yaml():
     found = source.as_yaml
 
     assert found == expected
+
+
+@pytest.mark.parametrize("file_path", ["/path/to/file", "./file"])
+def test_filepathsecretsource_as_yaml_round_trips(temp_dir, file_path):
+    config_dict = {"secret_name": SECRET_NAME, "file_path": file_path}
+
+    original, reloaded = _round_trip_secret_source(
+        config_secrets.FilePathSecretSource,
+        temp_dir / "installation.yaml",
+        config_dict,
+    )
+
+    assert reloaded == original
 
 
 @pytest.mark.parametrize(
@@ -229,6 +274,29 @@ def test_subprocesssecretsource_as_yaml(w_args):
     assert found == expected
 
 
+@pytest.mark.parametrize("w_args", [None, [], ["-a", "foo"]])
+def test_subprocesssecretsource_as_yaml_round_trips(temp_dir, w_args):
+    config_dict = {"secret_name": SECRET_NAME, "command": COMMAND}
+
+    if w_args is not None:
+        config_dict["args"] = w_args
+
+    original, reloaded = _round_trip_secret_source(
+        config_secrets.SubprocessSecretSource,
+        temp_dir / "installation.yaml",
+        config_dict,
+    )
+
+    # Not 'reloaded == original': 'as_yaml' emits 'list(self.args)', so a
+    # defaulted '()' comes back as '[]'. 'get_subprocess_secret' only ever
+    # splats it ('[source.command, *source.args]'), so 'command_line' is
+    # the state that matters, and it is equal either way.
+    assert reloaded.secret_name == original.secret_name
+    assert reloaded.command == original.command
+    assert reloaded.command_line == original.command_line
+    assert reloaded.extra_arguments == original.extra_arguments
+
+
 @pytest.mark.parametrize(
     "w_kind_kw, expectation",
     [
@@ -296,6 +364,19 @@ def test_randomcharssecretsource_as_yaml(kwargs, exp_nc):
     assert found == expected
 
 
+@pytest.mark.parametrize("w_params", [{}, {"n_chars": 17}])
+def test_randomcharssecretsource_as_yaml_round_trips(temp_dir, w_params):
+    config_dict = {"secret_name": SECRET_NAME} | w_params
+
+    original, reloaded = _round_trip_secret_source(
+        config_secrets.RandomCharsSecretSource,
+        temp_dir / "installation.yaml",
+        config_dict,
+    )
+
+    assert reloaded == original
+
+
 @pytest.mark.parametrize(
     "w_sources, exp_sources",
     [
@@ -341,6 +422,52 @@ def test_secretconfig_as_yaml():
     found = secret.as_yaml
 
     assert found == expected
+
+
+def _round_trip_secret_config(config_path, config):
+    """Reload a 'SecretConfig' from its own dump.
+
+    'from_yaml' drains 'sources' out of the mapping it is handed, hence
+    the copies.
+    """
+    klass = config_secrets.SecretConfig
+    original = klass.from_yaml(config_path, copy.deepcopy(config))
+    reloaded = klass.from_yaml(config_path, copy.deepcopy(original.as_yaml))
+
+    return original, reloaded
+
+
+# 'args' is spelled explicitly so the whole-object comparison is fair: a
+# defaulted '()' would dump as '[]' (see the subprocess round-trip above).
+FULL_SECRET_CONFIG = {
+    "secret_name": SECRET_NAME,
+    "sources": [
+        {"kind": "env_var", "env_var_name": ENV_VAR_NAME},
+        {"kind": "file_path", "file_path": SECRET_FILE_PATH},
+        {"kind": "subprocess", "command": COMMAND, "args": ["-a", "foo"]},
+        {"kind": "random_chars", "n_chars": 17},
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        # the bare-string shorthand
+        SECRET_NAME,
+        {"secret_name": SECRET_NAME, "sources": [{"kind": "env_var"}]},
+        FULL_SECRET_CONFIG,
+    ],
+)
+def test_secretconfig_as_yaml_round_trips(temp_dir, config):
+    # The string shorthand does not dump back to a string, but it does
+    # reach the same state: one 'env_var' source named for the secret.
+    original, reloaded = _round_trip_secret_config(
+        temp_dir / "installation.yaml",
+        config,
+    )
+
+    assert reloaded == original
 
 
 def test_secretconfig_resolved():
