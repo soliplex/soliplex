@@ -1865,6 +1865,19 @@ def test_installationconfig_from_yaml(
             _config_path=config_path,
         )
 
+        if "app_router_operations" in expected_kw:
+            exp_ar_ops = [
+                dataclasses.replace(
+                    ar_op,
+                    _config_path=config_path,
+                )
+                for ar_op in expected.app_router_operations
+            ]
+            expected = dataclasses.replace(
+                expected,
+                app_router_operations=exp_ar_ops,
+            )
+
         if "rooms_upload_path" in expected_kw:
             exp_rooms_upload_path = temp_dir / expected_kw["rooms_upload_path"]
         else:
@@ -2072,6 +2085,7 @@ def test_installationconfig_as_yaml(
                 group_name="test-group",
                 router_name="my.package.router",
                 prefix="/prefix",
+                _config_path=config_path,
             )
         ]
 
