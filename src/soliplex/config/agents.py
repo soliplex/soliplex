@@ -50,13 +50,29 @@ class UnknownCapability(KeyError):
     def __init__(self, name, _config_path=None):
         self.name = name
         self._config_path = _config_path
-        if _config_path is not None:
-            super().__init__(
-                f"Unknown capability name: {name} "
-                f"(configured in {_config_path})"
-            )
-        else:
-            super().__init__(f"Unknown capability name: {name}")
+
+        super().__init__(
+            f"Unknown capability name: {name} (configured in {_config_path})"
+        )
+
+
+class UnknownAgentConfigKind(KeyError):
+    def __init__(self, kind, _config_path=None):
+        self.kind = kind
+        self._config_path = _config_path
+        super().__init__(
+            f"Unknown agent config kind: {kind} (configured in {_config_path})"
+        )
+
+
+class AgentConfigKindMismatch(ValueError):
+    def __init__(self, found_kind, expected_kind):
+        self.found_kind = found_kind
+        self.expected_kind = expected_kind
+        super().__init__(
+            "Agent config kind mismatch: "
+            f"found '{found_kind}', expected '{expected_kind}'"
+        )
 
 
 class LLMProviderType(enum.StrEnum):
@@ -109,7 +125,7 @@ class AgentCapabilityConfig:
         try:
             cap_klass = AGENT_CAPABILITY_CLASSES_BY_NAME[self.name]
         except KeyError:
-            raise UnknownCapability(self.name) from None
+            raise UnknownCapability(self.name, self._config_path) from None
 
         return cap_klass(**self.kwargs)
 
@@ -178,6 +194,11 @@ class AgentConfig:
             self._system_prompt_text = system_prompt
 
     @classmethod
+    def _check_kind(cls, kind):
+        if kind not in (None, cls.kind):
+            raise AgentConfigKindMismatch(kind, cls.kind)
+
+    @classmethod
     def from_yaml(
         cls,
         installation_config: InstallationConfig,  # noqa F821 cycle
@@ -185,6 +206,9 @@ class AgentConfig:
         config_dict: dict,
     ):
         try:
+            kind = config_dict.pop("kind", None)
+            cls._check_kind(kind)
+
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
 
@@ -291,6 +315,7 @@ class AgentConfig:
 
         return {
             "id": self.id,
+            "kind": self.kind,
             "model_name": self.model_name,
             "retries": self.retries,
             "system_prompt": prompt,
@@ -343,6 +368,11 @@ class FactoryAgentConfig:
         return self._factory
 
     @classmethod
+    def _check_kind(cls, kind):
+        if kind not in (None, cls.kind):
+            raise AgentConfigKindMismatch(kind, cls.kind)
+
+    @classmethod
     def from_yaml(
         cls,
         installation_config: InstallationConfig,  # noqa F821 cycle
@@ -350,6 +380,9 @@ class FactoryAgentConfig:
         config_dict: dict,
     ):
         try:
+            kind = config_dict.pop("kind", None)
+            cls._check_kind(kind)
+
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
 
@@ -400,14 +433,17 @@ def extract_agent_config(
     config_path: pathlib.Path,
     config_dict: dict,
 ) -> AgentConfig:  # or subclass
-    agent_kind = config_dict.get("kind")
 
-    if agent_kind is not None:  # kind is a typing.ClassVar
-        config_dict = {
-            key: value for key, value in config_dict.items() if key != "kind"
-        }
+    # YAML not required to specify 'kind'
+    agent_kind = config_dict.get("kind", AgentConfig.kind)
 
-    ac_class = AGENT_CONFIG_CLASSES_BY_KIND.get(agent_kind, AgentConfig)
+    try:
+        ac_class = AGENT_CONFIG_CLASSES_BY_KIND[agent_kind]
+    except KeyError:
+        raise UnknownAgentConfigKind(
+            agent_kind,
+            config_path,
+        ) from None
 
     return ac_class.from_yaml(
         installation_config,
