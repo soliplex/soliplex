@@ -1242,6 +1242,7 @@ def test_factoryagentconfig_from_yaml(
     [
         WO_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
         W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
+        W_AGUI_FEATURE_NAMES_FACTORY_AGENT_CONFIG_KW.copy(),  # #1237
     ],
 )
 def test_factoryagentconfig_as_yaml(
@@ -1255,6 +1256,9 @@ def test_factoryagentconfig_as_yaml(
 
     if "extra_config" not in expected:
         expected["extra_config"] = {}
+
+    if "agui_feature_names" not in expected:
+        expected["agui_feature_names"] = ()  # #1237
 
     aconfig = config_agents.FactoryAgentConfig(**agent_config_kw)
 
