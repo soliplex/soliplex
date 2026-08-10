@@ -4,6 +4,7 @@ import dataclasses
 import functools
 import pathlib
 import typing
+import warnings
 from unittest import mock
 
 import pytest
@@ -204,11 +205,20 @@ W_CAPABILITIES_AGENT_CONFIG_KW = dict(
 )
 W_CAPABILITIES_AS_YAML = dict(
     capabilities=[
-        {"IncludeToolReturnSchemas": {}},  # BBB form, see #1230
-        {"Thinking": {"effort": "high"}},
+        {"name": "IncludeToolReturnSchemas", "kwargs": {}},
+        {"name": "Thinking", "kwargs": {"effort": "high"}},
     ]
 )
 W_CAPABILITIES_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+capabilities:
+    - name: "IncludeToolReturnSchemas"
+    - name: "Thinking"
+      kwargs:
+        effort: "high"
+"""
+# Deprecated spelling for the same config
+W_CAPABILITIES_BBB_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
 capabilities:
     - IncludeToolReturnSchemas
@@ -414,6 +424,99 @@ def test__apply_agent_config_template(temp_dir, config_dict, expected):
 
 
 @pytest.mark.parametrize(
+    "cap_config, expectation, deprecated",
+    [
+        (
+            "bogus",
+            pytest.raises(config_agents.UnknownCapability),
+            False,
+        ),
+        (
+            "testing",
+            contextlib.nullcontext(
+                config_agents.AgentCapabilityConfig(
+                    name="testing",
+                    kwargs={},
+                ),
+            ),
+            False,
+        ),
+        (
+            {"testing": {"dotted_name": "foo.bar"}},
+            contextlib.nullcontext(
+                config_agents.AgentCapabilityConfig(
+                    name="testing",
+                    kwargs={"dotted_name": "foo.bar"},
+                ),
+            ),
+            True,
+        ),
+        (
+            {"name": "testing", "kwargs": {"dotted_name": "foo.bar"}},
+            contextlib.nullcontext(
+                config_agents.AgentCapabilityConfig(
+                    name="testing",
+                    kwargs={"dotted_name": "foo.bar"},
+                ),
+            ),
+            False,
+        ),
+    ],
+)
+def test_agentcapabilityconfig_from_yaml(
+    temp_dir,
+    extra_agent_capability,
+    cap_config,
+    expectation,
+    deprecated,
+):
+
+    config_path = temp_dir / "config.yaml"
+
+    with (
+        expectation as expected,
+        warnings.catch_warnings(record=True) as warned,
+    ):
+        found = config_agents.AgentCapabilityConfig.from_yaml(
+            config_path,
+            cap_config,
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert found == dataclasses.replace(
+            expected,
+            _config_path=config_path,
+        )
+
+        if deprecated:
+            (d_warn,) = warned
+            assert d_warn.category is DeprecationWarning
+        else:
+            assert not warned
+
+
+@pytest.mark.parametrize(
+    "ctor_kwargs, expected",
+    [
+        (
+            {"name": "testing"},
+            {"name": "testing", "kwargs": {}},
+        ),
+        (
+            {"name": "testing", "kwargs": {"foo": "bar"}},
+            {"name": "testing", "kwargs": {"foo": "bar"}},
+        ),
+    ],
+)
+def test_agentcapabilityconfig_as_yaml(ctor_kwargs, expected):
+    acc = config_agents.AgentCapabilityConfig(**ctor_kwargs)
+
+    found = acc.as_yaml
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
     "name, kwargs, expectation",
     [
         ("bogus", {}, pytest.raises(config_agents.UnknownCapability)),
@@ -445,55 +548,6 @@ def test_agentcapabilityconfig_as_capability(
 
 
 @pytest.mark.parametrize(
-    "cap_config, expectation",
-    [
-        (
-            "bogus",
-            pytest.raises(config_agents.UnknownCapability),
-        ),
-        (
-            "testing",
-            contextlib.nullcontext(
-                config_agents.AgentCapabilityConfig(
-                    name="testing",
-                    kwargs={},
-                ),
-            ),
-        ),
-        (
-            {"testing": {"dotted_name": "foo.bar"}},
-            contextlib.nullcontext(
-                config_agents.AgentCapabilityConfig(
-                    name="testing",
-                    kwargs={"dotted_name": "foo.bar"},
-                ),
-            ),
-        ),
-    ],
-)
-def test_extract_agent_capability(
-    temp_dir,
-    extra_agent_capability,
-    cap_config,
-    expectation,
-):
-
-    config_path = temp_dir / "config.yaml"
-
-    with expectation as expected:
-        found = config_agents.extract_capability_config(
-            cap_config,
-            config_path,
-        )
-
-    if not isinstance(expected, pytest.ExceptionInfo):
-        assert found == dataclasses.replace(
-            expected,
-            _config_path=config_path,
-        )
-
-
-@pytest.mark.parametrize(
     "kw",
     [
         BARE_AGENT_CONFIG_KW.copy(),
@@ -508,64 +562,82 @@ def test_agentconfig_ctor(installation_config, kw):
 
 
 @pytest.mark.parametrize(
-    "config_yaml, expectation",
+    "config_yaml, expectation, deprecated",
     [
         (
             BOGUS_AGENT_CONFIG_YAML,
             pytest.raises(config_exc.FromYamlException),
+            False,
         ),
         (
             BOGUS_KIND_AGENT_CONFIG_YAML,
             pytest.raises(config_exc.FromYamlException),
+            False,
         ),
         (
             BARE_AGENT_CONFIG_YAML,
             contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
+            False,
         ),
         (
             W_KIND_AGENT_CONFIG_YAML,
             # `kind` stripped
             contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
+            False,
         ),
         (
             W_PROVIDER_KW_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_PROVIDER_KW_AGENT_CONFIG_KW.copy()),
+            False,
         ),
         (
             W_RETRIES_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_RETRIES_AGENT_CONFIG_KW.copy()),
+            False,
         ),
         (
             W_MODEL_SETTINGS_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_MODEL_SETTINGS_AGENT_CONFIG_KW.copy()),
+            False,
         ),
         (
             W_MULTIMODAL_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_MULTIMODAL_AGENT_CONFIG_KW.copy()),
+            False,
         ),
         (
             W_PROMPT_FILE_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_PROMPT_FILE_AGENT_CONFIG_KW.copy()),
+            False,
         ),
         (
             W_PROMPT_FILE_W_TEMPLATE_ID_AGENT_CONFIG_YAML,
             contextlib.nullcontext(
                 W_PROMPT_FILE_W_TEMPLATE_ID_AGENT_CONFIG_KW.copy()
             ),
+            False,
         ),
         (
             W_PROMPT_FILE_W_BOGUS_TEMPLATE_ID_AGENT_CONFIG_YAML,
             pytest.raises(config_exc.FromYamlException),
+            False,
         ),
         (
             W_CAPABILITIES_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_CAPABILITIES_AGENT_CONFIG_KW.copy()),
+            False,
+        ),
+        (
+            W_CAPABILITIES_BBB_AGENT_CONFIG_YAML,  # deprecated, see #1230
+            contextlib.nullcontext(W_CAPABILITIES_AGENT_CONFIG_KW.copy()),
+            True,
         ),
         (
             W_AGUI_FEATURE_NAMES_AGENT_CONFIG_YAML,
             contextlib.nullcontext(
                 W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW.copy()
             ),
+            False,
         ),
     ],
 )
@@ -574,6 +646,7 @@ def test_agentconfig_from_yaml(
     temp_dir,
     config_yaml,
     expectation,
+    deprecated,
 ):
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
@@ -598,7 +671,10 @@ def test_agentconfig_from_yaml(
         template_kw = {}
         installation_config.agent_configs = []
 
-    with expectation as expected:
+    with (
+        expectation as expected,
+        warnings.catch_warnings(record=True) as warned,
+    ):
         found = config_agents.AgentConfig.from_yaml(
             installation_config,
             yaml_file,
@@ -620,9 +696,13 @@ def test_agentconfig_from_yaml(
         )
 
         assert found == exp_agent_config
-
-        # See #180.
         assert found._installation_config is installation_config
+
+        if deprecated:
+            (d_warn,) = warned
+            assert d_warn.category is DeprecationWarning
+        else:
+            assert not warned
 
 
 @pytest.mark.parametrize("w_config_path", [False, True])
