@@ -862,7 +862,7 @@ class InstallationConfig:
 
             for aro in aros:
                 klass = aro_klasses_by_kind[aro["kind"]]
-                aros_cfg.append(klass.from_yaml(aro, config_path))
+                aros_cfg.append(klass.from_yaml(config_path, aro))
 
             config_dict["app_router_operations"] = aros_cfg
 
