@@ -37,11 +37,12 @@ MODEL_SETTINGS = {"temperature": 0.875}
 
 BOGUS_AGENT_CONFIG_YAML = ""
 
-W_KIND_AGENT_CONFIG_KW = dict(
-    id=AGENT_ID,
-    model_name=MODEL_NAME,
-    kind="testing",
-)
+BOGUS_KIND_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+kind: "bogus"
+model_name: "{MODEL_NAME}"
+system_prompt: "{SYSTEM_PROMPT}"
+"""
 
 BARE_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
@@ -50,6 +51,14 @@ BARE_AGENT_CONFIG_KW = dict(
 )
 BARE_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+system_prompt: "{SYSTEM_PROMPT}"
+"""
+
+# -> BARE_AGENT_CONFIG_KW, because 'AgentConfig.from_yaml' strips 'kind'
+W_KIND_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+kind: "{config_agents.AgentConfig.kind}"
 model_name: "{MODEL_NAME}"
 system_prompt: "{SYSTEM_PROMPT}"
 """
@@ -216,6 +225,28 @@ agui_feature_names:
 """
 
 FACTORY_NAME = "soliplex.config.agents.test_factory_wo_config"
+
+BOGUS_KIND_FACTORY_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+kind: "bogus"
+factory_name: "{FACTORY_NAME}"
+"""
+
+BARE_FACTORY_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    factory_name=FACTORY_NAME,
+)
+BARE_FACTORY_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+factory_name: "{FACTORY_NAME}"
+"""
+
+W_KIND_FACTORY_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+kind: "{config_agents.FactoryAgentConfig.kind}"
+factory_name: "{FACTORY_NAME}"
+"""
+
 WO_CONFIG_FACTORY_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
     factory_name=FACTORY_NAME,
@@ -285,6 +316,25 @@ template_id: "{W_EXTRA_CONFIG_TEMPLATE_AGENT_ID}"
 extra_config:
   foo: "Bar"
 """
+
+# These mappings are only used in 'test_extract_agent_capability':
+# `*AgentConfig.from_yaml' strips 'kind'.
+TESTING_KIND_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    kind="testing",
+)
+W_KIND_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    kind=config_agents.AgentConfig.kind,
+    model_name=MODEL_NAME,
+    system_prompt=SYSTEM_PROMPT,
+)
+W_KIND_FACTORY_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    kind=config_agents.FactoryAgentConfig.kind,
+    factory_name=FACTORY_NAME,
+)
 
 
 @pytest.fixture
@@ -459,7 +509,16 @@ def test_agentconfig_ctor(installation_config, kw):
             pytest.raises(config_exc.FromYamlException),
         ),
         (
+            BOGUS_KIND_AGENT_CONFIG_YAML,
+            pytest.raises(config_exc.FromYamlException),
+        ),
+        (
             BARE_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
+        ),
+        (
+            W_KIND_AGENT_CONFIG_YAML,
+            # `kind` stripped
             contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
         ),
         (
@@ -915,6 +974,7 @@ def test_agentconfig_as_yaml(
     model_settings = agent_config_kw.get("model_settings")
     expected = {
         "id": AGENT_ID,
+        "kind": config_agents.AgentConfig.kind,
         "system_prompt": system_prompt,
         "model_name": model_name,
         "model_settings": model_settings,
@@ -996,29 +1056,54 @@ def test_factoryagentconfig_factory(kw, w_existing):
 
 
 @pytest.mark.parametrize(
-    "config_yaml, expected_kw",
+    "config_yaml, expectation",
     [
-        (BOGUS_AGENT_CONFIG_YAML, None),
+        (
+            BOGUS_AGENT_CONFIG_YAML,
+            pytest.raises(config_exc.FromYamlException),
+        ),
+        (
+            BOGUS_KIND_FACTORY_AGENT_CONFIG_YAML,
+            pytest.raises(config_exc.FromYamlException),
+        ),
+        (
+            BARE_FACTORY_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(BARE_FACTORY_AGENT_CONFIG_KW.copy()),
+        ),
         (
             WO_CONFIG_FACTORY_AGENT_CONFIG_YAML,
-            WO_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
+            contextlib.nullcontext(WO_CONFIG_FACTORY_AGENT_CONFIG_KW.copy()),
+        ),
+        (
+            W_KIND_FACTORY_AGENT_CONFIG_YAML,
+            # kind stripped
+            contextlib.nullcontext(BARE_FACTORY_AGENT_CONFIG_KW.copy()),
         ),
         (
             W_CONFIG_FACTORY_AGENT_CONFIG_YAML,
-            W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
+            contextlib.nullcontext(W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy()),
         ),
         (
             W_AGUI_FEATURE_NAMES_FACTORY_AGENT_CONFIG_YAML,
-            W_AGUI_FEATURE_NAMES_FACTORY_AGENT_CONFIG_KW.copy(),
+            contextlib.nullcontext(
+                W_AGUI_FEATURE_NAMES_FACTORY_AGENT_CONFIG_KW.copy()
+            ),
         ),
-        (W_BOGUS_TEMPLATE_ID_FACTORY_AGENT_CONFIG_YAML, None),
+        (
+            W_BOGUS_TEMPLATE_ID_FACTORY_AGENT_CONFIG_YAML,
+            pytest.raises(config_exc.FromYamlException),
+        ),
         (
             W_TEMPLATE_ID_FACTORY_AGENT_CONFIG_YAML,
-            W_TEMPLATE_ID_FACTORY_AGENT_CONFIG_KW.copy(),
+            contextlib.nullcontext(
+                W_TEMPLATE_ID_FACTORY_AGENT_CONFIG_KW.copy()
+            ),
         ),
         (
             W_TEMPLATE_ID_W_EXTRA_CONFIG_FACTORY_AGENT_CONFIG_YAML,
-            W_TEMPLATE_ID_W_EXTRA_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
+            contextlib.nullcontext(
+                W_TEMPLATE_ID_W_EXTRA_CONFIG_FACTORY_AGENT_CONFIG_KW.copy()
+            ),
         ),
     ],
 )
@@ -1026,7 +1111,7 @@ def test_factoryagentconfig_from_yaml(
     installation_config,
     temp_dir,
     config_yaml,
-    expected_kw,
+    expectation,
 ):
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
@@ -1051,24 +1136,18 @@ def test_factoryagentconfig_from_yaml(
         template_kw = {}
         installation_config.agent_configs = []
 
-    if expected_kw is None:
-        with pytest.raises(config_exc.FromYamlException):
-            config_agents.FactoryAgentConfig.from_yaml(
-                installation_config,
-                yaml_file,
-                config_dict,
-            )
-    else:
-        expected = config_agents.FactoryAgentConfig(
-            _installation_config=installation_config,
-            _config_path=yaml_file,
-            **(template_kw | expected_kw),
-        )
-
+    with expectation as expected_kw:
         found = config_agents.FactoryAgentConfig.from_yaml(
             installation_config,
             yaml_file,
             config_dict,
+        )
+
+    if isinstance(expected_kw, dict):
+        expected = config_agents.FactoryAgentConfig(
+            _installation_config=installation_config,
+            _config_path=yaml_file,
+            **(template_kw | expected_kw),
         )
 
         assert found == expected
@@ -1078,7 +1157,7 @@ def test_factoryagentconfig_from_yaml(
 
 
 @pytest.mark.parametrize(
-    "kw",
+    "agent_config_kw",
     [
         WO_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
         W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
@@ -1086,17 +1165,17 @@ def test_factoryagentconfig_from_yaml(
 )
 def test_factoryagentconfig_as_yaml(
     installation_config,
-    kw,
+    agent_config_kw,
 ):
-    kw = copy.deepcopy(kw)
-    expected = copy.deepcopy(kw) | {
+    agent_config_kw = copy.deepcopy(agent_config_kw)
+    expected = copy.deepcopy(agent_config_kw) | {
         "kind": config_agents.FactoryAgentConfig.kind,
     }
 
     if "extra_config" not in expected:
         expected["extra_config"] = {}
 
-    aconfig = config_agents.FactoryAgentConfig(**kw)
+    aconfig = config_agents.FactoryAgentConfig(**agent_config_kw)
 
     found = aconfig.as_yaml
 
@@ -1104,10 +1183,24 @@ def test_factoryagentconfig_as_yaml(
 
 
 @pytest.mark.parametrize(
-    "agent_config, expected_kw",
+    "agent_config, expectation",
     [
-        (BARE_AGENT_CONFIG_KW.copy(), BARE_AGENT_CONFIG_KW),
-        (W_KIND_AGENT_CONFIG_KW.copy(), W_KIND_AGENT_CONFIG_KW),
+        (
+            {"kind": "bogus"},
+            pytest.raises(config_agents.UnknownAgentConfigKind),
+        ),
+        (
+            W_KIND_AGENT_CONFIG_KW.copy(),
+            contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
+        ),
+        (
+            W_KIND_FACTORY_AGENT_CONFIG_KW.copy(),
+            contextlib.nullcontext(BARE_FACTORY_AGENT_CONFIG_KW.copy()),
+        ),
+        (
+            TESTING_KIND_AGENT_CONFIG_KW.copy(),
+            contextlib.nullcontext(TESTING_KIND_AGENT_CONFIG_KW.copy()),
+        ),
     ],
 )
 def test_extract_agent_configs(
@@ -1115,7 +1208,7 @@ def test_extract_agent_configs(
     temp_dir,
     patched_agent_configs,
     agent_config,
-    expected_kw,
+    expectation,
 ):
     @dataclasses.dataclass(kw_only=True)
     class TestAgentConfig:
@@ -1127,6 +1220,7 @@ def test_extract_agent_configs(
 
         @classmethod
         def from_yaml(cls, i_config, c_path, c_dict):
+            assert c_dict.pop("kind") == cls.kind
             return cls(
                 _installation_config=i_config,
                 _config_path=c_path,
@@ -1134,29 +1228,48 @@ def test_extract_agent_configs(
             )
 
     # Register our extension agent config
-    patched_agent_configs["testing"] = TestAgentConfig
+    AC = config_agents.AgentConfig
+    FAC = config_agents.FactoryAgentConfig
 
-    if agent_config.get("kind") == "testing":
-        kw_no_kind = {k: v for k, v in expected_kw.items() if k != "kind"}
-        expected = TestAgentConfig(
-            _installation_config=installation_config,
-            _config_path=temp_dir,
-            **kw_no_kind,
-        )
-    else:
-        expected = config_agents.AgentConfig(
-            _installation_config=installation_config,
-            _config_path=temp_dir,
-            **expected_kw,
-        )
-
-    found = config_agents.extract_agent_config(
-        installation_config,
-        temp_dir,
-        agent_config,
+    patched_agent_configs.update(
+        {
+            TestAgentConfig.kind: TestAgentConfig,
+            AC.kind: AC,
+            FAC.kind: FAC,
+        }
     )
 
-    assert found == expected
+    with expectation as expected_kw:
+        found = config_agents.extract_agent_config(
+            installation_config,
+            temp_dir,
+            agent_config.copy(),  # might mutate
+        )
+
+    if isinstance(expected_kw, dict):
+        kind = agent_config["kind"]
+
+        if kind == "testing":
+            kw_no_kind = {k: v for k, v in agent_config.items() if k != "kind"}
+            expected = TestAgentConfig(
+                _installation_config=installation_config,
+                _config_path=temp_dir,
+                **kw_no_kind,
+            )
+        elif kind == config_agents.FactoryAgentConfig.kind:
+            expected = config_agents.FactoryAgentConfig(
+                _installation_config=installation_config,
+                _config_path=temp_dir,
+                **expected_kw,
+            )
+        else:
+            expected = config_agents.AgentConfig(
+                _installation_config=installation_config,
+                _config_path=temp_dir,
+                **expected_kw,
+            )
+
+        assert found == expected
 
 
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
