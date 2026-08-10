@@ -238,7 +238,7 @@ class SecretConfig:
 
         for source_config in source_configs:
             source_config["secret_name"] = config_dict["secret_name"]
-            source_kind = source_config.get("kind")
+            source_kind = source_config["kind"]
             source_klass = SourceClassesByKind[source_kind]
             source_inst = source_klass.from_yaml(config_path, source_config)
             sources.append(source_inst)
