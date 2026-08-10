@@ -431,6 +431,7 @@ class FactoryAgentConfig:
             "factory_name": self.factory_name,
             "with_agent_config": self.with_agent_config,
             "extra_config": self.extra_config,
+            "agui_feature_names": self.agui_feature_names,
         }
 
 
