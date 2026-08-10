@@ -116,7 +116,8 @@ def _apply_agent_config_template(
 
 ACC_BBB_NO_NAME_KEY_DEPRECATED = """\
 AgentCapabilityConfig.from_yaml: '{<name>: <kwargs>}' form is deprecated;
-use '{"name": <name>, "kwargs": <kwargs>}' instead.
+use '{"name": <name>, "kwargs": <kwargs>}' instead.  Support for the form
+will be removed after 'v0.76'.
 """
 
 
