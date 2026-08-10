@@ -76,7 +76,7 @@ class _AppRouterOperationBase:
             raise AppRouterOperationKindMismatch(kind, cls.kind)
 
     @classmethod
-    def from_yaml(cls, config_dict, config_path):
+    def from_yaml(cls, config_path, config_dict):
         try:
             kind = config_dict.pop("kind", None)
             cls._check_kind(kind)
@@ -175,7 +175,7 @@ class ClearAppRouters:
             raise AppRouterOperationKindMismatch(kind, cls.kind)
 
     @classmethod
-    def from_yaml(cls, config_dict, config_path):
+    def from_yaml(cls, config_path, config_dict):
         try:
             kind = config_dict.pop("kind", None)
             cls._check_kind(kind)
