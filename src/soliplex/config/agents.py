@@ -5,6 +5,7 @@ import enum
 import functools
 import pathlib
 import typing
+import warnings
 from collections import abc
 
 from pydantic_ai import capabilities as ai_capabilities
@@ -113,12 +114,50 @@ def _apply_agent_config_template(
     return config_dict
 
 
+ACC_BBB_NO_NAME_KEY_DEPRECATED = """\
+AgentCapabilityConfig.from_yaml: '{<name>: <kwargs>}' form is deprecated;
+use '{"name": <name>, "kwargs": <kwargs>}' instead.  Support for the form
+will be removed after 'v0.76'.
+"""
+
+
 @dataclasses.dataclass(kw_only=True)
 class AgentCapabilityConfig:
     name: str
     kwargs: dict[str, typing.Any] = _default_dict_field()
 
     _config_path: pathlib.Path = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        config_path: pathlib.Path,
+        config_dict_or_str: str | dict,
+    ):
+        if isinstance(config_dict_or_str, str):
+            name = config_dict_or_str
+            config_dict = {"name": name}
+        else:
+            if "name" not in config_dict_or_str:  # BBB deprecated
+                warnings.warn(
+                    ACC_BBB_NO_NAME_KEY_DEPRECATED,
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                ((name, kwargs),) = config_dict_or_str.items()
+                config_dict = {"name": name, "kwargs": kwargs}
+            else:
+                name = config_dict_or_str["name"]
+                config_dict = config_dict_or_str
+
+        if name not in AGENT_CAPABILITY_CLASSES_BY_NAME:
+            raise UnknownCapability(name, config_path)
+
+        return cls(**config_dict, _config_path=config_path)
+
+    @property
+    def as_yaml(self) -> dict:
+        return {"name": self.name, "kwargs": self.kwargs}
 
     @property
     def as_capability(self) -> ai_capabilities.AbstractCapability:
@@ -128,26 +167,6 @@ class AgentCapabilityConfig:
             raise UnknownCapability(self.name, self._config_path) from None
 
         return cap_klass(**self.kwargs)
-
-
-def extract_capability_config(
-    cap_config: str | dict[str, typing.Any],
-    _config_path: pathlib.Path,
-) -> AgentCapabilityConfig:
-    if isinstance(cap_config, str):
-        name = cap_config
-        kwargs = {}
-    else:
-        ((name, kwargs),) = cap_config.items()
-
-    if name not in AGENT_CAPABILITY_CLASSES_BY_NAME:
-        raise UnknownCapability(name, _config_path)
-
-    return AgentCapabilityConfig(
-        name=name,
-        kwargs=kwargs,
-        _config_path=_config_path,
-    )
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -234,7 +253,7 @@ class AgentConfig:
             capabilities = config_dict.pop("capabilities", None)
             if capabilities is not None:
                 config_dict["_capability_configs"] = [
-                    extract_capability_config(cap, config_path)
+                    AgentCapabilityConfig.from_yaml(config_path, cap)
                     for cap in capabilities
                 ]
 
@@ -310,7 +329,7 @@ class AgentConfig:
 
         for cap_cfg in self._capability_configs:
             cap_list = capabilities.setdefault("capabilities", [])
-            cap_list.append({cap_cfg.name: cap_cfg.kwargs})
+            cap_list.append(cap_cfg.as_yaml)
 
         return {
             "id": self.id,
