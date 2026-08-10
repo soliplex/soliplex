@@ -50,17 +50,20 @@ class APIRouterKwargs:
     deprecated: bool | None = None
 
     @property
-    def router_kwargs(self) -> dict[str, typing.Any]:
-        candidates = {
+    def _all_router_kwargs(self) -> dict[str, typing.Any]:
+        return {
             "prefix": self.prefix,
             "tags": self.tags,
             "dependencies": self.dependencies,
             "default_response_class": self.default_response_class,
             "deprecated": self.deprecated,
         }
+
+    @property
+    def router_kwargs(self) -> dict[str, typing.Any]:
         return {
             key: value
-            for key, value in candidates.items()
+            for key, value in self._all_router_kwargs.items()
             if value is not None
         }
 
@@ -110,13 +113,19 @@ class AddAppRouter(_AppRouterOperationBase, APIRouterKwargs):
 
     @property
     def as_yaml(self) -> dict[str, typing.Any]:
+        non_default_value_kwargs = {
+            key: value
+            for key, value in self._all_router_kwargs.items()
+            if key in _API_ROUTER_KWARG_DEFAULTS
+            and value != _API_ROUTER_KWARG_DEFAULTS[key]
+        }
         return (
             super().as_yaml
             | {
                 "router_name": self.router_name,
                 "replace_existing": self.replace_existing,
             }
-            | self.router_kwargs
+            | non_default_value_kwargs
         )
 
     def apply(self):
@@ -205,6 +214,10 @@ APP_ROUTER_OPERATIONS_BY_KIND = {
     ClearAppRouters.kind: ClearAppRouters,
 }
 
+
+_API_ROUTER_KWARG_DEFAULTS = {
+    field.name: field.default for field in dataclasses.fields(APIRouterKwargs)
+}
 
 _DEFAULT_KWARGS = APIRouterKwargs().router_kwargs
 

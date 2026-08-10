@@ -93,19 +93,20 @@ def test_addapprouter_from_yaml(temp_dir, config_dict, expectation):
 @pytest.mark.parametrize(
     "router_kw, exp_router_kw",
     [
-        ({}, DEFAULT_KW),
-        ({"prefix": None}, {}),
+        ({}, {}),
+        ({"prefix": None}, {"prefix": None}),  # 1215
+        ({"prefix": DEFAULT_KW["prefix"]}, {}),
         ({"prefix": PREFIX}, {"prefix": PREFIX}),
-        ({"tags": TAGS}, {"tags": TAGS} | DEFAULT_KW),
+        ({"tags": TAGS}, {"tags": TAGS}),
         (
             {"dependencies": DEPENDENCIES},
-            {"dependencies": DEPENDENCIES} | DEFAULT_KW,
+            {"dependencies": DEPENDENCIES},
         ),
         (
             {"default_response_class": DEFAULT_RESPONSE_CLASS},
-            {"default_response_class": DEFAULT_RESPONSE_CLASS} | DEFAULT_KW,
+            {"default_response_class": DEFAULT_RESPONSE_CLASS},
         ),
-        ({"deprecated": DEPRECATED}, {"deprecated": DEPRECATED} | DEFAULT_KW),
+        ({"deprecated": DEPRECATED}, {"deprecated": DEPRECATED}),
     ],
 )
 @pytest.mark.parametrize(
