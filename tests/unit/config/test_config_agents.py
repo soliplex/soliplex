@@ -202,6 +202,12 @@ W_CAPABILITIES_AGENT_CONFIG_KW = dict(
         ),
     ],
 )
+W_CAPABILITIES_AS_YAML = dict(
+    capabilities=[
+        {"IncludeToolReturnSchemas": {}},  # BBB form, see #1230
+        {"Thinking": {"effort": "high"}},
+    ]
+)
 W_CAPABILITIES_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
 capabilities:
@@ -943,26 +949,26 @@ def test_agentconfig_capabilities(w_kwargs, expected):
 
 
 @pytest.mark.parametrize(
-    "agent_config_kw",
+    "agent_config_kw, exp_cap",
     [
-        BARE_AGENT_CONFIG_KW.copy(),
-        W_PROVIDER_KW_AGENT_CONFIG_KW.copy(),
-        W_RETRIES_AGENT_CONFIG_KW.copy(),
-        W_PROMPT_FILE_AGENT_CONFIG_KW.copy(),
-        W_MULTIMODAL_AGENT_CONFIG_KW.copy(),
-        W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW.copy(),
+        (BARE_AGENT_CONFIG_KW.copy(), {}),
+        (W_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
+        (W_RETRIES_AGENT_CONFIG_KW.copy(), {}),
+        (W_PROMPT_FILE_AGENT_CONFIG_KW.copy(), {}),
+        (W_MULTIMODAL_AGENT_CONFIG_KW.copy(), {}),
+        (W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW.copy(), {}),
+        (
+            W_CAPABILITIES_AGENT_CONFIG_KW.copy(),
+            W_CAPABILITIES_AS_YAML,
+        ),
     ],
 )
 def test_agentconfig_as_yaml(
     installation_config,
     agent_config_kw,
+    exp_cap,
 ):
     agent_config_kw = copy.deepcopy(agent_config_kw)
-
-    ic_environ = {
-        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
-    }
-    installation_config.get_environment = ic_environ.get
     agent_config_kw["_installation_config"] = installation_config
 
     system_prompt = (
@@ -970,25 +976,19 @@ def test_agentconfig_as_yaml(
         or agent_config_kw.get("_system_prompt_text")
         or agent_config_kw.get("_system_prompt_path")
     )
-    model_name = agent_config_kw.get("model_name") or MODEL_NAME
-    model_settings = agent_config_kw.get("model_settings")
     expected = {
         "id": AGENT_ID,
         "kind": config_agents.AgentConfig.kind,
         "system_prompt": system_prompt,
-        "model_name": model_name,
-        "model_settings": model_settings,
+        "model_name": agent_config_kw.get("model_name"),
+        "model_settings": agent_config_kw.get("model_settings"),
         "retries": agent_config_kw.get("retries", 3),
+        "multimodal": agent_config_kw.get("multimodal", False),
         "provider_type": agent_config_kw.get("provider_type", "ollama"),
-    }
-
-    expected["provider_base_url"] = agent_config_kw.get(
-        "provider_base_url",
-        OLLAMA_BASE_URL,
-    )
-
-    expected["provider_key"] = agent_config_kw.get("provider_key")
-    expected["multimodal"] = agent_config_kw.get("multimodal", False)
+        "provider_base_url": agent_config_kw.get("provider_base_url"),
+        "provider_key": agent_config_kw.get("provider_key"),
+        "agui_feature_names": agent_config_kw.get("agui_feature_names", ()),
+    } | exp_cap
 
     aconfig = config_agents.AgentConfig(**agent_config_kw)
 
@@ -996,6 +996,7 @@ def test_agentconfig_as_yaml(
 
     assert found == expected
 
+    installation_config.get_environment.assert_not_called()  # see #1183
     installation_config.get_secret.assert_not_called()
 
 

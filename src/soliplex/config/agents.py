@@ -306,12 +306,11 @@ class AgentConfig:
             if self._system_prompt_text is None
             else self._system_prompt_text
         )
-        if self.provider_base_url is None:
-            provider_base_url = self._installation_config.get_environment(
-                "OLLAMA_BASE_URL"
-            )
-        else:
-            provider_base_url = self.provider_base_url
+        capabilities = {}
+
+        for cap_cfg in self._capability_configs:
+            cap_list = capabilities.setdefault("capabilities", [])
+            cap_list.append({cap_cfg.name: cap_cfg.kwargs})
 
         return {
             "id": self.id,
@@ -322,9 +321,10 @@ class AgentConfig:
             "model_settings": self.model_settings,
             "multimodal": self.multimodal,
             "provider_type": str(self.provider_type),
-            "provider_base_url": provider_base_url,
+            "provider_base_url": self.provider_base_url,
             "provider_key": self.provider_key,  # "secret:SECRET_NAME"
-        }
+            "agui_feature_names": self.agui_feature_names,
+        } | capabilities
 
 
 AgentFactory = abc.Callable[[], ai_ag_abstract.AbstractAgent]
