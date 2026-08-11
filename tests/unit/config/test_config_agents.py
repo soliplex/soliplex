@@ -516,6 +516,48 @@ def test_agentcapabilityconfig_as_yaml(ctor_kwargs, expected):
     assert found == expected
 
 
+def _round_trip_agent_capability_config(config_path, config_dict_or_str):
+    """Reload an 'AgentCapabilityConfig' from its own dump."""
+    klass = config_agents.AgentCapabilityConfig
+    original = klass.from_yaml(config_path, copy.deepcopy(config_dict_or_str))
+    reloaded = klass.from_yaml(config_path, copy.deepcopy(original.as_yaml))
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "cap_config, deprecated",
+    [
+        # bare-string shorthand
+        ("testing", False),
+        ({"name": "testing"}, False),
+        ({"name": "testing", "kwargs": {"dotted_name": "foo.bar"}}, False),
+        # deprecated single-key mapping spelling
+        ({"testing": {"dotted_name": "foo.bar"}}, True),
+    ],
+)
+def test_agentcapabilityconfig_as_yaml_round_trips(
+    temp_dir,
+    extra_agent_capability,
+    cap_config,
+    deprecated,
+):
+    # Neither the shorthand nor the deprecated spelling dumps back to the
+    # form it was written in -- 'as_yaml' always emits the canonical
+    # '{"name": ..., "kwargs": ...}' -- but all three reach the same
+    # state, which is the invariant under test. Reloading the dump must
+    # not re-warn, since the dump is canonical.
+    with warnings.catch_warnings(record=True) as warned:
+        warnings.simplefilter("always")
+        original, reloaded = _round_trip_agent_capability_config(
+            temp_dir / "config.yaml",
+            cap_config,
+        )
+
+    assert reloaded == original
+    assert len(warned) == (1 if deprecated else 0)
+
+
 @pytest.mark.parametrize(
     "name, kwargs, expectation",
     [
@@ -1080,6 +1122,64 @@ def test_agentconfig_as_yaml(
     installation_config.get_secret.assert_not_called()
 
 
+def _round_trip_agent_config(installation_config, config_path, config_dict):
+    """Reload an 'AgentConfig' from its own dump.
+
+    'from_yaml' drains 'kind', 'system_prompt', 'model_settings',
+    'capabilities' and 'agui_feature_names' out of the mapping it is
+    handed, hence the copies.
+    """
+    klass = config_agents.AgentConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_AGENT_CONFIG_YAML,
+        W_KIND_AGENT_CONFIG_YAML,
+        W_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_RETRIES_AGENT_CONFIG_YAML,
+        W_MODEL_SETTINGS_AGENT_CONFIG_YAML,
+        W_MULTIMODAL_AGENT_CONFIG_YAML,
+        W_PROMPT_FILE_AGENT_CONFIG_YAML,
+        W_AGUI_FEATURE_NAMES_AGENT_CONFIG_YAML,
+        W_CAPABILITIES_AGENT_CONFIG_YAML,
+        # deprecated capability spelling: dumps canonical, same state
+        W_CAPABILITIES_BBB_AGENT_CONFIG_YAML,
+    ],
+)
+def test_agentconfig_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    # No 'extra_agent_capability' here: it swaps the registry for one
+    # holding only 'testing', which would hide the real capability names
+    # these configs reference.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+
+        original, reloaded = _round_trip_agent_config(
+            installation_config,
+            temp_dir / "room_config.yaml",
+            yaml.safe_load(config_yaml),
+        )
+
+    assert reloaded == original
+
+
 @pytest.mark.parametrize(
     "kw",
     [
@@ -1265,6 +1365,54 @@ def test_factoryagentconfig_as_yaml(
     found = aconfig.as_yaml
 
     assert found == expected
+
+
+def _round_trip_factory_agent_config(
+    installation_config,
+    config_path,
+    config_dict,
+):
+    """Reload a 'FactoryAgentConfig' from its own dump.
+
+    'from_yaml' drains 'kind' and 'agui_feature_names' out of the mapping
+    it is handed, hence the copies.
+    """
+    klass = config_agents.FactoryAgentConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_FACTORY_AGENT_CONFIG_YAML,
+        W_KIND_FACTORY_AGENT_CONFIG_YAML,
+        W_CONFIG_FACTORY_AGENT_CONFIG_YAML,
+        W_AGUI_FEATURE_NAMES_FACTORY_AGENT_CONFIG_YAML,
+    ],
+)
+def test_factoryagentconfig_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    original, reloaded = _round_trip_factory_agent_config(
+        installation_config,
+        temp_dir / "room_config.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
 
 
 @pytest.mark.parametrize(

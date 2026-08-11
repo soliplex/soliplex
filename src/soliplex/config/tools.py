@@ -603,7 +603,7 @@ def extract_mcp_client_toolset_configs(
     for mcp_name, mcp_client_toolset_config in config_dict.pop(
         "mcp_client_toolsets", {}
     ).items():
-        kind = mcp_client_toolset_config.pop("kind")
+        kind = mcp_client_toolset_config["kind"]
         mcp_config_klass = MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[kind]
         mcp_client_toolset_configs[mcp_name] = mcp_config_klass.from_yaml(
             installation_config=installation_config,

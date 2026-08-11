@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 
 import pytest
@@ -151,3 +152,38 @@ def test_completionconfig_from_yaml(
     )
 
     assert found == expected
+
+
+@pytest.mark.xfail(strict=True, reason="#1187")
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_COMPLETION_CONFIG_YAML,
+        FULL_COMPLETION_CONFIG_YAML,
+    ],
+)
+def test_completionconfig_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    # 'CompletionConfig' has no 'as_yaml' at all, so the dump below
+    # raises 'AttributeError'. That makes the round trip the last
+    # executable statement in the test: anything after it would go
+    # uncovered while the xfail stands.
+    yaml_file = temp_dir / "test.yaml"
+    klass = config_completions.CompletionConfig
+    original = klass.from_yaml(
+        installation_config,
+        yaml_file,
+        copy.deepcopy(yaml.safe_load(config_yaml)),
+    )
+
+    assert (
+        klass.from_yaml(
+            installation_config,
+            yaml_file,
+            copy.deepcopy(original.as_yaml),
+        )
+        == original
+    )

@@ -1,6 +1,8 @@
 import contextlib
+import copy
 import dataclasses
 import json
+import operator
 import pathlib
 from unittest import mock
 
@@ -314,6 +316,79 @@ def test_quizconfig_as_yaml(temp_dir, installation_config, w_kw):
     found = inst.as_yaml
 
     assert found == expected
+
+
+def _round_trip_quiz_config(installation_config, config_path, config_dict):
+    """Reload a 'QuizConfig' from its own dump.
+
+    'from_yaml' drains 'judge_agent' out of the mapping it is handed,
+    hence the copies.
+    """
+    klass = config_quizzes.QuizConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+def test_quizconfig_as_yaml_round_trips_w_judge_agent(
+    temp_dir,
+    installation_config,
+):
+    installation_config.get_environment.side_effect = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+    }.get
+
+    original, reloaded = _round_trip_quiz_config(
+        installation_config,
+        temp_dir / "test.yaml",
+        yaml.safe_load(TEST_QUIZ_W_STEM_YAML),
+    )
+
+    assert reloaded == original
+
+
+QUIZ_STATE_ATTRS = (
+    "id",
+    "title",
+    "randomize",
+    "max_questions",
+    "_question_file_stem",
+    "_question_file_path_override",
+)
+
+
+def test_quizconfig_as_yaml_round_trips_wo_judge_agent(
+    temp_dir,
+    installation_config,
+):
+    installation_config.get_environment.side_effect = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+    }.get
+    get_state = operator.attrgetter(*QUIZ_STATE_ATTRS)
+
+    original, reloaded = _round_trip_quiz_config(
+        installation_config,
+        temp_dir / "test.yaml",
+        yaml.safe_load(TEST_QUIZ_W_OVR_YAML),
+    )
+
+    assert get_state(reloaded) == get_state(original)
+
+    # Not 'reloaded == original': '__post_init__' synthesizes the default
+    # judge without a '_config_path', where the reloaded one comes back
+    # through 'from_yaml' and has one. That field only resolves a
+    # relative system-prompt path, which the synthesized judge never has,
+    # so the judges are compared by their dumps.
+    assert reloaded.judge_agent.as_yaml == original.judge_agent.as_yaml
 
 
 def test_quizconfig__load_questions_file_miss_w_stem(
