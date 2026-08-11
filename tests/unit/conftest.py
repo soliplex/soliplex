@@ -213,6 +213,14 @@ def patched_agent_configs():
 
 
 @pytest.fixture
+def patched_secret_sources():
+    with mock.patch.dict(config_secrets.__dict__) as patched:
+        result = patched["SourceClassesByKind"] = {}
+
+        yield result
+
+
+@pytest.fixture
 def patched_secret_getters():
     with mock.patch.dict(config_secrets.__dict__) as patched:
         result = patched["SECRET_GETTERS_BY_KIND"] = {}

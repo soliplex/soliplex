@@ -1,36 +1,17 @@
 import contextlib
 import copy
-import dataclasses
-import typing
+import warnings
 from unittest import mock
 
 import _test_features as agui_features
+import _test_metaconfig
 import pytest
 import yaml
 
 from soliplex import authz
-from soliplex import secrets
-from soliplex.config import agents as config_agents
+from soliplex.config import _utils
 from soliplex.config import exceptions as config_exc
 from soliplex.config import meta as config_meta
-from soliplex.config import secrets as config_secrets
-from soliplex.config import skills as config_skills
-from soliplex.config import tools as config_tools
-
-NoRaise = contextlib.nullcontext()
-
-
-class FauxToolConfig:
-    tool_name = "faux"
-
-
-class FauxCapability:
-    dotted_name = "foo.bar"
-
-
-def faux_jsonpath_func(value):  # pragma: NO COVER (registered, not called)
-    return value
-
 
 BOGUS_ICMETA_YAML = """\
 meta:
@@ -72,81 +53,87 @@ meta:
 
 W_TOOL_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "tool_configs": [
-        config_meta.ConfigMeta(config_klass=FauxToolConfig),
+        config_meta.ToolConfigMeta(
+            config_klass=_test_metaconfig.DummyToolConfig,
+        ),
     ],
     "mcp_server_tool_wrappers": [
-        config_meta.ConfigMeta(
-            config_klass=FauxToolConfig,
-            wrapper_klass=config_tools.NoArgsMCPWrapper,
+        config_meta.MCP_ServerToolWrapperConfigMeta(
+            config_klass=_test_metaconfig.DummyToolConfig,
+            wrapper_klass=_test_metaconfig.DummyMCPWrapper,
         ),
     ],
 }
 W_TOOL_CONFIGS_ICMETA_YAML = """\
 meta:
   tool_configs:
-    - "test_config_meta.FauxToolConfig"
+    - "_test_metaconfig.DummyToolConfig"
   mcp_server_tool_wrappers:
-    - config_klass: "test_config_meta.FauxToolConfig"
-      wrapper_klass: "soliplex.config.tools.NoArgsMCPWrapper"
+    - config_klass: "_test_metaconfig.DummyToolConfig"
+      wrapper_klass: "_test_metaconfig.DummyMCPWrapper"
 """
 
 
 W_MCP_TOOLSET_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "mcp_toolset_configs": [
-        config_meta.ConfigMeta(
-            config_klass=config_tools.Stdio_MCP_ClientToolsetConfig,
+        config_meta.MCP_ToolsetConfigMeta(
+            config_klass=_test_metaconfig.DummyMCP_ToolsetConfig,
         )
     ],
 }
 W_MCP_TOOLSET_CONFIGS_ICMETA_YAML = """\
 meta:
   mcp_toolset_configs:
-    - "soliplex.config.tools.Stdio_MCP_ClientToolsetConfig"
+    - "_test_metaconfig.DummyMCP_ToolsetConfig"
 """
 
 
 W_SKILL_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "skill_configs": [
-        config_meta.ConfigMeta(config_klass=config_skills.HR_RAG_SkillConfig),
+        config_meta.SkillConfigMeta(
+            config_klass=_test_metaconfig.DummySkillConfig,
+        ),
     ],
 }
 W_SKILL_CONFIGS_ICMETA_YAML = """\
 meta:
   skill_configs:
-    - "soliplex.config.skills.HR_RAG_SkillConfig"
+    - "_test_metaconfig.DummySkillConfig"
 """
 
 
 W_AGENT_CAPABILITY_ICMETA_KW = BARE_ICMETA_KW | {
     "agent_capability_types": [
-        config_meta.ConfigMeta(config_klass=FauxCapability),
+        config_meta.AgentCapabilityMeta(
+            config_klass=_test_metaconfig.DummyAgentCapability
+        ),
     ],
 }
 W_AGENT_CAPABILITY_ICMETA_YAML = """\
 meta:
   agent_capability_types:
-      - "test_config_meta.FauxCapability"
+      - "_test_metaconfig.DummyAgentCapability"
 """
 
 
 W_AGENT_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "agent_configs": [
-        config_meta.ConfigMeta(config_klass=config_agents.AgentConfig),
-        config_meta.ConfigMeta(config_klass=config_agents.FactoryAgentConfig),
+        config_meta.AgentConfigMeta(
+            config_klass=_test_metaconfig.DummyAgentConfig,
+        ),
     ],
 }
 W_AGENT_CONFIGS_ICMETA_YAML = """\
 meta:
   agent_configs:
-      - "soliplex.config.agents.AgentConfig"
-      - "soliplex.config.agents.FactoryAgentConfig"
+      - "_test_metaconfig.DummyAgentConfig"
 """
 
 SECRET_SOURCE_FUNC = lambda source: "SEEKRIT"  # noqa E731
 W_SECRET_SOURCE_ICMETA_KW = BARE_ICMETA_KW | {
     "secret_sources": [
-        config_meta.ConfigMeta(
-            config_klass=config_secrets.EnvVarSecretSource,
+        config_meta.SecretSourceMeta(
+            config_klass=_test_metaconfig.DummySecretSource,
             registered_func=SECRET_SOURCE_FUNC,
         ),
     ],
@@ -154,7 +141,7 @@ W_SECRET_SOURCE_ICMETA_KW = BARE_ICMETA_KW | {
 W_SECRET_SOURCE_ICMETA_YAML = """\
 meta:
   secret_sources:
-    - "config_klass": "soliplex.config.secrets.EnvVarSecretSource"
+    - "config_klass": "_test_metaconfig.DummySecretSource"
       "registered_func": "soliplex.config.test_secret_func"
 """
 
@@ -164,7 +151,7 @@ W_JSONPATH_FUNCTIONS_ICMETA_KW = BARE_ICMETA_KW | {
     "jsonpath_functions": [
         config_meta.JSONPathFunctionConfigMeta(
             name=JSONPATH_FUNCTION_NAME,
-            func=faux_jsonpath_func,
+            func=_test_metaconfig.dummy_jsonpath_func,
         ),
     ],
 }
@@ -172,7 +159,7 @@ W_JSONPATH_FUNCTIONS_ICMETA_YAML = f"""\
 meta:
   jsonpath_functions:
       - name: "{JSONPATH_FUNCTION_NAME}"
-        func: "test_config_meta.faux_jsonpath_func"
+        func: "_test_metaconfig.dummy_jsonpath_func"
 """
 
 
@@ -185,42 +172,46 @@ FULL_ICMETA_KW = {
         ),
     ],
     "tool_configs": [
-        config_meta.ConfigMeta(config_klass=FauxToolConfig),
+        config_meta.ToolConfigMeta(
+            config_klass=_test_metaconfig.DummyToolConfig,
+        ),
     ],
     "mcp_toolset_configs": [
-        config_meta.ConfigMeta(
-            config_klass=config_tools.Stdio_MCP_ClientToolsetConfig
-        ),
-        config_meta.ConfigMeta(
-            config_klass=config_tools.HTTP_MCP_ClientToolsetConfig
+        config_meta.MCP_ToolsetConfigMeta(
+            config_klass=_test_metaconfig.DummyMCP_ToolsetConfig,
         ),
     ],
     "mcp_server_tool_wrappers": [
-        config_meta.ConfigMeta(
-            config_klass=FauxToolConfig,
-            wrapper_klass=config_tools.NoArgsMCPWrapper,
+        config_meta.MCP_ServerToolWrapperConfigMeta(
+            config_klass=_test_metaconfig.DummyToolConfig,
+            wrapper_klass=_test_metaconfig.DummyMCPWrapper,
         ),
     ],
     "skill_configs": [
-        config_meta.ConfigMeta(config_klass=config_skills.HR_RAG_SkillConfig),
-        config_meta.ConfigMeta(
-            config_klass=config_skills.HR_Analysis_SkillConfig
+        config_meta.SkillConfigMeta(
+            config_klass=_test_metaconfig.DummySkillConfig,
+        ),
+    ],
+    "agent_capability_types": [
+        config_meta.AgentCapabilityMeta(
+            config_klass=_test_metaconfig.DummyAgentCapability,
         ),
     ],
     "agent_configs": [
-        config_meta.ConfigMeta(config_klass=config_agents.AgentConfig),
-        config_meta.ConfigMeta(config_klass=config_agents.FactoryAgentConfig),
+        config_meta.AgentConfigMeta(
+            config_klass=_test_metaconfig.DummyAgentConfig,
+        ),
     ],
     "secret_sources": [
-        config_meta.ConfigMeta(
-            config_klass=config_secrets.EnvVarSecretSource,
+        config_meta.SecretSourceMeta(
+            config_klass=_test_metaconfig.DummySecretSource,
             registered_func=SECRET_SOURCE_FUNC,
         ),
     ],
     "jsonpath_functions": [
         config_meta.JSONPathFunctionConfigMeta(
             name=JSONPATH_FUNCTION_NAME,
-            func=faux_jsonpath_func,
+            func=_test_metaconfig.dummy_jsonpath_func,
         ),
     ],
 }
@@ -231,85 +222,60 @@ meta:
         model_klass: "_test_features.EmptyFeatureModel"
         source: "server"
   tool_configs:
-    - "test_config_meta.FauxToolConfig"
+    - "_test_metaconfig.DummyToolConfig"
   mcp_toolset_configs:
-      - "soliplex.config.tools.Stdio_MCP_ClientToolsetConfig"
-      - "soliplex.config.tools.HTTP_MCP_ClientToolsetConfig"
+      - "_test_metaconfig.DummyMCP_ToolsetConfig"
   mcp_server_tool_wrappers:
-    - config_klass: "test_config_meta.FauxToolConfig"
-      wrapper_klass: "soliplex.config.tools.NoArgsMCPWrapper"
+    - config_klass: "_test_metaconfig.DummyToolConfig"
+      wrapper_klass: "_test_metaconfig.DummyMCPWrapper"
   skill_configs:
-      - "soliplex.config.skills.HR_RAG_SkillConfig"
-      - "soliplex.config.skills.HR_Analysis_SkillConfig"
+      - "_test_metaconfig.DummySkillConfig"
+  agent_capability_types:
+      - "_test_metaconfig.DummyAgentCapability"
   agent_configs:
-      - "soliplex.config.agents.AgentConfig"
-      - "soliplex.config.agents.FactoryAgentConfig"
+      - "_test_metaconfig.DummyAgentConfig"
   secret_sources:
-    - "config_klass": "soliplex.config.secrets.EnvVarSecretSource"
+    - "config_klass": "_test_metaconfig.DummySecretSource"
       "registered_func": "soliplex.config.test_secret_func"
   jsonpath_functions:
       - name: "{JSONPATH_FUNCTION_NAME}"
-        func: "test_config_meta.faux_jsonpath_func"
+        func: "_test_metaconfig.dummy_jsonpath_func"
 """
 
-
-def test_jsonpathfunctionconfigmeta_from_yaml():
-    with mock.patch.dict("sys.modules", dummy=mock.Mock()):
-        import dummy
-
-        dummy.the_func = func = mock.Mock()
-
-        meta = config_meta.JSONPathFunctionConfigMeta.from_yaml(
-            {"name": "is_admin", "func": "dummy.the_func"}
-        )
-
-    assert meta.name == "is_admin"
-    assert meta.func is func
+NoRaise = contextlib.nullcontext()
 
 
-@mock.patch("importlib.import_module")
-def test_configmeta_from_yaml_w_importable_name(im):
-    config_yaml = "somemodule.SomeClass"
+def test_configmeta_from_yaml_w_importable_name():
+    config_yaml = "_test_metaconfig.DummyConfigClass"
 
-    faux_module = im.return_value = mock.Mock()
+    with warnings.catch_warnings(record=True) as warned:
+        meta = config_meta.ConfigMeta.from_yaml(config_yaml)
 
-    meta = config_meta.ConfigMeta.from_yaml(config_yaml)
+    assert meta.config_klass is _test_metaconfig.DummyConfigClass
+    assert meta.wrapper_klass is None
+    assert meta.registered_func is None
 
-    assert meta.config_klass is faux_module.SomeClass
+    (warning,) = warned
+    assert str(warning.message) == config_meta.CONFIG_META_DEPRECATED
+    assert warning.category is DeprecationWarning
 
 
+@pytest.mark.parametrize("w_regfunc", [False, True])
 @pytest.mark.parametrize("w_wrapper", [False, True])
-def test_configmeta_from_yaml_w_dict(w_wrapper):
+def test_configmeta_from_yaml_w_dict(w_wrapper, w_regfunc):
     config_klass = mock.Mock()
     wrapper_klass = mock.Mock()
+    registered_func = mock.Mock()
 
     config_yaml = {"config_klass": config_klass}
 
     if w_wrapper:
         config_yaml["wrapper_klass"] = wrapper_klass
 
-    meta = config_meta.ConfigMeta.from_yaml(config_yaml)
+    if w_regfunc:
+        config_yaml["registered_func"] = registered_func
 
-    assert meta.config_klass is config_klass
-
-    if w_wrapper:
-        assert meta.wrapper_klass is wrapper_klass
-    else:
-        assert meta.wrapper_klass is None
-
-
-@pytest.mark.parametrize("w_wrapper", [False, True])
-def test_configmeta_from_yaml_w_dict_w_names(w_wrapper):
-    dummy_module = mock.Mock()
-    config_klass = dummy_module.ConfigClass = mock.Mock()
-    wrapper_klass = dummy_module.WrapperClass = mock.Mock()
-
-    config_yaml = {"config_klass": "dummy.ConfigClass"}
-
-    if w_wrapper:
-        config_yaml["wrapper_klass"] = "dummy.WrapperClass"
-
-    with mock.patch.dict("sys.modules", dummy=dummy_module):
+    with warnings.catch_warnings(record=True) as warned:
         meta = config_meta.ConfigMeta.from_yaml(config_yaml)
 
     assert meta.config_klass is config_klass
@@ -318,6 +284,358 @@ def test_configmeta_from_yaml_w_dict_w_names(w_wrapper):
         assert meta.wrapper_klass is wrapper_klass
     else:
         assert meta.wrapper_klass is None
+
+    if w_regfunc:
+        assert meta.registered_func is registered_func
+    else:
+        assert meta.registered_func is None
+
+    (warning,) = warned
+    assert str(warning.message) == config_meta.CONFIG_META_DEPRECATED
+    assert warning.category is DeprecationWarning
+
+
+@pytest.mark.parametrize("w_regfunc", [False, True])
+@pytest.mark.parametrize("w_wrapper", [False, True])
+def test_configmeta_from_yaml_w_dict_w_names(
+    w_wrapper,
+    w_regfunc,
+):
+    config_yaml = {"config_klass": "_test_metaconfig.DummyConfigClass"}
+
+    if w_wrapper:
+        config_yaml["wrapper_klass"] = "_test_metaconfig.DummyWrapperClass"
+
+    if w_regfunc:
+        config_yaml["registered_func"] = "_test_metaconfig.dummy_jsonpath_func"
+
+    with warnings.catch_warnings(record=True) as warned:
+        meta = config_meta.ConfigMeta.from_yaml(config_yaml)
+
+    assert meta.config_klass is _test_metaconfig.DummyConfigClass
+
+    if w_wrapper:
+        assert meta.wrapper_klass is _test_metaconfig.DummyWrapperClass
+    else:
+        assert meta.wrapper_klass is None
+
+    if w_regfunc:
+        assert meta.registered_func is _test_metaconfig.dummy_jsonpath_func
+    else:
+        assert meta.registered_func is None
+
+    (warning,) = warned
+    assert str(warning.message) == config_meta.CONFIG_META_DEPRECATED
+    assert warning.category is DeprecationWarning
+
+
+@pytest.mark.parametrize(
+    "w_source_kw, exp_source",
+    [
+        ({}, "either"),
+        ({"source": "either"}, "either"),
+        ({"source": "server"}, "server"),
+        ({"source": "client"}, "client"),
+    ],
+)
+def test_agui_featureconfigmeta_from_yaml(w_source_kw, exp_source):
+
+    meta = config_meta.AGUI_FeatureConfigMeta.from_yaml(
+        {
+            "name": "my_feature",
+            "model_klass": "_test_metaconfig.DummyModelClass",
+        }
+        | w_source_kw
+    )
+
+    assert meta.name == "my_feature"
+    assert meta.model_klass is _test_metaconfig.DummyModelClass
+    assert meta.source == exp_source
+
+
+@pytest.mark.parametrize(
+    "w_depr_kw",
+    [
+        {},
+        {"wrapper_klass": "dummy.nonesuch_wrapper"},
+        {"registered_func": "dummy.nonesuch_func"},
+        {
+            "wrapper_klass": "dummy.nonesuch_wrapper",
+            "registered_func": "dummy.nonesuch_func",
+        },
+    ],
+)
+@pytest.mark.parametrize("w_bare_str", [False, True])
+def test_toolconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+    tool_config_klassname = "_test_metaconfig.DummyToolConfig"
+
+    if w_bare_str:
+        yaml_config = tool_config_klassname
+    else:
+        yaml_config = {
+            "config_klass": tool_config_klassname,
+        } | w_depr_kw
+
+    with warnings.catch_warnings(record=True) as warned:
+        found = config_meta.ToolConfigMeta.from_yaml(yaml_config)
+
+    assert found.config_klass is _test_metaconfig.DummyToolConfig
+    assert found.tool_name == _test_metaconfig.DummyToolConfig.tool_name
+
+    if not w_bare_str:
+        assert len(warned) == len(w_depr_kw)
+
+        messages = []
+        for warning in warned:
+            assert warning.category is DeprecationWarning
+            messages.append(str(warning.message))
+
+        for key in w_depr_kw:
+            assert any(key in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    "w_depr_kw",
+    [
+        {},
+        {"wrapper_klass": "dummy.nonesuch_wrapper"},
+        {"registered_func": "dummy.nonesuch_func"},
+        {
+            "wrapper_klass": "dummy.nonesuch_wrapper",
+            "registered_func": "dummy.nonesuch_func",
+        },
+    ],
+)
+@pytest.mark.parametrize("w_bare_str", [False, True])
+def test_mcp_toolsetconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+    tool_config_klassname = "_test_metaconfig.DummyToolConfig"
+
+    if w_bare_str:
+        yaml_config = tool_config_klassname
+    else:
+        yaml_config = {
+            "config_klass": tool_config_klassname,
+        } | w_depr_kw
+
+    with warnings.catch_warnings(record=True) as warned:
+        found = config_meta.MCP_ToolsetConfigMeta.from_yaml(yaml_config)
+
+    assert found.config_klass is _test_metaconfig.DummyToolConfig
+    assert found.kind == _test_metaconfig.DummyToolConfig.kind
+
+    if not w_bare_str:
+        assert len(warned) == len(w_depr_kw)
+
+        messages = []
+        for warning in warned:
+            assert warning.category is DeprecationWarning
+            messages.append(str(warning.message))
+
+        for key in w_depr_kw:
+            assert any(key in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    "w_depr_kw",
+    [
+        {},
+        {"registered_func": "dummy.nonesuch_func"},
+    ],
+)
+def test_mcp_servertoolwrapperconfigmeta_from_yaml(w_depr_kw):
+    tool_config_klassname = "_test_metaconfig.DummyToolConfig"
+    wrapper_klassname = "_test_metaconfig.DummyMCPWrapper"
+
+    yaml_config = {
+        "config_klass": tool_config_klassname,
+        "wrapper_klass": wrapper_klassname,
+    } | w_depr_kw
+
+    with warnings.catch_warnings(record=True) as warned:
+        found = config_meta.MCP_ServerToolWrapperConfigMeta.from_yaml(
+            yaml_config,
+        )
+
+    assert found.config_klass is _test_metaconfig.DummyToolConfig
+    assert found.wrapper_klass is _test_metaconfig.DummyMCPWrapper
+    assert found.tool_name == _test_metaconfig.DummyToolConfig.tool_name
+
+    assert len(warned) == len(w_depr_kw)
+
+    messages = []
+    for warning in warned:
+        assert warning.category is DeprecationWarning
+        messages.append(str(warning.message))
+
+    for key in w_depr_kw:
+        assert any(key in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    "w_depr_kw",
+    [
+        {},
+        {"wrapper_klass": "dummy.nonesuch_wrapper"},
+        {"registered_func": "dummy.nonesuch_func"},
+        {
+            "wrapper_klass": "dummy.nonesuch_wrapper",
+            "registered_func": "dummy.nonesuch_func",
+        },
+    ],
+)
+@pytest.mark.parametrize("w_bare_str", [False, True])
+def test_skillconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+    skill_config_klassname = "_test_metaconfig.DummySkillConfig"
+
+    if w_bare_str:
+        yaml_config = skill_config_klassname
+    else:
+        yaml_config = {
+            "config_klass": skill_config_klassname,
+        } | w_depr_kw
+
+    with warnings.catch_warnings(record=True) as warned:
+        found = config_meta.SkillConfigMeta.from_yaml(yaml_config)
+
+    assert found.config_klass is _test_metaconfig.DummySkillConfig
+    assert found.kind == _test_metaconfig.DummySkillConfig.kind
+
+    if not w_bare_str:
+        assert len(warned) == len(w_depr_kw)
+
+        messages = []
+        for warning in warned:
+            assert warning.category is DeprecationWarning
+            messages.append(str(warning.message))
+
+        for key in w_depr_kw:
+            assert any(key in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    "w_depr_kw",
+    [
+        {},
+        {"wrapper_klass": "dummy.nonesuch_wrapper"},
+        {"registered_func": "dummy.nonesuch_func"},
+        {
+            "wrapper_klass": "dummy.nonesuch_wrapper",
+            "registered_func": "dummy.nonesuch_func",
+        },
+    ],
+)
+@pytest.mark.parametrize("w_bare_str", [False, True])
+def test_agentcapabilityconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+    capability_klassname = "_test_metaconfig.DummyAgentCapability"
+    exp_cap_klass = _test_metaconfig.DummyAgentCapability
+
+    if w_bare_str:
+        yaml_config = capability_klassname
+    else:
+        yaml_config = {
+            "config_klass": capability_klassname,
+        } | w_depr_kw
+
+    with warnings.catch_warnings(record=True) as warned:
+        found = config_meta.AgentCapabilityMeta.from_yaml(yaml_config)
+
+    assert found.config_klass is exp_cap_klass
+    assert found.capability_name == exp_cap_klass.__name__
+
+    if not w_bare_str:
+        assert len(warned) == len(w_depr_kw)
+
+        messages = []
+        for warning in warned:
+            assert warning.category is DeprecationWarning
+            messages.append(str(warning.message))
+
+        for key in w_depr_kw:
+            assert any(key in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    "w_depr_kw",
+    [
+        {},
+        {"wrapper_klass": "dummy.nonesuch_wrapper"},
+        {"registered_func": "dummy.nonesuch_func"},
+        {
+            "wrapper_klass": "dummy.nonesuch_wrapper",
+            "registered_func": "dummy.nonesuch_func",
+        },
+    ],
+)
+@pytest.mark.parametrize("w_bare_str", [False, True])
+def test_agentconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+    agent_config_klassname = "_test_metaconfig.DummyAgentConfig"
+
+    if w_bare_str:
+        yaml_config = agent_config_klassname
+    else:
+        yaml_config = {
+            "config_klass": agent_config_klassname,
+        } | w_depr_kw
+
+    with warnings.catch_warnings(record=True) as warned:
+        found = config_meta.AgentConfigMeta.from_yaml(yaml_config)
+
+    assert found.config_klass is _test_metaconfig.DummyAgentConfig
+    assert found.kind == _test_metaconfig.DummyAgentConfig.kind
+
+    if not w_bare_str:
+        assert len(warned) == len(w_depr_kw)
+
+        messages = []
+        for warning in warned:
+            assert warning.category is DeprecationWarning
+            messages.append(str(warning.message))
+
+        for key in w_depr_kw:
+            assert any(key in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    "w_depr_kw",
+    [
+        {},
+        {"wrapper_klass": "dummy.nonesuch_wrapper"},
+    ],
+)
+def test_secretsourcemeta_from_yaml(w_depr_kw):
+    secret_source_klassname = "_test_metaconfig.DummySecretSource"
+    registered_funcname = "_test_metaconfig.dummy_secret_getter"
+
+    yaml_config = {
+        "config_klass": secret_source_klassname,
+        "registered_func": registered_funcname,
+    } | w_depr_kw
+
+    with warnings.catch_warnings(record=True) as warned:
+        found = config_meta.SecretSourceMeta.from_yaml(yaml_config)
+
+    assert found.config_klass is _test_metaconfig.DummySecretSource
+    assert found.registered_func is _test_metaconfig.dummy_secret_getter
+    assert found.kind == _test_metaconfig.DummySecretSource.kind
+
+    assert len(warned) == len(w_depr_kw)
+
+    messages = []
+    for warning in warned:
+        assert warning.category is DeprecationWarning
+        messages.append(str(warning.message))
+
+    for key in w_depr_kw:
+        assert any(key in message for message in messages)
+
+
+def test_jsonpathfunctionconfigmeta_from_yaml():
+    meta = config_meta.JSONPathFunctionConfigMeta.from_yaml(
+        {"name": "is_admin", "func": "_test_metaconfig.dummy_jsonpath_func"}
+    )
+
+    assert meta.name == "is_admin"
+    assert meta.func is _test_metaconfig.dummy_jsonpath_func
 
 
 @pytest.mark.parametrize(
@@ -349,6 +667,7 @@ def test_installationconfigmeta_from_yaml(
     patched_agent_capabilities,
     patched_agent_configs,
     patched_secret_getters,
+    patched_secret_sources,
     patched_agui_features,
     patched_app_routers,
     patched_tool_configs,
@@ -432,10 +751,13 @@ def test_installationconfigmeta_from_yaml(
                 for klass in patched_mcp_tool_wrappers.values()
             }
             for meta_kw in config_dict_meta["mcp_server_tool_wrappers"]:
-                wrapper_klass_name = meta_kw["wrapper_klass"]
+                tool_config_klass = _utils._from_dotted_name(
+                    meta_kw["config_klass"]
+                )
+                wrapper_klassname = meta_kw["wrapper_klass"]
                 assert (
-                    patched_mcp_tool_wrappers["faux"]
-                    == mcptcp_by_class_name[wrapper_klass_name]
+                    patched_mcp_tool_wrappers[tool_config_klass.tool_name]
+                    == mcptcp_by_class_name[wrapper_klassname]
                 )
 
         if config_dict_meta and "agent_capability_types" in config_dict_meta:
@@ -457,17 +779,19 @@ def test_installationconfigmeta_from_yaml(
                 assert kind in patched_agent_configs
 
         if config_dict_meta and "secret_sources" in config_dict_meta:
+            ss_klass = _test_metaconfig.DummySecretSource
             assert patched_secret_getters == {
-                config_secrets.EnvVarSecretSource.kind: SECRET_SOURCE_FUNC
+                ss_klass.kind: SECRET_SOURCE_FUNC
             }
+            assert patched_secret_sources == {ss_klass.kind: ss_klass}
 
         if config_dict_meta and "jsonpath_functions" in config_dict_meta:
             assert authz.registered_jsonpath_functions() == {
-                JSONPATH_FUNCTION_NAME: faux_jsonpath_func
+                JSONPATH_FUNCTION_NAME: _test_metaconfig.dummy_jsonpath_func
             }
             assert (
                 patched_jsonpath_functions[JSONPATH_FUNCTION_NAME]
-                is faux_jsonpath_func
+                is _test_metaconfig.dummy_jsonpath_func
             )
 
 
@@ -484,6 +808,7 @@ def test_installationconfigmeta_as_yaml(
     patched_agent_capabilities,
     patched_skill_configs,
     patched_secret_getters,
+    patched_secret_sources,
     patched_agui_features,
     patched_app_routers,
     patched_tool_configs,
@@ -503,67 +828,69 @@ def test_installationconfigmeta_as_yaml(
     expected = copy.deepcopy(BARE_ICMETA_KW)
 
     if w_tools:
-        klass = FauxToolConfig
+        klass = _test_metaconfig.DummyToolConfig
         patched_tool_configs[klass.tool_name] = klass
         expected["tool_configs"].append(
-            "test_config_meta.FauxToolConfig",
+            "_test_metaconfig.DummyToolConfig",
         )
-        wrapper_klass = config_tools.NoArgsMCPWrapper
+        wrapper_klass = _test_metaconfig.DummyMCPWrapper
         patched_mcp_tool_wrappers[klass.tool_name] = wrapper_klass
         expected["mcp_server_tool_wrappers"].append(
             {
-                "config_klass": "test_config_meta.FauxToolConfig",
-                "wrapper_klass": "soliplex.config.tools.NoArgsMCPWrapper",
+                "config_klass": "_test_metaconfig.DummyToolConfig",
+                "wrapper_klass": "_test_metaconfig.DummyMCPWrapper",
             }
         )
 
     if w_mcp_toolsets:
-        klass = config_tools.Stdio_MCP_ClientToolsetConfig
+        klass = _test_metaconfig.DummyMCP_ToolsetConfig
         patched_mcp_toolset_configs[klass.kind] = klass
         expected["mcp_toolset_configs"].append(
-            "soliplex.config.tools.Stdio_MCP_ClientToolsetConfig",
+            "_test_metaconfig.DummyMCP_ToolsetConfig",
         )
 
     if w_skills:
-        klass = config_skills.HR_RAG_SkillConfig
+        klass = _test_metaconfig.DummySkillConfig
         patched_skill_configs[klass.kind] = klass
         expected["skill_configs"].append(
-            "soliplex.config.skills.HR_RAG_SkillConfig",
+            "_test_metaconfig.DummySkillConfig",
         )
 
     if w_capability:
-        klass = FauxCapability
+        klass = _test_metaconfig.DummyAgentCapability
         patched_agent_capabilities[klass.__name__] = klass
         expected["agent_capability_types"].append(
-            "test_config_meta.FauxCapability",
+            "_test_metaconfig.DummyAgentCapability",
         )
 
     if w_agent:
-        klass = config_agents.AgentConfig
+        klass = _test_metaconfig.DummyAgentConfig
         patched_agent_configs[klass.kind] = klass
         expected["agent_configs"].append(
-            "soliplex.config.agents.AgentConfig",
+            "_test_metaconfig.DummyAgentConfig",
         )
 
     if w_secret_reg:
-        klass = config_secrets.EnvVarSecretSource
-        registered_func = secrets.get_env_var_secret
+        klass = _test_metaconfig.DummySecretSource
+        registered_func = _test_metaconfig.dummy_secret_getter
         patched_secret_getters[klass.kind] = registered_func
+        patched_secret_sources[klass.kind] = klass
+
         expected["secret_sources"].append(
             {
-                "config_klass": "soliplex.config.secrets.EnvVarSecretSource",
-                "registered_func": "soliplex.secrets.get_env_var_secret",
+                "config_klass": "_test_metaconfig.DummySecretSource",
+                "registered_func": "_test_metaconfig.dummy_secret_getter",
             }
         )
 
     if w_jsonpath:
         authz.register_jsonpath_function(
-            JSONPATH_FUNCTION_NAME, faux_jsonpath_func
+            JSONPATH_FUNCTION_NAME, _test_metaconfig.dummy_jsonpath_func
         )
         expected["jsonpath_functions"].append(
             {
                 "name": JSONPATH_FUNCTION_NAME,
-                "func": "test_config_meta.faux_jsonpath_func",
+                "func": "_test_metaconfig.dummy_jsonpath_func",
             }
         )
 
@@ -577,49 +904,117 @@ def test_installationconfigmeta_as_yaml(
 def test_installationconfigmeta_postinit_registers_tool_configs(
     patched_tool_configs,
 ):
-    @dataclasses.dataclass(kw_only=True)
-    class _DummyToolConfig(config_tools.ToolConfig):
-        tool_name: str = "tests.unit.test_config.dummy_tool"
+    tc_klass = _test_metaconfig.DummyToolConfig
+    tc_meta = config_meta.ToolConfigMeta(config_klass=tc_klass)
 
-    tc_meta = config_meta.ConfigMeta(config_klass=_DummyToolConfig)
     config_meta.InstallationConfigMeta(tool_configs=[tc_meta])
 
-    assert patched_tool_configs[_DummyToolConfig.tool_name] is _DummyToolConfig
+    assert patched_tool_configs[tc_klass.tool_name] is tc_klass
 
 
-def test_installationconfigmeta_postinit_registers_mcp_tool_wrappers(
-    patched_mcp_tool_wrappers,
+def test_installationconfigmeta_postinit_registers_mcp_toolset_configs(
+    patched_mcp_toolset_configs,
 ):
-    @dataclasses.dataclass(kw_only=True)
-    class _DummyToolConfig(config_tools.ToolConfig):
-        tool_name: str = "tests.unit.test_config.dummy_tool"
+    mtc_klass = _test_metaconfig.DummyMCP_ToolsetConfig
+    mtc_meta = config_meta.MCP_ToolsetConfigMeta(config_klass=mtc_klass)
 
-    @dataclasses.dataclass(kw_only=True)
-    class _DummyWrapper:
-        func: typing.Any
-        tool_config: config_tools.ToolConfig
+    config_meta.InstallationConfigMeta(mcp_toolset_configs=[mtc_meta])
 
-    mstw_meta = config_meta.ConfigMeta(
-        config_klass=_DummyToolConfig,
-        wrapper_klass=_DummyWrapper,
+    assert patched_mcp_toolset_configs[mtc_klass.kind] is mtc_klass
+
+
+@pytest.mark.parametrize(
+    "w_tc_registered, expectation",
+    [
+        (False, pytest.raises(config_meta.WrapperForUnknownToolConfig)),
+        (True, contextlib.nullcontext()),
+    ],
+)
+def test_installationconfigmeta_postinit_registers_mcp_tool_wrappers(
+    patched_tool_configs,
+    patched_mcp_tool_wrappers,
+    w_tc_registered,
+    expectation,
+):
+    cfg_klass = _test_metaconfig.DummyToolConfig
+    if w_tc_registered:
+        patched_tool_configs[cfg_klass.tool_name] = cfg_klass
+
+    wrp_klass = _test_metaconfig.DummyMCPWrapper
+    mstw_meta = config_meta.MCP_ServerToolWrapperConfigMeta(
+        config_klass=cfg_klass,
+        wrapper_klass=wrp_klass,
     )
-    config_meta.InstallationConfigMeta(mcp_server_tool_wrappers=[mstw_meta])
 
-    assert (
-        patched_mcp_tool_wrappers[_DummyToolConfig.tool_name] is _DummyWrapper
+    with expectation as expected:
+        config_meta.InstallationConfigMeta(
+            mcp_server_tool_wrappers=[mstw_meta],
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert patched_mcp_tool_wrappers[cfg_klass.tool_name] is wrp_klass
+
+
+def test_installationconfigmeta_postinit_registers_skill_configs(
+    patched_skill_configs,
+):
+    sc_klass = _test_metaconfig.DummySkillConfig
+    sc_meta = config_meta.SkillConfigMeta(config_klass=sc_klass)
+
+    config_meta.InstallationConfigMeta(skill_configs=[sc_meta])
+
+    assert patched_skill_configs[sc_klass.kind] is sc_klass
+
+
+def test_installationconfigmeta_postinit_registers_agent_capabilities(
+    patched_agent_capabilities,
+):
+    cap_klass = _test_metaconfig.DummyAgentCapability
+    ac_meta = config_meta.AgentCapabilityMeta(config_klass=cap_klass)
+
+    config_meta.InstallationConfigMeta(agent_capability_types=[ac_meta])
+
+    assert patched_agent_capabilities[cap_klass.__name__] is cap_klass
+
+
+def test_installationconfigmeta_postinit_registers_agent_configs(
+    patched_agent_configs,
+):
+    ac_klass = _test_metaconfig.DummyAgentConfig
+    ac_meta = config_meta.AgentConfigMeta(config_klass=ac_klass)
+
+    config_meta.InstallationConfigMeta(agent_configs=[ac_meta])
+
+    assert patched_agent_configs[ac_klass.kind] is ac_klass
+
+
+def test_installationconfigmeta_postinit_registers_secret_sources(
+    patched_secret_getters,
+    patched_secret_sources,
+):
+    ss_klass = _test_metaconfig.DummySecretSource
+    ss_getter = _test_metaconfig.dummy_secret_getter
+    ss_meta = config_meta.SecretSourceMeta(
+        config_klass=ss_klass,
+        registered_func=ss_getter,
     )
+
+    config_meta.InstallationConfigMeta(secret_sources=[ss_meta])
+
+    assert patched_secret_getters[ss_klass.kind] is ss_getter
+    assert patched_secret_sources[ss_klass.kind] is ss_klass
 
 
 def test_installationconfigmeta_postinit_registers_jsonpath_functions(
     patched_jsonpath_functions,
 ):
+    jp_func = _test_metaconfig.dummy_jsonpath_func
     jf_meta = config_meta.JSONPathFunctionConfigMeta(
         name=JSONPATH_FUNCTION_NAME,
-        func=faux_jsonpath_func,
+        func=jp_func,
     )
+
     config_meta.InstallationConfigMeta(jsonpath_functions=[jf_meta])
 
     env = authz.the_jsonpath_environment
-    assert (
-        env.function_extensions[JSONPATH_FUNCTION_NAME] is faux_jsonpath_func
-    )
+    assert env.function_extensions[JSONPATH_FUNCTION_NAME] is jp_func

@@ -5,6 +5,7 @@ import pathlib
 from unittest import mock
 
 import _test_features as agui_features
+import _test_metaconfig
 import _test_middleware
 import pytest
 import yaml
@@ -74,38 +75,45 @@ W_FULL_META_INSTALLATION_CONFIG_KW = {
             ),
         ],
         "tool_configs": [
-            config_meta.ConfigMeta(config_klass=FauxToolConfig),
+            config_meta.ToolConfigMeta(config_klass=FauxToolConfig),
         ],
         "mcp_toolset_configs": [
-            config_meta.ConfigMeta(
+            config_meta.MCP_ToolsetConfigMeta(
                 config_klass=config_tools.Stdio_MCP_ClientToolsetConfig
             ),
-            config_meta.ConfigMeta(
+            config_meta.MCP_ToolsetConfigMeta(
                 config_klass=config_tools.HTTP_MCP_ClientToolsetConfig
             ),
         ],
         "mcp_server_tool_wrappers": [
-            config_meta.ConfigMeta(
+            config_meta.MCP_ServerToolWrapperConfigMeta(
                 config_klass=FauxToolConfig,
                 wrapper_klass=config_tools.NoArgsMCPWrapper,
             ),
         ],
         "skill_configs": [
-            config_meta.ConfigMeta(
+            config_meta.SkillConfigMeta(
                 config_klass=config_skills.HR_RAG_SkillConfig
             ),
-            config_meta.ConfigMeta(
+            config_meta.SkillConfigMeta(
                 config_klass=config_skills.HR_Analysis_SkillConfig
             ),
         ],
+        "agent_capability_types": [
+            config_meta.AgentCapabilityMeta(
+                config_klass=_test_metaconfig.DummyAgentCapability
+            ),
+        ],
         "agent_configs": [
-            config_meta.ConfigMeta(config_klass=config_agents.AgentConfig),
-            config_meta.ConfigMeta(
+            config_meta.AgentConfigMeta(
+                config_klass=config_agents.AgentConfig,
+            ),
+            config_meta.AgentConfigMeta(
                 config_klass=config_agents.FactoryAgentConfig
             ),
         ],
         "secret_sources": [
-            config_meta.ConfigMeta(
+            config_meta.SecretSourceMeta(
                 config_klass=config_secrets.EnvVarSecretSource,
                 registered_func=test_meta.SECRET_SOURCE_FUNC,
             ),
@@ -130,6 +138,8 @@ meta:
   skill_configs:
       - "soliplex.config.skills.HR_RAG_SkillConfig"
       - "soliplex.config.skills.HR_Analysis_SkillConfig"
+  agent_capability_types:
+      - "_test_metaconfig.DummyAgentCapability"
   agent_configs:
       - "soliplex.config.agents.AgentConfig"
       - "soliplex.config.agents.FactoryAgentConfig"
@@ -305,7 +315,7 @@ W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "meta": {
         "agent_configs": [
-            config_meta.ConfigMeta(
+            config_meta.AgentConfigMeta(
                 config_klass=config_agents.FactoryAgentConfig,
             ),
         ],
