@@ -14,5 +14,8 @@ tools:
   - tool_name: "soliplex.tools.rag.search_documents"
     rag_lancedb_stem: "rag"
     search_documents_limit: 7
+    # Scope the room to a document subset.  Intersected with any filter the
+    # client supplies, so it can only narrow the result set, never widen it.
+    # rag_document_filter: "db_source IN ('set1', 'set2')"
 
 allow_mcp: false

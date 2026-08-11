@@ -242,6 +242,7 @@ class _HaikuRAGCapabilityConfig(
             db_path=self.rag_lancedb_path,
             config=self.haiku_rag_config,
             defer_loading=True,
+            base_filter=self.rag_document_filter,
         )
 
     @property
@@ -257,6 +258,10 @@ class _HaikuRAGCapabilityConfig(
             result["rag_lancedb_override_path"] = str(
                 self.rag_lancedb_override_path
             )
+
+        if self.rag_document_filter is not None:
+            result["rag_document_filter"] = self.rag_document_filter
+
         return result
 
     @property

@@ -37,6 +37,7 @@ async def search_documents(
             db_path=tool_config.rag_lancedb_path,
             config=hr_config,
             read_only=True,
+            base_filter=tool_config.rag_document_filter,
         ) as rag:
             results = await rag.search(
                 query,

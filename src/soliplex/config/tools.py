@@ -366,6 +366,9 @@ class SearchDocumentsToolConfig(
                 self.rag_lancedb_override_path
             )
 
+        if self.rag_document_filter is not None:
+            result["rag_document_filter"] = self.rag_document_filter
+
         result["search_documents_limit"] = self.search_documents_limit
 
         return result

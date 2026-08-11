@@ -297,6 +297,11 @@ class RoomConfig:
                         "db_path": rag_lancedb_path,
                         "config": haiku_rag_config,
                         "read_only": True,
+                        "base_filter": getattr(
+                            cfg,
+                            "rag_document_filter",
+                            None,
+                        ),
                     }
 
                     if include_source:

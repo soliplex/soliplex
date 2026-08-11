@@ -5,6 +5,7 @@ import json
 import fastapi
 from fastapi import responses
 from haiku.rag import client as hr_client
+from haiku.rag import utils as hr_utils
 from haiku.rag.store.models import chunk as hr_chunk
 
 from soliplex import authn
@@ -222,6 +223,24 @@ async def get_room_documents(
     )
 
 
+async def _chunk_in_scope(
+    rag: hr_client.HaikuRAG,
+    chunk: hr_chunk.Chunk,
+) -> bool:
+    """Whether a chunk's document survives the client's base filter.
+
+    'chunk_repository' sits below the client API, so a lookup by chunk id
+    bypasses 'base_filter'.  Re-check the owning document through
+    'count_documents', which applies it.
+    """
+    if rag.base_filter is None:
+        return True
+
+    safe_id = hr_utils.escape_sql_string(chunk.document_id)
+
+    return await rag.count_documents(filter=f"id = '{safe_id}'") > 0
+
+
 @util.logfire_span("GET /v1/rooms/{room_id}/chunk/{chunk_id}")
 @router.get("/v1/rooms/{room_id}/chunk/{chunk_id}")
 async def get_chunk_visualization(
@@ -281,7 +300,7 @@ async def get_chunk_visualization(
         async with hr_client.HaikuRAG(**hr_client_kw) as rag:
             chunk = await rag.chunk_repository.get_by_id(chunk_id)
 
-            if chunk:
+            if chunk and await _chunk_in_scope(rag, chunk):
                 images = await rag.visualize_chunk(
                     chunk, refs=doc_item_refs, expand=expand
                 )

@@ -127,6 +127,10 @@ class _RAGDatabaseBase:
     rag_lancedb_stem: str = None
     rag_lancedb_override_path: str = None
 
+    # Mandatory SQL WHERE clause scoping the room to a document subset.
+    # Intersected with any caller-supplied filter, so it can only narrow.
+    rag_document_filter: str | None = None
+
     # Normally set via subclass 'from_yaml'
     _installation_config: InstallationConfig = (  # noqa F821 cycle
         _utils._no_repr_no_compare_none()
@@ -177,9 +181,14 @@ class _RAGDatabaseBase:
         except RagDbFileNotFound as exc:
             rag_lancedb_path = f"MISSING: {exc.rag_db_filename}"
 
-        return {
+        extra = {
             "rag_lancedb_path": rag_lancedb_path,
         }
+
+        if self.rag_document_filter is not None:
+            extra["rag_document_filter"] = self.rag_document_filter
+
+        return extra
 
 
 @dataclasses.dataclass(kw_only=True)
