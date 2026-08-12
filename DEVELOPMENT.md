@@ -123,6 +123,10 @@ The configured hooks (see `.pre-commit-config.yaml`) enforce:
 - **ruff-check** -- lint Python sources (auto-fixing where possible).
 - **ruff-format** -- format Python sources.
 - **pymarkdown** -- lint Markdown files.
+- **lint-textio** -- reject text file IO in `src/soliplex/` that passes no
+  explicit `encoding=` and so falls back to the host locale encoding
+  (`cp1252` on a typical Windows host); see `scripts/lint_textio.py`, which
+  also runs standalone and carries a `--self-test` mode.
 - **actionlint** -- lint GitHub Actions workflow files.
 - **check-toml** / **check-yaml** -- validate TOML and YAML syntax.
 - **gitleaks** -- scan for committed secrets.

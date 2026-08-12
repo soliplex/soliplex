@@ -37,6 +37,20 @@ repos:
         language: system
         pass_filenames: false
         files: ^skills/soliplex-docs/
+      - id: lint-textio
+        name: lint text IO encoding
+        entry: uv run python scripts/lint_textio.py --verbose
+        language: system
+        types: [python]
+        # 'src/' only: the test suite's own call sites are a separate
+        # cleanup, and its fixtures are not UTF-8 by specification.
+        files: ^src/soliplex/
+      - id: lint-textio-self-test
+        name: lint text IO encoding (self-test)
+        entry: uv run python scripts/lint_textio.py --self-test
+        language: system
+        pass_filenames: false
+        files: ^scripts/lint_textio\.py$
 
   - repo: https://github.com/jackdewinter/pymarkdown
     rev: v0.9.36

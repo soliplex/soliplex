@@ -8,6 +8,7 @@ on:
       - 'pyproject.toml'
       - 'src/soliplex/**'
       - 'tests/**'
+      - 'scripts/**'
       - '.github/workflows/python-lint.yaml'
       - 'uv.lock'
   pull_request:
@@ -17,6 +18,7 @@ on:
       - 'pyproject.toml'
       - 'src/soliplex/**'
       - 'tests/**'
+      - 'scripts/**'
       - '.github/workflows/python-lint.yaml'
       - 'uv.lock'
   workflow_dispatch:
@@ -54,6 +56,18 @@ jobs:
           set -o pipefail
           uv run ruff check 2>&1 | tee ruff-check.log
 
+      # 'ruff PLW1514' covers only the 'open()' form, not the 'pathlib'
+      # 'read_text()' / 'write_text()' helpers; this catches all three.
+      # The self-test runs first, so a check gone blind fails loudly
+      # rather than passing by finding nothing.
+      - name: Check text IO encoding
+        run: |
+          set -o pipefail
+          uv run python scripts/lint_textio.py --self-test 2>&1 \
+            | tee lint-textio.log
+          uv run python scripts/lint_textio.py --verbose 2>&1 \
+            | tee -a lint-textio.log
+
       # Slack notification lives in 'ci-failure-notify.yaml', which only
       # links to this run (see #1203), so record what failed here.
       - name: Summarize failures
@@ -62,7 +76,7 @@ jobs:
           {
             echo "## Linting failed"
             echo
-            for log in ruff-format.log ruff-check.log; do
+            for log in ruff-format.log ruff-check.log lint-textio.log; do
               [ -f "$log" ] || continue
               echo "<details><summary>$log</summary>"
               echo
