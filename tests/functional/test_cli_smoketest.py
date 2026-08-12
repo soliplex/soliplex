@@ -21,6 +21,7 @@ import yaml
 
 from soliplex import authz
 from soliplex.authz import schema as authz_schema
+from tests._dburi import sqlite_dburi
 
 # 'tests/functional/test_cli_smoketest.py' -> parents[2] is the repo root.
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -51,18 +52,22 @@ ROOM = "faux"
 
 
 @pytest.fixture
-def scratch_installation(tmp_path):
+def scratch_installation(tmp_path, authz_dburi_sync, authz_dburi_async):
     """A copy of 'example/minimal.yaml' backed by a fresh, empty authz DB."""
     dst = tmp_path / "example"
     shutil.copytree(_EXAMPLE_DIR, dst)
     config_path = dst / "minimal.yaml"
-    db_path = tmp_path / "authz.sqlite"
 
     text = config_path.read_text()
-    text, n_db = _AUTHZ_DBURI_RE.subn(
+    # Passed as a callable because 're.sub' expands backslash escapes in a
+    # replacement *string*, which a Windows 'tmp_path' would trip over.
+    authz_replacement = (
         "authorization_dburi:\n"
-        f'  sync: "sqlite:///{db_path}"\n'
-        f'  async: "sqlite+aiosqlite:///{db_path}"',
+        f'  sync: "{authz_dburi_sync}"\n'
+        f'  async: "{authz_dburi_async}"'
+    )
+    text, n_db = _AUTHZ_DBURI_RE.subn(
+        lambda _: authz_replacement,
         text,
     )
     assert n_db == 1, f"expected one authz_dburi stanza, found {n_db}"
@@ -74,18 +79,6 @@ def scratch_installation(tmp_path):
     config_path.write_text(text)
 
     return config_path
-
-
-@pytest.fixture
-def authz_db_path(tmp_path):
-    """The scratch authz sqlite file that 'scratch_installation' points at.
-
-    Shares the per-test 'tmp_path', so it resolves to the same file the
-    repointed 'authorization_dburi' uses -- letting a test seed rows the
-    CLI cannot create on its own (e.g. an ACL entry whose stored
-    'json_path' no longer compiles).
-    """
-    return tmp_path / "authz.sqlite"
 
 
 def _run(config_path, group, subcommand, *rest, input_text=None):
@@ -162,7 +155,7 @@ def _seed_stale_acl_entry(db_path, room_id):
     'list_room_policies' read.
     """
     session = authz_schema.get_session(
-        engine_url=f"sqlite:///{db_path}",
+        engine_url=sqlite_dburi(db_path),
         init_schema=True,
     )
     with session:

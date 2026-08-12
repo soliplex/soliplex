@@ -72,6 +72,11 @@ skills:
 """
 
 LANCE_DB_OVERRIDE_PATH = pathlib.Path("/tmp/rag.lancedb")
+# 'str(WindowsPath("/tmp/rag.lancedb"))' is '\tmp\rag.lancedb', and a
+# double-quoted YAML scalar expands '\t' / '\r' as escapes -- so the path
+# is emitted POSIX-style, which round-trips to the same 'pathlib.Path' on
+# either platform.
+LANCE_DB_OVERRIDE_YAML_PATH = LANCE_DB_OVERRIDE_PATH.as_posix()
 
 W_HR_SKILLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
     "skills": config_skills.RoomSkillsConfig(
@@ -87,7 +92,7 @@ W_HR_SKILLS_ROOM_CONFIG_YAML = f"""\
 skills:
     skill_configs:
         - kind: "haiku.rag.skills.rag"
-          rag_lancedb_override_path: "{LANCE_DB_OVERRIDE_PATH}"
+          rag_lancedb_override_path: "{LANCE_DB_OVERRIDE_YAML_PATH}"
 """
 
 W_NON_HR_TOOLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {

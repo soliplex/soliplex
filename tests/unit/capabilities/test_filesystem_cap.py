@@ -234,7 +234,12 @@ async def test_run_script_returns_stdout(temp_dir):
         "scripts/echo.py", "stanza jabberwocky --stanza 3"
     )
 
-    assert output == "stanza jabberwocky --stanza 3\n"
+    # On Windows the child Python's own text-mode stdout writes '\r\n'
+    # onto the pipe. Universal newlines does not undo that here: it is a
+    # *text-mode* feature, and 'anyio.run_process' has no text mode --
+    # it hands back bytes, which 'run_script' turns into str with
+    # '.decode()', a codec call that leaves newlines untouched.
+    assert output.replace("\r\n", "\n") == "stanza jabberwocky --stanza 3\n"
 
 
 @pytest.mark.anyio
