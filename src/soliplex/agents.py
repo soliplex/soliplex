@@ -6,6 +6,7 @@ import typing
 import pydantic_ai
 from haiku.rag.capabilities import AnalysisCapability
 from haiku.rag.capabilities import RAGCapability
+from haiku.rag.capabilities import compaction as haiku_compaction
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import tools as ai_tools
@@ -117,13 +118,30 @@ def get_default_agent_from_configs(
         if isinstance(capability, (RAGCapability, AnalysisCapability)):
             capability.vision = agent_config.multimodal
 
+    # Earlier questions' evidence is replaced on the request with the evidence
+    # that was cited, once per run, whenever a room retrieves at all. haiku.rag
+    # made this an explicit capability rather than something its RAG capability
+    # did unconditionally, so a room that retrieves and does not register it
+    # resends every earlier turn's results on every request.
+    if any(
+        isinstance(capability, (RAGCapability, AnalysisCapability))
+        for capability in capabilities
+    ):
+        capabilities.append(haiku_compaction.create_capability())
+
     # A single model-facing capability loads eagerly so its tools are visible;
     # multiple stay deferred so the model routes between them via
     # load_capability. The audit capability is hook-only and always eager.
     routing_capabilities = [
         capability
         for capability in capabilities
-        if not isinstance(capability, cap_rag_audit.RAGAccessAuditCapability)
+        if not isinstance(
+            capability,
+            (
+                cap_rag_audit.RAGAccessAuditCapability,
+                haiku_compaction.EvidenceCompactionCapability,
+            ),
+        )
     ]
     defer_loading = len(routing_capabilities) > 1
     for capability in routing_capabilities:
