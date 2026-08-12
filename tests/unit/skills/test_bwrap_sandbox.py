@@ -19,10 +19,13 @@ THREAD_ID = uuid.uuid4()
 RUN_ID = uuid.uuid4()
 USERNAME = "phreddy"
 
-# 'write_transcript' requests owner-only '0600'. Windows has no POSIX mode
-# bits -- 'os.chmod' there only toggles the read-only flag -- so a writable
-# file reports '0666' however it was chmod'ed.
-EXPECTED_TRANSCRIPT_MODE = 0o600 if os.name == "posix" else 0o666
+# 'write_transcript' requests owner-only '0600', which every POSIX host
+# honours -- Linux and macOS (APFS / HFS+) alike, as 'os.name' is 'posix'
+# on both ('sys.platform' is what distinguishes 'darwin'). Windows is the
+# lone exception: it has no POSIX mode bits, and 'os.chmod' there only
+# toggles the read-only flag, so a writable file reports '0666' however
+# it was chmod'ed.
+EXPECTED_TRANSCRIPT_MODE = 0o666 if os.name == "nt" else 0o600
 
 ONE_ENVIRONMENT = mock.create_autospec(bs_models.EnvironmentInfo)
 ONE_ENVIRONMENT.name = "one"  # mock quirk
