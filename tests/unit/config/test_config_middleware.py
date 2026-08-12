@@ -78,7 +78,29 @@ def test_middlewareconfig_from_yaml(
         assert found == expected
 
 
-@pytest.mark.xfail(strict=True, reason="#1189")
+@pytest.mark.parametrize("w_extra_params", [{}, {"foo": "bar"}])
+def test_middlewareconfig_as_yaml(w_extra_params):
+    if w_extra_params:
+        ep_kwargs = {"extra_params": w_extra_params}
+    else:
+        ep_kwargs = {}
+
+    mwc = config_middleware.MiddlewareConfig(
+        name="test-as_yaml",
+        app_factory=_test_middleware.null_app_factory,
+        **ep_kwargs,
+    )
+
+    found = mwc.as_yaml
+
+    assert found["app_factory"] == "_test_middleware.null_app_factory"
+
+    if w_extra_params:
+        assert found["extra_params"] == w_extra_params
+    else:
+        assert "extra_params" not in found
+
+
 @pytest.mark.parametrize(
     "config_yaml",
     [
@@ -88,18 +110,11 @@ def test_middlewareconfig_from_yaml(
     ],
 )
 def test_middlewareconfig_as_yaml_round_trips(config_yaml):
-    # 'MiddlewareConfig' has no 'as_yaml' at all, so the dump below
-    # raises 'AttributeError'. That makes the round trip the last
-    # executable statement in the test: anything after it would go
-    # uncovered while the xfail stands.
-    #
-    # When it lands, 'as_yaml' has to reverse '_from_dotted_name':
-    # 'from_yaml' resolves 'app_factory' to the callable itself, so the
-    # dump must render it back to a dotted name via '_utils._dotted_name'.
     klass = config_middleware.MiddlewareConfig
     original = klass.from_yaml(copy.deepcopy(yaml.safe_load(config_yaml)))
+    reloaded = klass.from_yaml(copy.deepcopy(original.as_yaml))
 
-    assert klass.from_yaml(copy.deepcopy(original.as_yaml)) == original
+    assert reloaded == original
 
 
 @pytest.mark.parametrize(
