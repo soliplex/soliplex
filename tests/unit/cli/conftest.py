@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from soliplex.authz import schema as authz_schema
+from tests._dburi import sqlite_dburi
 
 # 'tests/unit/cli/conftest.py' -> parents[3] is the repo root.
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -49,33 +50,22 @@ class ScratchInstallation:
         )
 
 
-def _sqlite_dburi(db_path: pathlib.Path, driver: str = "") -> str:
-    """Build an absolute 'sqlite:///<abs>' URI for 'db_path'.
-
-    An absolute URI (four leading slashes once the leading '/' of a POSIX
-    path is included) keeps the database independent of the process
-    working directory.
-
-    The path is spelled POSIX-style because these URIs are written into a
-    double-quoted YAML scalar, where a Windows path's backslashes are
-    escape sequences: 'C:\\Users\\...' fails to parse ('\\U' wants eight
-    hex digits) and e.g. '\\t' would silently become a tab. SQLAlchemy's
-    sqlite dialect accepts 'sqlite:///C:/...' on Windows.
-    """
-    return f"sqlite{driver}:///{db_path.as_posix()}"
-
-
 def _point_authz_db(config_path: pathlib.Path, db_path: pathlib.Path) -> None:
     """Repoint a copied installation's authz DB at an absolute scratch file.
 
     The replacement is passed to 'subn' as a callable because 're.sub'
     expands backslash escapes in a replacement *string*.
+
+    Builds the URIs directly rather than via the 'authz_dburi_*' fixtures
+    in 'tests/conftest.py': those derive from the function-scoped
+    'tmp_path', and the caller here is the module-scoped
+    '_installation_template', which cannot request them.
     """
     text = config_path.read_text()
     replacement = (
         "authorization_dburi:\n"
-        f'  sync: "{_sqlite_dburi(db_path)}"\n'
-        f'  async: "{_sqlite_dburi(db_path, "+aiosqlite")}"'
+        f'  sync: "{sqlite_dburi(db_path)}"\n'
+        f'  async: "{sqlite_dburi(db_path, "+aiosqlite")}"'
     )
     text, n_subs = _AUTHZ_DBURI_RE.subn(lambda _: replacement, text)
     # Fail loudly if the example config's shape drifts out from under us.
@@ -132,7 +122,7 @@ def scratch_installation(_installation_template) -> ScratchInstallation:
     db_path.unlink(missing_ok=True)
     return ScratchInstallation(
         path=config_path,
-        dburi=_sqlite_dburi(db_path),
+        dburi=sqlite_dburi(db_path),
         db_path=db_path,
     )
 

@@ -21,6 +21,7 @@ import yaml
 
 from soliplex import authz
 from soliplex.authz import schema as authz_schema
+from tests._dburi import sqlite_dburi
 
 # 'tests/functional/test_cli_smoketest.py' -> parents[2] is the repo root.
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -50,33 +51,20 @@ STALE_ACL_MARKER = "stale_filter_func"
 ROOM = "faux"
 
 
-def _sqlite_dburi(db_path: pathlib.Path, driver: str = "") -> str:
-    """Build an absolute 'sqlite:///<abs>' URI for 'db_path'.
-
-    The path is spelled POSIX-style because these URIs are written into a
-    double-quoted YAML scalar, where a Windows path's backslashes are
-    escape sequences: 'C:\\Users\\...' fails to parse ('\\U' wants eight
-    hex digits) and e.g. '\\t' would silently become a tab. SQLAlchemy's
-    sqlite dialect accepts 'sqlite:///C:/...' on Windows.
-    """
-    return f"sqlite{driver}:///{db_path.as_posix()}"
-
-
 @pytest.fixture
-def scratch_installation(tmp_path):
+def scratch_installation(tmp_path, authz_dburi_sync, authz_dburi_async):
     """A copy of 'example/minimal.yaml' backed by a fresh, empty authz DB."""
     dst = tmp_path / "example"
     shutil.copytree(_EXAMPLE_DIR, dst)
     config_path = dst / "minimal.yaml"
-    db_path = tmp_path / "authz.sqlite"
 
     text = config_path.read_text()
     # Passed as a callable because 're.sub' expands backslash escapes in a
     # replacement *string*, which a Windows 'tmp_path' would trip over.
     authz_replacement = (
         "authorization_dburi:\n"
-        f'  sync: "{_sqlite_dburi(db_path)}"\n'
-        f'  async: "{_sqlite_dburi(db_path, "+aiosqlite")}"'
+        f'  sync: "{authz_dburi_sync}"\n'
+        f'  async: "{authz_dburi_async}"'
     )
     text, n_db = _AUTHZ_DBURI_RE.subn(
         lambda _: authz_replacement,
@@ -91,18 +79,6 @@ def scratch_installation(tmp_path):
     config_path.write_text(text)
 
     return config_path
-
-
-@pytest.fixture
-def authz_db_path(tmp_path):
-    """The scratch authz sqlite file that 'scratch_installation' points at.
-
-    Shares the per-test 'tmp_path', so it resolves to the same file the
-    repointed 'authorization_dburi' uses -- letting a test seed rows the
-    CLI cannot create on its own (e.g. an ACL entry whose stored
-    'json_path' no longer compiles).
-    """
-    return tmp_path / "authz.sqlite"
 
 
 def _run(config_path, group, subcommand, *rest, input_text=None):
@@ -179,7 +155,7 @@ def _seed_stale_acl_entry(db_path, room_id):
     'list_room_policies' read.
     """
     session = authz_schema.get_session(
-        engine_url=_sqlite_dburi(db_path),
+        engine_url=sqlite_dburi(db_path),
         init_schema=True,
     )
     with session:
