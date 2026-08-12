@@ -46,6 +46,8 @@ OLLAMA_BASE_URL = "https://example.com:12345"
 
 
 INSTALLATION_ID = "test-installation"
+SERVER_NAME = "test-config-installation"
+SERVER_DESCRIPTION = "Test Config Installation"
 
 BOGUS_INSTALLATION_CONFIG_YAML = ""
 
@@ -1760,6 +1762,97 @@ def test_installationconfig_authorization_dburi_async(w_kw, expected):
     assert found == expected
 
 
+def _marshal_iconfig_kw(iconfig_kw, config_path):
+    iconfig_kw = copy.deepcopy(iconfig_kw)
+
+    if "meta" in iconfig_kw:
+        icmeta_kw = iconfig_kw.pop("meta")
+        iconfig_kw["meta"] = config_meta.InstallationConfigMeta(
+            **icmeta_kw,
+            _config_path=config_path,
+        )
+    else:
+        iconfig_kw["meta"] = config_meta.InstallationConfigMeta(
+            _config_path=config_path,
+        )
+
+    if "_haiku_rag_config_file" not in iconfig_kw:
+        iconfig_kw["_haiku_rag_config_file"] = (
+            config_path.parent / "haiku.rag.yaml"
+        )
+    else:
+        # Match from_yaml: config_path.parent / hr_config_file
+        iconfig_kw["_haiku_rag_config_file"] = (
+            config_path.parent / iconfig_kw["_haiku_rag_config_file"]
+        )
+
+    iconfig = config_installation.InstallationConfig(
+        **iconfig_kw,
+        _config_path=config_path,
+    )
+
+    if "app_router_operations" in iconfig_kw:
+        ic_ar_ops = [
+            dataclasses.replace(
+                ar_op,
+                _config_path=config_path,
+            )
+            for ar_op in iconfig.app_router_operations
+        ]
+        iconfig = dataclasses.replace(
+            iconfig,
+            app_router_operations=ic_ar_ops,
+        )
+
+    root_dir = config_path.parent
+
+    if "rooms_upload_path" in iconfig_kw:
+        ic_rooms_upload_path = root_dir / iconfig_kw["rooms_upload_path"]
+    else:
+        ic_rooms_upload_path = None
+
+    if "threads_upload_path" in iconfig_kw:
+        ic_threads_upload_path = root_dir / iconfig_kw["threads_upload_path"]
+    else:
+        ic_threads_upload_path = None
+
+    if "sandbox_config" in iconfig_kw:
+        ic_sandbox_config = dataclasses.replace(
+            iconfig.sandbox_config,
+            _config_path=config_path,
+        )
+        iconfig = dataclasses.replace(
+            iconfig,
+            sandbox_config=ic_sandbox_config,
+        )
+
+    iconfig = dataclasses.replace(
+        iconfig,
+        rooms_upload_path=ic_rooms_upload_path,
+        threads_upload_path=ic_threads_upload_path,
+    )
+
+    if "oidc_paths" in iconfig_kw:
+        ic_oidc_paths = [
+            root_dir / oidc_path for oidc_path in iconfig_kw["oidc_paths"]
+        ]
+    else:
+        ic_oidc_paths = [root_dir / "oidc"]
+
+    iconfig = dataclasses.replace(iconfig, oidc_paths=ic_oidc_paths)
+
+    if "room_paths" in iconfig_kw:
+        ic_room_paths = [
+            root_dir / room_path for room_path in iconfig_kw["room_paths"]
+        ]
+    else:
+        ic_room_paths = [root_dir / "rooms"]
+
+    iconfig = dataclasses.replace(iconfig, room_paths=ic_room_paths)
+
+    return iconfig
+
+
 @pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
@@ -1922,90 +2015,7 @@ def test_installationconfig_from_yaml(
         assert exc.value._config_path == config_path
 
     else:
-        if "meta" in expected_kw:
-            icmeta_kw = expected_kw.pop("meta")
-            expected_kw["meta"] = config_meta.InstallationConfigMeta(
-                **icmeta_kw,
-                _config_path=config_path,
-            )
-        else:
-            expected_kw["meta"] = config_meta.InstallationConfigMeta(
-                _config_path=config_path,
-            )
-
-        if "_haiku_rag_config_file" not in expected_kw:
-            expected_kw["_haiku_rag_config_file"] = (
-                config_path.parent / "haiku.rag.yaml"
-            )
-        else:
-            # Match from_yaml: config_path.parent / hr_config_file
-            expected_kw["_haiku_rag_config_file"] = (
-                config_path.parent / expected_kw["_haiku_rag_config_file"]
-            )
-
-        expected = config_installation.InstallationConfig(
-            **expected_kw,
-            _config_path=config_path,
-        )
-
-        if "app_router_operations" in expected_kw:
-            exp_ar_ops = [
-                dataclasses.replace(
-                    ar_op,
-                    _config_path=config_path,
-                )
-                for ar_op in expected.app_router_operations
-            ]
-            expected = dataclasses.replace(
-                expected,
-                app_router_operations=exp_ar_ops,
-            )
-
-        if "rooms_upload_path" in expected_kw:
-            exp_rooms_upload_path = temp_dir / expected_kw["rooms_upload_path"]
-        else:
-            exp_rooms_upload_path = None
-
-        if "threads_upload_path" in expected_kw:
-            exp_threads_upload_path = (
-                temp_dir / expected_kw["threads_upload_path"]
-            )
-        else:
-            exp_threads_upload_path = None
-
-        if "sandbox_config" in expected_kw:
-            exp_sandbox_config = dataclasses.replace(
-                expected.sandbox_config,
-                _config_path=config_path,
-            )
-            expected = dataclasses.replace(
-                expected,
-                sandbox_config=exp_sandbox_config,
-            )
-
-        expected = dataclasses.replace(
-            expected,
-            rooms_upload_path=exp_rooms_upload_path,
-            threads_upload_path=exp_threads_upload_path,
-        )
-
-        if "oidc_paths" in expected_kw:
-            exp_oidc_paths = [
-                temp_dir / oidc_path for oidc_path in expected_kw["oidc_paths"]
-            ]
-        else:
-            exp_oidc_paths = [temp_dir / "oidc"]
-
-        expected = dataclasses.replace(expected, oidc_paths=exp_oidc_paths)
-
-        if "room_paths" in expected_kw:
-            exp_room_paths = [
-                temp_dir / room_path for room_path in expected_kw["room_paths"]
-            ]
-        else:
-            exp_room_paths = [temp_dir / "rooms"]
-
-        expected = dataclasses.replace(expected, room_paths=exp_room_paths)
+        expected = _marshal_iconfig_kw(expected_kw, config_path)
 
         found = config_installation.InstallationConfig.from_yaml(
             config_path,
@@ -2130,94 +2140,57 @@ def test_installationconfig_from_yaml_rejects_legacy_upload_path(temp_dir):
     assert "threads_upload_path" in str(exc.value)
 
 
-@pytest.mark.parametrize("w_aro", [False, True])
-@pytest.mark.parametrize("w_logfire_config", [False, True])
-@pytest.mark.parametrize("w_title_agent_config_id", [None, "title"])
-@pytest.mark.parametrize("w_sandbox_config", [False, True])
-@pytest.mark.parametrize("w_upload_path", [False, True])
-def test_installationconfig_as_yaml(
-    temp_dir,
-    patched_app_routers,
-    w_upload_path,
-    w_sandbox_config,
-    w_title_agent_config_id,
-    w_logfire_config,
-    w_aro,
-):
-    config_path = temp_dir / "installation.yaml"
+AS_YAML_ONLY_AGENT_CONFIG_ID = "test-agent"
+AS_YAML_ONLY_TITLE_AGENT_CONFIG_ID = "title"
+AS_YAML_ONLY_OIDC_PATH = "./oidc-test"
+AS_YAML_ONLY_ROOM_PATHS = ["/path/to/rooms", "./other/rooms"]
+AS_YAML_ONLY_COMPLETION_PATH = "/path/to/completions"
+AS_YAML_ONLY_QUIZZES_PATH = "./other/quizzes"
+AS_YAML_ONLY_SKILLS_PATH = "./other/skills"
+AS_YAML_ONLY_ARO_GROUP_NAME = "test-group"
+AS_YAML_ONLY_ARO_ROUTER_NAME = "my.package.router"
+AS_YAML_ONLY_ARO_PREFIX = "/prefix"
+
+
+def _as_yaml_only_base_stanzas():
+    """Config kwargs / expected 'as_yaml' for the unconditional keys.
+
+    'InstallationConfig.as_yaml' emits these no matter how the config is
+    populated, so every case below builds on them.
+    """
     meta = mock.create_autospec(config_meta.InstallationConfigMeta)
-    secret_1 = config_secrets.SecretConfig(secret_name="SECRET_ONE")
-    secret_2 = config_secrets.SecretConfig(secret_name="SECRET_TWO")
     agent_config = config_agents.AgentConfig(
-        id="test-agent",
-        system_prompt="You are a test",
+        id=AS_YAML_ONLY_AGENT_CONFIG_ID,
+        system_prompt=test_agents.SYSTEM_PROMPT,
         model_name=test_agents.MODEL_NAME,
         provider_base_url=test_agents.PROVIDER_BASE_URL,
     )
 
-    kwargs = {}
-
-    if w_logfire_config:
-        kwargs["logfire_config"] = config_logfire.LogfireConfig(
-            token="secret:LOGFIRE_TOKEN",
-        )
-
-    if w_aro:
-        kwargs["app_router_operations"] = [
-            config_routing.AddAppRouter(
-                group_name="test-group",
-                router_name="my.package.router",
-                prefix="/prefix",
-                _config_path=config_path,
-            )
-        ]
-
-    if w_upload_path:
-        rooms_upload_path = kwargs["rooms_upload_path"] = (
-            temp_dir / "uploads" / "rooms"
-        )
-        threads_upload_path = kwargs["threads_upload_path"] = (
-            temp_dir / "uploads" / "threads"
-        )
-
-    if w_sandbox_config:
-        environments_path = temp_dir / "sandbox" / "environments"
-        workdirs_path = temp_dir / "sandbox" / "workdirs"
-        sandbox_config = config_installation.SandboxConfig(
-            _config_path=config_path,
-            _environments_path=environments_path,
-            _workdirs_path=workdirs_path,
-        )
-        kwargs["sandbox_config"] = sandbox_config
-
-    installation_config = config_installation.InstallationConfig(
-        id=INSTALLATION_ID,
-        meta=meta,
-        secrets=[secret_1, secret_2],
-        environment={
+    kwargs = {
+        "id": INSTALLATION_ID,
+        "server_name": SERVER_NAME,
+        "server_description": SERVER_DESCRIPTION,
+        "meta": meta,
+        "secrets": [SECRET_CONFIG_1, SECRET_CONFIG_2],
+        "environment": {
             "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
         },
-        _haiku_rag_config_file=pathlib.Path(HAIKU_RAG_CONFIG_FILE),
-        agent_configs=[agent_config],
-        title_agent_config_id=w_title_agent_config_id,
-        _logging_config_file=pathlib.Path(LOGGING_CONFIG_FILE),
-        oidc_paths=[pathlib.Path("./oidc-test")],
-        room_paths=[
-            pathlib.Path("/path/to/rooms"),
-            pathlib.Path("./other/rooms"),
-        ],
-        completion_paths=[pathlib.Path("/path/to/completions")],
-        quizzes_paths=[pathlib.Path("./other/quizzes")],
-        filesystem_skills_paths=[pathlib.Path("./other/skills")],
-        **kwargs,
-    )
-
+        "_haiku_rag_config_file": pathlib.Path(HAIKU_RAG_CONFIG_FILE),
+        "agent_configs": [agent_config],
+        "oidc_paths": [pathlib.Path(AS_YAML_ONLY_OIDC_PATH)],
+        "room_paths": [pathlib.Path(path) for path in AS_YAML_ONLY_ROOM_PATHS],
+        "completion_paths": [pathlib.Path(AS_YAML_ONLY_COMPLETION_PATH)],
+        "quizzes_paths": [pathlib.Path(AS_YAML_ONLY_QUIZZES_PATH)],
+        "filesystem_skills_paths": [pathlib.Path(AS_YAML_ONLY_SKILLS_PATH)],
+    }
     expected = {
         "id": INSTALLATION_ID,
+        "server_name": SERVER_NAME,
+        "server_description": SERVER_DESCRIPTION,
         "meta": meta.as_yaml,
         "secrets": [
-            secret_1.as_yaml,
-            secret_2.as_yaml,
+            SECRET_CONFIG_1.as_yaml,
+            SECRET_CONFIG_2.as_yaml,
         ],
         "environment": {
             "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
@@ -2226,46 +2199,277 @@ def test_installationconfig_as_yaml(
         "agent_configs": [
             agent_config.as_yaml,
         ],
-        "logging_config_file": str(pathlib.Path(LOGGING_CONFIG_FILE)),
-        "oidc_paths": [str(pathlib.Path("oidc-test"))],
+        "oidc_paths": [str(pathlib.Path(AS_YAML_ONLY_OIDC_PATH))],
         "room_paths": [
-            str(pathlib.Path("/path/to/rooms")),
-            str(pathlib.Path("other/rooms")),
+            str(pathlib.Path(path)) for path in AS_YAML_ONLY_ROOM_PATHS
         ],
-        "completion_paths": [str(pathlib.Path("/path/to/completions"))],
-        "quizzes_paths": [str(pathlib.Path("other/quizzes"))],
-        "filesystem_skills_paths": [str(pathlib.Path("other/skills"))],
+        "completion_paths": [str(pathlib.Path(AS_YAML_ONLY_COMPLETION_PATH))],
+        "quizzes_paths": [str(pathlib.Path(AS_YAML_ONLY_QUIZZES_PATH))],
+        "filesystem_skills_paths": [
+            str(pathlib.Path(AS_YAML_ONLY_SKILLS_PATH))
+        ],
+        # Always emitted, even when unset.
+        "thread_persistence_dburi": {
+            "sync": None,
+            "async": None,
+        },
+        "authorization_dburi": {
+            "sync": None,
+            "async": None,
+        },
     }
 
-    if w_upload_path:
-        expected["rooms_upload_path"] = str(rooms_upload_path)
-        expected["threads_upload_path"] = str(threads_upload_path)
+    return kwargs, expected
 
-    if w_sandbox_config:
-        expected["sandbox_config"] = sandbox_config.as_yaml
 
-    if w_title_agent_config_id is not None:
-        expected["title_agent_config_id"] = w_title_agent_config_id
+#
+#   Each optional stanza 'as_yaml' emits is driven by its own, independent
+#   'if': the helpers below therefore vary one stanza at a time, rather
+#   than testing their (meaningless) cross product. The base case pins
+#   what gets emitted with every stanza omitted, and
+#   '_as_yaml_only_w_all_stanzas' pins the "everything at once" dump.
+#
+def _as_yaml_only_wo_stanzas(config_path):
+    return {}, {}
 
-    if w_logfire_config:
-        expected["logfire_config"] = (
-            test_logfire.W_TOKEN_ONLY_LOGFIRE_CONFIG_AS_YAML
-        )
 
-    if w_aro:
-        expected["app_router_operations"] = [
-            {
-                "kind": "add",
-                "group_name": "test-group",
-                "router_name": "my.package.router",
-                "prefix": "/prefix",
-                "replace_existing": False,
-            }
-        ]
+def _as_yaml_only_w_disable_dotenv_false(config_path):
+    return (
+        {"disable_dotenv": False},
+        {},
+    )
+
+
+def _as_yaml_only_w_disable_dotenv_true(config_path):
+    return (
+        {"disable_dotenv": True},
+        {"disable_dotenv": True},
+    )
+
+
+def _as_yaml_only_w_middlware_stack(config_path):
+    return (
+        {
+            "middleware_stack": [
+                config_middleware.MiddlewareConfig(
+                    name="test-middleware",
+                    app_factory=_test_middleware.null_app_factory,
+                    extra_params={"foo": "bar"},
+                ),
+            ],
+        },
+        {
+            "middleware_stack": [
+                {
+                    "name": "test-middleware",
+                    "app_factory": "_test_middleware.null_app_factory",
+                    "extra_params": {"foo": "bar"},
+                }
+            ],
+        },
+    )
+
+
+def _as_yaml_only_w_skill_configs(config_path):
+    skill_configs = [
+        {
+            "kind": "filesystem",
+            "skill_name": test_skills.FILESYSTEM_SKILL_NAME,
+        },
+    ]
+
+    return (
+        {"_skill_configs": skill_configs},
+        {"skill_configs": skill_configs},
+    )
+
+
+def _as_yaml_only_w_upload_paths(config_path):
+    rooms_upload_path = config_path.parent / ROOMS_UPLOAD_PATH
+    threads_upload_path = config_path.parent / THREADS_UPLOAD_PATH
+
+    return (
+        {
+            "rooms_upload_path": rooms_upload_path,
+            "threads_upload_path": threads_upload_path,
+        },
+        {
+            "rooms_upload_path": str(rooms_upload_path),
+            "threads_upload_path": str(threads_upload_path),
+        },
+    )
+
+
+def _as_yaml_only_w_sandbox_config(config_path):
+    # 'SandboxConfig.as_yaml' resolves its paths against 'config_path';
+    # that mapping is pinned by the 'SandboxConfig' tests above.
+    sandbox_config = config_installation.SandboxConfig(
+        _config_path=config_path,
+        _environments_path=SANDBOX_ENVIRONMENTS_PATH,
+        _workdirs_path=SANDBOX_WORKDIRS_PATH,
+    )
+
+    return (
+        {"sandbox_config": sandbox_config},
+        {"sandbox_config": sandbox_config.as_yaml},
+    )
+
+
+def _as_yaml_only_w_title_agent_config_id(config_path):
+    return (
+        {"title_agent_config_id": AS_YAML_ONLY_TITLE_AGENT_CONFIG_ID},
+        {"title_agent_config_id": AS_YAML_ONLY_TITLE_AGENT_CONFIG_ID},
+    )
+
+
+def _as_yaml_only_w_logfire_config(config_path):
+    logfire_config = config_logfire.LogfireConfig(
+        **test_logfire.W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
+    )
+
+    return (
+        {"logfire_config": logfire_config},
+        {"logfire_config": test_logfire.W_TOKEN_ONLY_LOGFIRE_CONFIG_AS_YAML},
+    )
+
+
+def _as_yaml_only_w_app_router_operations(config_path):
+    add_app_router = config_routing.AddAppRouter(
+        group_name=AS_YAML_ONLY_ARO_GROUP_NAME,
+        router_name=AS_YAML_ONLY_ARO_ROUTER_NAME,
+        prefix=AS_YAML_ONLY_ARO_PREFIX,
+        _config_path=config_path,
+    )
+
+    return (
+        {"app_router_operations": [add_app_router]},
+        {
+            "app_router_operations": [
+                {
+                    "kind": "add",
+                    "group_name": AS_YAML_ONLY_ARO_GROUP_NAME,
+                    "router_name": AS_YAML_ONLY_ARO_ROUTER_NAME,
+                    "prefix": AS_YAML_ONLY_ARO_PREFIX,
+                    "replace_existing": False,
+                },
+            ],
+        },
+    )
+
+
+def _as_yaml_only_w_tp_dburi(config_path):
+    return (
+        {
+            "_thread_persistence_dburi_sync": (TP_DBURI_SYNC_W_SECRET_AND_ENV),
+            "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
+        },
+        {
+            "thread_persistence_dburi": {
+                "sync": TP_DBURI_SYNC_W_SECRET_AND_ENV,
+                "async": TP_DBURI_ASYNC,
+            },
+        },
+    )
+
+
+def _as_yaml_only_w_authz_dburi(config_path):
+    return (
+        {
+            "_authorization_dburi_sync": RA_DBURI_SYNC_W_SECRET_AND_ENV,
+            "_authorization_dburi_async": RA_DBURI_ASYNC,
+        },
+        {
+            "authorization_dburi": {
+                "sync": RA_DBURI_SYNC_W_SECRET_AND_ENV,
+                "async": RA_DBURI_ASYNC,
+            },
+        },
+    )
+
+
+def _as_yaml_only_w_logging_config_file(config_path):
+    logging_config_file = pathlib.Path(LOGGING_CONFIG_FILE)
+
+    return (
+        {"_logging_config_file": logging_config_file},
+        {"logging_config_file": str(logging_config_file)},
+    )
+
+
+def _as_yaml_only_w_logging_headers_map(config_path):
+    logging_headers_map = {"request_id": LOGGING_HEADER_ID_KEY}
+
+    return (
+        {"_logging_headers_map": logging_headers_map},
+        {"logging_headers_map": logging_headers_map},
+    )
+
+
+def _as_yaml_only_w_logging_claims_map(config_path):
+    logging_claims_map = {"user_id": LOGGING_USER_ID_KEY}
+
+    return (
+        {"_logging_claims_map": logging_claims_map},
+        {"logging_claims_map": logging_claims_map},
+    )
+
+
+AS_YAML_ONLY_STANZA_CASES = (
+    _as_yaml_only_w_disable_dotenv_false,
+    _as_yaml_only_w_disable_dotenv_true,
+    _as_yaml_only_w_middlware_stack,
+    _as_yaml_only_w_skill_configs,
+    _as_yaml_only_w_upload_paths,
+    _as_yaml_only_w_sandbox_config,
+    _as_yaml_only_w_title_agent_config_id,
+    _as_yaml_only_w_logfire_config,
+    _as_yaml_only_w_app_router_operations,
+    _as_yaml_only_w_tp_dburi,
+    _as_yaml_only_w_authz_dburi,
+    _as_yaml_only_w_logging_config_file,
+    _as_yaml_only_w_logging_headers_map,
+    _as_yaml_only_w_logging_claims_map,
+)
+
+
+def _as_yaml_only_w_all_stanzas(config_path):
+    kwargs = {}
+    expected = {}
+
+    for make_stanzas in AS_YAML_ONLY_STANZA_CASES:
+        stanza_kwargs, stanza_expected = make_stanzas(config_path)
+        kwargs |= stanza_kwargs
+        expected |= stanza_expected
+
+    return kwargs, expected
+
+
+@pytest.mark.parametrize(
+    "make_stanzas",
+    [
+        _as_yaml_only_wo_stanzas,
+        *AS_YAML_ONLY_STANZA_CASES,
+        _as_yaml_only_w_all_stanzas,
+    ],
+    ids=lambda make_stanzas: make_stanzas.__name__.removeprefix(
+        "_as_yaml_only_"
+    ),
+)
+def test_installationconfig_as_yaml_only(
+    temp_dir,
+    patched_app_routers,
+    make_stanzas,
+):
+    config_path = temp_dir / "installation.yaml"
+    kwargs, expected = _as_yaml_only_base_stanzas()
+    stanza_kwargs, stanza_expected = make_stanzas(config_path)
+    installation_config = config_installation.InstallationConfig(
+        **(kwargs | stanza_kwargs),
+    )
 
     found = installation_config.as_yaml
 
-    assert found == expected
+    assert found == expected | stanza_expected
 
 
 def _round_trip_installation_config(config_path, config_dict):
@@ -2293,7 +2497,10 @@ def _round_trip_installation_config(config_path, config_dict):
 #   xfail below.
 INSTALLATION_STATE_ATTRS = (
     "id",
+    "server_name",
+    "server_description",
     "environment",
+    "middleware_stack",
     "filesystem_skills_paths",
     "oidc_paths",
     "room_paths",
@@ -2306,6 +2513,14 @@ INSTALLATION_STATE_ATTRS = (
     "agent_configs",
     "secrets",
     "logfire_config",
+    "logging_config_file",
+    "logging_headers_map",
+    "logging_claims_map",
+    "_thread_persistence_dburi_sync",
+    "_thread_persistence_dburi_async",
+    "_authorization_dburi_sync",
+    "_authorization_dburi_async",
+    "_skill_configs",
 )
 
 
@@ -2314,6 +2529,7 @@ INSTALLATION_STATE_ATTRS = (
     [
         BARE_INSTALLATION_CONFIG_YAML,
         W_BARE_META_INSTALLATION_CONFIG_YAML,
+        W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_YAML,
         W_SECRETS_INSTALLATION_CONFIG_YAML,
         W_ENVIRONMENT_LIST_INSTALLATION_CONFIG_YAML,
         W_ENVIRONMENT_MAPPING_INSTALLATION_CONFIG_YAML,
@@ -2372,62 +2588,6 @@ def test_installationconfig_as_yaml_round_trips_sandbox_config(temp_dir):
     assert found.environments_path == expected.environments_path
     assert found.workdirs_path == expected.workdirs_path
     assert found.transcripts_path == expected.transcripts_path
-
-
-@pytest.mark.xfail(strict=True, reason="#1186")
-@pytest.mark.parametrize(
-    "config_yaml, state_attrs",
-    [
-        # Both DB URIs fall through to the in-memory SQLite defaults, so
-        # a round-tripped installation silently stops persisting.
-        (
-            W_TP_DBURI_INSTALLATION_CONFIG_YAML,
-            (
-                "thread_persistence_dburi_sync",
-                "thread_persistence_dburi_async",
-            ),
-        ),
-        (
-            W_RA_DBURI_INSTALLATION_CONFIG_YAML,
-            ("authorization_dburi_sync", "authorization_dburi_async"),
-        ),
-        # 'logging_config_file' is stringified unconditionally, so an
-        # unset one dumps as the literal "None" and reloads as a path.
-        (BARE_INSTALLATION_CONFIG_YAML, ("logging_config_file",)),
-        (
-            W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
-            ("logging_headers_map", "logging_claims_map"),
-        ),
-        # The whole ASGI middleware stack is dropped, because
-        # 'MiddlewareConfig' has no 'as_yaml' to render the elements
-        # with (companion issue #1189).
-        (
-            W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_YAML,
-            ("middleware_stack",),
-        ),
-    ],
-)
-def test_installationconfig_as_yaml_round_trips_w_lost_state(
-    temp_dir,
-    patched_soliplex_config,
-    patched_tool_registries,
-    patched_mcp_toolset_configs,
-    patched_mcp_tool_wrappers,
-    patched_skill_configs,
-    patched_secret_getters,
-    config_yaml,
-    state_attrs,
-):
-    # 'attrgetter' rather than a loop of asserts: these all fail today,
-    # and a loop that never completes leaves its exit branch uncovered.
-    get_state = operator.attrgetter(*state_attrs)
-
-    original, reloaded = _round_trip_installation_config(
-        temp_dir / "installation.yaml",
-        yaml.safe_load(config_yaml),
-    )
-
-    assert get_state(reloaded) == get_state(original)
 
 
 @pytest.mark.parametrize(
