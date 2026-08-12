@@ -382,6 +382,31 @@ class ThreadStorage(agui.ThreadStorage):
 
         return run
 
+    async def get_latest_state(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+    ) -> agui.AGUI_State | None:
+        async with self.session as session:
+            try:
+                thread = await self._find_user_thread(
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    session=session,
+                )
+            except agui.UnknownThread:
+                return None
+
+            for run in reversed(await thread.awaitable_attrs.runs):
+                run_input = await run.awaitable_attrs.run_agent_input
+                if run_input is not None and run_input.state:
+                    return run_input.state
+
+        return None
+
     async def update_run_metadata(
         self,
         *,

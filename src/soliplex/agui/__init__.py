@@ -396,6 +396,20 @@ class ThreadStorage(abc.ABC):
         """Update a run with the given 'run_agent_input'"""
 
     @abc.abstractmethod
+    async def get_latest_state(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+    ) -> AGUI_State | None:
+        """Return the thread's most recent non-empty run state, or None
+
+        Return None for a thread with no such run, and for an unknown
+        thread.
+        """
+
+    @abc.abstractmethod
     async def update_run_metadata(
         self,
         *,

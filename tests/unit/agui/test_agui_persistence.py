@@ -1097,6 +1097,129 @@ async def test_threadstorage_finish_run(
     assert finished == NOW.replace(tzinfo=None)
 
 
+@pytest.mark.asyncio
+async def test_get_latest_state_unknown_thread(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    result = await ts.get_latest_state(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id="NONESUCH",
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_latest_state_skips_runs_without_state(
+    the_async_session, unit_of_work
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (cited_run,) = await thread.list_runs()
+
+    # A run with no input at all, then the reopened thread's own run,
+    # which carries no state of its own.
+    await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+    reopened_run = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    assert (
+        await ts.get_latest_state(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+        )
+        is None
+    )
+
+    async with unit_of_work():
+        await ts.add_run_input(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=await cited_run.awaitable_attrs.run_id,
+            run_input=agui_constants.FULL_RUN_AGENT_INPUT,
+        )
+        await ts.add_run_input(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=await reopened_run.awaitable_attrs.run_id,
+            run_input=agui_constants.EMPTY_RUN_AGENT_INPUT,
+        )
+
+    result = await ts.get_latest_state(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    assert result == agui_constants.STATE
+
+
+@pytest.mark.asyncio
+async def test_get_latest_state_returns_newest(
+    the_async_session, unit_of_work
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (older_run,) = await thread.list_runs()
+
+    newer_run = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    newest_state = {"rag": {"citation_index": {"1": "doc-1"}}}
+
+    async with unit_of_work():
+        await ts.add_run_input(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=await older_run.awaitable_attrs.run_id,
+            run_input=agui_constants.FULL_RUN_AGENT_INPUT,
+        )
+        await ts.add_run_input(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=await newer_run.awaitable_attrs.run_id,
+            run_input=agui_constants.FULL_RUN_AGENT_INPUT.model_copy(
+                update={"state": newest_state},
+            ),
+        )
+
+    result = await ts.get_latest_state(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    assert result == newest_state
+
+
 def test_as_utc_naive_tags_utc():
     naive = datetime.datetime(2026, 1, 1, 12, 0)
     assert agui_persistence._as_utc(naive) == T_NEW
