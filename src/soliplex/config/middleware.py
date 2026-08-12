@@ -78,16 +78,28 @@ class MiddlewareConfig:
     app_factory: MiddlewareFactory
     extra_params: dict[str, typing.Any] = _default_dict_field()
 
-    @property
-    def needs_iconfig(self):
-        argspec = inspect.getfullargspec(self.app_factory)
-        return "installation_config" in argspec.kwonlyargs
-
     @classmethod
     def from_yaml(cls, yaml_config: dict):
         app_factory = yaml_config["app_factory"]
         yaml_config["app_factory"] = _utils._from_dotted_name(app_factory)
         return cls(**yaml_config)
+
+    @property
+    def as_yaml(self):
+        result = {
+            "name": self.name,
+            "app_factory": _utils._dotted_name(self.app_factory),
+        }
+
+        if self.extra_params:
+            result["extra_params"] = self.extra_params
+
+        return result
+
+    @property
+    def needs_iconfig(self):
+        argspec = inspect.getfullargspec(self.app_factory)
+        return "installation_config" in argspec.kwonlyargs
 
 
 def compose_middleware_stack(
