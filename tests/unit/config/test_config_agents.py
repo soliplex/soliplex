@@ -9,6 +9,8 @@ from unittest import mock
 
 import pytest
 import yaml
+from haiku.rag.capabilities import compaction as hr_compaction
+from haiku.rag.capabilities import policy as hr_policy
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import settings as ai_settings
 
@@ -587,6 +589,38 @@ def test_agentcapabilityconfig_as_capability(
         assert isinstance(found, extra_agent_capability)
         for key, value in kwargs.items():
             assert getattr(found, key) == value
+
+
+@pytest.mark.parametrize(
+    "name, exp_klass",
+    [
+        (
+            "haiku-rag-evidence-compaction",
+            hr_compaction.EvidenceCompactionCapability,
+        ),
+        ("haiku-rag-citation-policy", hr_policy.CitationPolicyCapability),
+    ],
+)
+def test_agentcapabilityconfig_haiku_rag_capabilities(
+    temp_dir,
+    name,
+    exp_klass,
+):
+    """The haiku.rag evidence capabilities are namable in room config.
+
+    They register the factory rather than the class, so the id the
+    capability is identified by comes from haiku.rag rather than from
+    each room's YAML.
+    """
+    acc = config_agents.AgentCapabilityConfig(
+        name=name,
+        _config_path=temp_dir / "config.yaml",
+    )
+
+    found = acc.as_capability
+
+    assert isinstance(found, exp_klass)
+    assert found.id == name
 
 
 @pytest.mark.parametrize(

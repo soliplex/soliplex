@@ -8,6 +8,13 @@ suggestions:
 
 agent:
   template_id: "default_chat"
+  # Compaction replaces earlier questions' evidence on the request with
+  # what was cited; the citation policy is what makes citations happen.
+  # Registering compaction alone drops the evidence of any question the
+  # model did not cite for.
+  capabilities:
+    - "haiku-rag-evidence-compaction"
+    - "haiku-rag-citation-policy"
 
 skills:
   skill_configs:

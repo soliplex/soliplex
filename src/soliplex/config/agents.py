@@ -8,6 +8,8 @@ import typing
 import warnings
 from collections import abc
 
+from haiku.rag.capabilities import compaction as hr_compaction
+from haiku.rag.capabilities import policy as hr_policy
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import models as ai_models
 from pydantic_ai import settings as ai_settings
@@ -26,11 +28,25 @@ _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
 
 
+#   A registry entry is called with the configured kwargs, so a factory
+#   serves wherever a class does.
+CapabilityFactory = abc.Callable[..., ai_capabilities.AbstractCapability]
+
 #
 #   Copy the pydantic_ai capability registry as defaults, so that we
 #   can extend via meta-config.
 #
-AGENT_CAPABILITY_CLASSES_BY_NAME = ai_capabilities.CAPABILITY_TYPES.copy()
+#   haiku.rag's evidence capabilities are named here so a room that
+#   retrieves can register them. Their factories are registered rather
+#   than their classes, because each capability's id identifies it to
+#   pydantic-ai -- which rejects a second registration of the same id --
+#   and belongs to haiku.rag rather than to each room's configuration.
+#
+AGENT_CAPABILITY_CLASSES_BY_NAME: dict[str, CapabilityFactory] = {
+    **ai_capabilities.CAPABILITY_TYPES,
+    hr_compaction.CAPABILITY_ID: hr_compaction.create_capability,
+    hr_policy.CAPABILITY_ID: hr_policy.create_capability,
+}
 
 # ============================================================================
 #   Agent-related configuration types

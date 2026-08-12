@@ -2,6 +2,7 @@ import dataclasses
 from unittest import mock
 
 import pytest
+from haiku.rag.capabilities import policy as hr_policy
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import tools as ai_tools
 
@@ -308,6 +309,92 @@ def test_get_default_agent_aligns_rag_capability_vision(
     )
 
     assert rag_capability.vision is multimodal
+
+
+@mock.patch("soliplex.config.agents.get_model_from_config")
+@mock.patch("pydantic_ai.Agent")
+def test_get_default_agent_leaves_evidence_capabilities_to_config(
+    agent_klass,
+    gmfc,
+    tmp_path,
+):
+    """Retrieving does not register compaction or citation policy.
+
+    A room names them itself, so a room can retrieve without having
+    earlier evidence rewritten.
+    """
+    from haiku.rag.capabilities.rag import create_capability as create_rag
+    from haiku.rag.config.models import AppConfig
+
+    agent_config = mock.create_autospec(config_agents.AgentConfig)
+    agent_config.kind = "default"
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.model_settings = None
+    agent_config.retries = 3
+    agent_config.capabilities = []
+    agent_config.multimodal = False
+
+    rag_capability = create_rag(
+        db_path=tmp_path / "kb.lancedb", config=AppConfig()
+    )
+    capability_config = mock.Mock(
+        capabilities=[rag_capability],
+        rag_db_paths={},
+    )
+
+    agents.get_default_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs={},
+        mcp_client_toolset_configs={},
+        capability_config=capability_config,
+    )
+
+    built = agent_klass.call_args.kwargs["capabilities"]
+
+    assert built == [rag_capability]
+
+
+@mock.patch("soliplex.config.agents.get_model_from_config")
+@mock.patch("pydantic_ai.Agent")
+def test_get_default_agent_keeps_citation_policy_out_of_routing(
+    agent_klass,
+    gmfc,
+):
+    """The citation policy capability is hook-only.
+
+    It exposes no tools, so it neither defers nor counts towards the
+    decision to defer the capabilities that do.
+    """
+    agent_config = mock.create_autospec(config_agents.AgentConfig)
+    agent_config.kind = "default"
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.model_settings = None
+    agent_config.retries = 3
+    agent_config.multimodal = False
+    agent_config.capabilities = [hr_policy.create_capability()]
+
+    routed = mock.create_autospec(ai_capabilities.AbstractCapability)
+    capability_config = mock.Mock(
+        capabilities=[routed],
+        rag_db_paths={},
+    )
+
+    agents.get_default_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs={},
+        mcp_client_toolset_configs={},
+        capability_config=capability_config,
+    )
+
+    built = agent_klass.call_args.kwargs["capabilities"]
+    (policy,) = [
+        capability
+        for capability in built
+        if isinstance(capability, hr_policy.CitationPolicyCapability)
+    ]
+
+    assert policy.defer_loading is False
+    assert routed.defer_loading is False
 
 
 @pytest.mark.parametrize(

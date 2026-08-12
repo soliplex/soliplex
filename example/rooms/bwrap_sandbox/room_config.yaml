@@ -10,6 +10,13 @@ suggestions:
 agent:
   template_id: "default_chat"
   system_prompt: "./prompt.txt"
+  # Compaction replaces earlier questions' evidence on the request with
+  # what was cited; the citation policy is what makes citations happen.
+  # Registering compaction alone drops the evidence of any question the
+  # model did not cite for.
+  capabilities:
+    - "haiku-rag-evidence-compaction"
+    - "haiku-rag-citation-policy"
 
 tools:
   - tool_name: "soliplex.tools.current_run_info"
