@@ -751,6 +751,25 @@ def test_agentconfig_get_system_prompt(
             assert agent_config.get_system_prompt() is None
 
 
+# Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
+# 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
+# and raises outright. See 'ERR.md'.
+NON_ASCII_PROMPT = "Answer as Ada Lovelace’s amanuensis — from Łódź."
+
+
+def test_agentconfig_get_system_prompt_w_non_ascii(temp_dir):
+    """A UTF-8 prompt file decodes the same whatever the host locale."""
+    config_path = temp_dir / "prompt.txt"
+    config_path.write_bytes(NON_ASCII_PROMPT.encode("utf-8"))
+
+    agent_config = config_agents.AgentConfig(
+        **W_PROMPT_FILE_AGENT_CONFIG_KW,
+        _config_path=config_path,
+    )
+
+    assert agent_config.get_system_prompt() == NON_ASCII_PROMPT
+
+
 @pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
     "provider_type, kw, expected",

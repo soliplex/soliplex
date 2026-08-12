@@ -237,6 +237,31 @@ def test_get_file_path_secret(
         assert found == expected
 
 
+# Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
+# 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
+# and raises outright. See 'ERR.md'.
+NON_ASCII_SECRET = "pa’sswörd—Łódź"
+
+
+def test_get_file_path_secret_w_non_ascii(temp_dir):
+    """A UTF-8 secret file decodes the same whatever the host locale.
+
+    A mojibaked secret authenticates against nothing and gives no clue
+    why, so this path must not depend on the host's locale encoding.
+    """
+    secret_path = temp_dir / "secret_file"
+    secret_text = f"{NON_ASCII_SECRET}\n"
+    secret_path.write_bytes(secret_text.encode("utf-8"))
+
+    source = config_secrets.FilePathSecretSource(
+        secret_name=SECRET_NAME,
+        file_path="./secret_file",
+        _config_path=temp_dir / "installation.yaml",
+    )
+
+    assert secrets.get_file_path_secret(source) == NON_ASCII_SECRET
+
+
 @pytest.mark.parametrize(
     "command, args, expectation, expected",
     [

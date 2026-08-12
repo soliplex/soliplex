@@ -58,6 +58,23 @@ def test__load_config_yaml_w_invalid(temp_dir, invalid):
     assert exc.value._config_path == invalid_cfg
 
 
+# Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
+# 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
+# and raises outright. See 'ERR.md'.
+NON_ASCII_PROSE = "Ada Lovelace’s notes — Łódź"
+
+
+def test__load_config_yaml_w_non_ascii(temp_dir):
+    """A UTF-8 config decodes the same whatever the host locale is."""
+    config_path = temp_dir / "config.yaml"
+    yaml_text = f'id: "{NON_ASCII_PROSE}"\n'
+    config_path.write_bytes(yaml_text.encode("utf-8"))
+
+    found = config_installation._load_config_yaml(config_path)
+
+    assert found == {"id": NON_ASCII_PROSE}
+
+
 def test__find_configs_yaml_w_single(temp_dir):
     THING_ID = "testing"
     CONFIG_FILENAME = "config.yaml"
