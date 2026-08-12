@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import uuid
 from unittest import mock
@@ -17,6 +18,11 @@ ROOM_ID = "test_room"
 THREAD_ID = uuid.uuid4()
 RUN_ID = uuid.uuid4()
 USERNAME = "phreddy"
+
+# 'write_transcript' requests owner-only '0600'. Windows has no POSIX mode
+# bits -- 'os.chmod' there only toggles the read-only flag -- so a writable
+# file reports '0666' however it was chmod'ed.
+EXPECTED_TRANSCRIPT_MODE = 0o600 if os.name == "posix" else 0o666
 
 ONE_ENVIRONMENT = mock.create_autospec(bs_models.EnvironmentInfo)
 ONE_ENVIRONMENT.name = "one"  # mock quirk
@@ -507,7 +513,7 @@ def test_write_transcript(transcripts_path, content, suffix):
     )
     assert found_path.suffix == suffix
     assert found_path.read_text(encoding="utf-8") == content
-    assert (found_path.stat().st_mode & 0o777) == 0o600
+    assert (found_path.stat().st_mode & 0o777) == EXPECTED_TRANSCRIPT_MODE
 
 
 @pytest.mark.parametrize("w_iconfig", [False, True])

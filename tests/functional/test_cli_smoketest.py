@@ -50,6 +50,18 @@ STALE_ACL_MARKER = "stale_filter_func"
 ROOM = "faux"
 
 
+def _sqlite_dburi(db_path: pathlib.Path, driver: str = "") -> str:
+    """Build an absolute 'sqlite:///<abs>' URI for 'db_path'.
+
+    The path is spelled POSIX-style because these URIs are written into a
+    double-quoted YAML scalar, where a Windows path's backslashes are
+    escape sequences: 'C:\\Users\\...' fails to parse ('\\U' wants eight
+    hex digits) and e.g. '\\t' would silently become a tab. SQLAlchemy's
+    sqlite dialect accepts 'sqlite:///C:/...' on Windows.
+    """
+    return f"sqlite{driver}:///{db_path.as_posix()}"
+
+
 @pytest.fixture
 def scratch_installation(tmp_path):
     """A copy of 'example/minimal.yaml' backed by a fresh, empty authz DB."""
@@ -59,10 +71,15 @@ def scratch_installation(tmp_path):
     db_path = tmp_path / "authz.sqlite"
 
     text = config_path.read_text()
-    text, n_db = _AUTHZ_DBURI_RE.subn(
+    # Passed as a callable because 're.sub' expands backslash escapes in a
+    # replacement *string*, which a Windows 'tmp_path' would trip over.
+    authz_replacement = (
         "authorization_dburi:\n"
-        f'  sync: "sqlite:///{db_path}"\n'
-        f'  async: "sqlite+aiosqlite:///{db_path}"',
+        f'  sync: "{_sqlite_dburi(db_path)}"\n'
+        f'  async: "{_sqlite_dburi(db_path, "+aiosqlite")}"'
+    )
+    text, n_db = _AUTHZ_DBURI_RE.subn(
+        lambda _: authz_replacement,
         text,
     )
     assert n_db == 1, f"expected one authz_dburi stanza, found {n_db}"
@@ -162,7 +179,7 @@ def _seed_stale_acl_entry(db_path, room_id):
     'list_room_policies' read.
     """
     session = authz_schema.get_session(
-        engine_url=f"sqlite:///{db_path}",
+        engine_url=_sqlite_dburi(db_path),
         init_schema=True,
     )
     with session:

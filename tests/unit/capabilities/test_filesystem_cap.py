@@ -234,7 +234,9 @@ async def test_run_script_returns_stdout(temp_dir):
         "scripts/echo.py", "stanza jabberwocky --stanza 3"
     )
 
-    assert output == "stanza jabberwocky --stanza 3\n"
+    # 'run_script' hands back the script's stdout verbatim, and a child
+    # Python on Windows newline-translates 'print' to '\r\n'.
+    assert output.replace("\r\n", "\n") == "stanza jabberwocky --stanza 3\n"
 
 
 @pytest.mark.anyio
