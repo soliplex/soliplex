@@ -4,8 +4,9 @@ Text-mode 'read_text()' / 'write_text()' / 'open()' without an explicit
 'encoding=' fall back to 'locale.getpreferredencoding(False)' -- UTF-8
 on Linux, but 'cp1252' on a typical Windows host. Configuration YAML,
 quiz JSON, prompt files, and '.env' files are UTF-8 by specification, so
-that fallback silently mojibakes non-ASCII content on Windows (see
-'ERR.md').
+that fallback silently mojibakes non-ASCII content on Windows: a file
+holding 'Ada Lovelace’s — terse.' reads back as
+'Ada Lovelaceâ€™s â€” terse.' with no exception raised.
 
 The behavioural regression tests for this live next to the code they
 cover (prompt files in 'config/test_config_agents.py', installation YAML
@@ -89,8 +90,10 @@ def test_src_has_no_unencoded_text_io():
             )
         )
 
-    assert not findings, "text IO without 'encoding=' (see ERR.md):\n" + (
-        "\n".join(findings)
+    assert not findings, (
+        "text IO without 'encoding=' falls back to the host locale "
+        "encoding ('cp1252' on Windows); pass encoding=\"utf-8\":\n"
+        + "\n".join(findings)
     )
 
 

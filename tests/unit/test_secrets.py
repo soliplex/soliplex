@@ -239,7 +239,7 @@ def test_get_file_path_secret(
 
 # Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
 # 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
-# and raises outright. See 'ERR.md'.
+# and raises outright.
 NON_ASCII_SECRET = "pa’sswörd—Łódź"
 
 

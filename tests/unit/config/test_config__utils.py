@@ -60,7 +60,7 @@ def test__load_config_yaml_w_invalid(temp_dir, invalid):
 
 # Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
 # 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
-# and raises outright. See 'ERR.md'.
+# and raises outright.
 NON_ASCII_PROSE = "Ada Lovelace’s notes — Łódź"
 
 

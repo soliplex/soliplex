@@ -370,7 +370,7 @@ def test_quizconfig__load_questions_file(temp_dir, populated_quiz, quiz_json):
 
 # Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
 # 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
-# and raises outright. See 'ERR.md'.
+# and raises outright.
 NON_ASCII_INPUTS = "Whose notes — Ada Lovelace’s — reached Łódź?"
 
 
