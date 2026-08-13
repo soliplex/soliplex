@@ -3296,3 +3296,36 @@ def test_load_installation(populated_temp_dir, rel_path, raises, expected_id):
         installation = config_installation.load_installation(target)
 
         assert installation.id == expected_id
+
+
+# Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
+# 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
+# and raises outright. Written as bytes so the fixture is UTF-8 on any
+# host, whatever the locale encoding.
+NON_ASCII_PROSE = "Ada Lovelace’s notes — Łódź"
+
+
+def test__load_config_yaml_w_non_ascii(temp_dir):
+    """A UTF-8 config decodes the same whatever the host locale is."""
+    config_path = temp_dir / "config.yaml"
+    yaml_text = f'id: "{NON_ASCII_PROSE}"\n'
+    config_path.write_bytes(yaml_text.encode("utf-8"))
+
+    found = config_installation._load_config_yaml(config_path)
+
+    assert found == {"id": NON_ASCII_PROSE}
+
+
+def test__load_dotenv_w_non_ascii(temp_dir):
+    """A UTF-8 '.env' decodes the same whatever the host locale is.
+
+    Covers the second unencoded read in this module: a mojibaked value
+    here silently yields the wrong secret or API key.
+    """
+    dotenv_path = temp_dir / ".env"
+    dotenv_text = f'SOME_SECRET="{NON_ASCII_PROSE}"\n'
+    dotenv_path.write_bytes(dotenv_text.encode("utf-8"))
+
+    found = config_installation.InstallationConfig._load_dotenv(dotenv_path)
+
+    assert found == {"SOME_SECRET": NON_ASCII_PROSE}
