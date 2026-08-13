@@ -21,10 +21,13 @@ FRS = agui.FeedbackReviewStatus
 STATE_NAMESPACE = "soliplex-agui-run-feedback"
 
 
-class UnknownFeedback(KeyError):
+class UnknownFeedback(pydantic_ai.ModelRetry):
     def __init__(self, run_id: str):
         self.run_id = run_id
-        super().__init__(f"Uknown feedback entry for run id {run_id}")
+        super().__init__(
+            f"Unknown feedback entry for run id {run_id}. "
+            "Call 'query_recent_feedback' and try again."
+        )
 
 
 class RunFeedbackEntry(pydantic.BaseModel):
@@ -56,15 +59,15 @@ class RunFeedbackEntry(pydantic.BaseModel):
     """
 
     user_name: str
-    email: str | None
+    email: str | None = None
     room_id: str
     thread_id: str
     run_id: str
     created: datetime.datetime
     feedback: str
-    reason: str | None
-    status: agui.FeedbackReviewStatus | None
-    note: str | None
+    reason: str | None = None
+    status: agui.FeedbackReviewStatus | None = None
+    note: str | None = None
 
 
 class RunFeedbackInfo(pydantic.BaseModel):
@@ -255,23 +258,20 @@ async def query_recent_feedback(
       been reviewed or resolved.
     """
     agui_state = ctx.deps.state
-    our_state = agui_state.get(STATE_NAMESPACE)
-
-    if our_state is None:
-        before_state = {}
-        our_state = RecentRunFeedback()
-    else:
-        our_state = RecentRunFeedback.model_validate(our_state)
-        before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
+    our_state = RecentRunFeedback.model_validate(
+        agui_state.get(STATE_NAMESPACE) or {}  # guard against actual 'None'
+    )
+    before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
     entries = await _do_query(ctx, query)
     our_state.query = query
     our_state.entries = entries
 
-    after_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
+    after_json = our_state.model_dump(mode="json")
+    after_state = {STATE_NAMESPACE: after_json}
     metadata = _response_metadata(before_state, after_state)
 
-    agui_state[STATE_NAMESPACE] = our_state
+    agui_state[STATE_NAMESPACE] = after_json
 
     return pydantic_ai.ToolReturn(our_state.entries, metadata=metadata)
 
@@ -314,9 +314,8 @@ async def get_feedback_run_info(
       'run_id' is the UUID of the run.
     """
     agui_state = ctx.deps.state
-
     our_state = RecentRunFeedback.model_validate(
-        agui_state.get(STATE_NAMESPACE, {}),
+        agui_state.get(STATE_NAMESPACE) or {}  # guard against actual 'None'
     )
 
     to_query, _ = _find_feedback_by_run_id(our_state, run_id)
@@ -365,73 +364,46 @@ async def get_feedback_run_info(
     )
 
 
-async def _do_review_feedback(
-    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
-    run_entry: RunFeedbackEntry,
-    *,
-    note: str | None,
-):
-    the_threads = ctx.deps.the_threads
-    user = ctx.deps.user
-    await the_threads.review_run_feedback(
-        reviewer_user_name=user.preferred_username,
-        reviewer_email=user.email,
-        note=note,
-        user_name=run_entry.user_name,
-        room_id=run_entry.room_id,
-        thread_id=run_entry.thread_id,
-        run_id=run_entry.run_id,
-    )
-
-
 async def review_recent_feedback(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
     review: FeedbackReview,
 ) -> pydantic_ai.ToolReturn:
     """Add a user's review to a feedback entry for an AGUI run."""
     agui_state = ctx.deps.state
-    to_review = None
-
     our_state = RecentRunFeedback.model_validate(
-        agui_state.get(STATE_NAMESPACE, {}),
+        agui_state.get(STATE_NAMESPACE) or {}  # guard against actual 'None'
     )
 
     to_review, _ = _find_feedback_by_run_id(
-        our_state, review.run_id, ["opened"]
+        our_state, review.run_id, [FromWhichAttrs.OPENED]
     )
 
     before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
-    await _do_review_feedback(ctx, to_review, note=review.note)
+    the_threads = ctx.deps.the_threads
+    user = ctx.deps.user
+    await the_threads.review_run_feedback(
+        reviewer_user_name=user.preferred_username,
+        reviewer_email=user.email,
+        note=review.note,
+        user_name=to_review.user_name,
+        room_id=to_review.room_id,
+        thread_id=to_review.thread_id,
+        run_id=to_review.run_id,
+    )
 
     to_review.status = FRS.REVIEWED
     to_review.note = review.note
     our_state.entries.opened.remove(to_review)
     our_state.entries.reviewed.insert(0, to_review)
 
-    after_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
+    after_json = our_state.model_dump(mode="json")
+    after_state = {STATE_NAMESPACE: after_json}
     metadata = _response_metadata(before_state, after_state)
 
+    agui_state[STATE_NAMESPACE] = after_json
+
     return pydantic_ai.ToolReturn(our_state.entries, metadata=metadata)
-
-
-async def _do_resolve_feedback(
-    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
-    run_entry: RunFeedbackEntry,
-    *,
-    note: str | None,
-):
-    the_threads = ctx.deps.the_threads
-    user = ctx.deps.user
-    await the_threads.resolve_run_feedback(
-        resolver_user_name=user.preferred_username,
-        resolver_email=user.email,
-        note=note,
-        user_name=run_entry.user_name,
-        room_id=run_entry.room_id,
-        thread_id=run_entry.thread_id,
-        run_id=run_entry.run_id,
-    )
 
 
 async def resolve_recent_feedback(
@@ -440,25 +412,39 @@ async def resolve_recent_feedback(
 ) -> pydantic_ai.ToolReturn:
     """Add a user's resolution of a feedback entry for an AGUI run."""
     agui_state = ctx.deps.state
-
     our_state = RecentRunFeedback.model_validate(
-        agui_state.get(STATE_NAMESPACE, {}),
+        agui_state.get(STATE_NAMESPACE) or {}  # guard against actual 'None'
     )
 
     to_resolve, from_which = _find_feedback_by_run_id(
-        our_state, resolution.run_id, ["opened", "reviewed"]
+        our_state,
+        resolution.run_id,
+        [FromWhichAttrs.OPENED, FromWhichAttrs.REVIEWED],
     )
 
     before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
-    await _do_resolve_feedback(ctx, to_resolve, note=resolution.note)
+    the_threads = ctx.deps.the_threads
+    user = ctx.deps.user
+    await the_threads.resolve_run_feedback(
+        resolver_user_name=user.preferred_username,
+        resolver_email=user.email,
+        note=resolution.note,
+        user_name=to_resolve.user_name,
+        room_id=to_resolve.room_id,
+        thread_id=to_resolve.thread_id,
+        run_id=to_resolve.run_id,
+    )
 
     to_resolve.status = FRS.RESOLVED
     to_resolve.note = resolution.note
     from_which.remove(to_resolve)
     our_state.entries.resolved.insert(0, to_resolve)
 
-    after_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
+    after_json = our_state.model_dump(mode="json")
+    after_state = {STATE_NAMESPACE: after_json}
     metadata = _response_metadata(before_state, after_state)
+
+    agui_state[STATE_NAMESPACE] = after_json
 
     return pydantic_ai.ToolReturn(our_state.entries, metadata=metadata)

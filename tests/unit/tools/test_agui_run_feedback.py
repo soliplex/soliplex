@@ -14,6 +14,7 @@ from soliplex.tools import agui_run_feedback as arf_tools
 from tests.unit.agui import agui_constants
 
 FRS = agui.FeedbackReviewStatus
+STATE_NAMESPACE = arf_tools.STATE_NAMESPACE
 
 NOW = datetime.datetime.now(datetime.UTC)
 SINCE = NOW - datetime.timedelta(days=1)
@@ -170,6 +171,40 @@ def rf_query(request) -> arf_tools.RecentRunFeedbackQuery:
     return arf_tools.RecentRunFeedbackQuery(**request.param)
 
 
+def test_runfeedbackentry_nullable_defaults():
+    rfe = arf_tools.RunFeedbackEntry(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=THREAD_ID,
+        run_id=RUN_ID,
+        created=NOW,
+        feedback=THUMBS_UP,
+    )
+
+    assert rfe.email is None
+    assert rfe.reason is None
+    assert rfe.status is None
+    assert rfe.note is None
+
+
+def test_runfeedbackentry_from_dict_wo_nullable_defaults():
+    dumped = dict(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=THREAD_ID,
+        run_id=RUN_ID,
+        created=NOW,
+        feedback=THUMBS_UP,
+    )
+
+    rfe = arf_tools.RunFeedbackEntry.model_validate(dumped)
+
+    assert rfe.email is None
+    assert rfe.reason is None
+    assert rfe.status is None
+    assert rfe.note is None
+
+
 @pytest.mark.anyio
 async def test__do_query(
     the_run,
@@ -267,23 +302,28 @@ async def test_query_recent_feedback(do_query, ctx_w_deps, rf_query, w_state):
     exp_state = arf_tools.RecentRunFeedback(
         query=rf_query,
         entries=query_result,
-    )
+    ).model_dump(mode="json")
 
     deps = ctx_w_deps.deps
 
     if w_state == "wo_query":
-        deps.state[arf_tools.STATE_NAMESPACE] = arf_tools.RecentRunFeedback()
+        init_state = arf_tools.RecentRunFeedback()
     elif w_state == "diff_query":
-        deps.state[arf_tools.STATE_NAMESPACE] = arf_tools.RecentRunFeedback(
+        init_state = arf_tools.RecentRunFeedback(
             query=arf_tools.RecentRunFeedbackQuery(user_name=OTHER_USER_NAME),
         )
     elif w_state == "same_query":
-        deps.state[arf_tools.STATE_NAMESPACE] = arf_tools.RecentRunFeedback(
+        init_state = arf_tools.RecentRunFeedback(
             query=rf_query.model_copy(),
             entries=query_result,
         )
-    else:  # pragma: NO COVER
-        pass
+    else:
+        init_state = None
+
+    if init_state is not None:
+        deps.state[STATE_NAMESPACE] = init_state.model_dump(
+            mode="json",
+        )
 
     found = await arf_tools.query_recent_feedback(ctx_w_deps, rf_query)
 
@@ -291,7 +331,7 @@ async def test_query_recent_feedback(do_query, ctx_w_deps, rf_query, w_state):
     deltas = found.metadata
 
     assert found.return_value == query_result
-    assert deps.state[arf_tools.STATE_NAMESPACE] == exp_state
+    assert deps.state[STATE_NAMESPACE] == exp_state
 
     do_query.assert_called_once_with(ctx_w_deps, rf_query)
 
@@ -441,7 +481,7 @@ async def test_get_feedback_run_info(
     our_state = arf_tools.RecentRunFeedback(entries=entries)
 
     deps = ctx_w_deps.deps
-    deps.state[arf_tools.STATE_NAMESPACE] = our_state
+    deps.state[STATE_NAMESPACE] = our_state.model_dump(mode="json")
 
     found = await arf_tools.get_feedback_run_info(ctx_w_deps, RUN_ID)
 
@@ -468,30 +508,6 @@ async def test_get_feedback_run_info(
 
 
 @pytest.mark.anyio
-async def test__do_review_feedback(
-    run_feedback_entry,
-    ctx_w_deps,
-):
-    rvw_rf = ctx_w_deps.deps.the_threads.review_run_feedback
-
-    await arf_tools._do_review_feedback(
-        ctx_w_deps,
-        run_feedback_entry,
-        note=REVIEWED_NOTE,
-    )
-
-    rvw_rf.assert_called_once_with(
-        reviewer_user_name=OTHER_USER_NAME,
-        reviewer_email=OTHER_EMAIL,
-        note=REVIEWED_NOTE,
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=THREAD_ID,
-        run_id=RUN_ID,
-    )
-
-
-@pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_run_id, expectation",
     [
@@ -499,18 +515,20 @@ async def test__do_review_feedback(
         (OTHER_RUN_ID, pytest.raises(arf_tools.UnknownFeedback)),
     ],
 )
-@mock.patch("soliplex.tools.agui_run_feedback._do_review_feedback")
 async def test_review_recent_feedback(
-    do_review,
     ctx_w_deps,
     run_feedback_entry,
     w_run_id,
     expectation,
 ):
+    deps = ctx_w_deps.deps
+
     before_entries = arf_tools.RecentRunFeedbackEntries(
         opened=[run_feedback_entry],
     )
-    before_state = arf_tools.RecentRunFeedback(entries=before_entries)
+    before_state = arf_tools.RecentRunFeedback(
+        entries=before_entries,
+    ).model_dump(mode="json")
 
     exp_after_entry = run_feedback_entry.model_copy(
         update={
@@ -525,17 +543,20 @@ async def test_review_recent_feedback(
             "resolved": [],
         },
     )
-    exp_state = arf_tools.RecentRunFeedback(entries=exp_after_entries)
+    exp_state = arf_tools.RecentRunFeedback(
+        entries=exp_after_entries,
+    ).model_dump(mode="json")
 
-    deps = ctx_w_deps.deps
-    deps.state[arf_tools.STATE_NAMESPACE] = before_state.model_copy()
+    deps.state[STATE_NAMESPACE] = before_state
 
     review = arf_tools.FeedbackReview(run_id=w_run_id, note=REVIEWED_NOTE)
 
     with expectation as expected:
         found = await arf_tools.review_recent_feedback(ctx_w_deps, review)
 
-    after_state = deps.state[arf_tools.STATE_NAMESPACE]
+    after_state = deps.state[STATE_NAMESPACE]
+
+    rvw_rf = deps.the_threads.review_run_feedback
 
     if expected is None:
         assert after_state == exp_state
@@ -547,49 +568,30 @@ async def test_review_recent_feedback(
 
         d_remove = {
             "op": "remove",
-            "path": f"/{arf_tools.STATE_NAMESPACE}/entries/opened/0",
+            "path": f"/{STATE_NAMESPACE}/entries/opened/0",
         }
         assert d_remove in event.delta
 
         d_add = {
             "op": "add",
-            "path": f"/{arf_tools.STATE_NAMESPACE}/entries/reviewed/0",
+            "path": f"/{STATE_NAMESPACE}/entries/reviewed/0",
             "value": exp_after_entry.model_dump(mode="json"),
         }
         assert d_add in event.delta
 
-        do_review.assert_called_once_with(
-            ctx_w_deps,
-            run_feedback_entry,
+        rvw_rf.assert_awaited_once_with(
+            reviewer_user_name=OTHER_USER_NAME,
+            reviewer_email=OTHER_EMAIL,
             note=REVIEWED_NOTE,
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=THREAD_ID,
+            run_id=RUN_ID,
         )
+
     else:
         assert after_state == before_state
-        do_review.assert_not_called()
-
-
-@pytest.mark.anyio
-async def test__do_resolve_feedback(
-    run_feedback_entry,
-    ctx_w_deps,
-):
-    rsv_rf = ctx_w_deps.deps.the_threads.resolve_run_feedback
-
-    await arf_tools._do_resolve_feedback(
-        ctx_w_deps,
-        run_feedback_entry,
-        note=RESOLVED_NOTE,
-    )
-
-    rsv_rf.assert_called_once_with(
-        resolver_user_name=OTHER_USER_NAME,
-        resolver_email=OTHER_EMAIL,
-        note=RESOLVED_NOTE,
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=THREAD_ID,
-        run_id=RUN_ID,
-    )
+        rvw_rf.assert_not_awaited()
 
 
 @pytest.mark.anyio
@@ -601,9 +603,7 @@ async def test__do_resolve_feedback(
         (OTHER_RUN_ID, pytest.raises(arf_tools.UnknownFeedback)),
     ],
 )
-@mock.patch("soliplex.tools.agui_run_feedback._do_resolve_feedback")
 async def test_resolve_recent_feedback(
-    do_resolve,
     ctx_w_deps,
     run_feedback_entry,
     w_run_id,
@@ -618,7 +618,9 @@ async def test_resolve_recent_feedback(
         before_entries = arf_tools.RecentRunFeedbackEntries(
             opened=[run_feedback_entry],
         )
-    before_state = arf_tools.RecentRunFeedback(entries=before_entries)
+    before_state = arf_tools.RecentRunFeedback(
+        entries=before_entries,
+    ).model_dump(mode="json")
 
     exp_after_entry = run_feedback_entry.model_copy(
         update={
@@ -633,10 +635,12 @@ async def test_resolve_recent_feedback(
             "resolved": [exp_after_entry],
         },
     )
-    exp_state = arf_tools.RecentRunFeedback(entries=exp_after_entries)
+    exp_state = arf_tools.RecentRunFeedback(
+        entries=exp_after_entries,
+    )
 
     deps = ctx_w_deps.deps
-    deps.state[arf_tools.STATE_NAMESPACE] = before_state.model_copy()
+    deps.state[STATE_NAMESPACE] = before_state
 
     resolution = arf_tools.FeedbackResolution(
         run_id=w_run_id,
@@ -649,13 +653,14 @@ async def test_resolve_recent_feedback(
             resolution,
         )
 
-    after_state = deps.state[arf_tools.STATE_NAMESPACE]
+    after_state = deps.state[STATE_NAMESPACE]
 
+    rsv_rf = ctx_w_deps.deps.the_threads.resolve_run_feedback
     if expected is None:
         assert isinstance(found, pydantic_ai.ToolReturn)
 
         assert found.return_value == exp_state.entries
-        assert after_state == exp_state
+        assert after_state == exp_state.model_dump(mode="json")
 
         events = found.metadata
         (event,) = events
@@ -664,7 +669,7 @@ async def test_resolve_recent_feedback(
         d_remove = {
             "op": "remove",
             "path": (
-                f"/{arf_tools.STATE_NAMESPACE}/entries/"
+                f"/{STATE_NAMESPACE}/entries/"
                 f"{'reviewed' if w_reviewed else 'opened'}/0"
             ),
         }
@@ -672,17 +677,21 @@ async def test_resolve_recent_feedback(
 
         d_add = {
             "op": "add",
-            "path": f"/{arf_tools.STATE_NAMESPACE}/entries/resolved/0",
+            "path": f"/{STATE_NAMESPACE}/entries/resolved/0",
             "value": exp_after_entry.model_dump(mode="json"),
         }
         assert d_add in event.delta
 
-        do_resolve.assert_called_once_with(
-            ctx_w_deps,
-            run_feedback_entry,
+        rsv_rf.assert_awaited_once_with(
+            resolver_user_name=OTHER_USER_NAME,
+            resolver_email=OTHER_EMAIL,
             note=RESOLVED_NOTE,
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=THREAD_ID,
+            run_id=RUN_ID,
         )
 
     else:
         assert after_state == before_state
-        do_resolve.assert_not_called()
+        rsv_rf.assert_not_awaited()
