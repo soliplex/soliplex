@@ -78,6 +78,45 @@ def test_middlewareconfig_from_yaml(
         assert found == expected
 
 
+@pytest.mark.parametrize("w_extra_params", [{}, {"foo": "bar"}])
+def test_middlewareconfig_as_yaml(w_extra_params):
+    if w_extra_params:
+        ep_kwargs = {"extra_params": w_extra_params}
+    else:
+        ep_kwargs = {}
+
+    mwc = config_middleware.MiddlewareConfig(
+        name="test-as_yaml",
+        app_factory=_test_middleware.null_app_factory,
+        **ep_kwargs,
+    )
+
+    found = mwc.as_yaml
+
+    assert found["app_factory"] == "_test_middleware.null_app_factory"
+
+    if w_extra_params:
+        assert found["extra_params"] == w_extra_params
+    else:
+        assert "extra_params" not in found
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_MWCONFIG_YAML,
+        W_NEEDS_ICONFIG_MWCONFIG_YAML,
+        W_EXTRA_PARAMS_MWCONFIG_YAML,
+    ],
+)
+def test_middlewareconfig_as_yaml_round_trips(config_yaml):
+    klass = config_middleware.MiddlewareConfig
+    original = klass.from_yaml(copy.deepcopy(yaml.safe_load(config_yaml)))
+    reloaded = klass.from_yaml(copy.deepcopy(original.as_yaml))
+
+    assert reloaded == original
+
+
 @pytest.mark.parametrize(
     "config_kw, expected",
     [

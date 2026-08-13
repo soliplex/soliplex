@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 
 import pytest
@@ -403,6 +404,38 @@ def test_lfipydai_as_yaml(init_kw, expected):
     assert found == expected
 
 
+# 'from_yaml' splats its argument, so an empty *document* raises; the
+# minimal round-trippable input is an explicit empty mapping.
+EMPTY_MAPPING_YAML = "{}"
+
+
+def _round_trip_lfipydai(config_path, config_dict):
+    """Reload a 'LogfireInstrumentPydanticAI' from its own dump."""
+    klass = config_logfire.LogfireInstrumentPydanticAI
+    original = klass.from_yaml(config_path, copy.deepcopy(config_dict))
+    reloaded = klass.from_yaml(config_path, copy.deepcopy(original.as_yaml))
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        EMPTY_MAPPING_YAML,
+        W_VALUES_LFIPYDAI_CONFIG_YAML,
+    ],
+)
+def test_lfipydai_as_yaml_round_trips(temp_dir, config_yaml):
+    yaml_file = temp_dir / "test.yaml"
+
+    original, reloaded = _round_trip_lfipydai(
+        yaml_file,
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
+
+
 @pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
@@ -474,6 +507,33 @@ def test_lfifapi_as_yaml(init_kw, expected):
     found = ipydai_config.as_yaml
 
     assert found == expected
+
+
+def _round_trip_lfifapi(config_path, config_dict):
+    """Reload a 'LogfireInstrumentFastAPI' from its own dump."""
+    klass = config_logfire.LogfireInstrumentFastAPI
+    original = klass.from_yaml(config_path, copy.deepcopy(config_dict))
+    reloaded = klass.from_yaml(config_path, copy.deepcopy(original.as_yaml))
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        EMPTY_MAPPING_YAML,
+        W_VALUES_LFIFAPI_CONFIG_YAML,
+    ],
+)
+def test_lfifapi_as_yaml_round_trips(temp_dir, config_yaml):
+    yaml_file = temp_dir / "test.yaml"
+
+    original, reloaded = _round_trip_lfifapi(
+        yaml_file,
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
 
 
 @pytest.mark.parametrize(
@@ -632,6 +692,70 @@ def test_logfireconfig_logfire_as_yaml(
     found = lf_config.as_yaml
 
     assert found == expected
+
+
+ROUND_TRIP_IC_SECRETS = TEST_LOGFIRE_IC_DEFAULT_SECRETS
+ROUND_TRIP_IC_ENV = TEST_LOGFIRE_IC_DEFAULT_ENV | {
+    "LOGFIRE_BASE_URL": TEST_LOGFIRE_BASE_URL,
+}
+
+
+def _round_trip_logfire_config(installation_config, config_path, config_dict):
+    """Reload a 'LogfireConfig' from its own dump.
+
+    'from_yaml' pops the 'instrument_*' keys out of the mapping it is
+    handed, hence the copies.
+    """
+    klass = config_logfire.LogfireConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_YAML,
+        W_TOKEN_ONLY_LOGFIRE_CONFIG_YAML,
+        W_SOME_SCALARS_LOGFIRE_CONFIG_YAML,
+        W_SCALARS_LOGFIRE_CONFIG_YAML,
+        W_BASE_URL_LOGFIRE_CONFIG_YAML,
+        W_SCRUBBING_LOGFIRE_CONFIG_YAML,
+        W_IPYDAI_LOGFIRE_CONFIG_YAML,
+        W_IFAPI_LOGFIRE_CONFIG_YAML,
+    ],
+)
+def test_logfireconfig_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    installation_config.get_secret.side_effect = ROUND_TRIP_IC_SECRETS.get
+    installation_config.get_environment.side_effect = ROUND_TRIP_IC_ENV.get
+    yaml_file = temp_dir / "test.yaml"
+
+    original, reloaded = _round_trip_logfire_config(
+        installation_config,
+        yaml_file,
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
+
+    # 'logfire_config_kwargs' is what gets splatted into
+    # 'logfire.configure()'. Comparing it too proves the 'env:' /
+    # 'secret:' markers survived as markers, since resolution happens on
+    # the way out.
+    assert reloaded.logfire_config_kwargs == original.logfire_config_kwargs
 
 
 @pytest.mark.parametrize(

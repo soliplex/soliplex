@@ -1,4 +1,5 @@
 import contextlib
+import copy
 from unittest import mock
 
 import fastapi
@@ -145,6 +146,67 @@ def test_addapprouter_as_yaml(
     assert found == expected
 
 
+def _round_trip_app_router_op(op_class, config_path, config_dict):
+    """Reload an app-router operation from its own dump.
+
+    'from_yaml' pops 'kind' out of the mapping it is handed, hence the
+    copies.
+    """
+    original = op_class.from_yaml(config_path, copy.deepcopy(config_dict))
+    reloaded = op_class.from_yaml(
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+ADD_ROUTER_CONFIG = {
+    "kind": "add",
+    "group_name": GROUP_NAME,
+    "router_name": ROUTER_NAME,
+}
+
+
+@pytest.mark.parametrize(
+    "extra_config",
+    [
+        {},
+        {"replace_existing": True},
+        # 'prefix: null' means "mount at the root" -- it differs from the
+        # '/api' default, so 'as_yaml' has to emit it rather than filter
+        # it out as 'router_kwargs' does (#1215).
+        {"prefix": None},
+        {"prefix": PREFIX},
+        {"tags": TAGS},
+        {"dependencies": DEPENDENCIES},
+        {"default_response_class": DEFAULT_RESPONSE_CLASS},
+        {"deprecated": DEPRECATED},
+        {
+            "replace_existing": True,
+            "prefix": None,
+            "tags": TAGS,
+            "dependencies": DEPENDENCIES,
+            "default_response_class": DEFAULT_RESPONSE_CLASS,
+            "deprecated": DEPRECATED,
+        },
+    ],
+)
+def test_addapprouter_as_yaml_round_trips(temp_dir, extra_config):
+    original, reloaded = _round_trip_app_router_op(
+        config_routing.AddAppRouter,
+        temp_dir / "installation.yaml",
+        ADD_ROUTER_CONFIG | extra_config,
+    )
+
+    assert reloaded == original
+
+    # 'router_kwargs' is the state that matters: 'add_registered_routers'
+    # splats it into 'app.include_router', so it decides where the
+    # group's routes actually mount.
+    assert reloaded.router_kwargs == original.router_kwargs
+
+
 @pytest.mark.parametrize(
     "w_existing, w_replace, expectation",
     [
@@ -243,6 +305,30 @@ def test_deleteapprouter_as_yaml(
     assert found == expected
 
 
+DELETE_ROUTER_CONFIG = {
+    "kind": "delete",
+    "group_name": GROUP_NAME,
+}
+
+
+@pytest.mark.parametrize(
+    "extra_config",
+    [
+        {},
+        {"require_existing": False},
+        {"require_existing": True},
+    ],
+)
+def test_deleteapprouter_as_yaml_round_trips(temp_dir, extra_config):
+    original, reloaded = _round_trip_app_router_op(
+        config_routing.DeleteAppRouter,
+        temp_dir / "installation.yaml",
+        DELETE_ROUTER_CONFIG | extra_config,
+    )
+
+    assert reloaded == original
+
+
 @pytest.mark.parametrize(
     "w_existing, w_require, expectation",
     [
@@ -307,6 +393,16 @@ def test_clearapprouters_as_yaml():
     found = clear_op.as_yaml
 
     assert found == {"kind": "clear"}
+
+
+def test_clearapprouters_as_yaml_round_trips(temp_dir):
+    original, reloaded = _round_trip_app_router_op(
+        config_routing.ClearAppRouters,
+        temp_dir / "installation.yaml",
+        {"kind": "clear"},
+    )
+
+    assert reloaded == original
 
 
 @pytest.mark.parametrize("w_existing", [False, True])

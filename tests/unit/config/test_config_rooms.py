@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import dataclasses
 import pathlib
 from unittest import mock
@@ -71,6 +72,11 @@ skills:
 """
 
 LANCE_DB_OVERRIDE_PATH = pathlib.Path("/tmp/rag.lancedb")
+# 'str(WindowsPath("/tmp/rag.lancedb"))' is '\tmp\rag.lancedb', and a
+# double-quoted YAML scalar expands '\t' / '\r' as escapes -- so the path
+# is emitted POSIX-style, which round-trips to the same 'pathlib.Path' on
+# either platform.
+LANCE_DB_OVERRIDE_YAML_PATH = LANCE_DB_OVERRIDE_PATH.as_posix()
 
 W_HR_SKILLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
     "skills": config_skills.RoomSkillsConfig(
@@ -86,7 +92,7 @@ W_HR_SKILLS_ROOM_CONFIG_YAML = f"""\
 skills:
     skill_configs:
         - kind: "haiku.rag.skills.rag"
-          rag_lancedb_override_path: "{LANCE_DB_OVERRIDE_PATH}"
+          rag_lancedb_override_path: "{LANCE_DB_OVERRIDE_YAML_PATH}"
 """
 
 W_NON_HR_TOOLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
@@ -428,6 +434,77 @@ def test_roomconfig_as_yaml(temp_dir, installation_config, w_kw):
     found = inst.as_yaml
 
     assert found == expected
+
+
+def _round_trip_room_config(installation_config, config_path, config_dict):
+    """Reload a 'RoomConfig' from its own dump.
+
+    'from_yaml' drains 'agent', 'tools', 'mcp_client_toolsets', 'skills'
+    and 'quizzes' out of the mapping it is handed, hence the copies.
+    """
+    klass = config_rooms.RoomConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
+@pytest.mark.parametrize(
+    "config_yaml",
+    [
+        BARE_ROOM_CONFIG_YAML,
+        W__ORDER_ROOM_CONFIG_YAML,
+        W_NON_HR_SKILLS_ROOM_CONFIG_YAML,
+        W_HR_SKILLS_ROOM_CONFIG_YAML,
+        W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
+    ],
+)
+def test_roomconfig_as_yaml_round_trips(
+    installation_config,
+    temp_dir,
+    config_yaml,
+):
+    installation_config.skill_configs = {
+        test_skills.SKILL_NAME: mock.create_autospec(
+            config_skills.FilesystemSkillConfig,
+        ),
+        "other_skill": object(),
+    }
+
+    original, reloaded = _round_trip_room_config(
+        installation_config,
+        temp_dir / "test.yaml",
+        yaml.safe_load(config_yaml),
+    )
+
+    assert reloaded == original
+
+
+def test_roomconfig_as_yaml_round_trips_w_agent_agui_feature_names(
+    installation_config,
+    temp_dir,
+):
+    installation_config.skill_configs = {
+        test_skills.SKILL_NAME: mock.create_autospec(
+            config_skills.FilesystemSkillConfig,
+        ),
+    }
+
+    original, reloaded = _round_trip_room_config(
+        installation_config,
+        temp_dir / "test.yaml",
+        yaml.safe_load(FULL_ROOM_CONFIG_YAML),
+    )
+
+    assert reloaded == original
 
 
 @pytest.mark.parametrize("w_order", [False, True])

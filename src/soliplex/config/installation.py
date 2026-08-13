@@ -1068,6 +1068,8 @@ class InstallationConfig:
     def as_yaml(self) -> dict:
         result = {
             "id": self.id,
+            "server_name": self.server_name,
+            "server_description": self.server_description,
             "meta": self.meta.as_yaml,
             "secrets": [secret.as_yaml for secret in self.secrets],
             # Dump the resolved version, not the original config
@@ -1077,12 +1079,30 @@ class InstallationConfig:
             "filesystem_skills_paths": [
                 str(path) for path in self.filesystem_skills_paths
             ],
-            "logging_config_file": str(self._logging_config_file),
             "oidc_paths": [str(path) for path in self.oidc_paths],
             "room_paths": [str(path) for path in self.room_paths],
             "completion_paths": [str(path) for path in self.completion_paths],
             "quizzes_paths": [str(path) for path in self.quizzes_paths],
+            "thread_persistence_dburi": {
+                "sync": self._thread_persistence_dburi_sync,
+                "async": self._thread_persistence_dburi_async,
+            },
+            "authorization_dburi": {
+                "sync": self._authorization_dburi_sync,
+                "async": self._authorization_dburi_async,
+            },
         }
+
+        if self.disable_dotenv:
+            result["disable_dotenv"] = True
+
+        if self.middleware_stack:
+            result["middleware_stack"] = [
+                layer.as_yaml for layer in self.middleware_stack
+            ]
+
+        if self._skill_configs is not None:
+            result["skill_configs"] = self._skill_configs
 
         if self.rooms_upload_path:
             result["rooms_upload_path"] = str(self.rooms_upload_path)
@@ -1098,6 +1118,15 @@ class InstallationConfig:
 
         if self.logfire_config is not None:
             result["logfire_config"] = self.logfire_config.as_yaml
+
+        if self._logging_config_file is not None:
+            result["logging_config_file"] = str(self._logging_config_file)
+
+        if self._logging_headers_map is not None:
+            result["logging_headers_map"] = self.logging_headers_map
+
+        if self._logging_claims_map is not None:
+            result["logging_claims_map"] = self.logging_claims_map
 
         if self.app_router_operations:
             result["app_router_operations"] = [
