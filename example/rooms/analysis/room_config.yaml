@@ -18,8 +18,10 @@ agent:
 
 skills:
   skill_configs:
-    - kind: "haiku.rag.skills.rag"
-      rag_lancedb_stem: "rag"
+    # Analysis searches and cites as well as running code, so pairing it
+    # with the RAG skill over the same corpus would give the model two
+    # near-identical search tools, split its citations across the two
+    # records, and give the question two search budgets to spend.
     - kind: "haiku.rag.skills.analysis"
       rag_lancedb_stem: "rag"
 

@@ -180,8 +180,15 @@ E.g.:
           rag_lancedb_stem: "rag"
 
         - kind: "haiku.rag.skills.analysis"
-          rag_lancedb_stem: "rag"
+          rag_lancedb_stem: "notes"
   ```
+
+  Configure at most one of these two kinds per corpus.  Analysis searches
+  and cites as well as running code, so pairing it with the RAG skill over
+  the same database gives the agent two near-identical search tools, splits
+  its citations across the two records, and gives one question two search
+  budgets to spend.  Two kinds over *different* databases is fine, as
+  above.
 
 #### Default Skill Configuration Kinds
 
