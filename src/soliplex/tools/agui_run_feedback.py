@@ -70,16 +70,62 @@ class RunFeedbackEntry(pydantic.BaseModel):
     note: str | None = None
 
 
+#   What a run's recovered status means for the info we can show, keyed by
+#   the status replaying its events leaves behind.  Phrased to stand alone:
+#   these are reported to the user via 'RunFeedbackInfo.run_status_note'.
+RUN_STATUS_NOTES = {
+    agui_parser.RunStatus.INITIALIZED: (
+        "The run never started:  nothing was recorded for it."
+    ),
+    agui_parser.RunStatus.RUNNING: (
+        "The run never finished:  it may still be running, or resumable."
+    ),
+    agui_parser.RunStatus.ERROR: "The run ended with an error.",
+    agui_parser.RunStatus.FINISHED: "The run finished normally.",
+}
+
+
 class RunFeedbackInfo(pydantic.BaseModel):
-    """Information about the run which was the target of feedback"""
+    """Information about the run which was the target of feedback
+
+    Args:
+
+      'user_name' (string):  preferred username of the reporting user.
+
+      'email' (string or None):  email-address of the reporting user.
+
+      'room_id' (string): ID of the room in which the AGUI run originated.
+
+      'thread_id' (string): UUID of the AGUI thread which spawned the run.
+
+      'run_id' (string): UUID of the run against which the feedback was made.
+
+      'user_prompt' (string or None):  the prompt which drove the run, or
+        None if the run recorded none.  A run resumed to supply a tool
+        result (e.g. a human-in-the-loop approval) has its prompt in an
+        earlier run of the same thread.  See 'run_status_note'.
+
+      'agent_response' (string or None):  the agent's reply, or None if the
+        run recorded none:  it may have failed, never finished, or answered
+        only via tool calls.  See 'run_status_note'.
+
+      'run_status' (one of "INITIALIZED", "RUNNING", "FINISHED", "ERROR"):
+        the run's status, recovered by replaying its recorded events.
+
+      'run_status_note' (string):  what that status means for this run.
+        Report it to the user when 'user_prompt' or 'agent_response' is
+        None:  it explains what became of the run.
+    """
 
     user_name: str
-    email: str | None
+    email: str | None = None
     room_id: str
     thread_id: str
     run_id: str
-    user_prompt: str
-    agent_response: str
+    user_prompt: str | None = None
+    agent_response: str | None = None
+    run_status: str
+    run_status_note: str
 
 
 class RecentRunFeedbackQuery(pydantic.BaseModel):
@@ -310,6 +356,10 @@ async def get_feedback_run_info(
 ) -> RunFeedbackInfo:
     """Return information about the run against which the feedback was created
 
+    'user_prompt' and / or 'agent_response' come back as None for a run
+    which recorded neither;  'run_status_note' explains what became of it,
+    and should be reported to the user in that case.
+
     Args:
 
       'run_id' is the UUID of the run.
@@ -355,14 +405,21 @@ async def get_feedback_run_info(
         if message.role == "assistant" and message.content is not None
     ]
 
+    # A degenerate run (never started, died, errored, or answered only via
+    # tool calls) may have recorded neither:  report what it did record,
+    # explaining the gap via the run's status, rather than failing.
+    run_status = esp.run_status
+
     return RunFeedbackInfo(
         user_name=to_query.user_name,
         email=email,
         room_id=to_query.room_id,
         thread_id=to_query.thread_id,
         run_id=run_id,
-        user_prompt=user_prompts[-1],
-        agent_response=agent_responses[-1],
+        user_prompt=user_prompts[-1] if user_prompts else None,
+        agent_response=agent_responses[-1] if agent_responses else None,
+        run_status=run_status.name,
+        run_status_note=RUN_STATUS_NOTES[run_status],
     )
 
 
