@@ -73,6 +73,29 @@ def test_gitmetadata_ctor(temp_dir, w_file_path_file, w_override_files):
         assert found._git_tag is None
 
 
+# Git refnames may hold any UTF-8, so the override files are read as
+# UTF-8 rather than the host locale encoding. Under 'cp1252' (the Windows
+# default) '’' / '—' would mojibake silently and 'Ł' (U+0141 ->
+# b"\xc5\x81") would raise, since 0x81 is one of cp1252's undefined
+# slots. Written as bytes so the fixture is UTF-8 on any host.
+NON_ASCII_HASH = "hash-Łódź"
+NON_ASCII_BRANCH = "feature/Ada-Lovelace’s-notes"
+NON_ASCII_TAG = "v1.0—Łódź"
+
+
+def test_gitmetadata_ctor_w_non_ascii_override_files(temp_dir):
+    """UTF-8 override files decode the same whatever the host locale."""
+    (temp_dir / "git-hash.txt").write_bytes(NON_ASCII_HASH.encode("utf-8"))
+    (temp_dir / "git-branch.txt").write_bytes(NON_ASCII_BRANCH.encode("utf-8"))
+    (temp_dir / "git-tag.txt").write_bytes(NON_ASCII_TAG.encode("utf-8"))
+
+    found = util.GitMetadata(temp_dir)
+
+    assert found._git_hash == NON_ASCII_HASH
+    assert found._git_branch == NON_ASCII_BRANCH
+    assert found._git_tag == NON_ASCII_TAG
+
+
 @pytest.mark.parametrize("w_already", [None, "already"])
 @mock.patch("soliplex.util.subprocess")
 def test_gitmetadata_git_hash(subp, temp_dir, w_already):

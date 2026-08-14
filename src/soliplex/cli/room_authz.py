@@ -325,7 +325,7 @@ def room_authz_as_yaml(
     yaml_text = _room_policy_as_yaml(policy)
 
     if output is not None:
-        output.write_text(yaml_text)
+        output.write_text(yaml_text, encoding="utf-8")
     else:
         print(yaml_text, end="")
 
@@ -372,7 +372,7 @@ def room_authz_from_yaml(
     cli_util._check_ram_dburi(dburi, "room-authz from-yaml")
 
     if input_ is not None:
-        yaml_text = input_.read_text()
+        yaml_text = input_.read_text(encoding="utf-8")
     else:
         yaml_text = sys.stdin.read()
 

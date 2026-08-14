@@ -67,17 +67,17 @@ class GitMetadata:
         hash_path = self.repo_dir / "git-hash.txt"
 
         if hash_path.is_file():
-            self._git_hash = hash_path.read_text().strip()
+            self._git_hash = hash_path.read_text(encoding="utf-8").strip()
 
         branch_path = self.repo_dir / "git-branch.txt"
 
         if branch_path.is_file():
-            self._git_branch = branch_path.read_text().strip()
+            self._git_branch = branch_path.read_text(encoding="utf-8").strip()
 
         tag_path = self.repo_dir / "git-tag.txt"
 
         if tag_path.is_file():
-            self._git_tag = tag_path.read_text().strip()
+            self._git_tag = tag_path.read_text(encoding="utf-8").strip()
 
     @property
     def git_hash(self) -> str:

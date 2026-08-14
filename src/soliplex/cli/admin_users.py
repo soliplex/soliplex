@@ -472,7 +472,7 @@ def admin_users_as_yaml(
     yaml_text = _admin_users_as_yaml(discriminators)
 
     if output is not None:
-        output.write_text(yaml_text)
+        output.write_text(yaml_text, encoding="utf-8")
     else:
         print(yaml_text, end="")
 
@@ -508,7 +508,7 @@ def admin_users_from_yaml(
     cli_util._check_ram_dburi(dburi, "admin-users from-yaml")
 
     if input_ is not None:
-        yaml_text = input_.read_text()
+        yaml_text = input_.read_text(encoding="utf-8")
     else:
         yaml_text = sys.stdin.read()
 

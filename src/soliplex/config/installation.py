@@ -104,7 +104,7 @@ def _load_config_yaml(config_path: pathlib.Path) -> dict:
         raise config_exc.NoSuchConfig(config_path)
 
     try:
-        with config_path.open() as stream:
+        with config_path.open(encoding="utf-8") as stream:
             config_yaml = _check_is_dict(
                 yaml.safe_load(stream),
             )
@@ -386,7 +386,7 @@ class InstallationConfig:
     @staticmethod
     def _load_dotenv(from_path: pathlib.Path) -> dict[str, str] | None:
         if from_path.is_file():
-            with from_path.open() as stream:
+            with from_path.open(encoding="utf-8") as stream:
                 return dotenv.dotenv_values(stream=stream)
 
     @property
