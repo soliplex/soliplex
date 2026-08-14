@@ -104,6 +104,37 @@ async def _check_user_room_agent(
 _THREADS_PAGE_DEFAULT = 50
 _THREADS_PAGE_MAX = 200
 
+#   A search term longer than this is not a search; capping it keeps the
+#   generated LIKE pattern bounded.
+_THREAD_QUERY_MAX = 200
+
+#   The same ceiling the assignment body carries: filtering on more
+#   labels than a thread can hold is never a real query.
+_THREAD_LABELS_MAX = models.MAX_THREAD_LABELS
+
+#   Hoisted to a module-level singleton because the other query
+#   parameters here are annotated with immutable types, which exempts
+#   them from the "no calls in argument defaults" rule; 'list[int]' is
+#   not, so this one has to be built once, up here.
+_LABEL_IDS_QUERY = fastapi.Query(
+    default=None,
+    max_length=_THREAD_LABELS_MAX,
+)
+
+
+async def _thread_labels(
+    the_threads: agui.ThreadStorage,
+    threads,
+) -> dict[str, list[agui.Label]]:
+    """Return labels for a page of threads, keyed by thread_id.
+
+    One query for the whole page rather than awaiting 'thread.labels'
+    per row, which would be an N+1 across the listing.
+    """
+    return await the_threads.get_threads_labels(
+        thread_ids=[a_thread.thread_id for a_thread in threads],
+    )
+
 
 @util.logfire_span("GET /v1/agui/threads")
 @router.get("/v1/agui/threads")
@@ -114,6 +145,8 @@ async def get_agui_threads(
         le=_THREADS_PAGE_MAX,
     ),
     offset: int = fastapi.Query(default=0, ge=0),
+    label_ids: list[int] = _LABEL_IDS_QUERY,
+    q: str = fastapi.Query(default=None, max_length=_THREAD_QUERY_MAX),
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
@@ -141,6 +174,8 @@ async def get_agui_threads(
         room_ids=list(room_configs),
         limit=limit,
         offset=offset,
+        label_ids=label_ids,
+        name_query=q,
     )
 
     # Per-thread last activity comes from the same grouped-query trick the
@@ -157,6 +192,8 @@ async def get_agui_threads(
             )
         )
 
+    labels = await _thread_labels(the_threads, threads)
+
     model_threads = []
     for a_thread in threads:
         thread_meta = await a_thread.awaitable_attrs.thread_metadata
@@ -169,6 +206,7 @@ async def get_agui_threads(
                 ),
                 a_thread_runs=None,
                 a_thread_last_activity=last_activity.get(a_thread.thread_id),
+                a_thread_labels=labels.get(a_thread.thread_id),
             )
         )
 
@@ -208,11 +246,16 @@ async def get_room_agui(
         room_id=room_id,
     )
 
+    threads = list(
+        await the_threads.list_user_threads(
+            user_name=user_name,
+            room_id=room_id,
+        )
+    )
+    labels = await _thread_labels(the_threads, threads)
+
     model_threads = []
-    for a_thread in await the_threads.list_user_threads(
-        user_name=user_name,
-        room_id=room_id,
-    ):
+    for a_thread in threads:
         thread_meta = await a_thread.awaitable_attrs.thread_metadata
 
         model_threads.append(
@@ -223,6 +266,7 @@ async def get_room_agui(
                 ),
                 a_thread_runs=None,
                 a_thread_last_activity=last_activity.get(a_thread.thread_id),
+                a_thread_labels=labels.get(a_thread.thread_id),
             )
         )
 
@@ -292,6 +336,7 @@ async def get_room_agui_thread_id(
             thread_meta,
         ),
         a_thread_runs=a_thread_runs,
+        a_thread_labels=await thread.awaitable_attrs.labels,
     )
 
 
@@ -550,6 +595,62 @@ async def post_room_agui_thread_id_meta(
         ) from None
 
     return fastapi.Response(status_code=205)
+
+
+@util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/labels")
+@router.post("/v1/rooms/{room_id}/agui/{thread_id}/labels")
+async def post_room_agui_thread_id_labels(
+    room_id: str,
+    thread_id: pydantic.UUID4,
+    new_labels: models.AGUI_SetThreadLabelsRequest,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui.ThreadStorage = depend_the_threads,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.AGUI_Thread:
+    """Replace the labels carried by a thread within the given room
+
+    Assignment is open to any user who can reach the thread; only the
+    catalogue itself (see 'views.labels') is administrator-gated. An ID
+    naming no label is a 404 -- assigning never coins a label.
+    """
+    thread_id = str(thread_id)
+    the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_LABELS)
+
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
+        room_id=room_id,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=the_user_claims,
+        the_logger=the_logger,
+    )
+
+    try:
+        thread = await the_threads.set_thread_labels(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            label_ids=new_labels.label_ids,
+        )
+
+    except agui.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
+    # Returning the thread rather than a 205: the caller needs the label
+    # objects back to repaint its chips, and it has only sent IDs.
+    return models.AGUI_Thread.from_thread(
+        a_thread=thread,
+        a_thread_meta=models.AGUI_ThreadMetadata.from_thread_meta(
+            await thread.awaitable_attrs.thread_metadata,
+        ),
+        a_thread_runs=None,
+        a_thread_labels=await thread.awaitable_attrs.labels,
+    )
 
 
 @util.logfire_span("DELETE /v1/rooms/{room_id}/agui/{thread_id}")
