@@ -435,7 +435,7 @@ class ThreadStorage(agui.ThreadStorage):
         user_name: str,
         room_id: str,
         thread_id: str,
-        run_id: str = None,
+        run_id: str | None = None,
     ) -> agui.AGUI_State | None:
         async with self.session as session:
             try:

@@ -24,6 +24,9 @@ from . import _utils
 from . import exceptions as config_exc
 from . import rag as config_rag
 
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from .installation import InstallationConfig
+
 _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
@@ -316,6 +319,7 @@ class _HaikuRAGEvidenceSkillConfig:
     advertises them, along with the state a client can read.
     """
 
+    kind: typing.ClassVar[str]
     capability_factory: typing.ClassVar[typing.Callable]
     capability_id: typing.ClassVar[str]
     name: typing.ClassVar[str]

@@ -402,7 +402,7 @@ class ThreadStorage(abc.ABC):
         user_name: str,
         room_id: str,
         thread_id: str,
-        run_id: str = None,
+        run_id: str | None = None,
     ) -> AGUI_State | None:
         """Return the state a thread most recently ended a run with, or None
 
