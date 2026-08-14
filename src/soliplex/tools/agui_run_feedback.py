@@ -84,6 +84,14 @@ RUN_STATUS_NOTES = {
     agui_parser.RunStatus.FINISHED: "The run finished normally.",
 }
 
+#   Appended to the note when replaying the run left state deltas which
+#   could not be applied, and which no later snapshot superseded:  the
+#   recovered state is missing whatever those deltas carried.
+INCOMPLETE_STATE_NOTE = (
+    "The recovered 'agui_state' is incomplete:  {count} recorded state "
+    "update(s) could not be applied."
+)
+
 
 class RunFeedbackInfo(pydantic.BaseModel):
     """Information about the run which was the target of feedback
@@ -100,6 +108,13 @@ class RunFeedbackInfo(pydantic.BaseModel):
 
       'run_id' (string): UUID of the run against which the feedback was made.
 
+      'parent_run_id' (string or None):  UUID of the run this one continues,
+        or None for the first run of its thread.
+
+      'agui_state' (mapping or None):  the AG-UI state as of the end of the
+        run, recovered by replaying its recorded events.  It may be
+        incomplete;  'run_status_note' says so when it is.
+
       'user_prompt' (string or None):  the prompt which drove the run, or
         None if the run recorded none.  A run resumed to supply a tool
         result (e.g. a human-in-the-loop approval) has its prompt in an
@@ -112,9 +127,10 @@ class RunFeedbackInfo(pydantic.BaseModel):
       'run_status' (one of "INITIALIZED", "RUNNING", "FINISHED", "ERROR"):
         the run's status, recovered by replaying its recorded events.
 
-      'run_status_note' (string):  what that status means for this run.
-        Report it to the user when 'user_prompt' or 'agent_response' is
-        None:  it explains what became of the run.
+      'run_status_note' (string):  what that status means for this run, and
+        whether 'agui_state' came back incomplete.  Report it to the user
+        when 'user_prompt' or 'agent_response' is None, or when relaying
+        'agui_state':  it explains what became of the run.
     """
 
     user_name: str
@@ -122,6 +138,8 @@ class RunFeedbackInfo(pydantic.BaseModel):
     room_id: str
     thread_id: str
     run_id: str
+    parent_run_id: str | None = None
+    agui_state: dict[str, typing.Any] | None = None
     user_prompt: str | None = None
     agent_response: str | None = None
     run_status: str
@@ -383,6 +401,7 @@ async def get_feedback_run_info(
     thread = await run.awaitable_attrs.thread
     email = await thread.awaitable_attrs.email
     run_input = await run.awaitable_attrs.run_agent_input
+    parent_run_id = await run.awaitable_attrs.parent_run_id
     events = await run.awaitable_attrs.events
 
     esp = agui_parser.EventStreamParser(run_input)
@@ -409,6 +428,17 @@ async def get_feedback_run_info(
     # tool calls) may have recorded neither:  report what it did record,
     # explaining the gap via the run's status, rather than failing.
     run_status = esp.run_status
+    run_status_note = RUN_STATUS_NOTES[run_status]
+
+    if esp.invalid_state_deltas:
+        run_status_note = "  ".join(
+            [
+                run_status_note,
+                INCOMPLETE_STATE_NOTE.format(
+                    count=len(esp.invalid_state_deltas),
+                ),
+            ]
+        )
 
     return RunFeedbackInfo(
         user_name=to_query.user_name,
@@ -416,10 +446,12 @@ async def get_feedback_run_info(
         room_id=to_query.room_id,
         thread_id=to_query.thread_id,
         run_id=run_id,
+        parent_run_id=parent_run_id,
+        agui_state=esp.state,
         user_prompt=user_prompts[-1] if user_prompts else None,
         agent_response=agent_responses[-1] if agent_responses else None,
         run_status=run_status.name,
-        run_status_note=RUN_STATUS_NOTES[run_status],
+        run_status_note=run_status_note,
     )
 
 
