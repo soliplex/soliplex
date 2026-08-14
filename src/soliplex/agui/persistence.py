@@ -127,6 +127,86 @@ class ThreadStorage(agui.ThreadStorage):
             result = await session.scalars(query)
         return result
 
+    async def list_user_threads_page(
+        self,
+        *,
+        user_name: str,
+        room_ids: list[str],
+        limit: int,
+        offset: int,
+    ) -> tuple[list[agui_schema.Thread], int]:
+        room_ids = list(room_ids)
+
+        if not room_ids:
+            # No accessible rooms: short-circuit rather than emitting an
+            # 'IN ()', which SQLAlchemy warns about and which reads as
+            # "unfiltered" to anyone skimming the SQL.
+            return [], 0
+
+        async with self.session as session:
+            base = (
+                sqla_sql.select(agui_schema.Thread)
+                .where(agui_schema.Thread.user_name == user_name)
+                .where(agui_schema.Thread.room_id.in_(room_ids))
+            )
+
+            total = await session.scalar(
+                sqla_sql.select(sqla_sql.func.count()).select_from(
+                    base.subquery()
+                )
+            )
+
+            # Rooms sort by their latest activity, so the ordering has to
+            # come from an aggregate over runs. Doing it as a grouped
+            # subquery -- rather than joining runs directly -- keeps one
+            # row per thread: a direct join would multiply each thread by
+            # its run count and corrupt LIMIT/OFFSET.
+            room_activity = (
+                sqla_sql.select(
+                    agui_schema.Thread.room_id.label("room_id"),
+                    _LAST_ACTIVITY.label("last_activity"),
+                )
+                .join(agui_schema.Run.thread)
+                .where(agui_schema.Thread.user_name == user_name)
+                .group_by(agui_schema.Thread.room_id)
+                .subquery()
+            )
+
+            # LEFT OUTER on both: a room whose threads have no runs yet
+            # still has to appear, and so does a thread with no metadata
+            # row (one exists only once a name has been set).
+            query = (
+                base.outerjoin(
+                    room_activity,
+                    room_activity.c.room_id == agui_schema.Thread.room_id,
+                )
+                .outerjoin(agui_schema.Thread.thread_metadata)
+                .order_by(
+                    # Rooms with no activity sort last: 'NULLS LAST' is
+                    # not portable to SQLite, so order on the computed
+                    # is-null flag first.
+                    room_activity.c.last_activity.is_(None),
+                    room_activity.c.last_activity.desc(),
+                    # Tie-break on room_id so that rooms sharing an
+                    # activity timestamp still come out contiguous.
+                    agui_schema.Thread.room_id,
+                    sqla_sql.func.lower(
+                        sqla_sql.func.coalesce(
+                            agui_schema.ThreadMetadata.name, ""
+                        )
+                    ),
+                    # Final tie-break: two same-named threads in a room
+                    # must still page deterministically.
+                    agui_schema.Thread.id_,
+                )
+                .limit(limit)
+                .offset(offset)
+            )
+
+            threads = list(await session.scalars(query))
+
+        return threads, total
+
     async def get_thread(
         self,
         *,

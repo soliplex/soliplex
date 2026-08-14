@@ -248,6 +248,33 @@ class ThreadStorage(abc.ABC):
         """
 
     @abc.abstractmethod
+    async def list_user_threads_page(
+        self,
+        *,
+        user_name: str,
+        room_ids: list[str],
+        limit: int,
+        offset: int,
+    ) -> tuple[list[Thread], int]:
+        """Return one page of the user's threads across several rooms.
+
+        Unlike 'list_user_threads', which is scoped to a single room,
+        this spans every room in 'room_ids' -- the caller is responsible
+        for having already filtered those to the rooms the user may see.
+        An empty 'room_ids' therefore yields an empty page rather than
+        every room's threads.
+
+        Threads are ordered so that each room's threads are contiguous:
+        rooms by their latest run activity (most recent first, rooms with
+        no activity last), then -- within a room -- by thread name,
+        case-insensitively. Contiguity is what lets a client emit a
+        section divider whenever the room changes.
+
+        Returns the page and the total number of threads matching, so a
+        caller can tell whether more pages remain.
+        """
+
+    @abc.abstractmethod
     async def get_thread(
         self,
         *,
