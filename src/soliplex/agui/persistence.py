@@ -50,6 +50,32 @@ _LAST_ACTIVITY = sqla_sql.func.max(
     )
 )
 
+_LIKE_ESCAPE = "\\"
+
+
+def _like_escape(value: str) -> str:
+    """Neutralise LIKE's wildcards in a user-supplied search term.
+
+    Without this, searching for '100%' matches every thread, '_' matches
+    any single character, and a trailing backslash makes the pattern
+    unparseable. The backslash pass has to come first, or it would
+    escape the escapes added after it.
+    """
+    for char in (_LIKE_ESCAPE, "%", "_"):
+        value = value.replace(char, _LIKE_ESCAPE + char)
+    return value
+
+
+def _name_key(name: str) -> str:
+    """Fold a label name to its case-insensitive key.
+
+    'str.lower' rather than 'str.casefold': the clients fold with
+    JavaScript/Dart 'toLowerCase', and casefold disagrees with those on
+    characters such as 'ss', which would let a name look free in the
+    autocomplete and then collide on save.
+    """
+    return name.lower()
+
 
 class ThreadStorage(agui.ThreadStorage):
     def __init__(self, session: sqla_asyncio.AsyncSession):
@@ -134,6 +160,8 @@ class ThreadStorage(agui.ThreadStorage):
         room_ids: list[str],
         limit: int,
         offset: int,
+        label_ids: list[int] = None,
+        name_query: str = None,
     ) -> tuple[list[agui_schema.Thread], int]:
         room_ids = list(room_ids)
 
@@ -149,6 +177,51 @@ class ThreadStorage(agui.ThreadStorage):
                 .where(agui_schema.Thread.user_name == user_name)
                 .where(agui_schema.Thread.room_id.in_(room_ids))
             )
+
+            if label_ids:
+                # A semi-join, not 'JOIN ... DISTINCT': joining the
+                # association multiplies a thread by however many of the
+                # requested labels it carries, which corrupts
+                # LIMIT/OFFSET. The usual 'DISTINCT' repair does not fit
+                # either -- PostgreSQL requires every ORDER BY expression
+                # in the select list, and the ordering below is a
+                # computed one. EXISTS multiplies nothing.
+                base = base.where(
+                    sqla_sql.select(sqla_sql.literal(1))
+                    .select_from(agui_schema.thread_label)
+                    .where(
+                        agui_schema.thread_label.c.thread_id_
+                        == agui_schema.Thread.id_,
+                        agui_schema.thread_label.c.label_id_.in_(label_ids),
+                    )
+                    # Correlate explicitly: left to itself SQLAlchemy
+                    # correlates away every table the outer query also
+                    # selects from, which can leave the subquery with no
+                    # FROM clause at all.
+                    .correlate(agui_schema.Thread)
+                    .exists()
+                )
+
+            if name_query:
+                # Correlated rather than joined to 'thread_metadata':
+                # the outer join below exists so that never-titled
+                # threads still appear in an unfiltered listing, and
+                # reusing it here would turn this into a filter on that
+                # same optional row.
+                pattern = f"%{_like_escape(name_query).lower()}%"
+                base = base.where(
+                    sqla_sql.select(sqla_sql.literal(1))
+                    .select_from(agui_schema.ThreadMetadata)
+                    .where(
+                        agui_schema.ThreadMetadata.thread_id_
+                        == agui_schema.Thread.id_,
+                        sqla_sql.func.lower(
+                            agui_schema.ThreadMetadata.name
+                        ).like(pattern, escape=_LIKE_ESCAPE),
+                    )
+                    .correlate(agui_schema.Thread)
+                    .exists()
+                )
 
             total = await session.scalar(
                 sqla_sql.select(sqla_sql.func.count()).select_from(
@@ -271,6 +344,181 @@ class ThreadStorage(agui.ThreadStorage):
             )
             rows = (await session.execute(query)).all()
         return {thread_id: _as_utc(activity) for thread_id, activity in rows}
+
+    async def _find_label(self, *, label_id: int, session):
+        label = await session.get(agui_schema.Label, label_id)
+
+        if label is None:
+            raise agui.UnknownLabel(label_id)
+
+        return label
+
+    async def _assert_name_free(self, *, name: str, session, excluding=None):
+        """Refuse a label name already taken, ignoring case.
+
+        The unique constraint on 'name_key' is the real guard; checking
+        first is what turns a poisoned transaction into a 409 the client
+        can act on. 'excluding' is the label being renamed, which must
+        not collide with itself.
+        """
+        query = sqla_sql.select(agui_schema.Label.id_).where(
+            agui_schema.Label.name_key == _name_key(name)
+        )
+
+        if excluding is not None:
+            query = query.where(agui_schema.Label.id_ != excluding)
+
+        if (await session.scalars(query)).first() is not None:
+            raise agui.DuplicateLabel(name)
+
+    async def list_labels(self) -> list[agui_schema.Label]:
+        async with self.session as session:
+            query = sqla_sql.select(agui_schema.Label).order_by(
+                agui_schema.Label.name_key
+            )
+            labels = list(await session.scalars(query))
+
+        return labels
+
+    async def get_label_usage_counts(self) -> dict[int, int]:
+        async with self.session as session:
+            query = sqla_sql.select(
+                agui_schema.thread_label.c.label_id_,
+                sqla_sql.func.count(),
+            ).group_by(agui_schema.thread_label.c.label_id_)
+            rows = (await session.execute(query)).all()
+
+        return {label_id: count for label_id, count in rows}
+
+    async def create_label(
+        self,
+        *,
+        name: str,
+        color: str = None,
+    ) -> agui_schema.Label:
+        async with self.session as session:
+            await self._assert_name_free(name=name, session=session)
+
+            label = agui_schema.Label(
+                name=name,
+                name_key=_name_key(name),
+                # Placeholder only when the caller named no color: the
+                # default is derived from the row's own ID, which does
+                # not exist until the flush below. Deriving it from a
+                # count of existing labels instead would repeat colors
+                # after a delete and race concurrent creates.
+                color=color if color is not None else "#000000",
+            )
+            session.add(label)
+            await session.flush()
+
+            if color is None:
+                label.color = agui_util.hue_rotated_hex(label.id_)
+
+        return label
+
+    async def update_label(
+        self,
+        *,
+        label_id: int,
+        name: str = None,
+        color: str = None,
+    ) -> agui_schema.Label:
+        async with self.session as session:
+            label = await self._find_label(
+                label_id=label_id,
+                session=session,
+            )
+
+            if name is not None:
+                await self._assert_name_free(
+                    name=name,
+                    session=session,
+                    excluding=label_id,
+                )
+                label.name = name
+                label.name_key = _name_key(name)
+
+            if color is not None:
+                label.color = color
+
+        return label
+
+    async def delete_label(self, *, label_id: int) -> None:
+        async with self.session as session:
+            label = await self._find_label(
+                label_id=label_id,
+                session=session,
+            )
+            await session.delete(label)
+
+    async def set_thread_labels(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        label_ids: list[int],
+    ) -> agui_schema.Thread:
+        async with self.session as session:
+            thread = await self._find_user_thread(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                session=session,
+            )
+
+            labels = [
+                await self._find_label(label_id=label_id, session=session)
+                for label_id in dict.fromkeys(label_ids)
+            ]
+
+            # Load before assigning: under 'AsyncSession' the collection
+            # is lazy, and replacing it without awaiting it first raises
+            # 'MissingGreenlet' as SQLAlchemy tries to fetch the old
+            # contents from inside the assignment.
+            await thread.awaitable_attrs.labels
+            thread.labels = labels
+
+        return thread
+
+    async def get_threads_labels(
+        self,
+        *,
+        thread_ids: list[str],
+    ) -> dict[str, list[agui_schema.Label]]:
+        thread_ids = list(thread_ids)
+
+        if not thread_ids:
+            return {}
+
+        async with self.session as session:
+            query = (
+                sqla_sql.select(
+                    agui_schema.Thread.thread_id,
+                    agui_schema.Label,
+                )
+                .join(
+                    agui_schema.thread_label,
+                    agui_schema.thread_label.c.thread_id_
+                    == agui_schema.Thread.id_,
+                )
+                .join(
+                    agui_schema.Label,
+                    agui_schema.Label.id_
+                    == agui_schema.thread_label.c.label_id_,
+                )
+                .where(agui_schema.Thread.thread_id.in_(thread_ids))
+                .order_by(agui_schema.Label.name_key)
+            )
+            rows = (await session.execute(query)).all()
+
+        found: dict[str, list[agui_schema.Label]] = {}
+
+        for thread_id, label in rows:
+            found.setdefault(thread_id, []).append(label)
+
+        return found
 
     async def new_thread(
         self,
