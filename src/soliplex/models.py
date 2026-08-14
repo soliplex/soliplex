@@ -564,8 +564,18 @@ class UserProfile(pydantic.BaseModel):
     email: str
     preferred_username: str
 
+    # Lets a client paint the administrator-only affordances it has --
+    # the label management tab, for one -- rather than showing controls
+    # that 403 on use. It is a display hint only: every privileged
+    # operation is still gated server-side.
+    is_admin: bool = False
+
     @classmethod
-    def from_user_claims(cls, user_claims: dict[str, typing.Any]):
+    def from_user_claims(
+        cls,
+        user_claims: dict[str, typing.Any],
+        is_admin: bool = False,
+    ):
         defaults = {
             "given_name": user_claims.get("given_name", "<unknown>"),
             "family_name": user_claims.get("family_name", "<unknown>"),
@@ -574,6 +584,10 @@ class UserProfile(pydantic.BaseModel):
                 "preferred_username",
                 "<unknown>",
             ),
+            # Applied over the claims, never from them: this model
+            # allows extra fields, so a token carrying its own
+            # 'is_admin' claim would otherwise decide the answer for us.
+            "is_admin": is_admin,
         }
         return cls(**(user_claims | defaults))
 

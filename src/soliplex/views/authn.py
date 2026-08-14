@@ -8,6 +8,7 @@ from authlib.integrations import starlette_client
 from fastapi import responses
 
 from soliplex import authn
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -17,6 +18,7 @@ from soliplex import views
 router = fastapi.APIRouter(tags=["authentication"])
 
 depend_the_installation = installation.depend_the_installation
+depend_the_admin_users = views.depend_the_admin_user_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_unauth_logger = views.depend_the_unauth_logger
 depend_the_logger = views.depend_the_logger
@@ -162,10 +164,20 @@ async def get_auth_system(
 @router.get("/user_info", summary="Get user profile")
 async def get_user_info(
     the_installation: installation.Installation = depend_the_installation,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.UserProfile:
-    """Return the profile of the authenticated user"""
+    """Return the profile of the authenticated user
+
+    Carries 'is_admin' so a client can paint the administrator-only
+    affordances it has rather than showing controls that 403 on use.
+
+    Note for clients: this endpoint 404s outright when the installation
+    runs with authentication disabled, so "no profile" there means
+    single-user development, not "not an administrator". Treating it as
+    the latter would leave the label management tab uneditable locally.
+    """
     if the_installation.auth_disabled:
         the_logger.error(loggers.AUTHN_NO_AUTH_MODE)
         raise fastapi.HTTPException(
@@ -174,4 +186,14 @@ async def get_user_info(
         )
 
     the_logger.debug(loggers.AUTHN_GET_USER_INFO)
-    return models.UserProfile.from_user_claims(the_user_claims)
+
+    is_admin = await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_USER_PROFILE,
+        action=loggers.AUDIT_ACTION_READ,
+    )
+
+    return models.UserProfile.from_user_claims(
+        the_user_claims,
+        is_admin=is_admin,
+    )
