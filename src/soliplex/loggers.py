@@ -8,6 +8,7 @@ import typing
 
 SOLIPLEX_LOGGER_NAME = "soliplex"
 
+AGUI_GET_THREADS = "get agui threads"
 AGUI_GET_ROOM = "get room agui"
 AGUI_GET_ROOM_THREAD = "get room agui thread"
 AGUI_GET_ROOM_THREAD_RUN = "get room agui thread run"
