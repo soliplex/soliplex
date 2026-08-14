@@ -258,10 +258,11 @@ async def query_recent_feedback(
       been reviewed or resolved.
     """
     agui_state = ctx.deps.state
+    raw_state = agui_state.get(STATE_NAMESPACE)
     our_state = RecentRunFeedback.model_validate(
-        agui_state.get(STATE_NAMESPACE) or {}  # guard against actual 'None'
+        raw_state or {}  # guard against actual 'None'
     )
-    before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
+    before_state = {} if raw_state is None else {STATE_NAMESPACE: raw_state}
 
     entries = await _do_query(ctx, query)
     our_state.query = query
@@ -314,8 +315,9 @@ async def get_feedback_run_info(
       'run_id' is the UUID of the run.
     """
     agui_state = ctx.deps.state
+    raw_state = agui_state.get(STATE_NAMESPACE)
     our_state = RecentRunFeedback.model_validate(
-        agui_state.get(STATE_NAMESPACE) or {}  # guard against actual 'None'
+        raw_state or {}  # guard against actual 'None'
     )
 
     to_query, _ = _find_feedback_by_run_id(our_state, run_id)
@@ -370,15 +372,15 @@ async def review_recent_feedback(
 ) -> pydantic_ai.ToolReturn:
     """Add a user's review to a feedback entry for an AGUI run."""
     agui_state = ctx.deps.state
+    raw_state = agui_state.get(STATE_NAMESPACE)
     our_state = RecentRunFeedback.model_validate(
-        agui_state.get(STATE_NAMESPACE) or {}  # guard against actual 'None'
+        raw_state or {}  # guard against actual 'None'
     )
+    before_state = {} if raw_state is None else {STATE_NAMESPACE: raw_state}
 
     to_review, _ = _find_feedback_by_run_id(
         our_state, review.run_id, [FromWhichAttrs.OPENED]
     )
-
-    before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
     the_threads = ctx.deps.the_threads
     user = ctx.deps.user
@@ -412,17 +414,17 @@ async def resolve_recent_feedback(
 ) -> pydantic_ai.ToolReturn:
     """Add a user's resolution of a feedback entry for an AGUI run."""
     agui_state = ctx.deps.state
+    raw_state = agui_state.get(STATE_NAMESPACE)
     our_state = RecentRunFeedback.model_validate(
-        agui_state.get(STATE_NAMESPACE) or {}  # guard against actual 'None'
+        raw_state or {}  # guard against actual 'None'
     )
+    before_state = {} if raw_state is None else {STATE_NAMESPACE: raw_state}
 
     to_resolve, from_which = _find_feedback_by_run_id(
         our_state,
         resolution.run_id,
         [FromWhichAttrs.OPENED, FromWhichAttrs.REVIEWED],
     )
-
-    before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
     the_threads = ctx.deps.the_threads
     user = ctx.deps.user

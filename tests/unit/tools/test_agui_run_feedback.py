@@ -1,7 +1,9 @@
 import contextlib
+import copy
 import datetime
 from unittest import mock
 
+import jsonpatch
 import pydantic_ai
 import pytest
 from ag_ui import core as agui_core
@@ -325,20 +327,26 @@ async def test_query_recent_feedback(do_query, ctx_w_deps, rf_query, w_state):
             mode="json",
         )
 
+    start_agui_state = copy.deepcopy(deps.state)
+
     found = await arf_tools.query_recent_feedback(ctx_w_deps, rf_query)
 
     assert isinstance(found, pydantic_ai.ToolReturn)
-    deltas = found.metadata
 
     assert found.return_value == query_result
     assert deps.state[STATE_NAMESPACE] == exp_state
 
     do_query.assert_called_once_with(ctx_w_deps, rf_query)
 
+    deltas = found.metadata
+
     if w_state == "same_query":
         assert len(deltas) == 0
     else:
-        assert len(deltas) == 1
+        (event,) = deltas
+        assert (
+            jsonpatch.apply_patch(start_agui_state, event.delta) == deps.state
+        )
 
 
 @pytest.fixture
@@ -526,9 +534,12 @@ async def test_review_recent_feedback(
     before_entries = arf_tools.RecentRunFeedbackEntries(
         opened=[run_feedback_entry],
     )
-    before_state = arf_tools.RecentRunFeedback(
+    before_feedback_state = arf_tools.RecentRunFeedback(
         entries=before_entries,
     ).model_dump(mode="json")
+
+    deps.state[STATE_NAMESPACE] = before_feedback_state
+    start_agui_state = copy.deepcopy(deps.state)
 
     exp_after_entry = run_feedback_entry.model_copy(
         update={
@@ -547,19 +558,17 @@ async def test_review_recent_feedback(
         entries=exp_after_entries,
     ).model_dump(mode="json")
 
-    deps.state[STATE_NAMESPACE] = before_state
-
     review = arf_tools.FeedbackReview(run_id=w_run_id, note=REVIEWED_NOTE)
 
     with expectation as expected:
         found = await arf_tools.review_recent_feedback(ctx_w_deps, review)
 
-    after_state = deps.state[STATE_NAMESPACE]
+    after_feedback_state = deps.state[STATE_NAMESPACE]
 
     rvw_rf = deps.the_threads.review_run_feedback
 
     if expected is None:
-        assert after_state == exp_state
+        assert after_feedback_state == exp_state
 
         events = found.metadata
 
@@ -589,8 +598,15 @@ async def test_review_recent_feedback(
             run_id=RUN_ID,
         )
 
+        deltas = found.metadata
+
+        (event,) = deltas
+        assert (
+            jsonpatch.apply_patch(start_agui_state, event.delta) == deps.state
+        )
+
     else:
-        assert after_state == before_state
+        assert after_feedback_state == before_feedback_state
         rvw_rf.assert_not_awaited()
 
 
@@ -618,9 +634,14 @@ async def test_resolve_recent_feedback(
         before_entries = arf_tools.RecentRunFeedbackEntries(
             opened=[run_feedback_entry],
         )
-    before_state = arf_tools.RecentRunFeedback(
+
+    before_feedback_state = arf_tools.RecentRunFeedback(
         entries=before_entries,
     ).model_dump(mode="json")
+
+    deps = ctx_w_deps.deps
+    deps.state[STATE_NAMESPACE] = before_feedback_state
+    start_agui_state = copy.deepcopy(deps.state)
 
     exp_after_entry = run_feedback_entry.model_copy(
         update={
@@ -639,9 +660,6 @@ async def test_resolve_recent_feedback(
         entries=exp_after_entries,
     )
 
-    deps = ctx_w_deps.deps
-    deps.state[STATE_NAMESPACE] = before_state
-
     resolution = arf_tools.FeedbackResolution(
         run_id=w_run_id,
         note=RESOLVED_NOTE,
@@ -653,14 +671,14 @@ async def test_resolve_recent_feedback(
             resolution,
         )
 
-    after_state = deps.state[STATE_NAMESPACE]
+    after_feedback_state = deps.state[STATE_NAMESPACE]
 
     rsv_rf = ctx_w_deps.deps.the_threads.resolve_run_feedback
     if expected is None:
         assert isinstance(found, pydantic_ai.ToolReturn)
 
         assert found.return_value == exp_state.entries
-        assert after_state == exp_state.model_dump(mode="json")
+        assert after_feedback_state == exp_state.model_dump(mode="json")
 
         events = found.metadata
         (event,) = events
@@ -692,6 +710,13 @@ async def test_resolve_recent_feedback(
             run_id=RUN_ID,
         )
 
+        deltas = found.metadata
+
+        (event,) = deltas
+        assert (
+            jsonpatch.apply_patch(start_agui_state, event.delta) == deps.state
+        )
+
     else:
-        assert after_state == before_state
+        assert after_feedback_state == before_feedback_state
         rsv_rf.assert_not_awaited()
