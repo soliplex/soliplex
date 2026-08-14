@@ -117,48 +117,11 @@ agent:
 
 - `capabilities` (a list, default empty):  Pydantic AI capabilities for
   the agent, each named as a string, or as a mapping with `name` and
-  `kwargs`.  Names come from the Pydantic AI capability registry, from
-  the two evidence capabilities below, and from any registered via the
-  [`meta.agent_capability_types`](meta.md) stanza.
-
-### Evidence capabilities
-
-Two capabilities are available to a room that retrieves.  Both are
-hook-only: they add no tools, and neither affects whether the room's
-other capabilities load eagerly or on demand.
-
-- `haiku-rag-evidence-compaction`:  on each request, replaces earlier
-  questions' evidence with a capsule of the evidence that was cited,
-  re-attaching cited page images; every other earlier evidence return
-  becomes a short receipt.  Requests only -- stored history is untouched.
-
-- `haiku-rag-citation-policy`:  requires every answer to register the
-  evidence that grounds it, or to declare that nothing does.  An answer
-  that ends a question without declaring is redirected once to cite,
-  which costs an extra model request; an ending that cannot be redirected
-  is recorded as a violation in the run state.
-
-They are independent, but their effects are not symmetric:
-
-- **Compaction without the citation policy loses evidence.**  The capsule
-  is built only from what was cited, so for any earlier question the
-  model did not cite for, that question's evidence is replaced by
-  receipts and nothing takes its place -- worse than not compacting.
-  Register the citation policy alongside compaction, or register neither.
-
-- The citation policy without compaction is safe:  citations are required
-  and recorded, and no history is rewritten.
-
-A room that registers neither resends every earlier turn's full search
-results on every request.
-
-  ```yaml
-  agent:
-    template_id: "default_chat"
-    capabilities:
-      - "haiku-rag-evidence-compaction"
-      - "haiku-rag-citation-policy"
-  ```
+  `kwargs`.  Names come from the Pydantic AI capability registry and from
+  any registered via the
+  [`meta.agent_capability_types`](meta.md) stanza.  Capabilities which
+  need configuration, or which a room should advertise, are configured as
+  [skills](rooms.md#skill-configuration) instead.
 
 ### Example Ollama Configuration
 
