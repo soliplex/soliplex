@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import collections.abc
 import contextlib
+import copy
 import datetime
 import typing
 
@@ -49,6 +50,17 @@ _LAST_ACTIVITY = sqla_sql.func.max(
         agui_schema.Run.created,
     )
 )
+
+
+async def _final_state_snapshot(
+    run: agui_schema.Run,
+) -> agui.AGUI_State | None:
+    """Return the state the run last snapshotted, or None."""
+    for event in reversed(await run.awaitable_attrs.events):
+        if event.data.get("type") == agui_core.EventType.STATE_SNAPSHOT:
+            return copy.deepcopy(event.data.get("snapshot"))
+
+    return None
 
 
 class ThreadStorage(agui.ThreadStorage):
@@ -401,6 +413,14 @@ class ThreadStorage(agui.ThreadStorage):
                 return None
 
             for run in reversed(await thread.awaitable_attrs.runs):
+                # A run's own answer is in the state it ends with: the
+                # snapshot emitted once it finishes. Its input is the state
+                # the client held when the run began, so it lacks the
+                # evidence and citations of that run's own answer.
+                snapshot = await _final_state_snapshot(run)
+                if snapshot:
+                    return snapshot
+
                 run_input = await run.awaitable_attrs.run_agent_input
                 if run_input is not None and run_input.state:
                     return run_input.state

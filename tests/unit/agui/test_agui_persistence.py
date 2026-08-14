@@ -4,6 +4,7 @@ from unittest import mock
 
 import pytest
 import pytest_asyncio
+from ag_ui import core as agui_core
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
@@ -1169,6 +1170,66 @@ async def test_get_latest_state_skips_runs_without_state(
     )
 
     assert result == agui_constants.STATE
+
+
+@pytest.mark.asyncio
+async def test_get_latest_state_prefers_a_run_s_final_snapshot(
+    the_async_session, unit_of_work
+):
+    """A run's own answer is in the state it ends with, not the one it began.
+
+    A client returns the state it holds when it starts a run, so the
+    input of the newest run is a turn behind: it lacks the evidence and
+    citations of the answer that run went on to produce.
+    """
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (run,) = await thread.list_runs()
+    run_id = await run.awaitable_attrs.run_id
+
+    ended_with = {"rag": {"evidence": {"question": 5}}}
+
+    async with unit_of_work():
+        await ts.add_run_input(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=run_id,
+            run_input=agui_constants.FULL_RUN_AGENT_INPUT,
+        )
+        await ts.save_single_event(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=run_id,
+            event=agui_core.StateSnapshotEvent(snapshot=ended_with),
+        )
+        # The snapshot is emitted just before the run finishes, so the
+        # newest event is not the one carrying the state.
+        await ts.save_single_event(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=run_id,
+            event=agui_core.RunFinishedEvent(
+                thread_id=thread_id,
+                run_id=run_id,
+            ),
+        )
+
+    result = await ts.get_latest_state(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    assert result == ended_with
 
 
 @pytest.mark.asyncio
