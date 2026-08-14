@@ -93,6 +93,7 @@ markers = [
 
 [tool.coverage.run]
 omit = [
+    "scripts/lint_textio.py",   # runs its own '--self-test' during lint
     "src/soliplex/cli/__init__.py",
     "src/soliplex/tui.py",
 ]
