@@ -87,15 +87,19 @@ async def _lineage(
     return list(reversed(runs))
 
 
-async def _final_state_snapshot(
-    run: agui_schema.Run,
-) -> agui.AGUI_State | None:
-    """Return the state the run last snapshotted, or None."""
+#   A run which snapshotted nothing is distinct from one which
+#   snapshotted an empty state: the first has yet to say, the second has
+#   said that it holds none.
+_NOT_SNAPSHOTTED = object()
+
+
+async def _final_state_snapshot(run: agui_schema.Run) -> typing.Any:
+    """Return the state the run last snapshotted, or '_NOT_SNAPSHOTTED'."""
     for event in reversed(await run.awaitable_attrs.events):
         if event.data.get("type") == agui_core.EventType.STATE_SNAPSHOT:
             return copy.deepcopy(event.data.get("snapshot"))
 
-    return None
+    return _NOT_SNAPSHOTTED
 
 
 class ThreadStorage(agui.ThreadStorage):
@@ -462,8 +466,8 @@ class ThreadStorage(agui.ThreadStorage):
                 # the client held when the run began, so it lacks the
                 # evidence and citations of that run's own answer.
                 snapshot = await _final_state_snapshot(run)
-                if snapshot:
-                    return snapshot
+                if snapshot is not _NOT_SNAPSHOTTED:
+                    return snapshot or None
 
                 run_input = await run.awaitable_attrs.run_agent_input
                 if run_input is not None and run_input.state:

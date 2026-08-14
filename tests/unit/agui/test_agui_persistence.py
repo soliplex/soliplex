@@ -1782,3 +1782,50 @@ async def test_get_latest_state_declines_an_unplaceable_branch(
     )
 
     assert found is None
+
+
+@pytest.mark.asyncio
+async def test_get_latest_state_does_not_resurrect_older_state(
+    the_async_session, unit_of_work
+):
+    """A run which ended with no state ended with no state.
+
+    Reaching further back would restore a record the thread has since
+    left behind, whose counts predate the history it would arrive with.
+    """
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (older,) = await thread.list_runs()
+    newer = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    async with unit_of_work():
+        await _run_w_state(
+            ts,
+            thread_id=thread_id,
+            run_id=await older.awaitable_attrs.run_id,
+            state={"rag": {"evidence": {"question": 1}}},
+        )
+        await _run_w_state(
+            ts,
+            thread_id=thread_id,
+            run_id=await newer.awaitable_attrs.run_id,
+            state={},
+        )
+
+    found = await ts.get_latest_state(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    assert found is None
