@@ -33,6 +33,8 @@ OTHER_EMAIL = "bharney@example.com"
 ROOM_ID = "test-room-id"
 THREAD_ID = "test-thread-id"
 RUN_ID = "test-run-id"
+PARENT_RUN_ID = "test-parent-run-id"
+AGUI_STATE = {"test-namespace": {"test-key": "test-value"}}
 THUMBS_UP = "thumbs_up"
 REASON = "test-feedback-reason"
 REVIEWED_NOTE = "test-feedback-reviewed-note"
@@ -151,6 +153,14 @@ def the_run(request, the_thread, the_run_feedback):
             awaitable_attrs=mock.AsyncMock(),
         )
         run.awaitable_attrs.run_id = _awaitable("run_id", RUN_ID)
+        run.awaitable_attrs.parent_run_id = _awaitable(
+            "parent_run_id",
+            PARENT_RUN_ID,
+        )
+        run.awaitable_attrs.run_input = _awaitable(
+            "run_input",
+            {},
+        )
         run.awaitable_attrs.thread = _awaitable("thread", the_thread)
         run.awaitable_attrs.run_feedback = _awaitable(
             "run_feedback", the_run_feedback
@@ -257,7 +267,10 @@ async def test__do_query(
 
     lrrf.assert_called_once_with(**rf_query.as_kwargs)
 
-    if not the_run:  # silence resource warnings for unused fixtures
+    if the_run:  # silence resource warnings for unused fixtures
+        await the_run.awaitable_attrs.parent_run_id
+        await the_run.awaitable_attrs.run_input
+    else:
         await the_thread.awaitable_attrs.user_name
         await the_thread.awaitable_attrs.email
         await the_thread.awaitable_attrs.room_id
@@ -443,20 +456,22 @@ MULTI_RUN_MESSAGES = EARLIER_MESSAGES + SINGLE_RUN_MESSAGES
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "messages, run_status, exp_prompt, exp_response",
+    "messages, run_status, exp_prompt, exp_response, n_invalid",
     [
         # run which never started:  nothing recorded at all
-        (EMPTY_RUN_MESSAGES, RS.INITIALIZED, None, None),
+        (EMPTY_RUN_MESSAGES, RS.INITIALIZED, None, None, 0),
         # run which never finished:  no response *yet*
-        (ONLY_PROMPT_MESSAGES, RS.RUNNING, USER_PROMPT, None),
+        (ONLY_PROMPT_MESSAGES, RS.RUNNING, USER_PROMPT, None, 0),
         # run which errored before responding
-        (ONLY_PROMPT_MESSAGES, RS.ERROR, USER_PROMPT, None),
+        (ONLY_PROMPT_MESSAGES, RS.ERROR, USER_PROMPT, None, 0),
         # run resumed to supply a tool result (e.g. an approval):  its
         # prompt belongs to an earlier run of the thread
-        (ONLY_RESPONSE_MESSAGES, RS.FINISHED, None, RESPONSE_MESSAGE),
+        (ONLY_RESPONSE_MESSAGES, RS.FINISHED, None, RESPONSE_MESSAGE, 0),
         # normal cases:  the *last* exchange of the run
-        (SINGLE_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE),
-        (MULTI_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE),
+        (SINGLE_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE, 0),
+        (MULTI_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE, 0),
+        # run whose replay could not apply some of its state deltas
+        (SINGLE_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE, 2),
     ],
 )
 @mock.patch("soliplex.agui.parser.EventStreamParser")
@@ -469,6 +484,7 @@ async def test_get_feedback_run_info(
     run_status,
     exp_prompt,
     exp_response,
+    n_invalid,
 ):
     get_run = ctx_w_deps.deps.the_threads.get_run
 
@@ -501,6 +517,10 @@ async def test_get_feedback_run_info(
 
     esp.return_value.messages = messages
     esp.return_value.run_status = run_status
+    esp.return_value.state = AGUI_STATE
+    esp.return_value.invalid_state_deltas = [
+        agui_constants.STATE_DELTA_EVENT
+    ] * n_invalid
 
     db_events = []
     for agui_event in agui_events:
@@ -513,6 +533,10 @@ async def test_get_feedback_run_info(
         awaitable_attrs=mock.AsyncMock(),
     )
     run.awaitable_attrs.thread = _awaitable("thread", the_thread)
+    run.awaitable_attrs.parent_run_id = _awaitable(
+        "parent_run_id",
+        PARENT_RUN_ID,
+    )
     run.awaitable_attrs.run_agent_input = _awaitable("run_agent_input", rai)
     run.awaitable_attrs.events = _awaitable("events", db_events)
     get_run.return_value = run
@@ -533,10 +557,18 @@ async def test_get_feedback_run_info(
     assert found.room_id == ROOM_ID
     assert found.thread_id == THREAD_ID
     assert found.run_id == RUN_ID
+    assert found.parent_run_id == PARENT_RUN_ID
+    assert found.agui_state == AGUI_STATE
     assert found.user_prompt == exp_prompt
     assert found.agent_response == exp_response
     assert found.run_status == run_status.name
-    assert found.run_status_note == arf_tools.RUN_STATUS_NOTES[run_status]
+    assert arf_tools.RUN_STATUS_NOTES[run_status] in found.run_status_note
+
+    if n_invalid:
+        assert "could not be applied" in found.run_status_note
+        assert str(n_invalid) in found.run_status_note
+    else:
+        assert "could not be applied" not in found.run_status_note
 
     for agui_event, esp_call in zip(
         agui_events,
