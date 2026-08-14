@@ -204,8 +204,8 @@ configuring the RAG database and RAG client:
     data.  This file must exist in the standard location (typically
     under the `db/rag/` directory; see [rooms](rooms.md) for details).
 
-  - `rag_lancedb_override_path`: a string, a fully-qualified pathname,
-    including the suffix, of the LanceDB directory.
+  - `rag_lancedb_override_path`: a string, a pathname, including the
+    suffix, of the LanceDB directory.
 
 - `haiku_rag_config`: a path to the `haiku.rag.yaml` file used to configure
   the RAG client.  If not absolute, this path is resolved relative to
