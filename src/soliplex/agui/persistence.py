@@ -962,7 +962,11 @@ async def drive_agui_turn(
 
     ``run_stream_kwargs`` is forwarded verbatim to the Pydantic AI adapter.
     """
-    event_stream = adapter.run_stream(**(run_stream_kwargs or {}))
+    stream_kwargs = run_stream_kwargs or {}
+    event_stream = agui.with_final_state(
+        stream=adapter.run_stream(**stream_kwargs),
+        deps=stream_kwargs.get("deps"),
+    )
     compacted = agui.compact_event_stream(event_stream)
     async for event in compacted:
         try:

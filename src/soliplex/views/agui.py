@@ -661,18 +661,11 @@ async def init_agent_stream(
     run_stream_kwargs: dict,
     **drive_kwargs,
 ):
-    deps = run_stream_kwargs.get("deps")
-
-    async def with_final_state():
-        async for event in agui_adapter.run_stream(**run_stream_kwargs):
-            if (
-                deps is not None
-                and event.type == agui_core.EventType.RUN_FINISHED
-            ):
-                yield agui_core.StateSnapshotEvent(snapshot=deps.state)
-            yield event
-
-    compacted = agui.compact_event_stream(with_final_state())
+    w_final_state = agui.with_final_state(
+        stream=agui_adapter.run_stream(**run_stream_kwargs),
+        deps=run_stream_kwargs.get("deps"),
+    )
+    compacted = agui.compact_event_stream(w_final_state)
     await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
 
 
