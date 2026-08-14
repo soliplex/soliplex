@@ -10,12 +10,14 @@ from ag_ui import core as agui_core
 
 from soliplex import agui
 from soliplex import models
+from soliplex.agui import parser as agui_parser
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.tools import agui_run_feedback as arf_tools
 from tests.unit.agui import agui_constants
 
 FRS = agui.FeedbackReviewStatus
+RS = agui_parser.RunStatus
 STATE_NAMESPACE = arf_tools.STATE_NAMESPACE
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -412,13 +414,61 @@ def test__find_feedback_by_run_id(
         assert whence is getattr(our_state.entries, which)
 
 
+EMPTY_RUN_MESSAGES = []
+ONLY_PROMPT_MESSAGES = [
+    agui_core.types.UserMessage(
+        id=USER_PROMPT_MESSAGE_ID,
+        content=USER_PROMPT,
+    ),
+]
+ONLY_RESPONSE_MESSAGES = [
+    agui_core.types.AssistantMessage(
+        id=RESPONSE_MESSAGE_ID,
+        content=RESPONSE_MESSAGE,
+    ),
+]
+SINGLE_RUN_MESSAGES = ONLY_PROMPT_MESSAGES + ONLY_RESPONSE_MESSAGES
+EARLIER_MESSAGES = [
+    agui_core.types.UserMessage(
+        id=EARLIER_USER_PROMPT_MESSAGE_ID,
+        content=EARLIER_USER_PROMPT,
+    ),
+    agui_core.types.AssistantMessage(
+        id=EARLIER_RESPONSE_MESSAGE_ID,
+        content=EARLIER_RESPONSE_MESSAGE,
+    ),
+]
+MULTI_RUN_MESSAGES = EARLIER_MESSAGES + SINGLE_RUN_MESSAGES
+
+
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "messages, run_status, exp_prompt, exp_response",
+    [
+        # run which never started:  nothing recorded at all
+        (EMPTY_RUN_MESSAGES, RS.INITIALIZED, None, None),
+        # run which never finished:  no response *yet*
+        (ONLY_PROMPT_MESSAGES, RS.RUNNING, USER_PROMPT, None),
+        # run which errored before responding
+        (ONLY_PROMPT_MESSAGES, RS.ERROR, USER_PROMPT, None),
+        # run resumed to supply a tool result (e.g. an approval):  its
+        # prompt belongs to an earlier run of the thread
+        (ONLY_RESPONSE_MESSAGES, RS.FINISHED, None, RESPONSE_MESSAGE),
+        # normal cases:  the *last* exchange of the run
+        (SINGLE_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE),
+        (MULTI_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE),
+    ],
+)
 @mock.patch("soliplex.agui.parser.EventStreamParser")
 async def test_get_feedback_run_info(
     esp,
     run_feedback_entry,
     ctx_w_deps,
     the_thread,
+    messages,
+    run_status,
+    exp_prompt,
+    exp_response,
 ):
     get_run = ctx_w_deps.deps.the_threads.get_run
 
@@ -449,24 +499,8 @@ async def test_get_feedback_run_info(
         end_event,
     ]
 
-    esp.return_value.messages = [
-        agui_core.types.UserMessage(
-            id=EARLIER_USER_PROMPT_MESSAGE_ID,
-            content=EARLIER_USER_PROMPT,
-        ),
-        agui_core.types.AssistantMessage(
-            id=EARLIER_RESPONSE_MESSAGE_ID,
-            content=EARLIER_RESPONSE_MESSAGE,
-        ),
-        agui_core.types.UserMessage(
-            id=USER_PROMPT_MESSAGE_ID,
-            content=USER_PROMPT,
-        ),
-        agui_core.types.AssistantMessage(
-            id=RESPONSE_MESSAGE_ID,
-            content=RESPONSE_MESSAGE,
-        ),
-    ]
+    esp.return_value.messages = messages
+    esp.return_value.run_status = run_status
 
     db_events = []
     for agui_event in agui_events:
@@ -499,8 +533,10 @@ async def test_get_feedback_run_info(
     assert found.room_id == ROOM_ID
     assert found.thread_id == THREAD_ID
     assert found.run_id == RUN_ID
-    assert found.user_prompt == USER_PROMPT
-    assert found.agent_response == RESPONSE_MESSAGE
+    assert found.user_prompt == exp_prompt
+    assert found.agent_response == exp_response
+    assert found.run_status == run_status.name
+    assert found.run_status_note == arf_tools.RUN_STATUS_NOTES[run_status]
 
     for agui_event, esp_call in zip(
         agui_events,
