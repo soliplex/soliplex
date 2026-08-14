@@ -730,3 +730,24 @@ def test_haiku_rag_evidence_skill_config_wraps_yaml_errors(
             temp_dir / "room_config.yaml",
             {"kind": klass.kind, "bogus": "nonesuch"},
         )
+
+
+def test_every_skill_kind_advertises_registered_features(installation_config):
+    """A room's features are looked up by name when a thread is created.
+
+    An advertised name which is not in the registry is a KeyError there,
+    so every kind's names must be registered as this module is imported.
+    """
+    advertised = set()
+
+    for klass in config_skills.SKILL_CONFIG_CLASSES_BY_KIND.values():
+        names = getattr(klass, "agui_feature_names", None)
+        if isinstance(names, tuple):  # a ClassVar, not a property
+            advertised.update(names)
+            continue
+        namespace = getattr(klass, "state_namespace", None)
+        if isinstance(namespace, str):
+            advertised.add(namespace)
+
+    assert advertised
+    assert advertised <= set(config_agui.AGUI_FEATURES_BY_NAME)

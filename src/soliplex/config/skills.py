@@ -633,6 +633,7 @@ class EntrypointCapabilityConfig:
 for feature_name, model in (
     (hr_rag.STATE_NAMESPACE, hr_rag.RAGState),
     (hr_analysis.STATE_NAMESPACE, hr_analysis.AnalysisState),
+    (hr_policy.STATE_NAMESPACE, hr_policy.CitationPolicyState),
 ):
     config_agui.AGUI_FEATURES_BY_NAME[feature_name] = config_agui.AGUI_Feature(
         name=feature_name,
