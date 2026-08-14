@@ -212,7 +212,9 @@ class QuizConfig:
                 self._config_path,
             )
 
-        quiz_json = json.loads(self.question_file_path.read_text())
+        quiz_json = json.loads(
+            self.question_file_path.read_text(encoding="utf-8")
+        )
         return {
             q_dict["metadata"]["uuid"]: self._make_question(q_dict)
             for q_dict in quiz_json["cases"]

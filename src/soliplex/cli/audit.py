@@ -1060,7 +1060,7 @@ def _load_logging_config(the_installation):
     pyl_config = the_installation._config.logging_config_file
     if pyl_config is None:
         return None
-    with pyl_config.open() as f:
+    with pyl_config.open(encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 

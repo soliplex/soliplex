@@ -236,7 +236,7 @@ class AgentConfig:
             system_prompt_file = (
                 self._config_path.parent / self._system_prompt_path
             )
-            return system_prompt_file.read_text()
+            return system_prompt_file.read_text(encoding="utf-8")
 
         else:  # pragma: NO COVER
             pass

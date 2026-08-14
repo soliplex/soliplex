@@ -368,6 +368,34 @@ def test_quizconfig__load_questions_file(temp_dir, populated_quiz, quiz_json):
         assert f_question.metadata.options == options
 
 
+# Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
+# 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
+# and raises outright.
+NON_ASCII_INPUTS = "Whose notes — Ada Lovelace’s — reached Łódź?"
+
+
+def test_quizconfig__load_questions_file_w_non_ascii(temp_dir, quiz_json):
+    """A UTF-8 question file decodes the same whatever the host locale.
+
+    'json.dumps' escapes non-ASCII to '\\uXXXX' by default, so only a
+    file written with literal UTF-8 -- as a human author or another tool
+    would produce -- actually exercises the decode path.
+    """
+    quiz_json["cases"][0]["inputs"] = NON_ASCII_INPUTS
+    quiz_path = temp_dir / f"{TEST_QUIZ_ID}.json"
+    quiz_text = json.dumps(quiz_json, ensure_ascii=False)
+    quiz_path.write_bytes(quiz_text.encode("utf-8"))
+
+    qc = config_quizzes.QuizConfig(
+        id=TEST_QUIZ_ID,
+        question_file=str(quiz_path),
+    )
+
+    found = qc.get_questions()
+
+    assert found[0].inputs == NON_ASCII_INPUTS
+
+
 @pytest.mark.parametrize("w_max_questions", [None, 1])
 @pytest.mark.parametrize("w_loaded", [False, True])
 def test_quizconfig_get_questions(quiz_questions, w_loaded, w_max_questions):
