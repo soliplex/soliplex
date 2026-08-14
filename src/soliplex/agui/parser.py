@@ -244,6 +244,15 @@ class EventStreamParser:
     result: typing.Any = None
 
     state: dict = dataclasses.field(default_factory=dict)
+
+    #   Currently-skipped deltas: non-empty means our 'state' is incomplete.
+    #   See 'STATE_DELTA' handling below (#1257).
+    invalid_state_deltas: Events = dataclasses.field(default_factory=list)
+
+    #   All skipped deltas, preserved even when a snapshot heals our 'state'.
+    #   See 'STATE_DELTA' handling below (#1257).
+    skipped_state_deltas: Events = dataclasses.field(default_factory=list)
+
     messages: Messages = dataclasses.field(default_factory=list)
 
     messages_by_id: MessagesByID = dataclasses.field(default_factory=dict)
@@ -484,14 +493,36 @@ class EventStreamParser:
             case agui_core.EventType.STATE_DELTA:
                 self._assert_running(event)
 
-                new_state = jsonpatch.apply_patch(self.state, event.delta)
+                try:
+                    new_state = jsonpatch.apply_patch(self.state, event.delta)
 
-                self.state = new_state
+                except (
+                    jsonpatch.JsonPatchException,
+                    jsonpatch.JsonPointerException,
+                ):
+                    # The delta was recorded against state we don't have,
+                    # and therefore cannot be applied.  Skip it, but record
+                    # it twice:
+                    #
+                    # - 'invalid_state_deltas' signals that our current 'state'
+                    #   is incomplete.
+                    #
+                    # - 'skipped_state_deltas' preserves the skip for later
+                    #   debugging, even when a subsequent 'STATE_SNAPSHOT"
+                    #   clears the invalid list.
+                    self.invalid_state_deltas.append(event)
+                    self.skipped_state_deltas.append(event)
+
+                else:
+                    self.state = new_state
 
             case agui_core.EventType.STATE_SNAPSHOT:
                 self._assert_running(event)
 
                 self.state = event.snapshot
+
+                # Clear the invalid list, because our 'state' is now correct.
+                self.invalid_state_deltas.clear()
 
             case agui_core.EventType.MESSAGES_SNAPSHOT:
                 self._assert_running(event)

@@ -1360,7 +1360,19 @@ async def test_stream_llm_events(num_events):
 
 # -- init_agent_stream -------------------------------------------------
 
+IAS_RUN_STARTED_EVENT = agui_core.RunStartedEvent(
+    thread_id=TEST_THREAD_ID_STR,
+    run_id=TEST_RUN_ID_STR,
+)
+IAS_RUN_FINISHED_EVENT = agui_core.RunFinishedEvent(
+    thread_id=TEST_THREAD_ID_STR,
+    run_id=TEST_RUN_ID_STR,
+)
 
+
+# 'agui.with_final_state' owns which events get a snapshot (see
+# 'test_agui_package.test_with_final_state'):  here we check only that
+# 'init_agent_stream' wires it up, ahead of compaction, with the run's deps.
 @pytest.mark.asyncio
 @mock.patch("soliplex.views.agui.drive_llm_stream")
 @mock.patch("soliplex.agui.compact_event_stream")
@@ -1380,14 +1392,8 @@ async def test_init_agent_stream_adds_final_state(ces, dls):
     }
 
     async def events():
-        yield agui_core.RunStartedEvent(
-            thread_id=TEST_THREAD_ID_STR,
-            run_id=TEST_RUN_ID_STR,
-        )
-        yield agui_core.RunFinishedEvent(
-            thread_id=TEST_THREAD_ID_STR,
-            run_id=TEST_RUN_ID_STR,
-        )
+        yield IAS_RUN_STARTED_EVENT
+        yield IAS_RUN_FINISHED_EVENT
 
     adapter.run_stream.return_value = events()
     ces.side_effect = lambda stream: stream
@@ -1400,6 +1406,7 @@ async def test_init_agent_stream_adds_final_state(ces, dls):
 
     stream = dls.await_args.kwargs["llm_stream"]
     found = [event async for event in stream]
+
     adapter.run_stream.assert_called_once_with(**run_stream_kwargs)
     assert [event.type for event in found] == [
         agui_core.EventType.RUN_STARTED,
