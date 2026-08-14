@@ -88,6 +88,16 @@ TEXT_CONTENT_2_D = agui_core.TextMessageContentEvent(
 
 OTHER = agui_core.RawEvent(event=None, source="test-raw")
 
+THREAD_ID = "test-thread-id"
+RUN_ID = "test-run-id"
+
+RUN_STARTED = agui_core.RunStartedEvent(thread_id=THREAD_ID, run_id=RUN_ID)
+RUN_FINISHED = agui_core.RunFinishedEvent(thread_id=THREAD_ID, run_id=RUN_ID)
+RUN_ERROR = agui_core.RunErrorEvent(message="test error")
+
+FINAL_STATE = {"rag": {"citations": ["c1"]}}
+STATE_SNAPSHOT = agui_core.StateSnapshotEvent(snapshot=FINAL_STATE)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
@@ -211,6 +221,54 @@ async def test_compact_event_stream(events, expected):
             yield event
 
     found = [event async for event in agui.compact_event_stream(stream())]
+
+    for f_event, e_event in zip(found, expected, strict=True):
+        assert f_event == e_event
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "events, w_deps, expected",
+    [
+        # A snapshot precedes either terminal event, ...
+        (
+            [RUN_STARTED, RUN_FINISHED],
+            True,
+            [RUN_STARTED, STATE_SNAPSHOT, RUN_FINISHED],
+        ),
+        (
+            [RUN_STARTED, RUN_ERROR],
+            True,
+            [RUN_STARTED, STATE_SNAPSHOT, RUN_ERROR],
+        ),
+        # ... but only for a run which carries AG-UI state, ...
+        (
+            [RUN_STARTED, RUN_FINISHED],
+            False,
+            [RUN_STARTED, RUN_FINISHED],
+        ),
+        # ... and only if the stream reaches a terminal event.
+        (
+            [RUN_STARTED, OTHER],
+            True,
+            [RUN_STARTED, OTHER],
+        ),
+    ],
+)
+async def test_with_final_state(events, w_deps, expected):
+    deps = mock.Mock(state=FINAL_STATE) if w_deps else None
+
+    async def stream():
+        for event in events:
+            yield event
+
+    found = [
+        event
+        async for event in agui.with_final_state(
+            stream=stream(),
+            deps=deps,
+        )
+    ]
 
     for f_event, e_event in zip(found, expected, strict=True):
         assert f_event == e_event

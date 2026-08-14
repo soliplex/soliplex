@@ -213,6 +213,14 @@ W_TEST_E_STATE_DELTA = agui_core.StateDeltaEvent(
     ]
 )
 
+# Recorded against a state we don't have:  raises 'JsonPointerException',
+# which is not a 'JsonPatchException'.  See:  soliplex#1257.
+W_MISSING_PARENT_E_STATE_DELTA = agui_core.StateDeltaEvent(
+    delta=[
+        {"op": "replace", "path": "/missing/foo", "value": "bar"},
+    ]
+)
+
 STATE_SNAPSHOT = {"foo": "qux", "spam": "baz"}
 E_STATE_SNAPSHOT = agui_core.StateSnapshotEvent(
     snapshot=STATE_SNAPSHOT,
@@ -902,27 +910,43 @@ def test_esp_call_w_tool_call_result(
 #
 #   State management events
 #
-patch_failed = pytest.raises(jsonpatch.JsonPatchException)
 
 
 @pytest.mark.parametrize(
-    "status, state, event, expectation",
+    "status, state, event, expectation, exp_skipped",
     [
-        (INITIALIZED, {}, E_STATE_DELTA, not_running),
-        (RUNNING, {}, E_STATE_DELTA, no_error({"foo": "bar"})),
-        (RUNNING, {"foo": "foo"}, E_STATE_DELTA, no_error({"foo": "bar"})),
-        (RUNNING, {}, W_TEST_E_STATE_DELTA, patch_failed),
+        (INITIALIZED, {}, E_STATE_DELTA, not_running, False),
+        (RUNNING, {}, E_STATE_DELTA, no_error({"foo": "bar"}), False),
+        (
+            RUNNING,
+            {"foo": "foo"},
+            E_STATE_DELTA,
+            no_error({"foo": "bar"}),
+            False,
+        ),
+        # A delta which does not apply to the state we have is skipped and
+        # recorded, rather than killing the replay:  soliplex#1257.
+        (RUNNING, {}, W_TEST_E_STATE_DELTA, no_error({}), True),
+        (RUNNING, {}, W_MISSING_PARENT_E_STATE_DELTA, no_error({}), True),
         (
             RUNNING,
             {"foo": "foo"},
             W_TEST_E_STATE_DELTA,
             no_error({"foo": "bar"}),
+            False,
         ),
-        (FINISHED, {}, E_STATE_DELTA, not_running),
-        (ERROR, {}, E_STATE_DELTA, not_running),
+        (FINISHED, {}, E_STATE_DELTA, not_running, False),
+        (ERROR, {}, E_STATE_DELTA, not_running, False),
     ],
 )
-def test_esp_call_w_state_delta(event_kept, status, state, event, expectation):
+def test_esp_call_w_state_delta(
+    event_kept,
+    status,
+    state,
+    event,
+    expectation,
+    exp_skipped,
+):
     kw, check_log = event_kept
 
     esp = agui_parser.EventStreamParser(
@@ -936,6 +960,10 @@ def test_esp_call_w_state_delta(event_kept, status, state, event, expectation):
 
     if isinstance(expected, dict):
         assert esp.state == expected
+
+    exp_deltas = [event] if exp_skipped else []
+    assert esp.invalid_state_deltas == exp_deltas
+    assert esp.skipped_state_deltas == exp_deltas
 
     check_log(event)
 
@@ -968,6 +996,22 @@ def test_esp_call_w_state_snapshot(
         assert esp.state == expected
 
     check_log(event)
+
+
+def test_esp_call_w_state_snapshot_clears_invalid_deltas():
+    esp = agui_parser.EventStreamParser(
+        run_status=RUNNING,
+        state={},
+        invalid_state_deltas=[W_TEST_E_STATE_DELTA],
+        skipped_state_deltas=[W_TEST_E_STATE_DELTA],
+    )
+
+    esp(E_STATE_SNAPSHOT)
+
+    assert esp.state == STATE_SNAPSHOT
+    assert esp.invalid_state_deltas == []
+    # Kept for debugging, even though the snapshot superseded it.
+    assert esp.skipped_state_deltas == [W_TEST_E_STATE_DELTA]
 
 
 @pytest.mark.parametrize(
@@ -1007,6 +1051,11 @@ def test_esp_call_w_messages_snapshot(
         assert esp.messages == expected
 
     check_log(event)
+
+
+# Unlike a state delta, an activity delta which cannot be applied still
+# propagates.
+patch_failed = pytest.raises(jsonpatch.JsonPatchException)
 
 
 @pytest.mark.parametrize(

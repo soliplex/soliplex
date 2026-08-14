@@ -1424,6 +1424,42 @@ async def test_drive_agui_turn_persists_and_yields(
 
 
 @pytest.mark.anyio
+async def test_drive_agui_turn_adds_final_state(
+    monkeypatch,
+    identity_compact,
+):
+    deps = mock.Mock(state=agui_constants.STATE_SNAPTSHOT)
+    expected = [
+        agui_constants.STATE_SNAPSHOT_EVENT,
+        agui_constants.BARE_RUN_FINISHED_EVENT,
+    ]
+    saved = []
+
+    async def fake_save(engine, **kwargs):
+        saved.append(kwargs["event"])
+
+    monkeypatch.setattr(agui_persistence, "save_single_event", fake_save)
+
+    collected = [
+        event
+        async for event in agui_persistence.drive_agui_turn(
+            adapter=_adapter([agui_constants.BARE_RUN_FINISHED_EVENT]),
+            engine=object(),
+            user_name="u",
+            room_id="r",
+            thread_id="t",
+            run_id="x",
+            run_stream_kwargs={"deps": deps},
+        )
+    ]
+
+    assert collected == expected
+    # The snapshot must be persisted too:  replaying a stored run relies
+    # on it to re-establish the authoritative state.
+    assert saved == expected
+
+
+@pytest.mark.anyio
 async def test_drive_agui_turn_swallows_save_errors(
     monkeypatch,
     identity_compact,

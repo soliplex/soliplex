@@ -8,6 +8,7 @@ import typing
 
 import fastapi
 from ag_ui import core as agui_core
+from pydantic_ai import ui as ai_ui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 AGUI_Events = list[agui_core.Event]
@@ -21,6 +22,16 @@ _COMPACTIBLE_TYPES = {  # event_type: compacting_attr
     agui_core.EventType.REASONING_MESSAGE_CONTENT: "message_id",
     agui_core.EventType.TOOL_CALL_ARGS: "tool_call_id",
 }
+
+#
+#   Events which terminate a run's event stream
+#
+TERMINAL_EVENT_TYPES = frozenset(
+    [
+        agui_core.EventType.RUN_FINISHED,
+        agui_core.EventType.RUN_ERROR,
+    ]
+)
 
 
 class AGUI_Exception(ValueError):
@@ -580,6 +591,24 @@ async def compact_event_stream(stream: AGUI_EventStream):
                 compacting_id = getattr(event, compacting_attr, None)
             else:
                 yield event
+
+
+async def with_final_state(
+    *,
+    stream: AGUI_EventStream,
+    deps: ai_ui.StateHandler | None,
+) -> AGUI_EventStream:
+    """Yield events from 'stream', adding a final AG-UI state snapshot.
+
+    The snapshot precedes the run's terminal event: AG-UI clients may stop
+    reading after a terminal event, and on replay the parser only accepts a
+    snapshot while the run is still in the RUNNING state.
+    """
+    async for event in stream:
+        if deps is not None and event.type in TERMINAL_EVENT_TYPES:
+            yield agui_core.StateSnapshotEvent(snapshot=deps.state)
+
+        yield event
 
 
 async def get_the_threads(request: fastapi.Request) -> ThreadStorage:
