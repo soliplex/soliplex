@@ -52,6 +52,41 @@ _LAST_ACTIVITY = sqla_sql.func.max(
 )
 
 
+async def _lineage(
+    runs: collections.abc.Sequence[agui_schema.Run],
+    run_id: str | None,
+) -> list[agui_schema.Run] | None:
+    """Return the runs which can answer for 'run_id', newest first.
+
+    A run's own ancestry when it has one. Otherwise the thread in reverse
+    order, which is the same thing while every run is a continuation of
+    the last -- but None once the thread branches, because then no run
+    can be placed within it and a sibling's counts were taken over a
+    history this run never had.
+    """
+    by_run_id = {run.run_id: run for run in runs}
+    run = by_run_id.get(run_id) if run_id is not None else None
+    parent = await run.awaitable_attrs.parent if run is not None else None
+
+    if parent is not None:
+        ancestry = []
+        while parent is not None:
+            ancestry.append(parent)
+            parent = await parent.awaitable_attrs.parent
+        return ancestry
+
+    parented = [
+        await run.awaitable_attrs.parent_id_
+        for run in runs
+        if await run.awaitable_attrs.parent_id_ is not None
+    ]
+
+    if len(parented) != len(set(parented)):
+        return None
+
+    return list(reversed(runs))
+
+
 async def _final_state_snapshot(
     run: agui_schema.Run,
 ) -> agui.AGUI_State | None:
@@ -400,6 +435,7 @@ class ThreadStorage(agui.ThreadStorage):
         user_name: str,
         room_id: str,
         thread_id: str,
+        run_id: str = None,
     ) -> agui.AGUI_State | None:
         async with self.session as session:
             try:
@@ -412,7 +448,15 @@ class ThreadStorage(agui.ThreadStorage):
             except agui.UnknownThread:
                 return None
 
-            for run in reversed(await thread.awaitable_attrs.runs):
+            lineage = await _lineage(
+                await thread.awaitable_attrs.runs,
+                run_id,
+            )
+
+            if lineage is None:
+                return None
+
+            for run in lineage:
                 # A run's own answer is in the state it ends with: the
                 # snapshot emitted once it finishes. Its input is the state
                 # the client held when the run began, so it lacks the

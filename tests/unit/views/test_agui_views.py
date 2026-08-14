@@ -1376,6 +1376,7 @@ async def test_restore_run_state_fills_in_stored_state(the_threads, run_input):
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
 
     assert run_input.state == STORED_STATE
@@ -1384,6 +1385,7 @@ async def test_restore_run_state_fills_in_stored_state(the_threads, run_input):
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
 
 
@@ -1395,6 +1397,7 @@ async def test_restore_run_state_without_stored_state(the_threads, run_input):
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
 
     assert run_input.state == {}
@@ -1411,6 +1414,7 @@ async def test_restore_run_state_keeps_client_state(the_threads, run_input):
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
 
     assert run_input.state == {"rag": {"citation_index": {}}}

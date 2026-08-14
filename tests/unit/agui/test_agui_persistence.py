@@ -1668,3 +1668,117 @@ async def test_drive_agui_turn_swallows_save_errors(
     ]
 
     assert collected == events
+
+
+async def _run_w_state(ts, *, thread_id, run_id, state):
+    """Finish a run with the given state as its snapshot."""
+    await ts.add_run_input(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+        run_input=agui_constants.EMPTY_RUN_AGENT_INPUT,
+    )
+    await ts.save_single_event(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+        event=agui_core.StateSnapshotEvent(snapshot=state),
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_latest_state_follows_a_run_s_own_lineage(
+    the_async_session, unit_of_work
+):
+    """A branch is answered from its own ancestry, not a newer sibling.
+
+    Message counts in a record only index the history they were counted
+    over, so a sibling branch's state would be measured against a history
+    that never produced it.
+    """
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (root,) = await thread.list_runs()
+    root_id = await root.awaitable_attrs.run_id
+
+    branches = {}
+    for name in ("mine", "sibling"):
+        run = await ts.new_run(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            parent_run_id=root_id,
+        )
+        branches[name] = await run.awaitable_attrs.run_id
+
+    ancestral = {"rag": {"evidence": {"question": 1}}}
+    sibling = {"rag": {"evidence": {"question": 99}}}
+
+    async with unit_of_work():
+        await _run_w_state(
+            ts, thread_id=thread_id, run_id=root_id, state=ancestral
+        )
+        await _run_w_state(
+            ts,
+            thread_id=thread_id,
+            run_id=branches["sibling"],
+            state=sibling,
+        )
+
+    found = await ts.get_latest_state(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=branches["mine"],
+    )
+
+    assert found == ancestral
+
+
+@pytest.mark.asyncio
+async def test_get_latest_state_declines_an_unplaceable_branch(
+    the_async_session, unit_of_work
+):
+    """Without a lineage to follow, a branched thread has no one answer."""
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (root,) = await thread.list_runs()
+    root_id = await root.awaitable_attrs.run_id
+
+    for _ in range(2):
+        await ts.new_run(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            parent_run_id=root_id,
+        )
+
+    async with unit_of_work():
+        await _run_w_state(
+            ts,
+            thread_id=thread_id,
+            run_id=root_id,
+            state={"rag": {"evidence": {"question": 1}}},
+        )
+
+    found = await ts.get_latest_state(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    assert found is None

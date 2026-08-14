@@ -106,6 +106,7 @@ async def _restore_run_state(
     user_name: str,
     room_id: str,
     thread_id: str,
+    run_id: str,
 ) -> None:
     """Fill in a run's state from the thread's stored state.
 
@@ -132,6 +133,7 @@ async def _restore_run_state(
         user_name=user_name,
         room_id=room_id,
         thread_id=thread_id,
+        run_id=run_id,
     )
 
     if stored_state:
@@ -859,6 +861,7 @@ async def post_room_agui_thread_id_run_id(
         user_name=user_name,
         room_id=room_id,
         thread_id=thread_id,
+        run_id=run_id,
     )
 
     agent_deps = await the_installation.get_agent_deps_for_room(

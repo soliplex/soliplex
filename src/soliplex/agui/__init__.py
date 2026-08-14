@@ -402,11 +402,15 @@ class ThreadStorage(abc.ABC):
         user_name: str,
         room_id: str,
         thread_id: str,
+        run_id: str = None,
     ) -> AGUI_State | None:
-        """Return the thread's most recent non-empty run state, or None
+        """Return the state a thread most recently ended a run with, or None
 
-        Return None for a thread with no such run, and for an unknown
-        thread.
+        Answered from the ancestry of 'run_id' when it has one, so a run
+        continuing one branch is not handed a sibling's state.
+
+        Return None for a thread with no such run, for an unknown thread,
+        and for a branched thread in which 'run_id' cannot be placed.
         """
 
     @abc.abstractmethod
