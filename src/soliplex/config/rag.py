@@ -31,6 +31,16 @@ class RagDbExactlyOneOfStemOrOverride(TypeError):
         )
 
 
+class RagDbS3_URI_RequiresStemNotOverride(TypeError):
+    def __init__(self, _config_path):
+        self._config_path = _config_path
+        super().__init__(
+            f"Use of 'rag_lancedb_s3_bucket' requires 'rag_lancedb_stem' "
+            f" but cannot be used with 'rag_lancedb_override_path' "
+            f"(configured in {_config_path})"
+        )
+
+
 class RagDbFileNotFound(ValueError):
     def __init__(self, rag_db_filename, _config_path):
         self.rag_db_filename = rag_db_filename
@@ -85,6 +95,31 @@ class _RAGConfigBase:
         _utils._no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
+    _local_haiku_rag_config: hr_config.AppConfig | None = None
+
+    @classmethod
+    def _extract_local_hr_config(
+        cls,
+        config_dict,
+    ) -> hr_config.AppConfig | None:
+        """Helper for derived class 'from_yaml'"""
+        lrhc = config_dict.pop("local_haiku_rag_config", None)
+
+        if lrhc is not None:
+            config_dict["_local_haiku_rag_config"] = (
+                hr_config.AppConfig.model_validate(lrhc)
+            )
+
+        return config_dict
+
+    # Allow for overrides in the skill / tool config itself
+    @property
+    def local_haiku_rag_config(self) -> hr_config.AppConfig:
+        return (
+            self._local_haiku_rag_config
+            if self._local_haiku_rag_config
+            else {}
+        )
 
     @property
     def haiku_rag_config(self) -> hr_config.AppConfig:
@@ -99,22 +134,31 @@ class _RAGConfigBase:
                 raise exceptions.NoConfigPath()
 
             base_config = self._installation_config.haiku_rag_config
+            base_config_yaml = base_config.model_dump(exclude_unset=True)
+            merged_config_yaml = base_config_yaml
 
             hr_config_file = self._config_path.parent / "haiku.rag.yaml"
 
             if hr_config_file.is_file():
-                base_config_yaml = base_config.model_dump(exclude_unset=True)
                 room_config_yaml = hr_config.load_yaml_config(hr_config_file)
                 merged_config_yaml = _deep_merge(
-                    base_config_yaml,
+                    merged_config_yaml,
                     room_config_yaml,
                 )
 
-                self._haiku_rag_config = hr_config.AppConfig.model_validate(
-                    merged_config_yaml
+            local_config = self._local_haiku_rag_config
+            if local_config is not None:
+                my_config_yaml = local_config.model_dump(exclude_unset=True)
+                merged_config_yaml = _deep_merge(
+                    merged_config_yaml,
+                    my_config_yaml,
                 )
-            else:
-                self._haiku_rag_config = base_config
+
+            merged_hr_config = hr_config.AppConfig.model_validate(
+                merged_config_yaml
+            )
+
+            self._haiku_rag_config = merged_hr_config
 
         return self._haiku_rag_config
 
@@ -126,6 +170,9 @@ class _RAGDatabaseBase:
     # One of these two options must be specified
     rag_lancedb_stem: str = None
     rag_lancedb_override_path: str = None
+
+    # Uses the stem, but cannot be used with 'rag_lancedb_override_path`
+    rag_lancedb_s3_bucket: str = None
 
     # Normally set via subclass 'from_yaml'
     _installation_config: InstallationConfig = (  # noqa F821 cycle
@@ -142,6 +189,12 @@ class _RAGDatabaseBase:
 
         if len(list(passed)) != 1:
             raise RagDbExactlyOneOfStemOrOverride(self._config_path)
+
+        if self.rag_lancedb_s3_bucket is not None and (
+            self.rag_lancedb_stem is None
+            or self.rag_lancedb_override_path is not None
+        ):
+            raise RagDbS3_URI_RequiresStemNotOverride(self._config_path)
 
     @property
     def rag_lancedb_path(self) -> pathlib.Path:

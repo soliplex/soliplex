@@ -1,4 +1,5 @@
 import contextlib
+from unittest import mock
 
 import pytest
 import yaml
@@ -7,7 +8,10 @@ from haiku.rag import config as hr_config_module
 from soliplex.config import exceptions as config_exc
 from soliplex.config import rag as config_rag
 
+S3_URI = "s3://my-test-bucket/my-folder"
+
 rdb_exactly_one = pytest.raises(config_rag.RagDbExactlyOneOfStemOrOverride)
+rdb_s3_rq_stem = pytest.raises(config_rag.RagDbS3_URI_RequiresStemNotOverride)
 rdb_not_found = pytest.raises(config_rag.RagDbFileNotFound)
 no_config_path = pytest.raises(config_exc.NoConfigPath)
 ok_stem = contextlib.nullcontext("stem")
@@ -42,15 +46,59 @@ def test__deep_merge(base, derived, expected):
 
 
 @pytest.mark.parametrize(
-    "w_already, w_config_path, w_hr_yaml",
+    "w_config_dict",
     [
-        (False, False, {}),
-        (False, True, {}),
-        (False, True, {"environment": "from_room"}),
-        (False, True, {"prompts": {"domain_preamble": "from_room"}}),
-        (True, False, {}),
-        (True, True, {}),
-        (True, True, {"environment": "from_room"}),
+        {},
+        {"local_haiku_rag_config": {"environment": "from_local"}},
+    ],
+)
+@mock.patch("haiku.rag.config.AppConfig")
+def test__rcb__extract_local_hr_config(ac_klass, w_config_dict):
+    config_dict = w_config_dict.copy()
+    found = config_rag._RAGConfigBase._extract_local_hr_config(config_dict)
+
+    if config_dict:
+        assert found == {
+            "_local_haiku_rag_config": ac_klass.model_validate.return_value,
+        }
+        ac_klass.model_validate.assert_called_once_with(
+            w_config_dict["local_haiku_rag_config"]
+        )
+    else:
+        assert found == w_config_dict
+        ac_klass.model_validate.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_already, w_config_path, w_hr_yaml, w_local",
+    [
+        (False, False, {}, {}),
+        (False, True, {}, {}),
+        (False, True, {"environment": "from_room"}, {}),
+        (False, True, {"prompts": {"domain_preamble": "from_room"}}, {}),
+        (False, True, {}, {"prompts": {"domain_preamble": "from_local"}}),
+        (
+            False,
+            True,
+            {"prompts": {"domain_preamble": "from_room"}},
+            {"prompts": {"domain_preamble": "from_local"}},
+        ),
+        (True, False, {}, {}),
+        (True, True, {}, {}),
+        (True, True, {"environment": "from_room"}, {}),
+        (True, True, {}, {"environment": "from_local"}),
+        (
+            True,
+            True,
+            {"environment": "from_room"},
+            {"environment": "from_local"},
+        ),
+        (
+            False,
+            True,
+            {"prompts": {"domain_preamble": "from_room"}},
+            {"environment": "from_local"},
+        ),
     ],
 )
 def test__rcb_haiku_rag_config(
@@ -59,6 +107,7 @@ def test__rcb_haiku_rag_config(
     w_already,
     w_config_path,
     w_hr_yaml,
+    w_local,
 ):
     already = object()
 
@@ -88,6 +137,11 @@ def test__rcb_haiku_rag_config(
     else:
         exp_room_config_path = None
 
+    if w_local:
+        kw["_local_haiku_rag_config"] = (
+            hr_config_module.AppConfig.model_validate(w_local)
+        )
+
     rcb_config = config_rag._RAGConfigBase(**kw)
     assert isinstance(rcb_config, config_rag.RAGConfigProtocol)
 
@@ -98,12 +152,16 @@ def test__rcb_haiku_rag_config(
         if w_config_path:
             hr_config = rcb_config.haiku_rag_config
 
-            if "environment" in w_hr_yaml:
+            if "environment" in w_local:
+                assert hr_config.environment == "from_local"
+            elif "environment" in w_hr_yaml:
                 assert hr_config.environment == "from_room"
             else:
                 assert hr_config.environment == "from_installation"
 
-            if "prompts" in w_hr_yaml:
+            if "prompts" in w_local:
+                assert hr_config.prompts.domain_preamble == "from_local"
+            elif "prompts" in w_hr_yaml:
                 assert hr_config.prompts.domain_preamble == "from_room"
             else:
                 assert hr_config.prompts.domain_preamble == "from_installation"
@@ -123,14 +181,17 @@ def db_rag_path(temp_dir):
 
 
 @pytest.mark.parametrize(
-    "w_config_path, stem, override, ctor_expectation, rlp_expectation",
+    "w_config_path, stem, override, s3, ctor_expectation, rlp_expectation",
     [
-        (False, None, None, rdb_exactly_one, None),
-        (False, "testing", "/dev/null", rdb_exactly_one, None),
-        (False, "bogus", None, ok_stem, rdb_not_found),
-        (False, "testing", None, ok_stem, ok_stem),
-        (False, None, "./override", ok_ovr, rdb_not_found),
-        (True, None, "./override", ok_ovr, ok_ovr),
+        (False, None, None, None, rdb_exactly_one, None),
+        (False, "testing", "/dev/null", None, rdb_exactly_one, None),
+        (False, None, None, S3_URI, rdb_exactly_one, None),
+        (False, "bogus", None, None, ok_stem, rdb_not_found),
+        (False, "testing", None, None, ok_stem, ok_stem),
+        (False, "testing", None, S3_URI, ok_stem, ok_stem),
+        (False, None, "./override", None, ok_ovr, rdb_not_found),
+        (True, None, "./override", None, ok_ovr, ok_ovr),
+        (True, None, "./override", S3_URI, rdb_s3_rq_stem, None),
     ],
 )
 def test__rdb_ctor(
@@ -140,6 +201,7 @@ def test__rdb_ctor(
     w_config_path,
     stem,
     override,
+    s3,
     ctor_expectation,
     rlp_expectation,
 ):
@@ -173,6 +235,9 @@ def test__rdb_ctor(
 
     if override is not None:
         kw["rag_lancedb_override_path"] = override
+
+    if s3 is not None:
+        kw["rag_lancedb_s3_bucket"] = s3
 
     with ctor_expectation as ctor_which:
         rdb_config = config_rag._RAGDatabaseBase(**kw)
