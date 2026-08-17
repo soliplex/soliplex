@@ -25,7 +25,7 @@ from . import exceptions as config_exc
 from . import rag as config_rag
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
-    from .installation import InstallationConfig
+    from . import installation as config_installation
 
 _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
@@ -211,7 +211,7 @@ class _HaikuRAGCapabilityConfig(
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
@@ -328,13 +328,13 @@ class _HaikuRAGEvidenceSkillConfig:
     state_namespace: typing.ClassVar[str | None] = None
     state_type: typing.ClassVar[type[pydantic.BaseModel] | None] = None
 
-    _installation_config: InstallationConfig = None  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = None
     _config_path: pathlib.Path | None = None
 
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
@@ -423,7 +423,7 @@ class BwrapSandboxSkillConfig:
     state_namespace: typing.ClassVar[None] = None
     agui_feature_names: typing.ClassVar[tuple[str, ...]] = ()
 
-    _installation_config: InstallationConfig = None  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = None
     _config_path: pathlib.Path | None = None
 
     id: str | None = None
@@ -435,7 +435,7 @@ class BwrapSandboxSkillConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
@@ -534,7 +534,7 @@ class EntrypointCapabilityConfig:
     kind: typing.ClassVar[str] = "entrypoint"
     source: typing.ClassVar[SkillKind] = SkillKind.ENTRYPOINT
 
-    _installation_config: InstallationConfig = None  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = None
     _config_path: pathlib.Path | None = None
 
     name: str
@@ -557,7 +557,7 @@ class EntrypointCapabilityConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
@@ -665,7 +665,7 @@ SkillConfigMap = dict[str, SkillConfigTypes]
 
 
 def extract_skill_configs(
-    installation_config: InstallationConfig,  # noqa F821 cycles
+    installation_config: config_installation.InstallationConfig,
     config_path: pathlib.Path,
     config_dict: dict,
 ) -> SkillConfigMap:
@@ -695,14 +695,14 @@ class RoomSkillsConfig:
 
     installation_skill_names: list[str] = _default_list_field()
     _skill_configs: SkillConfigMap = _default_dict_field()
-    _installation_config: InstallationConfig = (  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
 
     @staticmethod
     def _check_installation_skills(
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ) -> None:
@@ -718,7 +718,7 @@ class RoomSkillsConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
