@@ -115,6 +115,14 @@ agent:
   for the YAML form.  The room's effective feature set is the union of
   features declared on the agent, the room, its tools, and its skills.
 
+- `capabilities` (a list, default empty):  Pydantic AI capabilities for
+  the agent, each named as a string, or as a mapping with `name` and
+  `kwargs`.  Names come from the Pydantic AI capability registry and from
+  any registered via the
+  [`meta.agent_capability_types`](meta.md) stanza.  Capabilities which
+  need configuration, or which a room should advertise, are configured as
+  [skills](rooms.md#skill-configuration) instead.
+
 ### Example Ollama Configuration
 
 **NOTE**: the values below show types, but should not be used without

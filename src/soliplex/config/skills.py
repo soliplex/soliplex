@@ -11,6 +11,8 @@ import pydantic
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
 from haiku.rag.capabilities import analysis as hr_analysis
+from haiku.rag.capabilities import compaction as hr_compaction
+from haiku.rag.capabilities import policy as hr_policy
 from haiku.rag.capabilities import rag as hr_rag
 from pydantic_ai import capabilities as ai_capabilities
 
@@ -21,6 +23,9 @@ from soliplex.skills import bwrap_sandbox
 from . import _utils
 from . import exceptions as config_exc
 from . import rag as config_rag
+
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from . import installation as config_installation
 
 _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
@@ -206,7 +211,7 @@ class _HaikuRAGCapabilityConfig(
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
@@ -306,6 +311,107 @@ class HR_Analysis_SkillConfig(_HaikuRAGCapabilityConfig):
 
 
 @dataclasses.dataclass(kw_only=True)
+class _HaikuRAGEvidenceSkillConfig:
+    """Base for haiku.rag's evidence capabilities.
+
+    These take no configuration:  naming one is the whole switch. They are
+    configured as skills rather than as agent capabilities so a room
+    advertises them, along with the state a client can read.
+    """
+
+    kind: typing.ClassVar[str]
+    capability_factory: typing.ClassVar[typing.Callable]
+    capability_id: typing.ClassVar[str]
+    name: typing.ClassVar[str]
+    description: typing.ClassVar[str]
+    source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
+    state_namespace: typing.ClassVar[str | None] = None
+    state_type: typing.ClassVar[type[pydantic.BaseModel] | None] = None
+
+    _installation_config: config_installation.InstallationConfig = None
+    _config_path: pathlib.Path | None = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: config_installation.InstallationConfig,
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            config_dict.pop("kind", None)
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+            return cls(**config_dict)
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                cls.name,
+                config_dict,
+            ) from exc
+
+    @property
+    def capability(self) -> ai_capabilities.AbstractCapability:
+        return type(self).capability_factory()
+
+    @property
+    def agui_feature_names(self) -> tuple[str, ...]:
+        if self.state_namespace is None:
+            return ()
+        return (self.state_namespace,)
+
+    @property
+    def as_yaml(self) -> dict:
+        return {"kind": self.kind}
+
+    @property
+    def license(self) -> None:
+        return None
+
+    @property
+    def compatibility(self) -> None:
+        return None
+
+    @property
+    def allowed_tools(self) -> list[str]:
+        return []
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {}
+
+    @property
+    def extra_parameters(self) -> dict[str, typing.Any]:
+        return {}
+
+
+@dataclasses.dataclass(kw_only=True)
+class HR_EvidenceCompaction_SkillConfig(_HaikuRAGEvidenceSkillConfig):
+    kind: typing.ClassVar[str] = "haiku.rag.skills.evidence_compaction"
+    capability_factory = hr_compaction.create_capability
+    capability_id = hr_compaction.CAPABILITY_ID
+    name = "rag-evidence-compaction"
+    description = (
+        "Replace earlier questions' evidence on each request with a capsule "
+        "of what was cited."
+    )
+
+
+@dataclasses.dataclass(kw_only=True)
+class HR_CitationPolicy_SkillConfig(_HaikuRAGEvidenceSkillConfig):
+    kind: typing.ClassVar[str] = "haiku.rag.skills.citation_policy"
+    capability_factory = hr_policy.create_capability
+    capability_id = hr_policy.CAPABILITY_ID
+    name = "rag-citation-policy"
+    description = (
+        "Require every answer to register the evidence that grounds it, or "
+        "to declare that nothing does."
+    )
+    state_namespace = hr_policy.STATE_NAMESPACE
+    state_type = hr_policy.CitationPolicyState
+
+
+@dataclasses.dataclass(kw_only=True)
 class BwrapSandboxSkillConfig:
     kind: typing.ClassVar[str] = bwrap_sandbox.CAPABILITY_NAME
     source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
@@ -317,7 +423,7 @@ class BwrapSandboxSkillConfig:
     state_namespace: typing.ClassVar[None] = None
     agui_feature_names: typing.ClassVar[tuple[str, ...]] = ()
 
-    _installation_config: InstallationConfig = None  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = None
     _config_path: pathlib.Path | None = None
 
     id: str | None = None
@@ -329,7 +435,7 @@ class BwrapSandboxSkillConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
@@ -428,7 +534,7 @@ class EntrypointCapabilityConfig:
     kind: typing.ClassVar[str] = "entrypoint"
     source: typing.ClassVar[SkillKind] = SkillKind.ENTRYPOINT
 
-    _installation_config: InstallationConfig = None  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = None
     _config_path: pathlib.Path | None = None
 
     name: str
@@ -451,7 +557,7 @@ class EntrypointCapabilityConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
@@ -527,6 +633,7 @@ class EntrypointCapabilityConfig:
 for feature_name, model in (
     (hr_rag.STATE_NAMESPACE, hr_rag.RAGState),
     (hr_analysis.STATE_NAMESPACE, hr_analysis.AnalysisState),
+    (hr_policy.STATE_NAMESPACE, hr_policy.CitationPolicyState),
 ):
     config_agui.AGUI_FEATURES_BY_NAME[feature_name] = config_agui.AGUI_Feature(
         name=feature_name,
@@ -540,6 +647,8 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
     for klass in [
         HR_RAG_SkillConfig,
         HR_Analysis_SkillConfig,
+        HR_EvidenceCompaction_SkillConfig,
+        HR_CitationPolicy_SkillConfig,
         BwrapSandboxSkillConfig,
         EntrypointCapabilityConfig,
     ]
@@ -556,7 +665,7 @@ SkillConfigMap = dict[str, SkillConfigTypes]
 
 
 def extract_skill_configs(
-    installation_config: InstallationConfig,  # noqa F821 cycles
+    installation_config: config_installation.InstallationConfig,
     config_path: pathlib.Path,
     config_dict: dict,
 ) -> SkillConfigMap:
@@ -586,14 +695,14 @@ class RoomSkillsConfig:
 
     installation_skill_names: list[str] = _default_list_field()
     _skill_configs: SkillConfigMap = _default_dict_field()
-    _installation_config: InstallationConfig = (  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
 
     @staticmethod
     def _check_installation_skills(
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ) -> None:
@@ -609,7 +718,7 @@ class RoomSkillsConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):

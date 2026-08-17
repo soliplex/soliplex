@@ -711,8 +711,8 @@ async def post_room_agui_thread_id_run_id(
     reconnects to an existing (possibly still in-progress) run by
     replaying persisted events from the database.
     """
-    thread_id = str(thread_id)
-    run_id = str(run_id)
+    thread_id: str = str(thread_id)
+    run_id: str = str(run_id)
     the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_RUN)
 
     user_name = the_user_claims.get("preferred_username", "<unknown>")

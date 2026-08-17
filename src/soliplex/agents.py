@@ -4,8 +4,10 @@ import dataclasses
 import typing
 
 import pydantic_ai
-from haiku.rag.capabilities import AnalysisCapability
-from haiku.rag.capabilities import RAGCapability
+from haiku.rag.capabilities import analysis as hr_caps_analysis
+from haiku.rag.capabilities import compaction as hr_caps_compaction
+from haiku.rag.capabilities import policy as hr_caps_policy
+from haiku.rag.capabilities import rag as hr_caps_rag
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import tools as ai_tools
@@ -19,6 +21,18 @@ from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 
 ToolConfigMap = dict[str, typing.Any]
+
+# Capabilities which take 'vision' from agent config's 'multimodal'
+HR_VisionCapabilities = (
+    hr_caps_rag.RAGCapability | hr_caps_analysis.AnalysisCapability
+)
+
+# Capabilities which can always be eagerly loaded
+HookOnlyCapabilities = (
+    hr_caps_compaction.EvidenceCompactionCapability
+    | hr_caps_policy.CitationPolicyCapability
+    | cap_rag_audit.RAGAccessAuditCapability
+)
 
 
 class CapabilityConfig(typing.Protocol):
@@ -114,16 +128,20 @@ def get_default_agent_from_configs(
     # agent's model, not haiku.rag's configured model, so gate on the room
     # agent's declared multimodality.
     for capability in capabilities:
-        if isinstance(capability, (RAGCapability, AnalysisCapability)):
+        if isinstance(capability, HR_VisionCapabilities):
             capability.vision = agent_config.multimodal
 
     # A single model-facing capability loads eagerly so its tools are visible;
-    # multiple stay deferred so the model routes between them via
-    # load_capability. The audit capability is hook-only and always eager.
+    #
+    # Multiple stay deferred so the model routes between them via
+    # 'load_capability'.
+    #
+    # Hook-only capabilities expose no tools to route
+    # between, so they neither defer nor count.
     routing_capabilities = [
         capability
         for capability in capabilities
-        if not isinstance(capability, cap_rag_audit.RAGAccessAuditCapability)
+        if not isinstance(capability, HookOnlyCapabilities)
     ]
     defer_loading = len(routing_capabilities) > 1
     for capability in routing_capabilities:

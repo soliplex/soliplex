@@ -22,4 +22,11 @@ skills:
     - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"
 
+    # Compaction replaces earlier questions' evidence on the request with
+    # what was cited; the citation policy is what makes citations happen.
+    # Configuring compaction alone drops the evidence of any question the
+    # model did not cite for.
+    - kind: "haiku.rag.skills.evidence_compaction"
+    - kind: "haiku.rag.skills.citation_policy"
+
 allow_mcp: false

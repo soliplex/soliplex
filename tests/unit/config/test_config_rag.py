@@ -1,4 +1,5 @@
 import contextlib
+import pathlib
 
 import pytest
 import yaml
@@ -200,6 +201,24 @@ def test__rdb_ctor(
         else:
             w_missing = rdb_config.get_extra_parameters()
             assert w_missing["rag_lancedb_path"].startswith("MISSING:")
+
+
+def test__rdb_override_path_expands_user(db_rag_path, monkeypatch):
+    """A '~' in an override path names the user's home directory.
+
+    Without expansion it would be resolved against the room directory as
+    a literal '~', which is never a database.
+    """
+    monkeypatch.setenv("HOME", str(db_rag_path))
+    db_override_path = db_rag_path / "test.lancedb"
+    db_override_path.mkdir()
+
+    rdb_config = config_rag._RAGDatabaseBase(
+        rag_lancedb_override_path=pathlib.Path("~/test.lancedb"),
+        _config_path=db_rag_path / "rooms" / "test" / "room_config.yaml",
+    )
+
+    assert rdb_config.rag_lancedb_path == db_override_path.resolve()
 
 
 def test__mrdb_ctor_wo_db_configs():

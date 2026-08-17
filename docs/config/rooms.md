@@ -180,8 +180,45 @@ E.g.:
           rag_lancedb_stem: "rag"
 
         - kind: "haiku.rag.skills.analysis"
-          rag_lancedb_stem: "rag"
+          rag_lancedb_stem: "notes"
   ```
+
+  Configure at most one of these two kinds per corpus.  Analysis searches
+  and cites as well as running code, so pairing it with the RAG skill over
+  the same database gives the agent two near-identical search tools, splits
+  its citations across the two records, and gives one question two search
+  budgets to spend.  Two kinds over *different* databases is fine, as
+  above.
+
+#### Evidence Skill Configuration Kinds
+
+Two further kinds take no configuration:  naming one is the whole switch.
+Both are hook-only, so they add no tools and neither affects whether the
+room's other capabilities load eagerly or on demand.
+
+- `haiku.rag.skills.evidence_compaction`:  on each request, replaces
+  earlier questions' evidence with a capsule of the evidence that was
+  cited, re-attaching cited page images;  every other earlier evidence
+  return becomes a short receipt.  Requests only -- stored history is
+  untouched.
+
+- `haiku.rag.skills.citation_policy`:  requires every answer to register
+  the evidence that grounds it, or to declare that nothing does.  An
+  answer which ends a question without declaring is redirected once to
+  cite, at the cost of an extra model request.  Publishes a
+  `citation_policy` state namespace, recording as a violation any question
+  which could not be asked to cite.
+
+Their effects are not symmetric.  **Compaction without the citation policy
+loses evidence:**  the capsule is built only from what was cited, so for
+any earlier question the model did not cite for, that question's evidence
+is replaced by receipts and nothing takes its place -- worse than not
+compacting.  Configure the citation policy alongside compaction, or
+configure neither.  The citation policy without compaction is safe:
+citations are required and recorded, and no history is rewritten.
+
+A room which configures neither resends every earlier turn's full search
+results on every request.
 
 #### Default Skill Configuration Kinds
 
@@ -197,8 +234,8 @@ configuring the RAG database and RAG client:
     data.  This file must exist in the standard location (typically
     under the `db/rag/` directory; see [rooms](rooms.md) for details).
 
-  - `rag_lancedb_override_path`: a string, a fully-qualified pathname,
-    including the suffix, of the LanceDB directory.
+  - `rag_lancedb_override_path`: a string, a pathname, including the
+    suffix, of the LanceDB directory.
 
 - `haiku_rag_config`: a path to the `haiku.rag.yaml` file used to configure
   the RAG client.  If not absolute, this path is resolved relative to

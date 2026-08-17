@@ -127,7 +127,11 @@ def test_haiku_rag_capability_config(
     assert isinstance(capability, capability_class)
     assert capability.db_path == db_path
     assert capability.defer_loading is True
+
+    assert config.state_namespace == state_namespace
     assert config.agui_feature_names == (state_namespace,)
+    assert state_namespace in config_agui.AGUI_FEATURES_BY_NAME
+
     assert config.source is config_skills.SkillKind.NATIVE
     assert config.license is None
     assert config.compatibility is None
@@ -661,3 +665,74 @@ def test_entrypoint_capability_config_unknown_entry_point(
     assert isinstance(
         raised.value.__cause__, config_skills.UnknownCapabilityEntryPoint
     )
+
+
+@pytest.mark.parametrize(
+    "klass, exp_kind, exp_namespace",
+    [
+        (
+            config_skills.HR_EvidenceCompaction_SkillConfig,
+            "haiku.rag.skills.evidence_compaction",
+            None,
+        ),
+        (
+            config_skills.HR_CitationPolicy_SkillConfig,
+            "haiku.rag.skills.citation_policy",
+            "citation_policy",
+        ),
+    ],
+)
+def test_haiku_rag_evidence_skill_config(
+    installation_config,
+    temp_dir,
+    klass,
+    exp_kind,
+    exp_namespace,
+):
+    """The evidence capabilities configure nothing and advertise themselves."""
+    config = klass.from_yaml(
+        installation_config,
+        temp_dir / "room_config.yaml",
+        {"kind": exp_kind},
+    )
+
+    assert klass.kind == exp_kind
+    assert config.source == config_skills.SkillKind.NATIVE
+    assert config.state_namespace == exp_namespace
+    assert config.as_yaml == {"kind": exp_kind}
+    assert config.extra_parameters == {}
+    assert config.allowed_tools == []
+    assert config.license is None
+    assert config.compatibility is None
+    assert config.metadata == {}
+
+    # A namespace a client can read is advertised as a feature; a
+    # capability which owns none advertises nothing.
+    if exp_namespace is None:
+        assert config.agui_feature_names == ()
+        assert exp_namespace not in config_agui.AGUI_FEATURES_BY_NAME
+    else:
+        assert config.agui_feature_names == (exp_namespace,)
+        assert exp_namespace in config_agui.AGUI_FEATURES_BY_NAME
+
+    capability = config.capability
+
+    assert capability.id == config.capability_id
+
+
+@pytest.mark.parametrize(
+    "klass",
+    [
+        config_skills.HR_EvidenceCompaction_SkillConfig,
+        config_skills.HR_CitationPolicy_SkillConfig,
+    ],
+)
+def test_haiku_rag_evidence_skill_config_wraps_yaml_errors(
+    installation_config, temp_dir, klass
+):
+    with pytest.raises(config_exc.FromYamlException):
+        klass.from_yaml(
+            installation_config,
+            temp_dir / "room_config.yaml",
+            {"kind": klass.kind, "bogus": "nonesuch"},
+        )

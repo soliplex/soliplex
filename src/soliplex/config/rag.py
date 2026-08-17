@@ -147,12 +147,14 @@ class _RAGDatabaseBase:
     def rag_lancedb_path(self) -> pathlib.Path:
         """Compute the path for the database"""
         if self.rag_lancedb_override_path is not None:
-            rsop = self.rag_lancedb_override_path
+            # Expanded before joining: a '~' resolved against the room
+            # directory is a literal directory name, never a home.
+            rsop = pathlib.Path(self.rag_lancedb_override_path).expanduser()
 
             if self._config_path is not None:
                 rsop = (self._config_path.parent / rsop).resolve()
             else:
-                rsop = pathlib.Path(rsop).resolve()
+                rsop = rsop.resolve()
 
             if not rsop.is_dir():
                 raise RagDbFileNotFound(rsop, self._config_path)
