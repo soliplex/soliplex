@@ -167,9 +167,7 @@ def run_input():
 
 @pytest.fixture
 def the_threads():
-    the_threads = mock.create_autospec(agui.ThreadStorage)
-    the_threads.get_latest_state.return_value = None
-    return the_threads
+    return mock.create_autospec(agui.ThreadStorage)
 
 
 def _awaitable(name, value):
@@ -1358,68 +1356,6 @@ async def test_stream_llm_events(num_events):
     ]
 
     assert found == expected
-
-
-# -- _restore_run_state ------------------------------------------------
-
-
-STORED_STATE = {"rag": {"citation_index": {"1": "doc-1"}}}
-
-
-@pytest.mark.asyncio
-async def test_restore_run_state_fills_in_stored_state(the_threads, run_input):
-    the_threads.get_latest_state.return_value = STORED_STATE
-
-    await agui_views._restore_run_state(
-        run_input=run_input,
-        the_threads=the_threads,
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
-    )
-
-    assert run_input.state == STORED_STATE
-
-    the_threads.get_latest_state.assert_awaited_once_with(
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
-    )
-
-
-@pytest.mark.asyncio
-async def test_restore_run_state_without_stored_state(the_threads, run_input):
-    await agui_views._restore_run_state(
-        run_input=run_input,
-        the_threads=the_threads,
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
-    )
-
-    assert run_input.state == {}
-
-
-@pytest.mark.asyncio
-async def test_restore_run_state_keeps_client_state(the_threads, run_input):
-    the_threads.get_latest_state.return_value = STORED_STATE
-    run_input.state = {"rag": {"citation_index": {}}}
-
-    await agui_views._restore_run_state(
-        run_input=run_input,
-        the_threads=the_threads,
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
-    )
-
-    assert run_input.state == {"rag": {"citation_index": {}}}
-
-    the_threads.get_latest_state.assert_not_awaited()
 
 
 # -- init_agent_stream -------------------------------------------------

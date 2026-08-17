@@ -396,24 +396,6 @@ class ThreadStorage(abc.ABC):
         """Update a run with the given 'run_agent_input'"""
 
     @abc.abstractmethod
-    async def get_latest_state(
-        self,
-        *,
-        user_name: str,
-        room_id: str,
-        thread_id: str,
-        run_id: str | None = None,
-    ) -> AGUI_State | None:
-        """Return the state a thread most recently ended a run with, or None
-
-        Answered from the ancestry of 'run_id' when it has one, so a run
-        continuing one branch is not handed a sibling's state.
-
-        Return None for a thread with no such run, for an unknown thread,
-        and for a branched thread in which 'run_id' cannot be placed.
-        """
-
-    @abc.abstractmethod
     async def update_run_metadata(
         self,
         *,

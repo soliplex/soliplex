@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import collections.abc
 import contextlib
-import copy
 import datetime
 import typing
 
@@ -50,56 +49,6 @@ _LAST_ACTIVITY = sqla_sql.func.max(
         agui_schema.Run.created,
     )
 )
-
-
-async def _lineage(
-    runs: collections.abc.Sequence[agui_schema.Run],
-    run_id: str | None,
-) -> list[agui_schema.Run] | None:
-    """Return the runs which can answer for 'run_id', newest first.
-
-    A run's own ancestry when it has one. Otherwise the thread in reverse
-    order, which is the same thing while every run is a continuation of
-    the last -- but None once the thread branches, because then no run
-    can be placed within it and a sibling's counts were taken over a
-    history this run never had.
-    """
-    by_run_id = {run.run_id: run for run in runs}
-    run = by_run_id.get(run_id) if run_id is not None else None
-    parent = await run.awaitable_attrs.parent if run is not None else None
-
-    if parent is not None:
-        ancestry = []
-        while parent is not None:
-            ancestry.append(parent)
-            parent = await parent.awaitable_attrs.parent
-        return ancestry
-
-    parented = [
-        await run.awaitable_attrs.parent_id_
-        for run in runs
-        if await run.awaitable_attrs.parent_id_ is not None
-    ]
-
-    if len(parented) != len(set(parented)):
-        return None
-
-    return list(reversed(runs))
-
-
-#   A run which snapshotted nothing is distinct from one which
-#   snapshotted an empty state: the first has yet to say, the second has
-#   said that it holds none.
-_NOT_SNAPSHOTTED = object()
-
-
-async def _final_state_snapshot(run: agui_schema.Run) -> typing.Any:
-    """Return the state the run last snapshotted, or '_NOT_SNAPSHOTTED'."""
-    for event in reversed(await run.awaitable_attrs.events):
-        if event.data.get("type") == agui_core.EventType.STATE_SNAPSHOT:
-            return copy.deepcopy(event.data.get("snapshot"))
-
-    return _NOT_SNAPSHOTTED
 
 
 class ThreadStorage(agui.ThreadStorage):
@@ -432,48 +381,6 @@ class ThreadStorage(agui.ThreadStorage):
             )
 
         return run
-
-    async def get_latest_state(
-        self,
-        *,
-        user_name: str,
-        room_id: str,
-        thread_id: str,
-        run_id: str | None = None,
-    ) -> agui.AGUI_State | None:
-        async with self.session as session:
-            try:
-                thread = await self._find_user_thread(
-                    user_name=user_name,
-                    room_id=room_id,
-                    thread_id=thread_id,
-                    session=session,
-                )
-            except agui.UnknownThread:
-                return None
-
-            lineage = await _lineage(
-                await thread.awaitable_attrs.runs,
-                run_id,
-            )
-
-            if lineage is None:
-                return None
-
-            for run in lineage:
-                # A run's own answer is in the state it ends with: the
-                # snapshot emitted once it finishes. Its input is the state
-                # the client held when the run began, so it lacks the
-                # evidence and citations of that run's own answer.
-                snapshot = await _final_state_snapshot(run)
-                if snapshot is not _NOT_SNAPSHOTTED:
-                    return snapshot or None
-
-                run_input = await run.awaitable_attrs.run_agent_input
-                if run_input is not None and run_input.state:
-                    return run_input.state
-
-        return None
 
     async def update_run_metadata(
         self,

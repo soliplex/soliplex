@@ -99,47 +99,6 @@ async def _check_user_room_agent(
     return user_profile, agent
 
 
-async def _restore_run_state(
-    *,
-    run_input: agui_core.RunAgentInput,
-    the_threads: agui.ThreadStorage,
-    user_name: str,
-    room_id: str,
-    thread_id: str,
-    run_id: str,
-) -> None:
-    """Fill in a run's state from the thread's stored state.
-
-    A client reopening a thread rebuilds the message history from our
-    stored runs but has no state of its own to send, leaving capabilities
-    with an empty record of what earlier questions retrieved and cited.
-    The state goes on the run input because that is where the AG-UI
-    adapter reads the state it assigns to the agent's dependencies.
-
-    A client that sends its own state keeps it.
-
-    This is sound only for a client that sends the thread's whole
-    history. haiku.rag's history compaction derives its boundary from a
-    message count recorded in the state, and that count indexes only the
-    history it was recorded against: restoring state onto a windowed
-    history puts the boundary mid-conversation, where compaction can
-    replace the current question's own evidence with a receipt. A client
-    that sends a window must not have state restored.
-    """
-    if run_input.state:
-        return
-
-    stored_state = await the_threads.get_latest_state(
-        user_name=user_name,
-        room_id=room_id,
-        thread_id=thread_id,
-        run_id=run_id,
-    )
-
-    if stored_state:
-        run_input.state = stored_state
-
-
 @util.logfire_span("GET /v1/rooms/{room_id}/agui")
 @router.get("/v1/rooms/{room_id}/agui")
 async def get_room_agui(
@@ -854,15 +813,6 @@ async def post_room_agui_thread_id_run_id(
             status_code=exc.status_code,
             detail=exc.args,
         ) from None
-
-    await _restore_run_state(
-        run_input=agui_adapter.run_input,
-        the_threads=the_threads,
-        user_name=user_name,
-        room_id=room_id,
-        thread_id=thread_id,
-        run_id=run_id,
-    )
 
     agent_deps = await the_installation.get_agent_deps_for_room(
         room_id=room_id,
