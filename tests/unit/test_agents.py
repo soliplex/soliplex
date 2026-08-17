@@ -2,8 +2,10 @@ import dataclasses
 from unittest import mock
 
 import pytest
-from haiku.rag.capabilities import policy as hr_policy
-from pydantic_ai import capabilities as ai_capabilities
+from haiku.rag.capabilities import policy as hr_caps_policy
+from haiku.rag.capabilities import rag as hr_caps_rag
+from haiku.rag.config import models as hr_models
+from pydantic_ai import capabilities as ai_caps
 from pydantic_ai import tools as ai_tools
 
 from soliplex import agents
@@ -202,7 +204,7 @@ def test_get_default_agent_from_configs(
     exp_retries = agent_config.retries = 7  # See #926
 
     if w_capabilities:
-        capability = mock.create_autospec(ai_capabilities.AbstractCapability)
+        capability = mock.create_autospec(ai_caps.AbstractCapability)
         agent_config.capabilities = [capability]
     else:
         agent_config.capabilities = []
@@ -219,9 +221,7 @@ def test_get_default_agent_from_configs(
 
     kwargs = {}
     if w_room_capabilities:
-        room_capability = mock.create_autospec(
-            ai_capabilities.AbstractCapability
-        )
+        room_capability = mock.create_autospec(ai_caps.AbstractCapability)
         capability_config = mock.Mock(
             capabilities=[room_capability],
             rag_db_paths=(
@@ -282,8 +282,6 @@ def test_get_default_agent_aligns_rag_capability_vision(
     multimodal,
     tmp_path,
 ):
-    from haiku.rag.capabilities.rag import create_capability as create_rag
-    from haiku.rag.config.models import AppConfig
 
     agent_config = mock.create_autospec(config_agents.AgentConfig)
     agent_config.kind = "default"
@@ -293,8 +291,8 @@ def test_get_default_agent_aligns_rag_capability_vision(
     agent_config.capabilities = []
     agent_config.multimodal = multimodal
 
-    rag_capability = create_rag(
-        db_path=tmp_path / "kb.lancedb", config=AppConfig()
+    rag_capability = hr_caps_rag.create_capability(
+        db_path=tmp_path / "kb.lancedb", config=hr_models.AppConfig()
     )
     capability_config = mock.Mock(
         capabilities=[rag_capability],
@@ -323,9 +321,6 @@ def test_get_default_agent_leaves_evidence_capabilities_to_config(
     A room names them itself, so a room can retrieve without having
     earlier evidence rewritten.
     """
-    from haiku.rag.capabilities.rag import create_capability as create_rag
-    from haiku.rag.config.models import AppConfig
-
     agent_config = mock.create_autospec(config_agents.AgentConfig)
     agent_config.kind = "default"
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
@@ -334,8 +329,8 @@ def test_get_default_agent_leaves_evidence_capabilities_to_config(
     agent_config.capabilities = []
     agent_config.multimodal = False
 
-    rag_capability = create_rag(
-        db_path=tmp_path / "kb.lancedb", config=AppConfig()
+    rag_capability = hr_caps_rag.create_capability(
+        db_path=tmp_path / "kb.lancedb", config=hr_models.AppConfig()
     )
     capability_config = mock.Mock(
         capabilities=[rag_capability],
@@ -371,9 +366,9 @@ def test_get_default_agent_keeps_citation_policy_out_of_routing(
     agent_config.model_settings = None
     agent_config.retries = 3
     agent_config.multimodal = False
-    agent_config.capabilities = [hr_policy.create_capability()]
+    agent_config.capabilities = [hr_caps_policy.create_capability()]
 
-    routed = mock.create_autospec(ai_capabilities.AbstractCapability)
+    routed = mock.create_autospec(ai_caps.AbstractCapability)
     capability_config = mock.Mock(
         capabilities=[routed],
         rag_db_paths={},
@@ -390,7 +385,7 @@ def test_get_default_agent_keeps_citation_policy_out_of_routing(
     (policy,) = [
         capability
         for capability in built
-        if isinstance(capability, hr_policy.CitationPolicyCapability)
+        if isinstance(capability, hr_caps_policy.CitationPolicyCapability)
     ]
 
     assert policy.defer_loading is False
@@ -423,8 +418,7 @@ def test_get_default_agent_defers_only_with_multiple_capabilities(
     agent_config.capabilities = []
 
     caps = [
-        mock.create_autospec(ai_capabilities.AbstractCapability)
-        for _ in range(n_caps)
+        mock.create_autospec(ai_caps.AbstractCapability) for _ in range(n_caps)
     ]
     capability_config = mock.Mock(
         capabilities=caps,
