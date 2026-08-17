@@ -2,6 +2,7 @@ import dataclasses
 from unittest import mock
 
 import pytest
+from haiku.rag.capabilities import compaction as hr_caps_compaction
 from haiku.rag.capabilities import policy as hr_caps_policy
 from haiku.rag.capabilities import rag as hr_caps_rag
 from haiku.rag.config import models as hr_models
@@ -11,6 +12,7 @@ from pydantic_ai import tools as ai_tools
 from soliplex import agents
 from soliplex import mcp_client
 from soliplex import tools
+from soliplex.capabilities import rag_audit as cap_rag_audit
 from soliplex.config import agents as config_agents
 from soliplex.config import installation as config_installation
 from soliplex.config import tools as config_tools
@@ -241,7 +243,6 @@ def test_get_default_agent_from_configs(
     )
 
     assert found is agent_klass.return_value
-
     agent_klass.assert_called_once()
 
     akc = agent_klass.call_args_list[0]
@@ -299,19 +300,22 @@ def test_get_default_agent_aligns_rag_capability_vision(
         rag_db_paths={},
     )
 
-    agents.get_default_agent_from_configs(
+    found = agents.get_default_agent_from_configs(
         agent_config=agent_config,
         tool_configs={},
         mcp_client_toolset_configs={},
         capability_config=capability_config,
     )
 
+    assert found is agent_klass.return_value
+    agent_klass.assert_called_once()
+
     assert rag_capability.vision is multimodal
 
 
 @mock.patch("soliplex.config.agents.get_model_from_config")
 @mock.patch("pydantic_ai.Agent")
-def test_get_default_agent_leaves_evidence_capabilities_to_config(
+def test_get_default_agent_from_configs_leaves_evidence_capabilities_to_config(
     agent_klass,
     gmfc,
     tmp_path,
@@ -337,115 +341,148 @@ def test_get_default_agent_leaves_evidence_capabilities_to_config(
         rag_db_paths={},
     )
 
-    agents.get_default_agent_from_configs(
+    found = agents.get_default_agent_from_configs(
         agent_config=agent_config,
         tool_configs={},
         mcp_client_toolset_configs={},
         capability_config=capability_config,
     )
 
-    built = agent_klass.call_args.kwargs["capabilities"]
+    assert found is agent_klass.return_value
+    agent_klass.assert_called_once()
+
+    akc = agent_klass.call_args_list[0]
+
+    built = akc.kwargs["capabilities"]
 
     assert built == [rag_capability]
 
 
-@mock.patch("soliplex.config.agents.get_model_from_config")
-@mock.patch("pydantic_ai.Agent")
-def test_get_default_agent_keeps_citation_policy_out_of_routing(
-    agent_klass,
-    gmfc,
-):
-    """The citation policy capability is hook-only.
-
-    It exposes no tools, so it neither defers nor counts towards the
-    decision to defer the capabilities that do.
-    """
-    agent_config = mock.create_autospec(config_agents.AgentConfig)
-    agent_config.kind = "default"
-    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
-    agent_config.model_settings = None
-    agent_config.retries = 3
-    agent_config.multimodal = False
-    agent_config.capabilities = [hr_caps_policy.create_capability()]
-
-    routed = mock.create_autospec(ai_caps.AbstractCapability)
-    capability_config = mock.Mock(
-        capabilities=[routed],
-        rag_db_paths={},
-    )
-
-    agents.get_default_agent_from_configs(
-        agent_config=agent_config,
-        tool_configs={},
-        mcp_client_toolset_configs={},
-        capability_config=capability_config,
-    )
-
-    built = agent_klass.call_args.kwargs["capabilities"]
-    (policy,) = [
-        capability
-        for capability in built
-        if isinstance(capability, hr_caps_policy.CitationPolicyCapability)
-    ]
-
-    assert policy.defer_loading is False
-    assert routed.defer_loading is False
-
-
+@pytest.mark.parametrize("w_audit", [False, True])
 @pytest.mark.parametrize(
-    "n_caps, w_audit, expected_defer",
+    "w_caps, exp_defers",
     [
-        (1, False, False),
-        (2, False, True),
-        (1, True, False),
+        ([], []),
+        # Single hook cap: don't defer
+        ([hr_caps_compaction.EvidenceCompactionCapability()], False),
+        ([hr_caps_policy.CitationPolicyCapability()], False),
+        (
+            # Multiple hook caps: don't defer
+            [
+                hr_caps_compaction.EvidenceCompactionCapability(),
+                hr_caps_policy.CitationPolicyCapability(),
+            ],
+            False,
+        ),
+        (
+            # Single non-hook cap: don't defer
+            [
+                hr_caps_rag.create_capability(
+                    db_path="/tmp/kb.lancedb",
+                    config=hr_models.AppConfig(),
+                ),
+            ],
+            False,
+        ),
+        (
+            # Single non-hook cap: don't defer, nor hook sibs
+            [
+                hr_caps_rag.create_capability(
+                    db_path="/tmp/kb.lancedb",
+                    config=hr_models.AppConfig(),
+                ),
+                hr_caps_compaction.EvidenceCompactionCapability(),
+                hr_caps_policy.CitationPolicyCapability(),
+            ],
+            False,
+        ),
+        (
+            # Multiple non-hook caps: defer each
+            [
+                hr_caps_rag.create_capability(
+                    db_path="/tmp/foo.lancedb",
+                    config=hr_models.AppConfig(),
+                ),
+                hr_caps_rag.create_capability(
+                    db_path="/tmp/bar.lancedb",
+                    config=hr_models.AppConfig(),
+                ),
+            ],
+            [True, True],
+        ),
+        (
+            [
+                # Multiple non-hook caps: defer each, but not -hook sibs
+                hr_caps_rag.create_capability(
+                    db_path="/tmp/foo.lancedb",
+                    config=hr_models.AppConfig(),
+                ),
+                hr_caps_rag.create_capability(
+                    db_path="/tmp/bar.lancedb",
+                    config=hr_models.AppConfig(),
+                ),
+                hr_caps_compaction.EvidenceCompactionCapability(),
+                hr_caps_policy.CitationPolicyCapability(),
+            ],
+            [True, True, False, False],
+        ),
+        # TBD: Test cases for #1270
+        # ([OneNonHookCapability()], False),
+        # ([OneNonHookCapability(), AnotherNonHookCapability()], False),
     ],
 )
 @mock.patch("soliplex.config.agents.get_model_from_config")
 @mock.patch("pydantic_ai.Agent")
-def test_get_default_agent_defers_only_with_multiple_capabilities(
+def test_get_default_agent_from_configs_w_caps_defer_loading(
     agent_klass,
     gmfc,
-    n_caps,
+    w_caps,
+    exp_defers,
     w_audit,
-    expected_defer,
 ):
-    agent_config = mock.create_autospec(config_agents.AgentConfig)
-    agent_config.kind = "default"
-    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
-    agent_config.model_settings = None
-    agent_config.retries = 3
-    agent_config.multimodal = False
-    agent_config.capabilities = []
+    if exp_defers is False:
+        exp_defers = [False] * len(w_caps)
 
-    caps = [
-        mock.create_autospec(ai_caps.AbstractCapability) for _ in range(n_caps)
-    ]
+    agent_config = mock.create_autospec(
+        config_agents.AgentConfig,
+        kind="default",
+        model_settings=None,
+        retries=3,
+        multimodal=False,
+        capabilities=[],
+    )
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+
     capability_config = mock.Mock(
-        capabilities=caps,
+        capabilities=w_caps,
         rag_db_paths=(
             {"haiku-rag": RAG_LANCEDB_OVERRIDE_PATH} if w_audit else {}
         ),
     )
 
-    agents.get_default_agent_from_configs(
+    exp_caps = w_caps[:]
+
+    if w_audit:
+        exp_caps.append(
+            cap_rag_audit.RAGAccessAuditCapability(
+                id="soliplex-rag-access-audit",
+                db_paths={"haiku-rag": RAG_LANCEDB_OVERRIDE_PATH},
+            )
+        )
+        exp_defers.append(False)
+
+    found = agents.get_default_agent_from_configs(
         agent_config=agent_config,
         tool_configs={},
         mcp_client_toolset_configs={},
         capability_config=capability_config,
     )
 
-    for capability in caps:
-        assert capability.defer_loading is expected_defer
+    assert found is agent_klass.return_value
+    agent_klass.assert_called_once()
 
-    if w_audit:
-        built = agent_klass.call_args.kwargs["capabilities"]
-        (audit,) = [
-            capability
-            for capability in built
-            if getattr(capability, "id", None) == "soliplex-rag-access-audit"
-        ]
-        # The hook-only audit capability is never counted and stays eager.
-        assert audit.defer_loading is False
+    for exp_cap, exp_defer in zip(exp_caps, exp_defers, strict=True):
+        assert exp_cap.defer_loading == exp_defer
 
 
 @pytest.mark.parametrize("w_room_capabilities", [False, True])
