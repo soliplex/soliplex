@@ -81,5 +81,26 @@ class CompletionConfig:
 
         return cls(**config_dict)
 
+    @property
+    def as_yaml(self) -> dict:
+        result = {
+            "id": self.id,
+            "agent": self.agent_config.as_yaml,
+        }
+
+        if self.name is not None:
+            result["name"] = self.name
+
+        if self.tool_configs:
+            result["tools"] = [tc.as_yaml for tc in self.tool_configs.values()]
+
+        if self.mcp_client_toolset_configs:
+            result["mcp_client_toolsets"] = {
+                key: mctc.as_yaml
+                for key, mctc in self.mcp_client_toolset_configs.items()
+            }
+
+        return result
+
 
 CompletionConfigMap = dict[str, CompletionConfig]
