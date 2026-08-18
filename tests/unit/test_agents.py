@@ -8,6 +8,7 @@ from haiku.rag.capabilities import rag as hr_caps_rag
 from haiku.rag.config import models as hr_models
 from pydantic_ai import capabilities as ai_caps
 from pydantic_ai import tools as ai_tools
+from pydantic_ai import toolsets as ai_toolsets
 
 from soliplex import agents
 from soliplex import mcp_client
@@ -358,6 +359,24 @@ def test_get_default_agent_from_configs_leaves_evidence_capabilities_to_config(
     assert built == [rag_capability]
 
 
+def _instructions_only(cap_id: str) -> ai_caps.Capability:
+    """A capability offering instructions and no tools."""
+    return ai_caps.Capability(id=cap_id, instructions="Do the thing.")
+
+
+def _tools_only(cap_id: str) -> ai_caps.Capability:
+    """A capability offering tools and no instructions."""
+    return ai_caps.Capability(id=cap_id, tools=[test_tool])
+
+
+def _w_toolset(cap_id: str) -> ai_caps.Capability:
+    """A capability offering a toolset built elsewhere."""
+    return ai_caps.Capability(
+        id=cap_id,
+        toolsets=[ai_toolsets.FunctionToolset([test_tool])],
+    )
+
+
 @pytest.mark.parametrize("w_audit", [False, True])
 @pytest.mark.parametrize(
     "w_caps, exp_defers",
@@ -426,9 +445,27 @@ def test_get_default_agent_from_configs_leaves_evidence_capabilities_to_config(
             ],
             [True, True, False, False],
         ),
-        # TBD: Test cases for #1270
-        # ([OneNonHookCapability()], False),
-        # ([OneNonHookCapability(), AnotherNonHookCapability()], False),
+        # Capabilities named nowhere in this module, classified by what
+        # they offer the model rather than by their type (#1270).
+        ([_instructions_only("one")], False),
+        ([_instructions_only("one"), _instructions_only("two")], [True, True]),
+        ([_tools_only("one")], False),
+        ([_tools_only("one"), _tools_only("two")], [True, True]),
+        # A toolset built elsewhere.
+        ([_w_toolset("one"), _w_toolset("two")], [True, True]),
+        # Native tools are neither instructions nor a toolset.
+        ([ai_caps.WebSearch(id="one")], False),
+        (
+            [ai_caps.WebSearch(id="one"), ai_caps.WebSearch(id="two")],
+            [True, True],
+        ),
+        # Offering nothing to load: hook-only, whatever the type.
+        ([ai_caps.Capability(id="bare")], False),
+        ([ai_caps.Thinking(id="thinking")], False),
+        (
+            [_instructions_only("one"), ai_caps.Capability(id="bare")],
+            False,
+        ),
     ],
 )
 @mock.patch("soliplex.config.agents.get_model_from_config")
