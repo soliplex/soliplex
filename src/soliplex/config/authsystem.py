@@ -9,7 +9,6 @@ from . import _utils
 from . import exceptions as config_exc
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
-_default_list_field = _utils._default_list_field
 
 
 # ============================================================================
@@ -63,6 +62,29 @@ class OIDCAuthSystemConfig:
             ) from exc
 
     @property
+    def as_yaml(self) -> dict:
+        result = {
+            "id": self.id,
+            "title": self.title,
+            "server_url": self.server_url,
+            "token_validation_pem": self.token_validation_pem,
+            "client_id": self.client_id,
+        }
+
+        if self.scope is not None:
+            result["scope"] = self.scope
+
+        if self.client_secret:
+            # Dumped raw: 'env:'/'secret:' interpolations are not resolved.
+            result["client_secret"] = self.client_secret
+
+        if self.oidc_client_pem_path is not None:
+            # Absolutized against the config dir on load.  See #1228.
+            result["oidc_client_pem_path"] = str(self.oidc_client_pem_path)
+
+        return result
+
+    @property
     def server_metadata_url(self):
         return f"{self.server_url}/{WELL_KNOWN_OPENID_CONFIGURATION}"
 
@@ -94,8 +116,3 @@ class OIDCAuthSystemConfig:
             # added by the auth setup
             # "authorize_state": main.SESSION_SECRET_KEY,
         }
-
-
-@dataclasses.dataclass(kw_only=True)
-class AvailableOIDCAuthSystemConfigs:
-    systems: list[OIDCAuthSystemConfig] = _default_list_field()
