@@ -25,6 +25,13 @@ AGUI_POST_RECENT_ROOM_FEEDBACK = "post recent room agui feedback"
 AGUI_POST_RECENT_USER_FEEDBACK = "post recent room user feedback"
 AGUI_POST_REVIEW_RECENT_FEEDBACK = "post review recent agui feedback"
 AGUI_POST_RESOLVE_RECENT_FEEDBACK = "post resolve recent agui feedback"
+AGUI_POST_ROOM_THREAD_LABELS = "post room agui thread labels"
+
+LABELS_LOGGER_NAME = "soliplex.labels"
+LABELS_GET = "get labels"
+LABELS_POST = "post label"
+LABELS_POST_LABEL = "post label update"
+LABELS_DELETE_LABEL = "delete label"
 
 UPLOADS_GET_ROOM = "uploads get room"
 UPLOADS_GET_ROOM_FILE = "uploads get room file"
@@ -120,6 +127,8 @@ AUDIT_RESOURCE_INSTALLATION_VERSIONS = "installation-versions"
 AUDIT_RESOURCE_INSTALLATION_PROVIDERS = "installation-providers"
 AUDIT_RESOURCE_INSTALLATION_GIT_METADATA = "installation-git-metadata"
 AUDIT_RESOURCE_ROOM_UPLOAD = "room-upload"
+AUDIT_RESOURCE_THREAD_LABEL = "thread-label"
+AUDIT_RESOURCE_USER_PROFILE = "user-profile"
 
 # room-authz audit events
 AUDIT_ROOM_POLICY_READ = "room policy read"

@@ -232,6 +232,7 @@ _DEFAULT_ROUTER_NAMES = {
     "thread_file_uploads": "soliplex.views.thread_file_uploads.router",
     "sandbox_workdirs": "soliplex.views.sandbox_workdirs.router",
     "installation": "soliplex.views.installation.router",
+    "labels": "soliplex.views.labels.router",
     "log_ingest": "soliplex.views.log_ingest.router",
     "quizzes": "soliplex.views.quizzes.router",
     "rooms": "soliplex.views.rooms.router",

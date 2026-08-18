@@ -6,6 +6,7 @@ import pytest
 from authlib.integrations import starlette_client
 from fastapi import responses
 
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -396,12 +397,15 @@ async def test_get_authn_system_without_hash():
 async def test_get_user_info(w_auth_disabled):
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = w_auth_disabled
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = False
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_auth_disabled:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authn_views.get_user_info(
                 the_installation=the_installation,
+                the_admin_users=the_admin_users,
                 the_user_claims=AUTH_USER_CLAIMS,
                 the_logger=the_logger,
             )
@@ -411,13 +415,46 @@ async def test_get_user_info(w_auth_disabled):
 
         the_logger.error.assert_called_once_with(loggers.AUTHN_NO_AUTH_MODE)
 
+        # The 404 comes first: with authentication disabled there is no
+        # user to check, so a client must read "no profile" here as
+        # single-user development, not as "not an administrator".
+        the_admin_users.check_admin_access.assert_not_awaited()
+
     else:
         found = await authn_views.get_user_info(
             the_installation=the_installation,
+            the_admin_users=the_admin_users,
             the_user_claims=AUTH_USER_CLAIMS,
             the_logger=the_logger,
         )
 
         assert found == models.UserProfile(**AUTH_USER_CLAIMS)
+        assert found.is_admin is False
 
         the_logger.debug.assert_called_once_with(loggers.AUTHN_GET_USER_INFO)
+
+
+@pytest.mark.anyio
+async def test_get_user_info_reports_an_administrator():
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = True
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    found = await authn_views.get_user_info(
+        the_installation=the_installation,
+        the_admin_users=the_admin_users,
+        the_user_claims=AUTH_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    # A display hint, so a client can paint the label management tab
+    # editable rather than showing controls that 403 on use.
+    assert found.is_admin is True
+
+    the_admin_users.check_admin_access.assert_awaited_once_with(
+        AUTH_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_USER_PROFILE,
+        action=loggers.AUDIT_ACTION_READ,
+    )

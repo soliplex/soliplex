@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from sqlalchemy import exc as sqla_exc
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
@@ -454,3 +455,127 @@ async def test_get_async_session(
             engine_url=config_installation.ASYNC_MEMORY_ENGINE_URL,
             **exp_kwargs,
         )
+
+
+@pytest.fixture
+def the_fk_session():
+    """A session whose SQLite connection enforces foreign keys.
+
+    The shared 'the_session' fixture builds its engine with a bare
+    'create_engine', which leaves SQLite's default of *ignoring* foreign
+    keys in place -- so an 'ON DELETE CASCADE' test against it would
+    pass whether or not the cascade were declared. 'get_engine'
+    registers the 'PRAGMA foreign_keys=ON' listener, which is what makes
+    the cascade assertions below mean anything.
+    """
+    engine = agui_schema.get_engine(init_schema=True)
+
+    with sqla_orm.Session(bind=engine) as session:
+        yield session
+
+    engine.dispose()
+
+
+# These flush rather than commit: a commit expires the identity map,
+# which invalidates a 'thread.labels' collection mid-append and silently
+# drops the appended rows.
+def _label(session, name, color="#123456"):
+    label = agui_schema.Label(
+        name=name,
+        name_key=name.lower(),
+        color=color,
+    )
+    session.add(label)
+    session.flush()
+    return label
+
+
+def _labelled_thread(session):
+    thread = agui_schema.Thread(
+        room_id=ROOM_ID,
+        user_name=USER_NAME,
+        email=EMAIL,
+    )
+    session.add(thread)
+    session.flush()
+    return thread
+
+
+def test_label_name_key_is_unique(the_fk_session):
+    _label(the_fk_session, "Urgent")
+
+    # Two labels differing only by case fold to the same key. The
+    # storage layer lower-cases on the way in; the constraint is what
+    # makes that fold binding rather than advisory.
+    the_fk_session.add(
+        agui_schema.Label(name="urgent", name_key="urgent", color="#654321")
+    )
+
+    with pytest.raises(sqla_exc.IntegrityError):
+        the_fk_session.commit()
+
+
+def test_thread_labels_round_trip(the_fk_session):
+    thread = _labelled_thread(the_fk_session)
+    thread.labels.append(_label(the_fk_session, "Urgent"))
+    the_fk_session.commit()
+    the_fk_session.expire_all()
+
+    assert [label.name for label in thread.labels] == ["Urgent"]
+
+
+def test_thread_labels_sort_by_folded_name(the_fk_session):
+    thread = _labelled_thread(the_fk_session)
+    for name in ("zebra", "Alpha", "mango"):
+        thread.labels.append(_label(the_fk_session, name))
+    the_fk_session.commit()
+    the_fk_session.expire_all()
+
+    # Ordered by 'name_key', so case does not shuffle the chips: a
+    # capitalised label must not sort ahead of every lowercase one.
+    assert [label.name for label in thread.labels] == [
+        "Alpha",
+        "mango",
+        "zebra",
+    ]
+
+
+def test_deleting_a_thread_detaches_its_labels(the_fk_session):
+    thread = _labelled_thread(the_fk_session)
+    label = _label(the_fk_session, "Urgent")
+    thread.labels.append(label)
+    the_fk_session.commit()
+
+    the_fk_session.delete(thread)
+    the_fk_session.commit()
+
+    # The association goes; the label stays in the catalogue.
+    assert the_fk_session.query(agui_schema.thread_label).count() == 0
+    assert the_fk_session.get(agui_schema.Label, label.id_) is not None
+
+
+def test_deleting_a_label_detaches_it_from_threads(the_fk_session):
+    thread = _labelled_thread(the_fk_session)
+    label = _label(the_fk_session, "Urgent")
+    thread.labels.append(label)
+    the_fk_session.commit()
+
+    the_fk_session.delete(label)
+    the_fk_session.commit()
+
+    # Deleting a label must not take its threads with it.
+    assert the_fk_session.query(agui_schema.thread_label).count() == 0
+    assert the_fk_session.get(agui_schema.Thread, thread.id_) is not None
+
+
+def test_label_ids_are_not_recycled(the_fk_session):
+    # 'sqlite_autoincrement': without it SQLite hands the next label the
+    # ID just freed, and a client still holding the old catalogue would
+    # paint the new label with the deleted one's name and color.
+    first = _label(the_fk_session, "Urgent")
+    the_fk_session.delete(first)
+    the_fk_session.commit()
+
+    second = _label(the_fk_session, "Blocked")
+
+    assert second.id_ != first.id_

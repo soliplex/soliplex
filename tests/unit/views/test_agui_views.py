@@ -32,6 +32,24 @@ EMAIL = "phreddy@example.com"
 
 THE_USER_CLAIMS = {"preferred_username": USER_NAME, "email": EMAIL}
 
+
+class _TestLabel(agui.Label):
+    """A stand-in label.
+
+    A plain instance rather than a mock: 'name' is reserved in 'Mock's
+    constructor -- it names the mock instead of setting an attribute --
+    so an autospec'd label has no readable name at all.
+    """
+
+    def __init__(self, label_id=1, label_name="Urgent", color="#123456"):
+        self.id_ = label_id
+        self.name = label_name
+        self.name_key = label_name.lower()
+        self.color = color
+
+
+TEST_LABEL = _TestLabel()
+
 AUTH_USER = {
     "preferred_username": USER_NAME,
     "given_name": GIVEN_NAME,
@@ -97,7 +115,7 @@ AGUI_EVENTS = [
 
 @pytest.fixture
 def test_thread():
-    return mock.create_autospec(
+    a_thread = mock.create_autospec(
         agui.Thread,
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,
@@ -106,6 +124,11 @@ def test_thread():
         awaitable_attrs=mock.AsyncMock(),
         instance=True,
     )
+    # Handlers that render a single thread read its labels off the
+    # instance; the bare 'AsyncMock' would hand back a mock that is not
+    # a list.
+    a_thread.awaitable_attrs.labels = _AwaitableValue([])
+    return a_thread
 
 
 def _make_thread_metadata(
@@ -167,7 +190,32 @@ def run_input():
 
 @pytest.fixture
 def the_threads():
-    return mock.create_autospec(agui.ThreadStorage)
+    storage = mock.create_autospec(agui.ThreadStorage)
+    # Left unstubbed, awaiting an 'AsyncMock' yields another 'AsyncMock'
+    # whose '.get' returns a coroutine rather than a list of labels --
+    # which fails somewhere well away from the cause. Every handler that
+    # renders threads asks for these, so default it to a real mapping.
+    storage.get_threads_labels.return_value = {}
+    return storage
+
+
+class _AwaitableValue:
+    """An 'awaitable_attrs' entry that need not be awaited exactly once.
+
+    '_awaitable' builds its coroutine eagerly, so a fixture that sets one
+    for every test leaves it un-awaited -- and warned about -- in each
+    test that never renders a thread. This builds the coroutine at await
+    time instead, so it is free to be awaited never, once, or twice.
+    """
+
+    def __init__(self, value):
+        self._value = value
+
+    def __await__(self):
+        async def getter():
+            return self._value
+
+        return getter().__await__()
 
 
 def _awaitable(name, value):
@@ -2297,6 +2345,8 @@ async def test_get_agui_threads(the_threads, test_thread, w_thread_meta):
     found = await agui_views.get_agui_threads(
         limit=25,
         offset=0,
+        label_ids=None,
+        q=None,
         the_installation=the_installation,
         the_threads=the_threads,
         the_room_authz=the_room_authz,
@@ -2327,6 +2377,8 @@ async def test_get_agui_threads(the_threads, test_thread, w_thread_meta):
         room_ids=[TEST_ROOM_ID],
         limit=25,
         offset=0,
+        label_ids=None,
+        name_query=None,
     )
 
     the_logger.debug.assert_called_once_with(loggers.AGUI_GET_THREADS)
@@ -2441,3 +2493,147 @@ async def test_get_agui_threads_groups_activity_lookups_by_room(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
     )
+
+    # Labels likewise: one batched query for the whole page rather than
+    # awaiting each thread's collection in turn.
+    the_threads.get_threads_labels.assert_awaited_once_with(
+        thread_ids=[a_thread.thread_id for a_thread in threads],
+    )
+
+
+@pytest.mark.anyio
+async def test_get_agui_threads_forwards_the_filters(the_threads):
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    the_installation.get_room_configs.return_value = {
+        TEST_ROOM_ID: mock.create_autospec(config_rooms.RoomConfig),
+    }
+    the_threads.list_user_threads_page.return_value = ([], 0)
+
+    await agui_views.get_agui_threads(
+        limit=50,
+        offset=0,
+        label_ids=[1, 2],
+        q="manual",
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    # Both halves of the search box reach the query. 'q' is the wire
+    # name; the storage layer calls it 'name_query'.
+    _args, kwargs = the_threads.list_user_threads_page.call_args
+    assert kwargs["label_ids"] == [1, 2]
+    assert kwargs["name_query"] == "manual"
+
+
+@pytest.mark.anyio
+async def test_get_agui_threads_carries_labels(the_threads, test_thread):
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    the_installation.get_room_configs.return_value = {
+        TEST_ROOM_ID: mock.create_autospec(config_rooms.RoomConfig),
+    }
+    test_thread.awaitable_attrs.thread_metadata = _awaitable(
+        "thread_metadata",
+        None,
+    )
+    the_threads.list_user_threads_page.return_value = ([test_thread], 1)
+    the_threads.get_threads_last_activity.return_value = {}
+    the_threads.get_threads_labels.return_value = {
+        TEST_THREAD_ID_STR: [TEST_LABEL],
+    }
+
+    found = await agui_views.get_agui_threads(
+        limit=50,
+        offset=0,
+        label_ids=None,
+        q=None,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    (m_thread,) = found.threads
+
+    # Whole labels, not bare IDs: the client paints coloured chips
+    # straight from the listing rather than joining it against a
+    # separately-fetched catalogue.
+    (m_label,) = m_thread.labels
+    assert m_label.id == TEST_LABEL.id_
+    assert m_label.name == TEST_LABEL.name
+    assert m_label.color == TEST_LABEL.color
+
+
+@pytest.mark.anyio
+async def test_post_room_agui_thread_id_labels(the_threads, test_thread):
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    test_thread.awaitable_attrs.thread_metadata = _awaitable(
+        "thread_metadata",
+        None,
+    )
+    test_thread.awaitable_attrs.labels = _AwaitableValue([TEST_LABEL])
+    the_threads.set_thread_labels.return_value = test_thread
+
+    found = await agui_views.post_room_agui_thread_id_labels(
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_UUID,
+        new_labels=models.AGUI_SetThreadLabelsRequest(label_ids=[1]),
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    # The thread comes back rather than a bare 205: the caller sent only
+    # IDs and needs the label objects to repaint its chips.
+    (m_label,) = found.labels
+    assert m_label.name == TEST_LABEL.name
+
+    the_threads.set_thread_labels.assert_awaited_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        label_ids=[1],
+    )
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_POST_ROOM_THREAD_LABELS,
+    )
+
+
+@pytest.mark.anyio
+async def test_post_room_agui_thread_id_labels_reports_an_unknown_label(
+    the_threads,
+):
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    the_threads.set_thread_labels.side_effect = agui.UnknownLabel(404)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await agui_views.post_room_agui_thread_id_labels(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            new_labels=models.AGUI_SetThreadLabelsRequest(label_ids=[404]),
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    # Attaching never coins a label, whoever is asking.
+    assert exc.value.status_code == 404

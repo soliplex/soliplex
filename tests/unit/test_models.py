@@ -1229,8 +1229,26 @@ def test_installation_from_config_w_agui_feature(
 def test_userprofile_from_user_claims(user_claims, exp_profile_kw, exp_extra):
     found = models.UserProfile.from_user_claims(user_claims)
 
-    assert found.model_dump() == exp_profile_kw
+    # Nobody is an administrator unless the caller says so.
+    assert found.model_dump() == exp_profile_kw | {"is_admin": False}
     assert found.__pydantic_extra__ == exp_extra
+
+
+def test_userprofile_from_user_claims_carries_admin():
+    found = models.UserProfile.from_user_claims(AUTH_USER_CLAIMS, True)
+
+    assert found.is_admin is True
+
+
+def test_userprofile_from_user_claims_ignores_an_admin_claim():
+    # The model allows extra fields, so a token carrying its own
+    # 'is_admin' claim would otherwise decide the answer for us -- and
+    # the client would paint administrator controls that then 403.
+    found = models.UserProfile.from_user_claims(
+        AUTH_USER_CLAIMS | {"is_admin": True},
+    )
+
+    assert found.is_admin is False
 
 
 @pytest.mark.parametrize(

@@ -47,6 +47,24 @@ class UnknownRun(AGUI_Exception):
         )
 
 
+class UnknownLabel(AGUI_Exception):
+    status_code = 404
+
+    def __init__(self, label_id: int):  # pragma: NO COVER
+        self.label_id = label_id
+        super().__init__(f"Unknown label: {label_id}")
+
+
+class DuplicateLabel(AGUI_Exception):
+    status_code = 409
+
+    def __init__(self, name: str):  # pragma: NO COVER
+        self.name = name
+        super().__init__(
+            f"A label named '{name}' already exists (label names ignore case)"
+        )
+
+
 class ThreadRoomMismatch(AGUI_Exception):
     def __init__(self, room_id: str, thread_room_id: str):  # pragma: NO COVER
         self.room_id = room_id
@@ -201,6 +219,32 @@ class ThreadMetadata(abc.ABC):
     """Description for the thread"""
 
 
+class Label(abc.ABC):
+    """A category which may be attached to threads
+
+    Labels are global to the installation and curated by administrators.
+    """
+
+    id_: int
+    """Unique ID for the label
+
+    Allocated per deployment, so nothing portable between installations
+    may key on it.
+    """
+
+    name: str
+    """Name for the label, as people read and type it"""
+
+    name_key: str
+    """'name' folded to lower case; label names ignore case"""
+
+    color: str
+    """'#RRGGBB' swatch for the label"""
+
+    created: datetime.datetime
+    """Timestamp"""
+
+
 class Thread(abc.ABC):
     """Hold a set of AGUI runs sharing the same 'thread_id'
 
@@ -255,6 +299,8 @@ class ThreadStorage(abc.ABC):
         room_ids: list[str],
         limit: int,
         offset: int,
+        label_ids: list[int] = None,
+        name_query: str = None,
     ) -> tuple[list[Thread], int]:
         """Return one page of the user's threads across several rooms.
 
@@ -270,8 +316,92 @@ class ThreadStorage(abc.ABC):
         case-insensitively. Contiguity is what lets a client emit a
         section divider whenever the room changes.
 
+        'label_ids', when given, keeps only threads carrying *any* of
+        those labels -- the "any of" reading people know from chip
+        filters elsewhere. An empty list means the same as omitting it.
+
+        'name_query', when given, keeps only threads whose name contains
+        it, case-insensitively. The two filters combine: passing both
+        keeps threads that match the name *and* carry one of the labels.
+
         Returns the page and the total number of threads matching, so a
         caller can tell whether more pages remain.
+        """
+
+    @abc.abstractmethod
+    async def list_labels(self) -> list[Label]:
+        """Return the installation's whole label catalogue, by name."""
+
+    @abc.abstractmethod
+    async def get_label_usage_counts(self) -> dict[int, int]:
+        """Return how many threads carry each label, keyed by label ID.
+
+        Counts span every user's threads, so a caller must not expose
+        them to anyone who could not otherwise see that activity: a label
+        name beside a volume is a side channel into work the caller has
+        no access to. Labels nothing carries are omitted.
+        """
+
+    @abc.abstractmethod
+    async def create_label(self, *, name: str, color: str = None) -> Label:
+        """Add a label to the catalogue and return it.
+
+        'color' defaults to 'util.DEFAULT_LABEL_COLOR', a neutral grey.
+        Raises 'DuplicateLabel' if a label with that name -- ignoring
+        case -- already exists.
+        """
+
+    @abc.abstractmethod
+    async def update_label(
+        self,
+        *,
+        label_id: int,
+        name: str = None,
+        color: str = None,
+    ) -> Label:
+        """Rename and/or recolor a label, returning it.
+
+        Each of 'name' and 'color' is left alone when omitted. Raises
+        'UnknownLabel' if no such label exists, or 'DuplicateLabel' if
+        the new name collides with another label's.
+        """
+
+    @abc.abstractmethod
+    async def delete_label(self, *, label_id: int) -> None:
+        """Remove a label from the catalogue.
+
+        Detaches it from every thread carrying it; the threads
+        themselves are untouched. Raises 'UnknownLabel' if no such label
+        exists.
+        """
+
+    @abc.abstractmethod
+    async def set_thread_labels(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        label_ids: list[int],
+    ) -> Thread:
+        """Replace the labels carried by one of the user's threads.
+
+        Labels are only ever selected from the existing catalogue --
+        assigning does not create. Raises 'UnknownLabel' if any ID names
+        no label.
+        """
+
+    @abc.abstractmethod
+    async def get_threads_labels(
+        self,
+        *,
+        thread_ids: list[str],
+    ) -> dict[str, list[Label]]:
+        """Return the labels carried by each of several threads.
+
+        Keyed by thread_id (the AG-UI protocol ID); threads carrying no
+        labels are omitted. Batched so that listing a page of threads
+        costs one query rather than one per thread.
         """
 
     @abc.abstractmethod
