@@ -2,7 +2,6 @@ import contextlib
 import copy
 import dataclasses
 import json
-import operator
 import pathlib
 from unittest import mock
 
@@ -243,13 +242,8 @@ def test_quizconfig_from_yaml(
 
     jac = expected_kw.pop("judge_agent")
 
-    if "provider_base_url" not in jac:
-        jac["provider_base_url"] = (
-            installation_config.get_environment.return_value
-        )
-    else:
-        jac["_config_path"] = yaml_file
-        jac["_installation_config"] = installation_config
+    jac["_config_path"] = yaml_file
+    jac["_installation_config"] = installation_config
 
     expected_kw["judge_agent"] = config_agents.AgentConfig(**jac)
 
@@ -356,16 +350,6 @@ def test_quizconfig_as_yaml_round_trips_w_judge_agent(
     assert reloaded == original
 
 
-QUIZ_STATE_ATTRS = (
-    "id",
-    "title",
-    "randomize",
-    "max_questions",
-    "_question_file_stem",
-    "_question_file_path_override",
-)
-
-
 def test_quizconfig_as_yaml_round_trips_wo_judge_agent(
     temp_dir,
     installation_config,
@@ -373,7 +357,6 @@ def test_quizconfig_as_yaml_round_trips_wo_judge_agent(
     installation_config.get_environment.side_effect = {
         "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
     }.get
-    get_state = operator.attrgetter(*QUIZ_STATE_ATTRS)
 
     original, reloaded = _round_trip_quiz_config(
         installation_config,
@@ -381,14 +364,7 @@ def test_quizconfig_as_yaml_round_trips_wo_judge_agent(
         yaml.safe_load(TEST_QUIZ_W_OVR_YAML),
     )
 
-    assert get_state(reloaded) == get_state(original)
-
-    # Not 'reloaded == original': '__post_init__' synthesizes the default
-    # judge without a '_config_path', where the reloaded one comes back
-    # through 'from_yaml' and has one. That field only resolves a
-    # relative system-prompt path, which the synthesized judge never has,
-    # so the judges are compared by their dumps.
-    assert reloaded.judge_agent.as_yaml == original.judge_agent.as_yaml
+    assert reloaded == original
 
 
 def test_quizconfig__load_questions_file_miss_w_stem(
