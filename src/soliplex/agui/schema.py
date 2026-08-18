@@ -171,8 +171,8 @@ class Label(Base):
     rather than on a functional index over 'lower(name)' because SQLite
     cannot express the latter.
 
-    'color' is a '#RRGGBB' string, defaulted from the row's own ID (see
-    'agui.util.hue_rotated_hex') and thereafter editable.
+    'color' is a '#RRGGBB' string, defaulting to the neutral grey in
+    'agui.util.DEFAULT_LABEL_COLOR' and thereafter editable.
     """
 
     __tablename__ = "label"
