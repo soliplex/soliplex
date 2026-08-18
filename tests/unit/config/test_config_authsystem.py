@@ -91,6 +91,17 @@ W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_YAML = f"""
     client_secret: "{AUTHSYSTEM_CLIENT_SECRET_SECRET}"
 """
 
+CLIENT_SECRET_ENV_NAME = "TEST_OIDC_CLIENT_SECRET"
+AUTHSYSTEM_CLIENT_SECRET_ENV = f"env:{CLIENT_SECRET_ENV_NAME}"
+W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
+W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_KW["client_secret"] = (
+    AUTHSYSTEM_CLIENT_SECRET_ENV
+)
+W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    client_secret: "{AUTHSYSTEM_CLIENT_SECRET_ENV}"
+"""
+
 AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL_NAME = "cacert.pem"
 AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL = "./cacert.pem"
 W_OIDC_CPP_REL_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
@@ -264,7 +275,101 @@ def test_authsystem_from_yaml_w_oid_cpp(
     assert found == expected
 
 
-@pytest.mark.xfail(strict=True, reason="#1188")
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        BARE_AUTHSYSTEM_CONFIG_KW.copy(),
+        W_SCOPE_AUTHSYSTEM_CONFIG_KW.copy(),
+        W_PEM_AUTHSYSTEM_CONFIG_KW.copy(),
+        W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW.copy(),
+        W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW.copy(),
+        W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_KW.copy(),
+    ],
+)
+def test_authsystem_as_yaml(installation_config, temp_dir, w_kw):
+    config_path = temp_dir / "config.yaml"
+
+    inst = config_authsystem.OIDCAuthSystemConfig(
+        **w_kw,
+        _config_path=config_path,
+        _installation_config=installation_config,
+    )
+
+    expected = {
+        "id": w_kw["id"],
+        "title": w_kw["title"],
+        "server_url": w_kw["server_url"],
+        "token_validation_pem": w_kw["token_validation_pem"],
+        "client_id": w_kw["client_id"],
+    }
+
+    if "scope" in w_kw:
+        expected["scope"] = w_kw["scope"]
+
+    if "client_secret" in w_kw:
+        expected["client_secret"] = w_kw["client_secret"]
+
+    if "oidc_client_pem_path" in w_kw:
+        expected["oidc_client_pem_path"] = str(w_kw["oidc_client_pem_path"])
+
+    found = inst.as_yaml
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "client_secret",
+    [
+        AUTHSYSTEM_CLIENT_SECRET_SECRET,
+        AUTHSYSTEM_CLIENT_SECRET_ENV,
+    ],
+)
+def test_authsystem_as_yaml_emits_client_secret_marker_unresolved(
+    installation_config,
+    temp_dir,
+    client_secret,
+):
+    """A 'secret:' / 'env:' marker is dumped as configured, not resolved."""
+    w_kw = BARE_AUTHSYSTEM_CONFIG_KW.copy()
+    w_kw["client_secret"] = client_secret
+    inst = config_authsystem.OIDCAuthSystemConfig(
+        **w_kw,
+        _config_path=temp_dir / "config.yaml",
+        _installation_config=installation_config,
+    )
+
+    found = inst.as_yaml
+
+    assert found["client_secret"] == client_secret
+    installation_config.get_secret.assert_not_called()
+    installation_config.get_environment.assert_not_called()
+
+
+def _round_trip_authsystem_config(
+    installation_config,
+    config_path,
+    config_dict,
+):
+    """Reload an 'OIDCAuthSystemConfig' from its own dump.
+
+    'from_yaml' drains 'oidc_client_pem_path' out of the mapping it is
+    handed, hence the copies.
+    """
+    klass = config_authsystem.OIDCAuthSystemConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
 @pytest.mark.parametrize(
     "config_yaml",
     [
@@ -279,6 +384,7 @@ def test_authsystem_from_yaml_w_oid_cpp(
         # dump must emit the marker rather than 'oauth_client_kwargs''
         # resolved secret.
         W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_YAML,
+        W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_YAML,
     ],
 )
 def test_authsystem_as_yaml_round_trips(
@@ -286,26 +392,13 @@ def test_authsystem_as_yaml_round_trips(
     temp_dir,
     config_yaml,
 ):
-    # 'OIDCAuthSystemConfig' has no 'as_yaml' at all, so the dump below
-    # raises 'AttributeError'. That makes the round trip the last
-    # executable statement in the test: anything after it would go
-    # uncovered while the xfail stands.
-    config_path = temp_dir / "config.yaml"
-    klass = config_authsystem.OIDCAuthSystemConfig
-    original = klass.from_yaml(
+    original, reloaded = _round_trip_authsystem_config(
         installation_config,
-        config_path,
-        copy.deepcopy(yaml.safe_load(config_yaml)),
+        temp_dir / "config.yaml",
+        yaml.safe_load(config_yaml),
     )
 
-    assert (
-        klass.from_yaml(
-            installation_config,
-            config_path,
-            copy.deepcopy(original.as_yaml),
-        )
-        == original
-    )
+    assert reloaded == original
 
 
 def test_authsystem_server_metadata_url():
