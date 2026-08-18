@@ -4,7 +4,6 @@ import dataclasses
 import functools
 import pathlib
 import typing
-import warnings
 from unittest import mock
 
 import pytest
@@ -217,14 +216,6 @@ capabilities:
       kwargs:
         effort: "high"
 """
-# Deprecated spelling for the same config
-W_CAPABILITIES_BBB_AGENT_CONFIG_YAML = f"""
-id: "{AGENT_ID}"
-capabilities:
-    - IncludeToolReturnSchemas
-    - Thinking:
-        effort: "high"
-"""
 
 W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
@@ -424,12 +415,11 @@ def test__apply_agent_config_template(temp_dir, config_dict, expected):
 
 
 @pytest.mark.parametrize(
-    "cap_config, expectation, deprecated",
+    "cap_config, expectation",
     [
         (
             "bogus",
             pytest.raises(config_agents.UnknownCapability),
-            False,
         ),
         (
             "testing",
@@ -439,17 +429,6 @@ def test__apply_agent_config_template(temp_dir, config_dict, expected):
                     kwargs={},
                 ),
             ),
-            False,
-        ),
-        (
-            {"testing": {"dotted_name": "foo.bar"}},
-            contextlib.nullcontext(
-                config_agents.AgentCapabilityConfig(
-                    name="testing",
-                    kwargs={"dotted_name": "foo.bar"},
-                ),
-            ),
-            True,
         ),
         (
             {"name": "testing", "kwargs": {"dotted_name": "foo.bar"}},
@@ -459,7 +438,6 @@ def test__apply_agent_config_template(temp_dir, config_dict, expected):
                     kwargs={"dotted_name": "foo.bar"},
                 ),
             ),
-            False,
         ),
     ],
 )
@@ -468,15 +446,11 @@ def test_agentcapabilityconfig_from_yaml(
     extra_agent_capability,
     cap_config,
     expectation,
-    deprecated,
 ):
 
     config_path = temp_dir / "config.yaml"
 
-    with (
-        expectation as expected,
-        warnings.catch_warnings(record=True) as warned,
-    ):
+    with expectation as expected:
         found = config_agents.AgentCapabilityConfig.from_yaml(
             config_path,
             cap_config,
@@ -487,12 +461,6 @@ def test_agentcapabilityconfig_from_yaml(
             expected,
             _config_path=config_path,
         )
-
-        if deprecated:
-            (d_warn,) = warned
-            assert d_warn.category is DeprecationWarning
-        else:
-            assert not warned
 
 
 @pytest.mark.parametrize(
@@ -526,36 +494,28 @@ def _round_trip_agent_capability_config(config_path, config_dict_or_str):
 
 
 @pytest.mark.parametrize(
-    "cap_config, deprecated",
+    "cap_config",
     [
         # bare-string shorthand
-        ("testing", False),
-        ({"name": "testing"}, False),
-        ({"name": "testing", "kwargs": {"dotted_name": "foo.bar"}}, False),
-        # deprecated single-key mapping spelling
-        ({"testing": {"dotted_name": "foo.bar"}}, True),
+        "testing",
+        {"name": "testing"},
+        {"name": "testing", "kwargs": {"dotted_name": "foo.bar"}},
     ],
 )
 def test_agentcapabilityconfig_as_yaml_round_trips(
     temp_dir,
     extra_agent_capability,
     cap_config,
-    deprecated,
 ):
-    # Neither the shorthand nor the deprecated spelling dumps back to the
-    # form it was written in -- 'as_yaml' always emits the canonical
-    # '{"name": ..., "kwargs": ...}' -- but all three reach the same
-    # state, which is the invariant under test. Reloading the dump must
-    # not re-warn, since the dump is canonical.
-    with warnings.catch_warnings(record=True) as warned:
-        warnings.simplefilter("always")
-        original, reloaded = _round_trip_agent_capability_config(
-            temp_dir / "config.yaml",
-            cap_config,
-        )
+    # The shorthand spelling does not dump back to the original form:
+    # 'as_yaml' always emits the canonical '{"name": ..., "kwargs": ...}',
+    # test. Reloading the dump results in the same state.
+    original, reloaded = _round_trip_agent_capability_config(
+        temp_dir / "config.yaml",
+        cap_config,
+    )
 
     assert reloaded == original
-    assert len(warned) == (1 if deprecated else 0)
 
 
 @pytest.mark.parametrize(
@@ -604,82 +564,64 @@ def test_agentconfig_ctor(installation_config, kw):
 
 
 @pytest.mark.parametrize(
-    "config_yaml, expectation, deprecated",
+    "config_yaml, expectation",
     [
         (
             BOGUS_AGENT_CONFIG_YAML,
             pytest.raises(config_exc.FromYamlException),
-            False,
         ),
         (
             BOGUS_KIND_AGENT_CONFIG_YAML,
             pytest.raises(config_exc.FromYamlException),
-            False,
         ),
         (
             BARE_AGENT_CONFIG_YAML,
             contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_KIND_AGENT_CONFIG_YAML,
             # `kind` stripped
             contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_PROVIDER_KW_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_PROVIDER_KW_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_RETRIES_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_RETRIES_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_MODEL_SETTINGS_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_MODEL_SETTINGS_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_MULTIMODAL_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_MULTIMODAL_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_PROMPT_FILE_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_PROMPT_FILE_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_PROMPT_FILE_W_TEMPLATE_ID_AGENT_CONFIG_YAML,
             contextlib.nullcontext(
                 W_PROMPT_FILE_W_TEMPLATE_ID_AGENT_CONFIG_KW.copy()
             ),
-            False,
         ),
         (
             W_PROMPT_FILE_W_BOGUS_TEMPLATE_ID_AGENT_CONFIG_YAML,
             pytest.raises(config_exc.FromYamlException),
-            False,
         ),
         (
             W_CAPABILITIES_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_CAPABILITIES_AGENT_CONFIG_KW.copy()),
-            False,
-        ),
-        (
-            W_CAPABILITIES_BBB_AGENT_CONFIG_YAML,  # deprecated, see #1230
-            contextlib.nullcontext(W_CAPABILITIES_AGENT_CONFIG_KW.copy()),
-            True,
         ),
         (
             W_AGUI_FEATURE_NAMES_AGENT_CONFIG_YAML,
             contextlib.nullcontext(
                 W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW.copy()
             ),
-            False,
         ),
     ],
 )
@@ -688,7 +630,6 @@ def test_agentconfig_from_yaml(
     temp_dir,
     config_yaml,
     expectation,
-    deprecated,
 ):
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
@@ -713,10 +654,7 @@ def test_agentconfig_from_yaml(
         template_kw = {}
         installation_config.agent_configs = []
 
-    with (
-        expectation as expected,
-        warnings.catch_warnings(record=True) as warned,
-    ):
+    with expectation as expected:
         found = config_agents.AgentConfig.from_yaml(
             installation_config,
             yaml_file,
@@ -739,12 +677,6 @@ def test_agentconfig_from_yaml(
 
         assert found == exp_agent_config
         assert found._installation_config is installation_config
-
-        if deprecated:
-            (d_warn,) = warned
-            assert d_warn.category is DeprecationWarning
-        else:
-            assert not warned
 
 
 @pytest.mark.parametrize("w_config_path", [False, True])
@@ -1175,8 +1107,6 @@ def _round_trip_agent_config(installation_config, config_path, config_dict):
         W_PROMPT_FILE_AGENT_CONFIG_YAML,
         W_AGUI_FEATURE_NAMES_AGENT_CONFIG_YAML,
         W_CAPABILITIES_AGENT_CONFIG_YAML,
-        # deprecated capability spelling: dumps canonical, same state
-        W_CAPABILITIES_BBB_AGENT_CONFIG_YAML,
     ],
 )
 def test_agentconfig_as_yaml_round_trips(
@@ -1184,17 +1114,11 @@ def test_agentconfig_as_yaml_round_trips(
     temp_dir,
     config_yaml,
 ):
-    # No 'extra_agent_capability' here: it swaps the registry for one
-    # holding only 'testing', which would hide the real capability names
-    # these configs reference.
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-
-        original, reloaded = _round_trip_agent_config(
-            installation_config,
-            temp_dir / "room_config.yaml",
-            yaml.safe_load(config_yaml),
-        )
+    original, reloaded = _round_trip_agent_config(
+        installation_config,
+        temp_dir / "room_config.yaml",
+        yaml.safe_load(config_yaml),
+    )
 
     assert reloaded == original
 

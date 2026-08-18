@@ -5,7 +5,6 @@ import enum
 import functools
 import pathlib
 import typing
-import warnings
 from collections import abc
 
 from pydantic_ai import capabilities as ai_capabilities
@@ -114,13 +113,6 @@ def _apply_agent_config_template(
     return config_dict
 
 
-ACC_BBB_NO_NAME_KEY_DEPRECATED = """\
-AgentCapabilityConfig.from_yaml: '{<name>: <kwargs>}' form is deprecated;
-use '{"name": <name>, "kwargs": <kwargs>}' instead.  Support for the form
-will be removed after 'v0.76'.
-"""
-
-
 @dataclasses.dataclass(kw_only=True)
 class AgentCapabilityConfig:
     name: str
@@ -138,17 +130,8 @@ class AgentCapabilityConfig:
             name = config_dict_or_str
             config_dict = {"name": name}
         else:
-            if "name" not in config_dict_or_str:  # BBB deprecated
-                warnings.warn(
-                    ACC_BBB_NO_NAME_KEY_DEPRECATED,
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                ((name, kwargs),) = config_dict_or_str.items()
-                config_dict = {"name": name, "kwargs": kwargs}
-            else:
-                name = config_dict_or_str["name"]
-                config_dict = config_dict_or_str
+            name = config_dict_or_str["name"]
+            config_dict = config_dict_or_str
 
         if name not in AGENT_CAPABILITY_CLASSES_BY_NAME:
             raise UnknownCapability(name, config_path)
