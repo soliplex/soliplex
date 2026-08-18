@@ -5,8 +5,6 @@ import typing
 
 import pydantic_ai
 from haiku.rag.capabilities import analysis as hr_caps_analysis
-from haiku.rag.capabilities import compaction as hr_caps_compaction
-from haiku.rag.capabilities import policy as hr_caps_policy
 from haiku.rag.capabilities import rag as hr_caps_rag
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import capabilities as ai_capabilities
@@ -25,13 +23,6 @@ ToolConfigMap = dict[str, typing.Any]
 # Capabilities which take 'vision' from agent config's 'multimodal'
 HR_VisionCapabilities = (
     hr_caps_rag.RAGCapability | hr_caps_analysis.AnalysisCapability
-)
-
-# Capabilities which can always be eagerly loaded
-HookOnlyCapabilities = (
-    hr_caps_compaction.EvidenceCompactionCapability
-    | hr_caps_policy.CitationPolicyCapability
-    | cap_rag_audit.RAGAccessAuditCapability
 )
 
 
@@ -94,6 +85,27 @@ def make_mcp_client_toolset(
     return factory(**toolset_config.tool_kwargs)
 
 
+def _is_routing_capability(
+    capability: ai_capabilities.AbstractCapability,
+) -> bool:
+    """Whether the model has anything to load from this capability.
+
+    Tools or instructions are what there is to route between; a hook-only
+    capability offers neither.
+    """
+    if capability.get_instructions() or capability.get_native_tools():
+        return True
+
+    toolset = capability.get_toolset()
+
+    if toolset is None:
+        return False
+
+    # A capability registering no tools of its own still gets an empty
+    # 'FunctionToolset', so ask whether it is empty, not whether it exists.
+    return bool(getattr(toolset, "tools", True))
+
+
 def get_default_agent_from_configs(
     *,
     agent_config: config_agents.AgentConfig,
@@ -135,13 +147,10 @@ def get_default_agent_from_configs(
     #
     # Multiple stay deferred so the model routes between them via
     # 'load_capability'.
-    #
-    # Hook-only capabilities expose no tools to route
-    # between, so they neither defer nor count.
     routing_capabilities = [
         capability
         for capability in capabilities
-        if not isinstance(capability, HookOnlyCapabilities)
+        if _is_routing_capability(capability)
     ]
     defer_loading = len(routing_capabilities) > 1
     for capability in routing_capabilities:
