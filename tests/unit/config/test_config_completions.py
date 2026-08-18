@@ -154,7 +154,72 @@ def test_completionconfig_from_yaml(
     assert found == expected
 
 
-@pytest.mark.xfail(strict=True, reason="#1187")
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        BARE_COMPLETION_CONFIG_KW.copy(),
+        FULL_COMPLETION_CONFIG_KW.copy(),
+    ],
+)
+def test_completionconfig_as_yaml(installation_config, temp_dir, w_kw):
+    yaml_file = temp_dir / "completions" / COMPLETION_ID / "test.yaml"
+    w_kw = w_kw.copy()
+
+    inst = config_completions.CompletionConfig(
+        **w_kw,
+        _config_path=yaml_file,
+        _installation_config=installation_config,
+    )
+
+    expected = {
+        "id": w_kw["id"],
+        "agent": inst.agent_config.as_yaml,
+    }
+
+    if "name" in w_kw:
+        expected["name"] = w_kw["name"]
+
+    if "tool_configs" in w_kw:
+        expected["tools"] = [
+            tc.as_yaml for tc in w_kw["tool_configs"].values()
+        ]
+
+    if "mcp_client_toolset_configs" in w_kw:
+        expected["mcp_client_toolsets"] = {
+            key: mctc.as_yaml
+            for key, mctc in w_kw["mcp_client_toolset_configs"].items()
+        }
+
+    found = inst.as_yaml
+
+    assert found == expected
+
+
+def _round_trip_completion_config(
+    installation_config,
+    config_path,
+    config_dict,
+):
+    """Reload a 'CompletionConfig' from its own dump.
+
+    'from_yaml' drains 'agent', 'tools' and 'mcp_client_toolsets' out of
+    the mapping it is handed, hence the copies.
+    """
+    klass = config_completions.CompletionConfig
+    original = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_dict),
+    )
+    reloaded = klass.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(original.as_yaml),
+    )
+
+    return original, reloaded
+
+
 @pytest.mark.parametrize(
     "config_yaml",
     [
@@ -167,23 +232,10 @@ def test_completionconfig_as_yaml_round_trips(
     temp_dir,
     config_yaml,
 ):
-    # 'CompletionConfig' has no 'as_yaml' at all, so the dump below
-    # raises 'AttributeError'. That makes the round trip the last
-    # executable statement in the test: anything after it would go
-    # uncovered while the xfail stands.
-    yaml_file = temp_dir / "test.yaml"
-    klass = config_completions.CompletionConfig
-    original = klass.from_yaml(
+    original, reloaded = _round_trip_completion_config(
         installation_config,
-        yaml_file,
-        copy.deepcopy(yaml.safe_load(config_yaml)),
+        temp_dir / "test.yaml",
+        yaml.safe_load(config_yaml),
     )
 
-    assert (
-        klass.from_yaml(
-            installation_config,
-            yaml_file,
-            copy.deepcopy(original.as_yaml),
-        )
-        == original
-    )
+    assert reloaded == original
