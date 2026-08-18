@@ -1722,7 +1722,7 @@ async def _labelled(ts, *, room_id, name, label_ids):
 
 
 @pytest.mark.asyncio
-async def test_create_label_folds_its_name_and_derives_a_color(
+async def test_create_label_folds_its_name_and_defaults_its_color(
     the_async_session,
     unit_of_work,
 ):
@@ -1731,10 +1731,10 @@ async def test_create_label_folds_its_name_and_derives_a_color(
     async with unit_of_work():
         label_id = await _label_id(ts, "Urgent")
 
-    # The color derives from the row's own key, so it survives a delete
-    # elsewhere in the catalogue rather than shifting with a count.
+    # Stored rather than left null: every client paints from this column,
+    # and a null would have each of them invent its own fallback.
     assert await _label_rows(ts) == [
-        (label_id, "Urgent", "urgent", agui_util.hue_rotated_hex(label_id))
+        (label_id, "Urgent", "urgent", agui_util.DEFAULT_LABEL_COLOR)
     ]
 
 

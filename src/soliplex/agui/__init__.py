@@ -346,7 +346,7 @@ class ThreadStorage(abc.ABC):
     async def create_label(self, *, name: str, color: str = None) -> Label:
         """Add a label to the catalogue and return it.
 
-        'color' defaults to one derived from the new label's own ID.
+        'color' defaults to 'util.DEFAULT_LABEL_COLOR', a neutral grey.
         Raises 'DuplicateLabel' if a label with that name -- ignoring
         case -- already exists.
         """

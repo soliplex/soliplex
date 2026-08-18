@@ -402,18 +402,21 @@ class ThreadStorage(agui.ThreadStorage):
             label = agui_schema.Label(
                 name=name,
                 name_key=_name_key(name),
-                # Placeholder only when the caller named no color: the
-                # default is derived from the row's own ID, which does
-                # not exist until the flush below. Deriving it from a
-                # count of existing labels instead would repeat colors
-                # after a delete and race concurrent creates.
-                color=color if color is not None else "#000000",
+                # A label nobody colored is stored neutral rather than
+                # left null: the column is what every client paints from,
+                # and "no color" would make each of them invent its own
+                # fallback -- so the same label would look different
+                # depending on which one you were looking at.
+                color=(
+                    color
+                    if color is not None
+                    else agui_util.DEFAULT_LABEL_COLOR
+                ),
             )
             session.add(label)
+            # Flushed here rather than left to the commit so the row's ID
+            # is populated on the instance the caller is handed back.
             await session.flush()
-
-            if color is None:
-                label.color = agui_util.hue_rotated_hex(label.id_)
 
         return label
 
