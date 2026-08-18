@@ -145,12 +145,9 @@ class QuizConfig:
             kwargs = {
                 "id": f"quiz-{self.id}-judge",
                 "model_name": "gpt-oss:20b",
+                "_installation_config": self._installation_config,
+                "_config_path": self._config_path,
             }
-            if self._installation_config is not None:
-                i_config = self._installation_config
-                kwargs["provider_base_url"] = i_config.get_environment(
-                    "OLLAMA_BASE_URL",
-                )
             self.judge_agent = agents.AgentConfig(**kwargs)
 
     @property
