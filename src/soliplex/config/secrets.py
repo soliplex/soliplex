@@ -198,6 +198,15 @@ SourceClassesByKind = {
 }
 
 
+# The source kinds Soliplex registers itself, captured before any
+# metaconfig registration can add to either registry. 'soliplex.secrets'
+# registers a getter for exactly these kinds, so this is the default key
+# set for both 'SourceClassesByKind' and 'SECRET_GETTERS_BY_KIND'.
+# 'InstallationConfigMeta.as_yaml' compares against it to distinguish a
+# registry a config cleared from one that was never touched.
+DEFAULT_SECRET_SOURCE_KINDS = frozenset(SourceClassesByKind)
+
+
 @dataclasses.dataclass(kw_only=True)
 class SecretConfig:
     secret_name: str

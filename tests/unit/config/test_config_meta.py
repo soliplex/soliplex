@@ -1,5 +1,6 @@
 import contextlib
 import copy
+import dataclasses
 
 import _test_features as agui_features
 import _test_metaconfig
@@ -53,6 +54,25 @@ meta:
         source: "server"
 """
 
+W_AGUI_FEATURES_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "agui_features": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.AGUI_FeatureConfigMeta(
+            name=AGUI_FEATURE_NAME_FOR_META,
+            model_klass=agui_features.EmptyFeatureModel,
+            source="server",
+        ),
+    ],
+}
+W_AGUI_FEATURES_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  agui_features:
+      - "{config_meta.ClearMetaRegistry.MARKER}"
+      - name: "{AGUI_FEATURE_NAME_FOR_META}"
+        model_klass: "_test_features.EmptyFeatureModel"
+        source: "server"
+"""
+
 
 W_TOOL_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "tool_configs": [
@@ -76,6 +96,64 @@ meta:
       wrapper_klass: "_test_metaconfig.DummyMCPWrapper"
 """
 
+W_TOOL_CONFIGS_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "tool_configs": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.ToolConfigMeta(
+            config_klass=_test_metaconfig.DummyToolConfig,
+        ),
+    ],
+}
+W_TOOL_CONFIGS_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  tool_configs:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
+    - "_test_metaconfig.DummyToolConfig"
+"""
+
+W_TOOL_WRAPPERS_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "mcp_server_tool_wrappers": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.MCP_ServerToolWrapperConfigMeta(
+            config_klass=_test_metaconfig.DummyToolConfig,
+            wrapper_klass=_test_metaconfig.DummyMCPWrapper,
+        ),
+    ],
+}
+W_TOOL_WRAPPERS_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  mcp_server_tool_wrappers:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
+    - config_klass: "_test_metaconfig.DummyToolConfig"
+      wrapper_klass: "_test_metaconfig.DummyMCPWrapper"
+"""
+
+W_TOOL_CONFIGS_W_WRAPPERS_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "tool_configs": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.ToolConfigMeta(
+            config_klass=_test_metaconfig.DummyToolConfig,
+        ),
+    ],
+    "mcp_server_tool_wrappers": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.MCP_ServerToolWrapperConfigMeta(
+            config_klass=_test_metaconfig.DummyToolConfig,
+            wrapper_klass=_test_metaconfig.DummyMCPWrapper,
+        ),
+    ],
+}
+W_TOOL_CONFIGS_W_WRAPPERS_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  tool_configs:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
+    - "_test_metaconfig.DummyToolConfig"
+  mcp_server_tool_wrappers:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
+    - config_klass: "_test_metaconfig.DummyToolConfig"
+      wrapper_klass: "_test_metaconfig.DummyMCPWrapper"
+"""
+
 
 W_MCP_TOOLSET_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "mcp_toolset_configs": [
@@ -87,6 +165,22 @@ W_MCP_TOOLSET_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
 W_MCP_TOOLSET_CONFIGS_ICMETA_YAML = """\
 meta:
   mcp_toolset_configs:
+    - "_test_metaconfig.DummyMCP_ToolsetConfig"
+"""
+
+
+W_MCP_TOOLSET_CONFIGS_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "mcp_toolset_configs": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.MCP_ToolsetConfigMeta(
+            config_klass=_test_metaconfig.DummyMCP_ToolsetConfig,
+        ),
+    ],
+}
+W_MCP_TOOLSET_CONFIGS_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  mcp_toolset_configs:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
     - "_test_metaconfig.DummyMCP_ToolsetConfig"
 """
 
@@ -104,6 +198,21 @@ meta:
     - "_test_metaconfig.DummySkillConfig"
 """
 
+W_SKILL_CONFIGS_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "skill_configs": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.SkillConfigMeta(
+            config_klass=_test_metaconfig.DummySkillConfig,
+        ),
+    ],
+}
+W_SKILL_CONFIGS_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  skill_configs:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
+    - "_test_metaconfig.DummySkillConfig"
+"""
+
 
 W_AGENT_CAPABILITY_ICMETA_KW = BARE_ICMETA_KW | {
     "agent_capability_types": [
@@ -118,6 +227,21 @@ meta:
       - "_test_metaconfig.DummyAgentCapability"
 """
 
+W_AGENT_CAPABILITY_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "agent_capability_types": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.AgentCapabilityMeta(
+            config_klass=_test_metaconfig.DummyAgentCapability
+        ),
+    ],
+}
+W_AGENT_CAPABILITY_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  agent_capability_types:
+      - "{config_meta.ClearMetaRegistry.MARKER}"
+      - "_test_metaconfig.DummyAgentCapability"
+"""
+
 
 W_AGENT_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "agent_configs": [
@@ -129,6 +253,21 @@ W_AGENT_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
 W_AGENT_CONFIGS_ICMETA_YAML = """\
 meta:
   agent_configs:
+      - "_test_metaconfig.DummyAgentConfig"
+"""
+
+W_AGENT_CONFIGS_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "agent_configs": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.AgentConfigMeta(
+            config_klass=_test_metaconfig.DummyAgentConfig,
+        ),
+    ],
+}
+W_AGENT_CONFIGS_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  agent_configs:
+      - "{config_meta.ClearMetaRegistry.MARKER}"
       - "_test_metaconfig.DummyAgentConfig"
 """
 
@@ -152,6 +291,23 @@ meta:
       "registered_func": "soliplex.config.test_secret_func"
 """
 
+W_SECRET_SOURCE_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "secret_sources": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.SecretSourceMeta(
+            config_klass=_test_metaconfig.DummySecretSource,
+            registered_func=secret_source_func,
+        ),
+    ],
+}
+W_SECRET_SOURCE_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  secret_sources:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
+    - "config_klass": "_test_metaconfig.DummySecretSource"
+      "registered_func": "soliplex.config.test_secret_func"
+"""
+
 
 JSONPATH_FUNCTION_NAME = "faux_filter"
 W_JSONPATH_FUNCTIONS_ICMETA_KW = BARE_ICMETA_KW | {
@@ -165,6 +321,23 @@ W_JSONPATH_FUNCTIONS_ICMETA_KW = BARE_ICMETA_KW | {
 W_JSONPATH_FUNCTIONS_ICMETA_YAML = f"""\
 meta:
   jsonpath_functions:
+      - name: "{JSONPATH_FUNCTION_NAME}"
+        func: "_test_metaconfig.dummy_jsonpath_func"
+"""
+
+W_JSONPATH_FUNCTIONS_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "jsonpath_functions": [
+        config_meta.ClearMetaRegistry(),
+        config_meta.JSONPathFunctionConfigMeta(
+            name=JSONPATH_FUNCTION_NAME,
+            func=_test_metaconfig.dummy_jsonpath_func,
+        ),
+    ],
+}
+W_JSONPATH_FUNCTIONS_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  jsonpath_functions:
+      - "{config_meta.ClearMetaRegistry.MARKER}"
       - name: "{JSONPATH_FUNCTION_NAME}"
         func: "_test_metaconfig.dummy_jsonpath_func"
 """
@@ -397,6 +570,128 @@ def test_jsonpathfunctionconfigmeta_from_yaml():
     assert meta.func is _test_metaconfig.dummy_jsonpath_func
 
 
+@dataclasses.dataclass(frozen=True)
+class _TestConfig:
+    @classmethod
+    def from_yaml(cls, entry):
+        return cls()
+
+
+@pytest.mark.parametrize(
+    "w_entries, exp_entries",
+    [
+        ([], []),
+        (
+            [
+                config_meta.ClearMetaRegistry.MARKER,
+            ],
+            [
+                config_meta.ClearMetaRegistry(),
+            ],
+        ),
+        (
+            [
+                config_meta.ClearMetaRegistry.MARKER,
+                config_meta.ClearMetaRegistry.MARKER,
+            ],
+            [
+                config_meta.ClearMetaRegistry(),
+            ],
+        ),
+        (
+            [
+                config_meta.ClearMetaRegistry.MARKER,
+                {},
+            ],
+            [
+                config_meta.ClearMetaRegistry(),
+                _TestConfig(),
+            ],
+        ),
+        (
+            [
+                {},
+                config_meta.ClearMetaRegistry.MARKER,
+            ],
+            [
+                config_meta.ClearMetaRegistry(),
+                _TestConfig(),
+            ],
+        ),
+        (
+            [
+                config_meta.ClearMetaRegistry.MARKER,
+                {},
+                config_meta.ClearMetaRegistry.MARKER,
+            ],
+            [
+                config_meta.ClearMetaRegistry(),
+                _TestConfig(),
+            ],
+        ),
+    ],
+)
+def test_installationconfigmeta__partition_cmrs(w_entries, exp_entries):
+
+    found = config_meta.InstallationConfigMeta._partition_cmrs(
+        w_entries,
+        config_klass=_TestConfig,
+    )
+
+    assert found == exp_entries
+
+
+@pytest.mark.parametrize(
+    "w_entries, exp_entries, exp_clear",
+    [
+        ([], [], False),
+        (
+            [config_meta.ClearMetaRegistry()],
+            [],
+            True,
+        ),
+        (
+            [config_meta.ClearMetaRegistry(), config_meta.ClearMetaRegistry()],
+            [],
+            True,
+        ),
+        (
+            [config_meta.ClearMetaRegistry(), {}],
+            [{}],
+            True,
+        ),
+        (
+            [{}],
+            [{}],
+            False,
+        ),
+        (
+            [{}, config_meta.ClearMetaRegistry()],
+            [{}],
+            True,
+        ),
+        (
+            [
+                config_meta.ClearMetaRegistry(),
+                {},
+                config_meta.ClearMetaRegistry(),
+            ],
+            [{}],
+            True,
+        ),
+    ],
+)
+def test_installationconfigmeta__strip_clear(
+    w_entries, exp_entries, exp_clear
+):
+
+    found = config_meta.InstallationConfigMeta._strip_clear(w_entries)
+
+    entries, clear = found
+    assert entries == exp_entries
+    assert clear == exp_clear
+
+
 @pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
@@ -422,17 +717,17 @@ def test_jsonpathfunctionconfigmeta_from_yaml():
 def test_installationconfigmeta_from_yaml(
     temp_dir,
     patched_soliplex_config,
+    patched_agui_features,
+    patched_tool_configs,
+    patched_mcp_toolset_configs,
+    patched_mcp_tool_wrappers,
     patched_skill_configs,
     patched_agent_capabilities,
     patched_agent_configs,
     patched_secret_getters,
     patched_secret_sources,
-    patched_agui_features,
-    patched_app_routers,
-    patched_tool_configs,
-    patched_mcp_toolset_configs,
-    patched_mcp_tool_wrappers,
     patched_jsonpath_functions,
+    patched_app_routers,
     config_yaml,
     expected_kw,
 ):
@@ -519,6 +814,16 @@ def test_installationconfigmeta_from_yaml(
                     == mcptcp_by_class_name[wrapper_klassname]
                 )
 
+        if config_dict_meta and "skill_configs" in config_dict_meta:
+            scs_by_class_name = {
+                f"{klass.__module__}.{klass.__name__}": klass
+                for klass in patched_skill_configs.values()
+            }
+            for klass_name in config_dict_meta["skill_configs"]:
+                assert (
+                    scs_by_class_name[klass_name].kind in patched_skill_configs
+                )
+
         if config_dict_meta and "agent_capability_types" in config_dict_meta:
             acts_by_class_name = {
                 f"{klass.__module__}.{klass.__name__}": klass.__name__
@@ -554,6 +859,267 @@ def test_installationconfigmeta_from_yaml(
             )
 
 
+@pytest.mark.parametrize(
+    "config_yaml, expected_kw",
+    [
+        pytest.param(
+            W_AGUI_FEATURES_W_CLEAR_ICMETA_YAML,
+            W_AGUI_FEATURES_W_CLEAR_ICMETA_KW,
+            id="agui_features",
+        ),
+        pytest.param(
+            W_TOOL_CONFIGS_W_CLEAR_ICMETA_YAML,
+            W_TOOL_CONFIGS_W_CLEAR_ICMETA_KW,
+            id="tool_configs_only",
+        ),
+        pytest.param(
+            W_TOOL_WRAPPERS_W_CLEAR_ICMETA_YAML,
+            W_TOOL_WRAPPERS_W_CLEAR_ICMETA_KW,
+            id="tool_wrappers_only",
+        ),
+        pytest.param(
+            W_TOOL_CONFIGS_W_WRAPPERS_W_CLEAR_ICMETA_YAML,
+            W_TOOL_CONFIGS_W_WRAPPERS_W_CLEAR_ICMETA_KW,
+            id="tool_configs and wrappers",
+        ),
+        pytest.param(
+            W_MCP_TOOLSET_CONFIGS_W_CLEAR_ICMETA_YAML,
+            W_MCP_TOOLSET_CONFIGS_W_CLEAR_ICMETA_KW,
+            id="MCP toolsets",
+        ),
+        pytest.param(
+            W_SKILL_CONFIGS_W_CLEAR_ICMETA_YAML,
+            W_SKILL_CONFIGS_W_CLEAR_ICMETA_KW,
+            id="skills",
+        ),
+        pytest.param(
+            W_AGENT_CAPABILITY_W_CLEAR_ICMETA_YAML,
+            W_AGENT_CAPABILITY_W_CLEAR_ICMETA_KW,
+            id="agent_capabilities",
+        ),
+        pytest.param(
+            W_AGENT_CONFIGS_W_CLEAR_ICMETA_YAML,
+            W_AGENT_CONFIGS_W_CLEAR_ICMETA_KW,
+            id="agents",
+        ),
+        pytest.param(
+            W_SECRET_SOURCE_W_CLEAR_ICMETA_YAML,
+            W_SECRET_SOURCE_W_CLEAR_ICMETA_KW,
+            id="secret sources",
+        ),
+        pytest.param(
+            W_JSONPATH_FUNCTIONS_W_CLEAR_ICMETA_YAML,
+            W_JSONPATH_FUNCTIONS_W_CLEAR_ICMETA_KW,
+            id="jsonpath functions",
+        ),
+    ],
+)
+def test_installationconfigmeta_from_yaml_w_clear(
+    temp_dir,
+    patched_soliplex_config,
+    patched_agui_features,
+    patched_tool_configs,
+    patched_mcp_toolset_configs,
+    patched_mcp_tool_wrappers,
+    patched_skill_configs,
+    patched_agent_capabilities,
+    patched_agent_configs,
+    patched_secret_getters,
+    patched_secret_sources,
+    patched_jsonpath_functions,
+    patched_app_routers,
+    config_yaml,
+    expected_kw,
+):
+    patched_soliplex_config["test_secret_func"] = secret_source_func
+    expected_kw = copy.deepcopy(expected_kw)
+
+    yaml_file = temp_dir / "config.yaml"
+    yaml_file.write_text(config_yaml)
+
+    with yaml_file.open() as fp:
+        config_dict = yaml.safe_load(fp)
+
+    config_dict_meta = copy.deepcopy(config_dict["meta"])
+
+    if "mcp_server_tool_wrappers" in config_dict_meta:
+        # Cannot register wrappers for unknown tool configs
+        patched_tool_configs["_test_metaconfig.dummy_tool"] = object()
+
+    expected = config_meta.InstallationConfigMeta(
+        _config_path=yaml_file,
+        **expected_kw,
+    )
+
+    # ICMeta c'tor loads defaults
+    patched_app_routers.clear()
+
+    if "agui_features" in config_dict_meta:
+        patched_agui_features.clear()
+        patched_agui_features["before"] = object()
+
+    if "tool_configs" in config_dict_meta:
+        patched_tool_configs.clear()
+        patched_tool_configs["before"] = object()
+
+        # TC clear must clear wrappers
+        patched_mcp_tool_wrappers.clear()
+        patched_mcp_tool_wrappers["before"] = object()
+
+    if "mcp_toolset_configs" in config_dict_meta:
+        patched_mcp_toolset_configs.clear()
+        patched_mcp_toolset_configs["before"] = object()
+
+    if "mcp_server_tool_wrappers" in config_dict_meta:
+        patched_mcp_tool_wrappers.clear()
+        patched_mcp_tool_wrappers["before"] = object()
+
+    if "skill_configs" in config_dict_meta:
+        patched_skill_configs.clear()
+        patched_skill_configs["before"] = object()
+
+    if "agent_capability_types" in config_dict_meta:
+        patched_agent_capabilities.clear()
+        patched_agent_capabilities["before"] = object()
+
+    if "agent_configs" in config_dict_meta:
+        patched_agent_configs.clear()
+        patched_agent_configs["before"] = object()
+
+    if "secret_sources" in config_dict_meta:
+        patched_secret_sources.clear()
+        patched_secret_sources["before"] = object()
+        patched_secret_getters.clear()
+        patched_secret_getters["before"] = object()
+
+    if "jsonpath_functions" in config_dict_meta:
+        patched_jsonpath_functions.clear()
+        patched_jsonpath_functions["before"] = object()
+
+    ic_meta = config_meta.InstallationConfigMeta.from_yaml(
+        yaml_file,
+        config_dict_meta.copy() if config_dict_meta is not None else None,
+    )
+
+    assert ic_meta == expected
+
+    if "agui_features" in config_dict_meta:
+        assert "before" not in patched_agui_features
+
+        for (af_name, af_found), af_expected in zip(
+            patched_agui_features.items(),
+            config_dict_meta["agui_features"][1:],  # skip clear
+            strict=True,
+        ):
+            assert af_name == af_expected["name"]
+            assert af_found.name == af_expected["name"]
+            assert af_found.model_klass == af_expected["model_klass"]
+            assert af_found.source == af_expected["source"]
+
+    if "tool_configs" in config_dict_meta:
+        assert "before" not in patched_tool_configs
+        assert "before" not in patched_mcp_tool_wrappers
+
+        tcs_by_class_name = {
+            f"{klass.__module__}.{klass.__name__}": klass
+            for klass in patched_tool_configs.values()
+        }
+        for klass_name in config_dict_meta["tool_configs"]:
+            if klass_name != config_meta.ClearMetaRegistry.MARKER:
+                assert (
+                    tcs_by_class_name[klass_name].tool_name
+                    in patched_tool_configs
+                )
+
+    if "mcp_toolset_configs" in config_dict_meta:
+        assert "before" not in patched_mcp_toolset_configs
+
+        mtscs_by_class_name = {
+            f"{klass.__module__}.{klass.__name__}": klass
+            for klass in patched_mcp_toolset_configs.values()
+        }
+        for klass_name in config_dict_meta["mcp_toolset_configs"]:
+            if klass_name != config_meta.ClearMetaRegistry.MARKER:
+                assert (
+                    mtscs_by_class_name[klass_name].kind
+                    in patched_mcp_toolset_configs
+                )
+
+    if "mcp_server_tool_wrappers" in config_dict_meta:
+        assert "before" not in patched_mcp_tool_wrappers
+
+        mcptcp_by_class_name = {
+            f"{klass.__module__}.{klass.__name__}": klass
+            for klass in patched_mcp_tool_wrappers.values()
+        }
+        for meta_kw in config_dict_meta["mcp_server_tool_wrappers"]:
+            if meta_kw != config_meta.ClearMetaRegistry.MARKER:
+                tool_config_klass = _utils._from_dotted_name(
+                    meta_kw["config_klass"]
+                )
+                wrapper_klassname = meta_kw["wrapper_klass"]
+                assert (
+                    patched_mcp_tool_wrappers[tool_config_klass.tool_name]
+                    == mcptcp_by_class_name[wrapper_klassname]
+                )
+
+    if "skill_configs" in config_dict_meta:
+        assert "before" not in patched_skill_configs
+
+        scs_by_class_name = {
+            f"{klass.__module__}.{klass.__name__}": klass
+            for klass in patched_skill_configs.values()
+        }
+        for klass_name in config_dict_meta["skill_configs"]:
+            if klass_name != config_meta.ClearMetaRegistry.MARKER:
+                assert (
+                    scs_by_class_name[klass_name].kind in patched_skill_configs
+                )
+
+    if "agent_capability_types" in config_dict_meta:
+        assert "before" not in patched_agent_capabilities
+
+        acts_by_class_name = {
+            f"{klass.__module__}.{klass.__name__}": klass.__name__
+            for klass in patched_agent_capabilities.values()
+        }
+        for klass_name in config_dict_meta["agent_capability_types"]:
+            if klass_name != config_meta.ClearMetaRegistry.MARKER:
+                short_name = acts_by_class_name[klass_name]
+                assert short_name in patched_agent_capabilities
+
+    if "agent_configs" in config_dict_meta:
+        assert "before" not in patched_agent_configs
+
+        acs_by_class_name = {
+            f"{klass.__module__}.{klass.__name__}": klass
+            for klass in patched_agent_configs.values()
+        }
+        for klass_name in config_dict_meta["agent_configs"]:
+            if klass_name != config_meta.ClearMetaRegistry.MARKER:
+                kind = acs_by_class_name[klass_name].kind
+                assert kind in patched_agent_configs
+
+    if "secret_sources" in config_dict_meta:
+        assert "before" not in patched_secret_getters
+        assert "before" not in patched_secret_sources
+
+        ss_klass = _test_metaconfig.DummySecretSource
+        assert patched_secret_getters == {ss_klass.kind: secret_source_func}
+        assert patched_secret_sources == {ss_klass.kind: ss_klass}
+
+    if "jsonpath_functions" in config_dict_meta:
+        assert "before" not in patched_jsonpath_functions
+
+        assert authz.registered_jsonpath_functions() == {
+            JSONPATH_FUNCTION_NAME: _test_metaconfig.dummy_jsonpath_func
+        }
+        assert (
+            patched_jsonpath_functions[JSONPATH_FUNCTION_NAME]
+            is _test_metaconfig.dummy_jsonpath_func
+        )
+
+
 @pytest.mark.parametrize("w_jsonpath", [False, True])
 @pytest.mark.parametrize("w_secret_reg", [False, True])
 @pytest.mark.parametrize("w_agent", [False, True])
@@ -584,7 +1150,8 @@ def test_installationconfigmeta_as_yaml(
 ):
     patched_soliplex_config["test_secret_func"] = secret_source_func
 
-    expected = copy.deepcopy(BARE_ICMETA_KW)
+    first_clear = config_meta.ClearMetaRegistry.MARKER
+    expected = {key: [first_clear] for key in BARE_ICMETA_KW}
 
     if w_tools:
         klass = _test_metaconfig.DummyToolConfig
@@ -660,6 +1227,22 @@ def test_installationconfigmeta_as_yaml(
     assert found == expected
 
 
+def test_installationconfigmeta_as_yaml_wo_secret_source_clear(
+    patched_secret_sources,
+    patched_secret_getters,
+):
+    # Every import-time kind is registered in both registries, so nothing
+    # was suppressed and 'as_yaml' must not ask a reload to clear them.
+    for kind in config_secrets.DEFAULT_SECRET_SOURCE_KINDS:
+        patched_secret_sources[kind] = _test_metaconfig.DummySecretSource
+        patched_secret_getters[kind] = _test_metaconfig.dummy_secret_getter
+
+    found = config_meta.InstallationConfigMeta().as_yaml["secret_sources"]
+
+    assert config_meta.ClearMetaRegistry.MARKER not in found
+    assert len(found) == len(config_secrets.DEFAULT_SECRET_SOURCE_KINDS)
+
+
 def _registry_snapshot():
     """Copy every registry 'InstallationConfigMeta' writes into."""
     return {
@@ -700,6 +1283,7 @@ def _clear_registries():
     config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME.clear()
     config_agents.AGENT_CONFIG_CLASSES_BY_KIND.clear()
     config_secrets.SECRET_GETTERS_BY_KIND.clear()
+    config_secrets.SourceClassesByKind.clear()
 
     # Drop only the config-supplied filters, leaving the RFC 9535
     # built-ins the environment needs.
@@ -743,6 +1327,7 @@ def _round_trip_icmeta_registries(config_path, config_dict):
     "config_yaml",
     [
         BARE_ICMETA_YAML,
+        # YAML which does not clear the registries
         W_AGUI_FEATURES_ICMETA_YAML,
         W_TOOL_CONFIGS_ICMETA_YAML,
         W_MCP_TOOLSET_CONFIGS_ICMETA_YAML,
@@ -752,6 +1337,15 @@ def _round_trip_icmeta_registries(config_path, config_dict):
         W_SECRET_SOURCE_ICMETA_YAML,
         W_JSONPATH_FUNCTIONS_ICMETA_YAML,
         FULL_ICMETA_YAML,
+        # YAML which already clears the registries
+        W_AGUI_FEATURES_W_CLEAR_ICMETA_YAML,
+        W_TOOL_CONFIGS_W_CLEAR_ICMETA_YAML,
+        W_MCP_TOOLSET_CONFIGS_W_CLEAR_ICMETA_YAML,
+        W_SKILL_CONFIGS_W_CLEAR_ICMETA_YAML,
+        W_AGENT_CAPABILITY_W_CLEAR_ICMETA_YAML,
+        W_AGENT_CONFIGS_W_CLEAR_ICMETA_YAML,
+        W_SECRET_SOURCE_W_CLEAR_ICMETA_YAML,
+        W_JSONPATH_FUNCTIONS_W_CLEAR_ICMETA_YAML,
     ],
 )
 def test_installationconfigmeta_as_yaml_round_trips_registries(
@@ -764,6 +1358,7 @@ def test_installationconfigmeta_as_yaml_round_trips_registries(
     patched_agent_capabilities,
     patched_agent_configs,
     patched_secret_getters,
+    patched_secret_sources,
     patched_jsonpath_functions,
     temp_dir,
     config_yaml,
