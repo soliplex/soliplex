@@ -3,7 +3,6 @@ from __future__ import annotations  # forward refs in typing decls
 import dataclasses
 import pathlib
 import typing
-import warnings
 
 from soliplex import authz
 
@@ -23,17 +22,6 @@ _default_list_field = _utils._default_list_field
 _default_dict_field = _utils._default_dict_field
 
 
-CONFIG_META_DEPRECATED = """\
-The 'ConfigMeta' class is deprecated; use one of the specialized meta-config
-types instead.  Support for the form will be removed after 'v0.76'.
-"""
-
-FROM_YAML_KEY_DEPRECATED = """\
-The '{field}' key passed to '{klass}.from_yaml' is deprecated,
-and will be removed after 'v0.76'.
-"""
-
-
 class WrapperForUnknownToolConfig(ValueError):
     def __init__(self, tool_config_klass, wrapper_klass):
         self.tool_config_klass = tool_config_klass
@@ -46,65 +34,6 @@ class WrapperForUnknownToolConfig(ValueError):
             f"Wrapper class '{wk_dotted}' cannot be "
             f"registered for unregistered tool config class '{tck_dotted}'"
         )
-
-
-@dataclasses.dataclass(kw_only=True)
-class ConfigMeta:
-    """(Deprecated) Registered config class
-
-    This class was used for widely different types, and is now
-    deprecated in favor of the more specific meta config types below.
-
-    'config_klass'
-        a class or factory: returned value must have a 'from_yaml' method
-        compatible with the category for which it is used.
-
-    'wrapper_klass'
-        a class or factory used to wrap instances of 'config_klass'
-
-    'registered_func'
-        a callable taking an instance of 'config_klass' (return type
-        unspecified), but it should be the same type for all 'config_klass'
-        classes registered for a given set.
-    """
-
-    config_klass: typing.Any
-    wrapper_klass: typing.Any = None
-    registered_func: typing.Any = None
-
-    @classmethod
-    def from_yaml(cls, yaml_config: _utils.DottedName | dict):
-
-        warnings.warn(
-            CONFIG_META_DEPRECATED,
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-        if isinstance(yaml_config, _utils.DottedName):
-            config_klass = _utils._from_dotted_name(yaml_config)
-            return cls(config_klass=config_klass)
-        else:
-            config_klass = yaml_config["config_klass"]
-
-            if isinstance(config_klass, _utils.DottedName):
-                config_klass = _utils._from_dotted_name(config_klass)
-
-            wrapper_klass = yaml_config.get("wrapper_klass")
-
-            if isinstance(wrapper_klass, _utils.DottedName):
-                wrapper_klass = _utils._from_dotted_name(wrapper_klass)
-
-            registered_func = yaml_config.get("registered_func")
-
-            if isinstance(registered_func, _utils.DottedName):
-                registered_func = _utils._from_dotted_name(registered_func)
-
-            return cls(
-                config_klass=config_klass,
-                wrapper_klass=wrapper_klass,
-                registered_func=registered_func,
-            )
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -146,18 +75,6 @@ class _ConfigKlassOnlyMeta:
             config_klass = _utils._from_dotted_name(
                 yaml_config["config_klass"]
             )
-
-            for field in ("wrapper_klass", "registered_func"):
-                if field in yaml_config:
-                    msg = FROM_YAML_KEY_DEPRECATED.format(
-                        klass=cls.__name__,
-                        field=field,
-                    )
-                    warnings.warn(
-                        msg,
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
 
         return cls(config_klass=config_klass)
 
@@ -241,17 +158,6 @@ class MCP_ServerToolWrapperConfigMeta:
     def from_yaml(cls, yaml_config: _utils.DottedName | dict):
         config_klass = _utils._from_dotted_name(yaml_config["config_klass"])
         wrapper_klass = _utils._from_dotted_name(yaml_config["wrapper_klass"])
-
-        if "registered_func" in yaml_config:
-            msg = FROM_YAML_KEY_DEPRECATED.format(
-                klass=cls.__name__,
-                field="registered_func",
-            )
-            warnings.warn(
-                msg,
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
         return cls(
             config_klass=config_klass,
@@ -371,17 +277,6 @@ class SecretSourceMeta:
         registered_func = _utils._from_dotted_name(
             yaml_config["registered_func"],
         )
-
-        if "wrapper_klass" in yaml_config:
-            msg = FROM_YAML_KEY_DEPRECATED.format(
-                klass=cls.__name__,
-                field="wrapper_klass",
-            )
-            warnings.warn(
-                msg,
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
         return cls(
             config_klass=config_klass,
