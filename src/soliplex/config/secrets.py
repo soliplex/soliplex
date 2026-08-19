@@ -5,6 +5,8 @@ import pathlib
 import re
 import typing
 
+from soliplex import secrets
+
 from . import _utils
 from . import exceptions as config_exc
 
@@ -101,6 +103,9 @@ class EnvVarSecretSource(_BaseSecretSource):
         return {"env_var_name": self.env_var_name}
 
 
+SECRET_GETTERS_BY_KIND[EnvVarSecretSource.kind] = secrets.get_env_var_secret
+
+
 @dataclasses.dataclass(kw_only=True)
 class FilePathSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "file_path"
@@ -119,6 +124,11 @@ class FilePathSecretSource(_BaseSecretSource):
     @property
     def extra_arguments(self) -> dict[str, typing.Any]:
         return {"file_path": self.file_path}
+
+
+SECRET_GETTERS_BY_KIND[FilePathSecretSource.kind] = (
+    secrets.get_file_path_secret
+)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -156,6 +166,11 @@ class SubprocessSecretSource(_BaseSecretSource):
         }
 
 
+SECRET_GETTERS_BY_KIND[SubprocessSecretSource.kind] = (
+    secrets.get_subprocess_secret
+)
+
+
 @dataclasses.dataclass(kw_only=True)
 class RandomCharsSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "random_chars"
@@ -174,6 +189,11 @@ class RandomCharsSecretSource(_BaseSecretSource):
     @property
     def extra_arguments(self) -> dict[str, typing.Any]:
         return {"n_chars": self.n_chars}
+
+
+SECRET_GETTERS_BY_KIND[RandomCharsSecretSource.kind] = (
+    secrets.get_random_chars_secret
+)
 
 
 SecretSource = (
@@ -266,3 +286,35 @@ class SecretConfig:
     @property
     def resolved(self) -> str | None:
         return self._resolved
+
+
+def get_secret(secret_config: SecretConfig) -> str:
+    excs = []
+    sources = secret_config.sources
+    while secret_config.resolved is None and sources:
+        source, *sources = sources
+        getter = SECRET_GETTERS_BY_KIND[source.kind]
+        try:
+            secret_config._resolved = getter(source)
+        except secrets.SecretError as exc:
+            excs.append(exc)
+
+    if secret_config.resolved is None:
+        raise secrets.SecretSourcesFailed(secret_config.secret_name, excs)
+
+    return secret_config.resolved
+
+
+def resolve_secrets(secret_configs: list[SecretConfig]) -> None:
+    failed_names = []
+    excs = []
+
+    for secret_config in secret_configs:
+        try:
+            get_secret(secret_config)
+        except secrets.SecretError as exc:
+            failed_names.append(secret_config.secret_name)
+            excs.append(exc)
+
+    if failed_names:
+        raise secrets.SecretsNotFound(",".join(failed_names), excs)

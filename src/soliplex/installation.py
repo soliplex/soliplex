@@ -20,7 +20,6 @@ from soliplex import agui
 from soliplex import authz
 from soliplex import loggers
 from soliplex import mcp_server
-from soliplex import secrets
 from soliplex import util
 from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
@@ -31,6 +30,7 @@ from soliplex.config import installation as config_installation
 from soliplex.config import logfire as config_logfire
 from soliplex.config import rooms as config_rooms
 from soliplex.config import routing as config_routing
+from soliplex.config import secrets as config_secrets
 
 ProviderURL = str | None
 ProviderModelNames = set[str]
@@ -124,10 +124,10 @@ class Installation:
 
     def get_secret(self, secret_name) -> str:
         secret_config = self._config.secrets_map[secret_name]
-        return secrets.get_secret(secret_config)
+        return config_secrets.get_secret(secret_config)
 
     def resolve_secrets(self):
-        secrets.resolve_secrets(self._config.secrets)
+        config_secrets.resolve_secrets(self._config.secrets)
 
     def get_environment_sources(
         self, key

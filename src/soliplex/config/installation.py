@@ -14,6 +14,7 @@ import dotenv
 import yaml
 from haiku.rag import config as hr_config
 
+from soliplex import secrets
 from soliplex.capabilities import filesystem as cap_fs
 
 from . import _utils
@@ -424,14 +425,13 @@ class InstallationConfig:
         return self._secrets_map
 
     def _resolve_secret(self, secret_name):
-        from soliplex import secrets as secrets_module  # avoid cycle
 
         try:
             secret_config = self.secrets_map[secret_name]
         except KeyError:
-            raise secrets_module.UnknownSecret(secret_name) from None
+            raise secrets.UnknownSecret(secret_name) from None
 
-        return secrets_module.get_secret(secret_config)
+        return config_secrets.get_secret(secret_config)
 
     def get_secret(self, secret_name) -> str:
         """Return the value for a given secret."""

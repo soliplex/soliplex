@@ -4,11 +4,13 @@ from unittest import mock
 
 import pytest
 
+from soliplex import secrets
 from soliplex.config import exceptions as config_exc
 from soliplex.config import secrets as config_secrets
 
 NoRaise = contextlib.nullcontext()
 NotASecret = pytest.raises(config_secrets.NotASecret)
+ExcGroup = pytest.raises(ExceptionGroup)
 
 
 SECRET_NAME = "TEST_SECRET"
@@ -16,6 +18,20 @@ SECRET_VALUE = "DEADBEEF"
 SECRET_FILE_PATH = "./very_seekrit"
 ENV_VAR_NAME = "TEST_ENV_VAR"
 COMMAND = "cat"
+ERROR_MISS = object()
+
+SECRET_NAME_1 = "TEST_SECRET"
+SECRET_NAME_2 = "OTHER_SECRET"
+SECRET_CONFIG_1 = config_secrets.SecretConfig(secret_name=SECRET_NAME_1)
+SECRET_CONFIG_2 = config_secrets.SecretConfig(secret_name=SECRET_NAME_2)
+ENV_VAR_MISS = config_secrets.EnvVarSecretSource(
+    secret_name=SECRET_NAME,
+    env_var_name="NONESUCH",
+)
+ENV_VAR_HIT = config_secrets.EnvVarSecretSource(
+    secret_name=SECRET_NAME,
+    env_var_name=ENV_VAR_NAME,
+)
 
 
 @pytest.mark.parametrize(
@@ -491,3 +507,59 @@ def test_strip_secret_prefix(config_str, expectation, expected):
 
     if expected is not None:
         assert found == expected
+
+
+@pytest.mark.parametrize(
+    "sources, expectation, expected",
+    [
+        ([ENV_VAR_MISS], ExcGroup, ERROR_MISS),
+        ([ENV_VAR_MISS, ENV_VAR_HIT], NoRaise, SECRET_VALUE),
+    ],
+)
+@mock.patch("os.urandom")
+def test_get_secret_secret_ctor_w_sources(
+    o_ur,
+    sources,
+    expectation,
+    expected,
+):
+    secret_config = config_secrets.SecretConfig(
+        secret_name=SECRET_NAME,
+        sources=sources,
+    )
+
+    env_patch = {ENV_VAR_NAME: SECRET_VALUE}
+
+    with mock.patch.dict("os.environ", clear=True, **env_patch):
+        with expectation:
+            found = config_secrets.get_secret(secret_config)
+
+    if expected is not ERROR_MISS:
+        assert found == expected
+
+
+@pytest.mark.parametrize(
+    "secret_configs, expectation",
+    [
+        ((), NoRaise),
+        ([SECRET_CONFIG_1], ExcGroup),
+        ([SECRET_CONFIG_1, SECRET_CONFIG_2], ExcGroup),
+    ],
+)
+@mock.patch("soliplex.config.secrets.get_secret")
+def test_resolve_secrets(gs, secret_configs, expectation):
+    gs.side_effect = secrets.SecretError("testing")
+
+    with mock.patch("os.environ", clear=True):
+        with expectation as expected:
+            config_secrets.resolve_secrets(secret_configs)
+
+    if expected is not None:
+        assert len(expected.value.exceptions) == len(secret_configs)
+
+        for secret_config, gs_call in zip(
+            secret_configs,
+            gs.call_args_list,
+            strict=True,
+        ):
+            assert gs_call == mock.call(secret_config)

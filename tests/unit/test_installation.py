@@ -74,7 +74,7 @@ def test_user() -> models.UserProfile:
         ({SECRET_NAME_1: SECRET_CONFIG_1}, NoRaise),
     ],
 )
-@mock.patch("soliplex.secrets.get_secret")
+@mock.patch("soliplex.config.secrets.get_secret")
 def test_installation_get_secret(gs, secrets_map, expectation):
     i_config = mock.create_autospec(
         config_installation.InstallationConfig,
@@ -101,7 +101,7 @@ def test_installation_get_secret(gs, secrets_map, expectation):
         ([SECRET_CONFIG_1, SECRET_CONFIG_2], RaisesSecretError),
     ],
 )
-@mock.patch("soliplex.secrets.resolve_secrets")
+@mock.patch("soliplex.config.secrets.resolve_secrets")
 def test_installation_resolve_secrets(srs, secret_configs, expectation):
     i_config = mock.create_autospec(
         config_installation.InstallationConfig,
@@ -1298,7 +1298,7 @@ def mcp_apps():
 @mock.patch("soliplex.loggers.ProcessLifetimeAuditLog")
 @mock.patch("soliplex.installation.add_no_auth_user_as_admin")
 @mock.patch("soliplex.installation.apply_logfire_configuration")
-@mock.patch("soliplex.secrets.resolve_secrets")
+@mock.patch("soliplex.config.secrets.resolve_secrets")
 @mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
 @mock.patch("soliplex.config.routing.add_registered_routers")
 @mock.patch("soliplex.config.installation.load_installation")
