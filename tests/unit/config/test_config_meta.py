@@ -1,7 +1,5 @@
 import contextlib
 import copy
-import warnings
-from unittest import mock
 
 import _test_features as agui_features
 import _test_metaconfig
@@ -254,90 +252,6 @@ meta:
 NoRaise = contextlib.nullcontext()
 
 
-def test_configmeta_from_yaml_w_importable_name():
-    config_yaml = "_test_metaconfig.DummyConfigClass"
-
-    with warnings.catch_warnings(record=True) as warned:
-        meta = config_meta.ConfigMeta.from_yaml(config_yaml)
-
-    assert meta.config_klass is _test_metaconfig.DummyConfigClass
-    assert meta.wrapper_klass is None
-    assert meta.registered_func is None
-
-    (warning,) = warned
-    assert str(warning.message) == config_meta.CONFIG_META_DEPRECATED
-    assert warning.category is DeprecationWarning
-
-
-@pytest.mark.parametrize("w_regfunc", [False, True])
-@pytest.mark.parametrize("w_wrapper", [False, True])
-def test_configmeta_from_yaml_w_dict(w_wrapper, w_regfunc):
-    config_klass = mock.Mock()
-    wrapper_klass = mock.Mock()
-    registered_func = mock.Mock()
-
-    config_yaml = {"config_klass": config_klass}
-
-    if w_wrapper:
-        config_yaml["wrapper_klass"] = wrapper_klass
-
-    if w_regfunc:
-        config_yaml["registered_func"] = registered_func
-
-    with warnings.catch_warnings(record=True) as warned:
-        meta = config_meta.ConfigMeta.from_yaml(config_yaml)
-
-    assert meta.config_klass is config_klass
-
-    if w_wrapper:
-        assert meta.wrapper_klass is wrapper_klass
-    else:
-        assert meta.wrapper_klass is None
-
-    if w_regfunc:
-        assert meta.registered_func is registered_func
-    else:
-        assert meta.registered_func is None
-
-    (warning,) = warned
-    assert str(warning.message) == config_meta.CONFIG_META_DEPRECATED
-    assert warning.category is DeprecationWarning
-
-
-@pytest.mark.parametrize("w_regfunc", [False, True])
-@pytest.mark.parametrize("w_wrapper", [False, True])
-def test_configmeta_from_yaml_w_dict_w_names(
-    w_wrapper,
-    w_regfunc,
-):
-    config_yaml = {"config_klass": "_test_metaconfig.DummyConfigClass"}
-
-    if w_wrapper:
-        config_yaml["wrapper_klass"] = "_test_metaconfig.DummyWrapperClass"
-
-    if w_regfunc:
-        config_yaml["registered_func"] = "_test_metaconfig.dummy_jsonpath_func"
-
-    with warnings.catch_warnings(record=True) as warned:
-        meta = config_meta.ConfigMeta.from_yaml(config_yaml)
-
-    assert meta.config_klass is _test_metaconfig.DummyConfigClass
-
-    if w_wrapper:
-        assert meta.wrapper_klass is _test_metaconfig.DummyWrapperClass
-    else:
-        assert meta.wrapper_klass is None
-
-    if w_regfunc:
-        assert meta.registered_func is _test_metaconfig.dummy_jsonpath_func
-    else:
-        assert meta.registered_func is None
-
-    (warning,) = warned
-    assert str(warning.message) == config_meta.CONFIG_META_DEPRECATED
-    assert warning.category is DeprecationWarning
-
-
 @pytest.mark.parametrize(
     "w_source_kw, exp_source",
     [
@@ -362,61 +276,23 @@ def test_agui_featureconfigmeta_from_yaml(w_source_kw, exp_source):
     assert meta.source == exp_source
 
 
-@pytest.mark.parametrize(
-    "w_depr_kw",
-    [
-        {},
-        {"wrapper_klass": "dummy.nonesuch_wrapper"},
-        {"registered_func": "dummy.nonesuch_func"},
-        {
-            "wrapper_klass": "dummy.nonesuch_wrapper",
-            "registered_func": "dummy.nonesuch_func",
-        },
-    ],
-)
 @pytest.mark.parametrize("w_bare_str", [False, True])
-def test_toolconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+def test_toolconfigmeta_from_yaml(w_bare_str):
     tool_config_klassname = "_test_metaconfig.DummyToolConfig"
 
     if w_bare_str:
         yaml_config = tool_config_klassname
     else:
-        yaml_config = {
-            "config_klass": tool_config_klassname,
-        } | w_depr_kw
+        yaml_config = {"config_klass": tool_config_klassname}
 
-    with warnings.catch_warnings(record=True) as warned:
-        found = config_meta.ToolConfigMeta.from_yaml(yaml_config)
+    found = config_meta.ToolConfigMeta.from_yaml(yaml_config)
 
     assert found.config_klass is _test_metaconfig.DummyToolConfig
     assert found.tool_name == _test_metaconfig.DummyToolConfig.tool_name
 
-    if not w_bare_str:
-        assert len(warned) == len(w_depr_kw)
 
-        messages = []
-        for warning in warned:
-            assert warning.category is DeprecationWarning
-            messages.append(str(warning.message))
-
-        for key in w_depr_kw:
-            assert any(key in message for message in messages)
-
-
-@pytest.mark.parametrize(
-    "w_depr_kw",
-    [
-        {},
-        {"wrapper_klass": "dummy.nonesuch_wrapper"},
-        {"registered_func": "dummy.nonesuch_func"},
-        {
-            "wrapper_klass": "dummy.nonesuch_wrapper",
-            "registered_func": "dummy.nonesuch_func",
-        },
-    ],
-)
 @pytest.mark.parametrize("w_bare_str", [False, True])
-def test_mcp_toolsetconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+def test_mcp_toolsetconfigmeta_from_yaml(w_bare_str):
     tool_config_klassname = "_test_metaconfig.DummyToolConfig"
 
     if w_bare_str:
@@ -424,76 +300,32 @@ def test_mcp_toolsetconfigmeta_from_yaml(w_bare_str, w_depr_kw):
     else:
         yaml_config = {
             "config_klass": tool_config_klassname,
-        } | w_depr_kw
+        }
 
-    with warnings.catch_warnings(record=True) as warned:
-        found = config_meta.MCP_ToolsetConfigMeta.from_yaml(yaml_config)
+    found = config_meta.MCP_ToolsetConfigMeta.from_yaml(yaml_config)
 
     assert found.config_klass is _test_metaconfig.DummyToolConfig
     assert found.kind == _test_metaconfig.DummyToolConfig.kind
 
-    if not w_bare_str:
-        assert len(warned) == len(w_depr_kw)
 
-        messages = []
-        for warning in warned:
-            assert warning.category is DeprecationWarning
-            messages.append(str(warning.message))
-
-        for key in w_depr_kw:
-            assert any(key in message for message in messages)
-
-
-@pytest.mark.parametrize(
-    "w_depr_kw",
-    [
-        {},
-        {"registered_func": "dummy.nonesuch_func"},
-    ],
-)
-def test_mcp_servertoolwrapperconfigmeta_from_yaml(w_depr_kw):
+def test_mcp_servertoolwrapperconfigmeta_from_yaml():
     tool_config_klassname = "_test_metaconfig.DummyToolConfig"
     wrapper_klassname = "_test_metaconfig.DummyMCPWrapper"
 
     yaml_config = {
         "config_klass": tool_config_klassname,
         "wrapper_klass": wrapper_klassname,
-    } | w_depr_kw
+    }
 
-    with warnings.catch_warnings(record=True) as warned:
-        found = config_meta.MCP_ServerToolWrapperConfigMeta.from_yaml(
-            yaml_config,
-        )
+    found = config_meta.MCP_ServerToolWrapperConfigMeta.from_yaml(yaml_config)
 
     assert found.config_klass is _test_metaconfig.DummyToolConfig
     assert found.wrapper_klass is _test_metaconfig.DummyMCPWrapper
     assert found.tool_name == _test_metaconfig.DummyToolConfig.tool_name
 
-    assert len(warned) == len(w_depr_kw)
 
-    messages = []
-    for warning in warned:
-        assert warning.category is DeprecationWarning
-        messages.append(str(warning.message))
-
-    for key in w_depr_kw:
-        assert any(key in message for message in messages)
-
-
-@pytest.mark.parametrize(
-    "w_depr_kw",
-    [
-        {},
-        {"wrapper_klass": "dummy.nonesuch_wrapper"},
-        {"registered_func": "dummy.nonesuch_func"},
-        {
-            "wrapper_klass": "dummy.nonesuch_wrapper",
-            "registered_func": "dummy.nonesuch_func",
-        },
-    ],
-)
 @pytest.mark.parametrize("w_bare_str", [False, True])
-def test_skillconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+def test_skillconfigmeta_from_yaml(w_bare_str):
     skill_config_klassname = "_test_metaconfig.DummySkillConfig"
 
     if w_bare_str:
@@ -501,141 +333,59 @@ def test_skillconfigmeta_from_yaml(w_bare_str, w_depr_kw):
     else:
         yaml_config = {
             "config_klass": skill_config_klassname,
-        } | w_depr_kw
+        }
 
-    with warnings.catch_warnings(record=True) as warned:
-        found = config_meta.SkillConfigMeta.from_yaml(yaml_config)
+    found = config_meta.SkillConfigMeta.from_yaml(yaml_config)
 
     assert found.config_klass is _test_metaconfig.DummySkillConfig
     assert found.kind == _test_metaconfig.DummySkillConfig.kind
 
-    if not w_bare_str:
-        assert len(warned) == len(w_depr_kw)
 
-        messages = []
-        for warning in warned:
-            assert warning.category is DeprecationWarning
-            messages.append(str(warning.message))
-
-        for key in w_depr_kw:
-            assert any(key in message for message in messages)
-
-
-@pytest.mark.parametrize(
-    "w_depr_kw",
-    [
-        {},
-        {"wrapper_klass": "dummy.nonesuch_wrapper"},
-        {"registered_func": "dummy.nonesuch_func"},
-        {
-            "wrapper_klass": "dummy.nonesuch_wrapper",
-            "registered_func": "dummy.nonesuch_func",
-        },
-    ],
-)
 @pytest.mark.parametrize("w_bare_str", [False, True])
-def test_agentcapabilityconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+def test_agentcapabilityconfigmeta_from_yaml(w_bare_str):
     capability_klassname = "_test_metaconfig.DummyAgentCapability"
     exp_cap_klass = _test_metaconfig.DummyAgentCapability
 
     if w_bare_str:
         yaml_config = capability_klassname
     else:
-        yaml_config = {
-            "config_klass": capability_klassname,
-        } | w_depr_kw
+        yaml_config = {"config_klass": capability_klassname}
 
-    with warnings.catch_warnings(record=True) as warned:
-        found = config_meta.AgentCapabilityMeta.from_yaml(yaml_config)
+    found = config_meta.AgentCapabilityMeta.from_yaml(yaml_config)
 
     assert found.config_klass is exp_cap_klass
     assert found.capability_name == exp_cap_klass.__name__
 
-    if not w_bare_str:
-        assert len(warned) == len(w_depr_kw)
 
-        messages = []
-        for warning in warned:
-            assert warning.category is DeprecationWarning
-            messages.append(str(warning.message))
-
-        for key in w_depr_kw:
-            assert any(key in message for message in messages)
-
-
-@pytest.mark.parametrize(
-    "w_depr_kw",
-    [
-        {},
-        {"wrapper_klass": "dummy.nonesuch_wrapper"},
-        {"registered_func": "dummy.nonesuch_func"},
-        {
-            "wrapper_klass": "dummy.nonesuch_wrapper",
-            "registered_func": "dummy.nonesuch_func",
-        },
-    ],
-)
 @pytest.mark.parametrize("w_bare_str", [False, True])
-def test_agentconfigmeta_from_yaml(w_bare_str, w_depr_kw):
+def test_agentconfigmeta_from_yaml(w_bare_str):
     agent_config_klassname = "_test_metaconfig.DummyAgentConfig"
 
     if w_bare_str:
         yaml_config = agent_config_klassname
     else:
-        yaml_config = {
-            "config_klass": agent_config_klassname,
-        } | w_depr_kw
+        yaml_config = {"config_klass": agent_config_klassname}
 
-    with warnings.catch_warnings(record=True) as warned:
-        found = config_meta.AgentConfigMeta.from_yaml(yaml_config)
+    found = config_meta.AgentConfigMeta.from_yaml(yaml_config)
 
     assert found.config_klass is _test_metaconfig.DummyAgentConfig
     assert found.kind == _test_metaconfig.DummyAgentConfig.kind
 
-    if not w_bare_str:
-        assert len(warned) == len(w_depr_kw)
 
-        messages = []
-        for warning in warned:
-            assert warning.category is DeprecationWarning
-            messages.append(str(warning.message))
-
-        for key in w_depr_kw:
-            assert any(key in message for message in messages)
-
-
-@pytest.mark.parametrize(
-    "w_depr_kw",
-    [
-        {},
-        {"wrapper_klass": "dummy.nonesuch_wrapper"},
-    ],
-)
-def test_secretsourcemeta_from_yaml(w_depr_kw):
+def test_secretsourcemeta_from_yaml():
     secret_source_klassname = "_test_metaconfig.DummySecretSource"
     registered_funcname = "_test_metaconfig.dummy_secret_getter"
 
     yaml_config = {
         "config_klass": secret_source_klassname,
         "registered_func": registered_funcname,
-    } | w_depr_kw
+    }
 
-    with warnings.catch_warnings(record=True) as warned:
-        found = config_meta.SecretSourceMeta.from_yaml(yaml_config)
+    found = config_meta.SecretSourceMeta.from_yaml(yaml_config)
 
     assert found.config_klass is _test_metaconfig.DummySecretSource
     assert found.registered_func is _test_metaconfig.dummy_secret_getter
     assert found.kind == _test_metaconfig.DummySecretSource.kind
-
-    assert len(warned) == len(w_depr_kw)
-
-    messages = []
-    for warning in warned:
-        assert warning.category is DeprecationWarning
-        messages.append(str(warning.message))
-
-    for key in w_depr_kw:
-        assert any(key in message for message in messages)
 
 
 def test_jsonpathfunctionconfigmeta_from_yaml():
