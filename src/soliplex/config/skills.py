@@ -176,22 +176,6 @@ class FilesystemSkillConfig:
         return self._validation_errors
 
     @property
-    def license(self) -> None:
-        return None
-
-    @property
-    def compatibility(self) -> None:
-        return None
-
-    @property
-    def allowed_tools(self) -> list[str]:
-        return []
-
-    @property
-    def metadata(self) -> dict[str, str]:
-        return {}
-
-    @property
     def extra_parameters(self) -> dict[str, pathlib.Path]:
         return {"path": self.path}
 
@@ -263,22 +247,6 @@ class _HaikuRAGCapabilityConfig(
                 self.rag_lancedb_override_path
             )
         return result
-
-    @property
-    def license(self) -> None:
-        return None
-
-    @property
-    def compatibility(self) -> None:
-        return None
-
-    @property
-    def allowed_tools(self) -> list[str]:
-        return []
-
-    @property
-    def metadata(self) -> dict[str, str]:
-        return {}
 
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:
@@ -363,22 +331,6 @@ class _HaikuRAGEvidenceSkillConfig:
     @property
     def as_yaml(self) -> dict:
         return {"kind": self.kind}
-
-    @property
-    def license(self) -> None:
-        return None
-
-    @property
-    def compatibility(self) -> None:
-        return None
-
-    @property
-    def allowed_tools(self) -> list[str]:
-        return []
-
-    @property
-    def metadata(self) -> dict[str, str]:
-        return {}
 
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:
@@ -500,22 +452,6 @@ class BwrapSandboxSkillConfig:
         return result
 
     @property
-    def license(self) -> None:
-        return None
-
-    @property
-    def compatibility(self) -> None:
-        return None
-
-    @property
-    def allowed_tools(self) -> list[str]:
-        return []
-
-    @property
-    def metadata(self) -> dict[str, str]:
-        return {}
-
-    @property
     def extra_parameters(self) -> dict[str, typing.Any]:
         result = {"default_environment": self.default_environment}
         if self.allowed_environments is not None:
@@ -608,22 +544,6 @@ class EntrypointCapabilityConfig:
     @property
     def as_yaml(self) -> dict:
         return {"kind": self.kind, "name": self.name, **self.params}
-
-    @property
-    def license(self) -> None:
-        return None
-
-    @property
-    def compatibility(self) -> None:
-        return None
-
-    @property
-    def allowed_tools(self) -> list[str]:
-        return []
-
-    @property
-    def metadata(self) -> dict[str, str]:
-        return {}
 
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:
