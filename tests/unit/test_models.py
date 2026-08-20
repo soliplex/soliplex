@@ -452,13 +452,6 @@ def test_skill_from_config_w_fssc(filesystem_skill_config):
     assert found.source == config_skills.SkillKind.FILESYSTEM
     assert found.name == filesystem_skill_config.name
     assert found.description == filesystem_skill_config.description
-    assert found.license == filesystem_skill_config.license
-    assert found.compatibility == filesystem_skill_config.compatibility
-    assert found.allowed_tools == " ".join(
-        filesystem_skill_config.allowed_tools,
-    )
-    assert found.metadata == filesystem_skill_config.metadata
-
     assert found.state_type_schema is None
     assert found.state_namespace is None
     assert found.extra_parameters == {"path": filesystem_skill_config.path}
@@ -480,12 +473,6 @@ def test_skill_from_config_w_hrrsc(hr_rag_skill_config):
     assert found.source == config_skills.SkillKind.NATIVE
     assert found.name == hr_rag_skill_config.name
     assert found.description == hr_rag_skill_config.description
-    assert found.license == hr_rag_skill_config.license
-    assert found.compatibility == hr_rag_skill_config.compatibility
-    assert found.allowed_tools == " ".join(
-        hr_rag_skill_config.allowed_tools,
-    )
-    assert found.metadata == hr_rag_skill_config.metadata
     assert found.state_type_schema == hr_rag.RAGState.model_json_schema()
     assert found.state_namespace == hr_rag.STATE_NAMESPACE
     assert found.extra_parameters == {
@@ -504,12 +491,6 @@ def test_skill_from_config_w_bwssc(bwrap_sandbox_skill_config):
     assert found.source == config_skills.SkillKind.NATIVE
     assert found.name == bwrap_sandbox_skill_config.name
     assert found.description == bwrap_sandbox_skill_config.description
-    assert found.license == bwrap_sandbox_skill_config.license
-    assert found.compatibility == bwrap_sandbox_skill_config.compatibility
-    assert found.allowed_tools == " ".join(
-        bwrap_sandbox_skill_config.allowed_tools,
-    )
-    assert found.metadata == bwrap_sandbox_skill_config.metadata
     assert found.state_type_schema is None
     assert found.state_namespace is None
     assert found.extra_parameters == {
@@ -522,10 +503,6 @@ def test_skill_from_config_without_extra_parameters():
     skill_config.source = config_skills.SkillKind.FILESYSTEM
     skill_config.name = SKILL_NAME
     skill_config.description = SKILL_DESC
-    skill_config.license = None
-    skill_config.compatibility = None
-    skill_config.allowed_tools = []
-    skill_config.metadata = {}
     skill_config.state_type = None
     skill_config.state_namespace = None
     skill_config.extra_parameters = {}

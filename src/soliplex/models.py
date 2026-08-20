@@ -143,10 +143,6 @@ class Skill(pydantic.BaseModel):
     source: config_skills.SkillKind | None = None
     name: str
     description: str
-    license: str | None
-    compatibility: str | None
-    allowed_tools: SkillAllowedTools = None
-    metadata: SkillMetadata = None
     state_type_schema: dict[str, typing.Any] | None = None
     state_namespace: str | None = None
     extra_parameters: dict[str, typing.Any] = {}
@@ -168,10 +164,6 @@ class Skill(pydantic.BaseModel):
             source=skill_config.source,
             name=skill_config.name,
             description=skill_config.description,
-            license=skill_config.license,
-            compatibility=skill_config.compatibility,
-            allowed_tools=" ".join(skill_config.allowed_tools),
-            metadata=skill_config.metadata,
             state_namespace=skill_config.state_namespace,
             **kwargs,
         )

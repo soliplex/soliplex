@@ -57,10 +57,6 @@ def test_filesystem_skill_config_properties(temp_dir):
     assert config.state_type is None
     assert config.state_namespace is None
     assert config.agui_feature_names == ()
-    assert config.license is None
-    assert config.compatibility is None
-    assert config.allowed_tools == []
-    assert config.metadata == {}
     assert config.extra_parameters == {"path": path}
 
 
@@ -133,10 +129,6 @@ def test_haiku_rag_capability_config(
     assert state_namespace in config_agui.AGUI_FEATURES_BY_NAME
 
     assert config.source is config_skills.SkillKind.NATIVE
-    assert config.license is None
-    assert config.compatibility is None
-    assert config.allowed_tools == []
-    assert config.metadata == {}
     assert config.extra_parameters == {"rag_lancedb_path": db_path}
     assert config.rag_lancedb_override_path == db_path
     assert config.as_yaml == {
@@ -261,10 +253,6 @@ def test_bwrap_sandbox_config_from_yaml(installation_config, temp_dir):
     assert config.state_type is None
     assert config.state_namespace is None
     assert config.agui_feature_names == ()
-    assert config.license is None
-    assert config.compatibility is None
-    assert config.allowed_tools == []
-    assert config.metadata == {}
     assert config.extra_parameters == {
         "default_environment": "python",
         "allowed_environments": ["python"],
@@ -575,10 +563,6 @@ def test_entrypoint_capability_config_stateful(
     assert config.state_type is _FakeState
     assert config.agui_feature_names == ("entrypoint-test",)
     assert config.source is config_skills.SkillKind.ENTRYPOINT
-    assert config.license is None
-    assert config.compatibility is None
-    assert config.allowed_tools == []
-    assert config.metadata == {}
     assert config.extra_parameters == {"foo": "bar"}
     assert config.as_yaml == {
         "kind": "entrypoint",
@@ -701,10 +685,6 @@ def test_haiku_rag_evidence_skill_config(
     assert config.state_namespace == exp_namespace
     assert config.as_yaml == {"kind": exp_kind}
     assert config.extra_parameters == {}
-    assert config.allowed_tools == []
-    assert config.license is None
-    assert config.compatibility is None
-    assert config.metadata == {}
 
     # A namespace a client can read is advertised as a feature; a
     # capability which owns none advertises nothing.
