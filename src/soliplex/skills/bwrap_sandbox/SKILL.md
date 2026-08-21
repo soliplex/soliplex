@@ -110,7 +110,7 @@ and may not be the environment you want.
 
    ```python
    run(command=["head", "-n", "5", "/sandbox/volumes/thread/orders.csv"],
-       environment_name="bare")
+       environment_name="default")
    ```
 
    (or `["wc", "-l", <path>]`, `["file", <path>]`, etc.).  For anything
@@ -122,7 +122,7 @@ and may not be the environment you want.
    argument to `run_python`:
 
    ```python
-   run_python(script="<python source>", environment_name="bare")
+   run_python(script="<python source>", environment_name="default")
    ```
 
    Write the whole program as a single string, and use real newlines between
@@ -165,7 +165,7 @@ and may not be the environment you want.
 Task: user uploads `orders.csv` and asks "what's the total order value?".
 A full run looks like:
 
-1. `list_environments()` — shows one environment named `bare`
+1. `list_environments()` — shows one environment named `default`
    with `pandas` in its dependencies. Use it.
 
 2. `list_volume_files("thread")` — returns
@@ -181,7 +181,7 @@ A full run looks like:
    df = pd.read_csv('/sandbox/volumes/thread/orders.csv')
    print(f"Total: {df['amount'].sum():.2f}")
    """,
-       environment_name="bare",
+       environment_name="default",
    )
    ```
 
