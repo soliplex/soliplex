@@ -65,7 +65,7 @@ and may not be the environment you want.
 
    ```python
    {
-      "name": "bare",
+      "name": "default",
       "description": "Minimal Python",
       "dependencies": ["pandas"],
    }
