@@ -150,8 +150,8 @@ async def test_skill_list_environments(
 @pytest.mark.parametrize(
     "volume, expected",
     [
-        ("thread", ["thread_file.txt"]),
-        ("room", ["room_file.txt"]),
+        ("thread", ["/sandbox/volumes/thread/thread_file.txt"]),
+        ("room", ["/sandbox/volumes/room/room_file.txt"]),
         ("nonesuch", []),
     ],
 )

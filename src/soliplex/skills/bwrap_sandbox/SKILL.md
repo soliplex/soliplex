@@ -1,9 +1,10 @@
 ---
-name: bwrap-sandbox
+name: bubble-sandbox
 description: |
     This skill runs Python in a bubblewrap
-    sandbox. Each run has a persistent working directory and read-only
-    access to uploaded files mounted under '/sandbox/volumes'.
+    sandbox. Each run gets a scratch working directory that lasts for the
+    duration of that run, plus read-only access to uploaded files mounted
+    under '/sandbox/volumes'.
 ---
 
 # Sandbox
@@ -15,17 +16,17 @@ Use it to compute results from files.
 
 Use the sandbox if **any** of these is true:
 
-- The task references one or mor files uploaded
-  under `sandbox/volumes/thread` or `sandbox/volumes/room`.
+- The task references one or more files uploaded
+  under `/sandbox/volumes/thread` or `/sandbox/volumes/room`.
 - The task asks for a number, count, table, or other value derived from data.
 - You were about to state a computed result without actually computing it.
 
 Do NOT use the sandbox if **any** of these is true:
 
 - The question is about definitions, explanations, or concepts.
-- The answer is a already stated in the conversation.
+- The answer is already stated in the conversation.
 - The task is to write code for the user to run, not to execute code yourself.
-- The task is value ("analyze the files", "take a look")
+- The task is vague ("analyze the files", "take a look")
   with no concrete question. Ask the user what they want to know
   before running anything.
 
@@ -43,11 +44,19 @@ Do NOT use the sandbox if **any** of these is true:
 
 - `list_environments()` — returns available Python environments,
   each with a `name`, `description`, and set of installed `dependencies`.
-- `list_volume_files(volume_name)` — returns a list of absolue paths of files
-  within the given volume (`"thread"` or `"room"`).
-- `run(environment, *command_args)` — run a an arbitrary shell command
-   in the sandbox.
-- `run_python(environment, script_text)` — run a Python script string.
+- `list_volume_files(volume)` — returns the sandbox paths of the files in
+  the given volume. `volume` is `"thread"` or `"room"`.
+- `run(command, environment_name=None, timeout=None)` — run a shell command
+  in the sandbox. `command` is either a single string (run via `sh -c`) or a
+  list of strings (executable first, then one element per argument).
+- `run_python(script, environment_name=None, timeout=None)` — run a Python
+  script. `script` is the full source as one string.
+
+On `run` and `run_python`, `environment_name` and `timeout` are both
+optional and fall back to the values this skill was configured with.
+Always pass `environment_name` explicitly, using a name that
+`list_environments` returned — the configured default is not visible to you
+and may not be the environment you want.
 
 ## Workflow
 
@@ -67,9 +76,9 @@ Do NOT use the sandbox if **any** of these is true:
      is not configured — do not proceed.
    - If the list contains exactly one environment, use its `name`.
    - Otherwise, pick the `name` of the first environment whose `dependencies`
-     include a library the task needs (e.g, `pandas` for tabular data,
-     `numpy` for numeric work, `pillow` for images).  If no environments match,
-     use 'name' of the first entry in the list.
+     include a library the task needs (e.g. `pandas` for tabular data,
+     `numpy` for numeric work, `pillow` for images).  If no environments
+     match, use the `name` of the first entry in the list.
 
 2. **List files in both volumes.**  This step is mandatory — do not skip it,
    even if the task seems to involve one volume.  Run both:
@@ -79,30 +88,41 @@ Do NOT use the sandbox if **any** of these is true:
    list_volume_files("room")
    ```
 
-   Each tool prints one absolute path line, or nothing if the volume is empty:
+   Each call returns a list of absolute paths as seen from inside the
+   sandbox, or an empty list if the volume has no files:
 
    ```python
-   /sandbox/volumes/thread/orders.csv
-   /sandbox/volumes/thread/notes.txt
+   ["/sandbox/volumes/thread/orders.csv",
+    "/sandbox/volumes/thread/notes.txt"]
    ```
 
-   If both commands print no files, proceed without inputs.
+   Pass these paths straight to `run` or `run_python` — they are already
+   the paths your script should open.
+
+   If both calls return no files, proceed without inputs.
 
 3. **Read only the files you need.** Do not dump every file — pick the
    ones the task actually requires. If `room` has any files, read them too:
    they often contain rules or reference data the task depends on.
 
-   To peek at a file's shape before writing analysis code, use the `run` tool,
-   e.g. `run(environment, "head", "-n", "5", <path>)` (or `"wc", "-l"`,
-   `"file"`, etc.).  For anything beyond a quick peek — parsing, filtering,
-   joining — read it inside a the script call in step 4 rather than running
-   `"cat"` on the whole file.
+   To peek at a file's shape before writing analysis code, use the `run`
+   tool with a list `command`, e.g.
 
-4. **Run a Python script in the sandbox.** Pass the source as the `script_text`
+   ```python
+   run(command=["head", "-n", "5", "/sandbox/volumes/thread/orders.csv"],
+       environment_name="bare")
+   ```
+
+   (or `["wc", "-l", <path>]`, `["file", <path>]`, etc.).  For anything
+   beyond a quick peek — parsing, filtering, joining — read the file inside
+   the script you pass to `run_python` in step 4 rather than running `cat`
+   on the whole file.
+
+4. **Run a Python script in the sandbox.** Pass the source as the `script`
    argument to `run_python`:
 
    ```python
-   run_python(environment, script_text="<python source>")
+   run_python(script="<python source>", environment_name="bare")
    ```
 
    Write the whole program as a single string, and use real newlines between
@@ -145,17 +165,24 @@ Do NOT use the sandbox if **any** of these is true:
 Task: user uploads `orders.csv` and asks "what's the total order value?".
 A full run looks like:
 
-1. `list_environments()` — shows one environment named `default`
+1. `list_environments()` — shows one environment named `bare`
    with `pandas` in its dependencies. Use it.
 
-2. `list_volume_files("thread")` — lists `/sandbox/volumes/thread/orders.csv`.
-   `list_volume_files("room")` — prints no files.
+2. `list_volume_files("thread")` — returns
+   `["/sandbox/volumes/thread/orders.csv"]`.
+   `list_volume_files("room")` — returns `[]`.
    Continue with just the thread input.
 
 3. Run:
 
    ```python
-   run_python("default", script_text="import pandas as pd; df = pd.read_csv('/sandbox/volumes/thread/orders.csv'); print(f\"Total: {df['amount'].sum():.2f}\")"
+   run_python(
+       script="""import pandas as pd
+   df = pd.read_csv('/sandbox/volumes/thread/orders.csv')
+   print(f"Total: {df['amount'].sum():.2f}")
+   """,
+       environment_name="bare",
+   )
    ```
 
    — prints `Total: 48215.00`.

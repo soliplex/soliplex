@@ -16,13 +16,14 @@ from soliplex import sandbox_audit
 
 VolumeName = typing.Literal["thread"] | typing.Literal["room"]
 
+# Where 'bubble_sandbox' bind-mounts named volumes inside the
+# sandbox (see 'bubble_sandbox.sandbox.volume_sandbox_args').
+SANDBOX_VOLUMES_PATH = "/sandbox/volumes"
+
 CAPABILITY_NAME = "bubble-sandbox"
 CAPABILITY_DESCRIPTION = """\
 Write and execute Python code in a bubblewrap sandbox
 """
-
-
-EnvironmentInfo = dict[str, str]
 
 
 LIST_ENVIRONMENTS_DESCRIPTION = """
@@ -44,7 +45,7 @@ async def skill_list_environments(
     *,
     bwrap_sandbox: bs_sandbox.BwrapSandbox,
     allowed_environments: AllowedEnvironments = None,
-) -> list[EnvironmentInfo]:
+) -> list[bs_models.EnvironmentInfo]:
     candidates = bwrap_sandbox.config.list_environments()
     if allowed_environments is not None:
         return [env for env in candidates if env.name in allowed_environments]
@@ -53,42 +54,46 @@ async def skill_list_environments(
 
 
 RUN_DESCRIPTION = """\
-Execute a shell command in the working directory.
+Run a shell command inside the bubblewrap sandbox.
 
-IMPORTANT: This tool is for operations that REQUIRE a real shell — \
-running tests, builds, git commands, package installs, running scripts.
+IMPORTANT: Prefer the ``run_python`` tool for anything that parses, \
+filters, or aggregates data. Use this tool for quick inspection of an \
+input file -- checking its size, type, or first few lines before \
+writing a script against it.
 
 ## Usage
-- To run a command requiring shell support, pass the command as a single \
-string; the skill will then pass it to a shell via "sh -c".
-- To run a command which does not require shell support, pass a list of \
-strings, where the first element is the name or path of the executable \
-to run, and the remaining elements are arguments to that executable.
-- Always quote file paths containing spaces with double quotes.
-- Prefer absolute paths over relative paths.
-- When running multiple independent commands, make separate `execute` calls \
-in a single response (parallel execution).
-- When commands depend on each other, chain with `&&` in a single call \
-(e.g., `cd /project && make test`).
-- For long-running commands (builds, large test suites), increase the timeout.
+- To run a command needing shell features (pipes, redirection, ``&&``), \
+pass ``command`` as a single string; it is run via "sh -c".
+- Otherwise pass ``command`` as a list of strings: the executable name \
+or path first, then one element per argument. This form needs no \
+quoting and is the safer default.
+- ``environment_name`` selects the environment to run in; omit it to \
+use the configured default. Call ``list_environments`` for the choices.
+- ``timeout`` caps the run in seconds; omit it to use the configured \
+default.
+- Paths must be absolute and sandbox-visible: read inputs from \
+'/sandbox/volumes/thread/' or '/sandbox/volumes/room/', and write only \
+under '/sandbox/work/'. Host paths do not exist inside the sandbox.
+- Quote any path containing spaces when using the string form.
+- When running several independent commands, make separate ``run`` \
+calls in a single response (parallel execution).
 
 ## Debugging
-- Read the FULL error output when a command fails — the root cause is often \
-in the middle of a traceback, not the last line.
-- Reproduce the error before attempting a fix.
-- Change one thing at a time — don't make multiple speculative fixes.
-- If something fails 3 times with the same approach, STOP and try a \
-completely different strategy.
-
-## Safety
-- Be careful not to introduce command injection vulnerabilities.
-- Be careful with destructive commands (`rm -rf`, `drop table`, etc.) — \
-verify the target path/object before executing.
+- Read the FULL error output when a command fails -- the root cause is \
+often in the middle of a traceback, not the last line.
+- Change one thing at a time; do not make multiple speculative fixes.
+- If the same approach fails 3 times, STOP and report the error rather \
+than retrying.
 """
 
 
-LIST_VOLUME_FILES_DESCRIPTION = """
-Return a list of absolute filenames of files in a sandbox volume
+LIST_VOLUME_FILES_DESCRIPTION = """\
+Return the sandbox paths of the files in a sandbox volume.
+
+Each entry is an absolute path as seen from inside the sandbox (for \
+example '/sandbox/volumes/thread/orders.csv'), so it can be passed \
+straight to the ``run`` and ``run_python`` tools. Returns an empty \
+list when the volume holds no files or is not configured.
 """
 
 
@@ -103,9 +108,13 @@ async def skill_list_volume_files(
         if volume_path is None:
             return []
 
+        # Report the path the sandbox sees, not the host path: the volume
+        # is bind-mounted at '/sandbox/volumes/<volume>', so the host path
+        # is both meaningless inside the sandbox and not something to leak
+        # into the prompt.
         return [
-            sub.absolute().name
-            for sub in volume_path.glob("*")
+            f"{SANDBOX_VOLUMES_PATH}/{volume}/{sub.name}"
+            for sub in sorted(volume_path.glob("*"))
             if sub.is_file()
         ]
 
@@ -121,9 +130,9 @@ async def skill_run(
     *,
     bwrap_sandbox: bs_sandbox.BwrapSandbox,
     command: str | list[str],
-    environment_name: str = None,
+    environment_name: str | None = None,
     workdir: pathlib.Path | None = None,
-    timeout: float = None,  # seconds
+    timeout: float | None = None,  # seconds
     extra_volumes: bs_models.VolumeMap = None,
 ) -> str:
     """Execute a shell command in the working directory.
@@ -133,7 +142,7 @@ async def skill_run(
         environment_name: name of sandbox environment (defaults to 'bare')
         workdir: path on host system to mount as the working directory
         timeout: Maximum execution time in seconds. Defaults to the value
-            in the 'buuble_sandbox.config.Config' used to construct
+            in the 'bubble_sandbox.config.Config' used to construct
             the toolset.
     """
     if isinstance(command, str):
@@ -164,17 +173,23 @@ RUN_PYTHON_DESCRIPTION = """\
 Execute a Python script in the sandbox environment.
 
 IMPORTANT: The ``script`` parameter must be valid Python source code. \
-Do NOT pass shell commands — use the ``execute`` tool for shell commands.
+Do NOT pass shell commands — use the ``run`` tool for those.
 
 ## Usage
 - Pass a complete, self-contained Python script as the ``script`` string.
 - The script runs via the Python interpreter built into the chosen \
 environment, with access to its pre-installed packages.
 - Use ``list_environments`` first to discover available environments \
-and their installed packages.
+and their installed packages. ``environment_name`` selects one; omit \
+it to use the configured default.
+- ``timeout`` caps the run in seconds; omit it to use the configured \
+default.
 - Print results to stdout — the output is captured and returned.
 - Use absolute paths (e.g. ``/sandbox/work/data.csv``) when \
 reading or writing files.
+- Inputs under '/sandbox/volumes/thread/' and '/sandbox/volumes/room/' \
+are read-only; write only under '/sandbox/work/'. Host paths do not \
+exist inside the sandbox.
 
 ## Debugging
 - Read the FULL error output when a script fails — the root cause is \
@@ -189,9 +204,9 @@ async def skill_run_python(
     *,
     bwrap_sandbox: bs_sandbox.BwrapSandbox,
     script: str,
-    environment_name: str = None,
+    environment_name: str | None = None,
     workdir: pathlib.Path | None = None,
-    timeout: float = None,  # seconds
+    timeout: float | None = None,  # seconds
     extra_volumes: bs_models.VolumeMap = None,
 ) -> str:
     """Execute a python script in the working directory.
@@ -201,7 +216,7 @@ async def skill_run_python(
         environment_name: name of sandbox environment (defaults to 'bare')
         workdir: path on host system to mount as the working directory
         timeout: Maximum execution time in seconds. Defaults to the value
-            in the 'buuble_sandbox.config.Config' used to construct
+            in the 'bubble_sandbox.config.Config' used to construct
             the toolset.
     """
     try:
@@ -336,7 +351,7 @@ def create_sandbox_toolset(
             up to this many times. Defaults to 1.
 
     Returns:
-        FunctionToolset with thses tools:
+        FunctionToolset with these tools:
         'list_environments, 'list_volume_files', 'run' and 'run_python'.
     """
     if sandbox_config is None:
@@ -371,7 +386,7 @@ def create_sandbox_toolset(
     @toolset.tool(description=LIST_ENVIRONMENTS_DESCRIPTION)
     async def list_environments(
         ctx: pydantic_ai.RunContext,
-    ) -> list[EnvironmentInfo]:
+    ) -> list[bs_models.EnvironmentInfo]:
         return await skill_list_environments(
             bwrap_sandbox=bwrap_sandbox,
             allowed_environments=allowed_environments,
@@ -408,8 +423,8 @@ def create_sandbox_toolset(
     async def run(
         ctx: pydantic_ai.RunContext,
         command: str | list[str],
-        environment_name: str = None,
-        timeout: float = None,  # seconds
+        environment_name: str | None = None,
+        timeout: float | None = None,  # seconds
     ) -> str:
         deps = ctx.deps
         workdir = get_workdir(
@@ -460,8 +475,8 @@ def create_sandbox_toolset(
     async def run_python(
         ctx: pydantic_ai.RunContext,
         script: str,
-        environment_name: str = None,
-        timeout: float = None,  # seconds
+        environment_name: str | None = None,
+        timeout: float | None = None,  # seconds
     ) -> str:
         deps = ctx.deps
         workdir = get_workdir(
