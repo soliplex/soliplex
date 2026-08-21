@@ -4,6 +4,7 @@
 - Allow privileged users to mark feedback a as "reviewed", "resolved".
 """
 
+import contextlib
 import datetime
 import enum
 import typing
@@ -12,10 +13,12 @@ import jsonpatch
 import pydantic
 import pydantic_ai
 from ag_ui import core as agui_core
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
 from soliplex import agui
 from soliplex.agui import parser as agui_parser
+from soliplex.agui import persistence as agui_persistence
 
 FRS = agui.FeedbackReviewStatus
 STATE_NAMESPACE = "soliplex-agui-run-feedback"
@@ -241,11 +244,28 @@ class FeedbackResolution(pydantic.BaseModel):
     note: str | None = None
 
 
-async def _do_query(
+@contextlib.asynccontextmanager
+async def _get_threads_storage(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
+):
+    """Context manager for tool-call local thread storage / session
+
+    Cannot be derived from the FastAPI request dependency, because
+    tool calls must run / complete in their own boundaries.
+    """
+    engine = ctx.deps.thread_persistence_engine
+    async with sqla_asyncio.AsyncSession(bind=engine) as session:
+        # One transaction per tool call: the storage methods no longer
+        # commit, so the tool call owns the unit of work -- committed on a
+        # clean response, rolled back if the handler raises.
+        async with session.begin():
+            yield agui_persistence.ThreadStorage(session)
+
+
+async def _do_query(
+    the_threads: agui_persistence.ThreadStorage,
     query: RecentRunFeedbackQuery,
 ) -> RecentRunFeedback:
-    the_threads = ctx.deps.the_threads
     runs_w_recent_fb = await the_threads.list_recent_run_feedback(
         **query.as_kwargs,
     )
@@ -328,7 +348,8 @@ async def query_recent_feedback(
     )
     before_state = {} if raw_state is None else {STATE_NAMESPACE: raw_state}
 
-    entries = await _do_query(ctx, query)
+    async with _get_threads_storage(ctx) as the_threads:
+        entries = await _do_query(the_threads, query)
     our_state.query = query
     our_state.entries = entries
 
@@ -390,29 +411,29 @@ async def get_feedback_run_info(
 
     to_query, _ = _find_feedback_by_run_id(our_state, run_id)
 
-    the_threads = ctx.deps.the_threads
-    run = await the_threads.get_run(
-        user_name=to_query.user_name,
-        room_id=to_query.room_id,
-        thread_id=to_query.thread_id,
-        run_id=to_query.run_id,
-    )
+    async with _get_threads_storage(ctx) as the_threads:
+        run = await the_threads.get_run(
+            user_name=to_query.user_name,
+            room_id=to_query.room_id,
+            thread_id=to_query.thread_id,
+            run_id=to_query.run_id,
+        )
 
-    thread = await run.awaitable_attrs.thread
-    email = await thread.awaitable_attrs.email
-    run_input = await run.awaitable_attrs.run_agent_input
-    parent_run_id = await run.awaitable_attrs.parent_run_id
-    events = await run.awaitable_attrs.events
+        thread = await run.awaitable_attrs.thread
+        email = await thread.awaitable_attrs.email
+        run_input = await run.awaitable_attrs.run_agent_input
+        parent_run_id = await run.awaitable_attrs.parent_run_id
+        events = await run.awaitable_attrs.events
 
-    esp = agui_parser.EventStreamParser(run_input)
+        esp = agui_parser.EventStreamParser(run_input)
 
-    for event in events:
-        try:
-            e_model = event.to_agui_model()
-        # agui_core.events.Event is not all-inclusive :<
-        except pydantic.ValidationError:  # pragma: NO COVER
-            continue
-        esp(e_model)
+        for event in events:
+            try:
+                e_model = event.to_agui_model()
+            # agui_core.events.Event is not all-inclusive :<
+            except pydantic.ValidationError:  # pragma: NO COVER
+                continue
+            esp(e_model)
 
     user_prompts = [
         message.content for message in esp.messages if message.role == "user"
@@ -471,17 +492,17 @@ async def review_recent_feedback(
         our_state, review.run_id, [FromWhichAttrs.OPENED]
     )
 
-    the_threads = ctx.deps.the_threads
     user = ctx.deps.user
-    await the_threads.review_run_feedback(
-        reviewer_user_name=user.preferred_username,
-        reviewer_email=user.email,
-        note=review.note,
-        user_name=to_review.user_name,
-        room_id=to_review.room_id,
-        thread_id=to_review.thread_id,
-        run_id=to_review.run_id,
-    )
+    async with _get_threads_storage(ctx) as the_threads:
+        await the_threads.review_run_feedback(
+            reviewer_user_name=user.preferred_username,
+            reviewer_email=user.email,
+            note=review.note,
+            user_name=to_review.user_name,
+            room_id=to_review.room_id,
+            thread_id=to_review.thread_id,
+            run_id=to_review.run_id,
+        )
 
     to_review.status = FRS.REVIEWED
     to_review.note = review.note
@@ -515,17 +536,17 @@ async def resolve_recent_feedback(
         [FromWhichAttrs.OPENED, FromWhichAttrs.REVIEWED],
     )
 
-    the_threads = ctx.deps.the_threads
     user = ctx.deps.user
-    await the_threads.resolve_run_feedback(
-        resolver_user_name=user.preferred_username,
-        resolver_email=user.email,
-        note=resolution.note,
-        user_name=to_resolve.user_name,
-        room_id=to_resolve.room_id,
-        thread_id=to_resolve.thread_id,
-        run_id=to_resolve.run_id,
-    )
+    async with _get_threads_storage(ctx) as the_threads:
+        await the_threads.resolve_run_feedback(
+            resolver_user_name=user.preferred_username,
+            resolver_email=user.email,
+            note=resolution.note,
+            user_name=to_resolve.user_name,
+            room_id=to_resolve.room_id,
+            thread_id=to_resolve.thread_id,
+            run_id=to_resolve.run_id,
+        )
 
     to_resolve.status = FRS.RESOLVED
     to_resolve.note = resolution.note
