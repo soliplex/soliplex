@@ -209,7 +209,12 @@ def test__rdb_override_path_expands_user(db_rag_path, monkeypatch):
     Without expansion it would be resolved against the room directory as
     a literal '~', which is never a database.
     """
+    # 'expanduser' reads a different variable per platform: 'HOME' on
+    # POSIX, 'USERPROFILE' (then 'HOMEDRIVE' + 'HOMEPATH') on Windows,
+    # where 'HOME' is ignored outright. Set both so '~' resolves to the
+    # fixture directory rather than the real home on either platform.
     monkeypatch.setenv("HOME", str(db_rag_path))
+    monkeypatch.setenv("USERPROFILE", str(db_rag_path))
     db_override_path = db_rag_path / "test.lancedb"
     db_override_path.mkdir()
 
