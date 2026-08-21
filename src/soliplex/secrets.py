@@ -34,6 +34,16 @@ class SecretFilePathNotFound(SecretError):
         )
 
 
+class NoGetterForSecretSourceKind(SecretError):
+    def __init__(self, secret_name: str, kind: str):
+        self.secret_name = secret_name
+        self.kind = kind
+        super().__init__(
+            f"No getter registered for source kind '{kind}' "
+            f"for secret: {secret_name}"
+        )
+
+
 class SecretSubprocessError(SecretError):
     def __init__(self, secret_name: str, command_line: list[str]):
         self.secret_name = secret_name

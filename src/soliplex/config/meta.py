@@ -22,6 +22,16 @@ _default_list_field = _utils._default_list_field
 _default_dict_field = _utils._default_dict_field
 
 
+class ExtraneousKeys(TypeError):
+    def __init__(self, allowed_keys, extra_keys):
+        self.extra_keys = extra_keys
+        allowed_key_repr = ", ".join(f"'{key}'" for key in allowed_keys)
+        extra_key_repr = ", ".join(f"'{key}'" for key in extra_keys)
+        super().__init__(
+            f"Only {allowed_key_repr} allowed (passed {extra_key_repr})"
+        )
+
+
 class WrapperForUnknownToolConfig(ValueError):
     def __init__(self, tool_config_klass, wrapper_klass):
         self.tool_config_klass = tool_config_klass
@@ -33,6 +43,19 @@ class WrapperForUnknownToolConfig(ValueError):
         super().__init__(
             f"Wrapper class '{wk_dotted}' cannot be "
             f"registered for unregistered tool config class '{tck_dotted}'"
+        )
+
+
+class GetterForUnknownSecretSource(ValueError):
+    def __init__(self, kind, func):
+        self.kind = kind
+        self.func = func
+
+        func_dotted = _utils._dotted_name(func)
+
+        super().__init__(
+            f"Getter '{func_dotted}' cannot be registered "
+            f"for unregistered secret source kind '{kind}'"
         )
 
 
@@ -70,10 +93,18 @@ class AGUI_FeatureConfigMeta:
         return cls(**yaml_config)
 
 
+AllowedKeys = typing.ClassVar[frozenset[str]]
+
+
 @dataclasses.dataclass(kw_only=True)
 class _ConfigKlassOnlyMeta:
-    """Base for config meta classes which take only 'config_klass'"""
+    """Base for config meta classes which take only 'config_klass'
 
+    Derived classes may declare ignored, deprecated keys by overriding
+    '_ALLOWED_KEYS'.
+    """
+
+    _ALLOWED_KEYS: AllowedKeys = frozenset({"config_klass"})
     config_klass: typing.Any
 
     @classmethod
@@ -82,6 +113,11 @@ class _ConfigKlassOnlyMeta:
         if isinstance(yaml_config, _utils.DottedName):
             config_klass = _utils._from_dotted_name(yaml_config)
         else:
+            extraneous_keys = set(yaml_config) - cls._ALLOWED_KEYS
+
+            if extraneous_keys:
+                raise ExtraneousKeys(cls._ALLOWED_KEYS, extraneous_keys)
+
             config_klass = _utils._from_dotted_name(
                 yaml_config["config_klass"]
             )
@@ -101,13 +137,21 @@ class ToolConfigMeta(_ConfigKlassOnlyMeta):
         '_utils._from_dotted_name'.
 
     'wrapper_klass'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
 
     'registered_func'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
     """
+
+    _ALLOWED_KEYS: AllowedKeys = frozenset(
+        {
+            "config_klass",
+            "wrapper_klass",
+            "registered_func",
+        }
+    )
 
     @property
     def tool_name(self) -> _utils.DottedName:
@@ -126,13 +170,21 @@ class MCP_ToolsetConfigMeta(_ConfigKlassOnlyMeta):
         '_utils._from_dotted_name'.
 
     'wrapper_klass'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
 
     'registered_func'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
     """
+
+    _ALLOWED_KEYS: AllowedKeys = frozenset(
+        {
+            "config_klass",
+            "wrapper_klass",
+            "registered_func",
+        }
+    )
 
     @property
     def kind(self) -> str:
@@ -157,9 +209,17 @@ class MCP_ServerToolWrapperConfigMeta:
         '_utils._from_dotted_name'.
 
     'registered_func'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
     """
+
+    _ALLOWED_KEYS: AllowedKeys = frozenset(
+        {
+            "config_klass",
+            "wrapper_klass",
+            "registered_func",
+        }
+    )
 
     config_klass: typing.Any
     wrapper_klass: typing.Any
@@ -191,13 +251,21 @@ class SkillConfigMeta(_ConfigKlassOnlyMeta):
         '_utils._from_dotted_name'.
 
     'wrapper_klass'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
 
     'registered_func'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
     """
+
+    _ALLOWED_KEYS: AllowedKeys = frozenset(
+        {
+            "config_klass",
+            "wrapper_klass",
+            "registered_func",
+        }
+    )
 
     @property
     def kind(self) -> str:
@@ -216,13 +284,21 @@ class AgentCapabilityMeta(_ConfigKlassOnlyMeta):
         '_utils._from_dotted_name'.
 
     'wrapper_klass'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
 
     'registered_func'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
     """
+
+    _ALLOWED_KEYS: AllowedKeys = frozenset(
+        {
+            "config_klass",
+            "wrapper_klass",
+            "registered_func",
+        }
+    )
 
     @property
     def capability_name(self) -> _utils.DottedName:
@@ -241,13 +317,21 @@ class AgentConfigMeta(_ConfigKlassOnlyMeta):
         '_utils._from_dotted_name'.
 
     'wrapper_klass'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
 
     'registered_func'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+        No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
+        '_ALLOWED_KEYS') and otherwise ignored.
     """
+
+    _ALLOWED_KEYS: AllowedKeys = frozenset(
+        {
+            "config_klass",
+            "wrapper_klass",
+            "registered_func",
+        }
+    )
 
     @property
     def kind(self) -> str:
@@ -255,8 +339,8 @@ class AgentConfigMeta(_ConfigKlassOnlyMeta):
 
 
 @dataclasses.dataclass(kw_only=True)
-class SecretSourceMeta:
-    """Meta-config class for registering secret source classes
+class SecretSourceMeta(_ConfigKlassOnlyMeta):
+    """Meta-config class for registering secret source classes.
 
     'config_klass'
         a class or factory: returned value must have a 'from_yaml' method
@@ -265,37 +349,41 @@ class SecretSourceMeta:
         If passed as a string to 'from_yaml', it is resolved via
         '_utils._from_dotted_name'.
 
-    'registered_func'
-        a callable taking an instance of 'config_klass' and returning
-        a resolved secret, or raising a 'soliplex_secrets.SecretError'
-        on a miss.
-
-        If passed as a string to 'from_yaml', it is resolved via
-        '_utils._from_dotted_name'.
-
-    'wrapper_klass'
-        No-op fossil from 'ConfigMeta'; can only be passed to 'from_yaml',
-        where it is ignored with a deprecation warning.
+    The getter which resolves a secret from an instance of 'config_klass'
+    is registered separately, via 'SecretGetterConfigMeta'. A YAML entry
+    may still carry 'registered_func' alongside 'config_klass' as
+    shorthand: 'InstallationConfigMeta.from_yaml' desugars it into an
+    entry here plus one in 'secret_getters'.
     """
-
-    config_klass: typing.Any
-    registered_func: typing.Any = None
-
-    @classmethod
-    def from_yaml(cls, yaml_config: _utils.DottedName | dict):
-        config_klass = _utils._from_dotted_name(yaml_config["config_klass"])
-        registered_func = _utils._from_dotted_name(
-            yaml_config["registered_func"],
-        )
-
-        return cls(
-            config_klass=config_klass,
-            registered_func=registered_func,
-        )
 
     @property
     def kind(self) -> str:
         return self.config_klass.kind
+
+
+@dataclasses.dataclass(kw_only=True)
+class SecretGetterConfigMeta:
+    """Registered secret getter function
+
+    'kind'
+        the secret source kind whose sources the function resolves. Its
+        source config class must already be registered, via
+        'meta.secret_sources'.
+
+    'func'
+        dotted name of a callable taking an instance of the source config
+        class registered for 'kind', returning the resolved secret, or
+        raising a 'soliplex.secrets.SecretError' subclass on a miss.
+    """
+
+    kind: str
+    func: typing.Any
+
+    @classmethod
+    def from_yaml(cls, yaml_config: dict):
+        func = yaml_config["func"]
+        yaml_config["func"] = _utils._from_dotted_name(func)
+        return cls(**yaml_config)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -362,18 +450,41 @@ class InstallationConfigMeta:
         types of agents which can be configured.
 
     'secret_sources'
-        a list consisting of  strings (importable dotted names of secret
+        a list consisting of strings (importable dotted names of secret
         source classes) or `SecretSourceMeta' mappings, defining the
-        tyeps of secret sources which can be configured.
+        types of secret sources which can be configured.
+
+        As shorthand, an entry may carry 'registered_func' alongside
+        'config_klass'; it is desugared into this list plus an implicit
+        'secret_getters' entry for the same kind.
+
+    'secret_getters'
+        a list consisting of `SecretGetterConfigMeta' mappings, defining
+        the functions which resolve secrets from the sources configured
+        for a given kind. Applied after 'secret_sources': a getter whose
+        kind has no registered source class raises
+        'GetterForUnknownSecretSource'.
 
     'jsonpath_functions'
         a list consisting of `JSONPathFunctionConfigMeta' mappings,
         defining named filter functions registered into the shared
         'authz.the_jsonpath_environment' for use in room ACL queries.
 
-    After loading, adds the configured classes to the registry mappings
-    'TOOL_CONFIG_CLASSES_BY_TOOL_NAME' and
-    'MCP_TOOLSET_CONFIG_CLASSES_BY_KIND'.
+    After loading, adds the configured entries to the global registries
+    each subsection feeds: 'AGUI_FEATURES_BY_NAME',
+    'TOOL_CONFIG_CLASSES_BY_TOOL_NAME',
+    'MCP_TOOLSET_CONFIG_CLASSES_BY_KIND',
+    'MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME',
+    'SKILL_CONFIG_CLASSES_BY_KIND', 'AGENT_CAPABILITY_CLASSES_BY_NAME',
+    'AGENT_CONFIG_CLASSES_BY_KIND', 'SourceClassesByKind',
+    'SECRET_GETTERS_BY_KIND', and the shared JSONPath environment's
+    function extensions.
+
+    A '$$CLEAR$$' marker in a subsection empties that subsection's
+    registry first. Two subsections cascade, because the dependent
+    registry cannot outlive the one it keys off: clearing 'tool_configs'
+    also clears 'mcp_server_tool_wrappers', and clearing 'secret_sources'
+    also clears 'secret_getters'.
     """
 
     agui_features: list[str | AGUI_FeatureConfigMeta | ClearMetaRegistry] = ()
@@ -390,6 +501,7 @@ class InstallationConfigMeta:
     ] = ()
     agent_configs: list[str | AgentConfigMeta | ClearMetaRegistry] = ()
     secret_sources: list[str | SecretSourceMeta | ClearMetaRegistry] = ()
+    secret_getters: list[SecretGetterConfigMeta | ClearMetaRegistry] = ()
     jsonpath_functions: list[
         JSONPathFunctionConfigMeta | ClearMetaRegistry
     ] = ()
@@ -421,6 +533,41 @@ class InstallationConfigMeta:
             for entry in entries
             if entry != ClearMetaRegistry.MARKER
         ]
+
+    @staticmethod
+    def _desugar_secret_sources(
+        source_entries: list[str | dict],
+        getter_entries: list[str | dict],
+    ) -> tuple[list, list]:
+        """Split combined secret source entries into the two subsections.
+
+        A 'secret_sources' entry carrying 'registered_func' alongside
+        'config_klass' is shorthand for registering the source class and
+        its getter together. Strip that key, and **prepend** an equivalent
+        'secret_getters' entry, so an explicitly configured getter for the
+        same kind still wins ('__post_init__' is last-write-wins).
+
+        Both lists are returned unpartitioned, so that a 'ClearMetaRegistry'
+        marker written by the user is still hoisted ahead of the desugared
+        entries.
+        """
+        desugared = []
+        sources = []
+
+        for entry in source_entries:
+            if isinstance(entry, dict) and "registered_func" in entry:
+                entry = dict(entry)
+                registered_func = entry.pop("registered_func")
+                config_klass = _utils._from_dotted_name(
+                    entry["config_klass"],
+                )
+                desugared.append(
+                    {"kind": config_klass.kind, "func": registered_func},
+                )
+
+            sources.append(entry)
+
+        return sources, desugared + list(getter_entries)
 
     @staticmethod
     def _strip_clear(entries: tuple | list) -> tuple[list, bool]:
@@ -481,9 +628,19 @@ class InstallationConfigMeta:
                 config_klass=AgentConfigMeta,
             )
 
-            config_dict["secret_sources"] = cls._partition_cmrs(
+            secret_sources, secret_getters = cls._desugar_secret_sources(
                 config_dict.get("secret_sources", ()),
+                config_dict.get("secret_getters", ()),
+            )
+
+            config_dict["secret_sources"] = cls._partition_cmrs(
+                secret_sources,
                 config_klass=SecretSourceMeta,
+            )
+
+            config_dict["secret_getters"] = cls._partition_cmrs(
+                secret_getters,
+                config_klass=SecretGetterConfigMeta,
             )
 
             config_dict["jsonpath_functions"] = cls._partition_cmrs(
@@ -590,11 +747,23 @@ class InstallationConfigMeta:
 
         if ss_clear:
             ss_registry.clear()
-            sg_registry.clear()
+            sg_registry.clear()  # no getters without sources
 
         for ss_meta in self.secret_sources:
-            sg_registry[ss_meta.kind] = ss_meta.registered_func
             ss_registry[ss_meta.kind] = ss_meta.config_klass
+
+        self.secret_getters, sg_clear = self._strip_clear(self.secret_getters)
+
+        if sg_clear:
+            sg_registry.clear()
+
+        for sg_meta in self.secret_getters:
+            if sg_meta.kind not in ss_registry:
+                raise GetterForUnknownSecretSource(
+                    kind=sg_meta.kind,
+                    func=sg_meta.func,
+                )
+            sg_registry[sg_meta.kind] = sg_meta.func
 
         self.jsonpath_functions, jf_clear = self._strip_clear(
             self.jsonpath_functions,
@@ -660,32 +829,15 @@ class InstallationConfigMeta:
         ]
 
         ss_registry = config_secrets.SourceClassesByKind
-        sg_registry = config_secrets.SECRET_GETTERS_BY_KIND
-
-        # A source kind is usable only if it is in both registries:
-        # 'SecretConfig.from_yaml' parses it via 'SourceClassesByKind',
-        # 'soliplex.secrets' resolves it via 'SECRET_GETTERS_BY_KIND'.
-        # Skipping kinds with no getter avoids a 'KeyError' here when the
-        # two disagree.
-        secret_source_entries = [
-            {
-                "config_klass": _utils._dotted_name(
-                    ss_registry[kind],
-                ),
-                "registered_func": _utils._dotted_name(sg_registry[kind]),
-            }
-            for kind in ss_registry
-            if kind in sg_registry
+        secret_source_entries = first_clear + [
+            _utils._dotted_name(klass) for klass in ss_registry.values()
         ]
 
-        # Emit the clear marker only for registries that really lost one
-        # of their import-time kinds, because '__post_init__' empties both
-        # before re-registering: a clear asked for here deletes anything
-        # the entries above skipped. Hence the union -- a kind sitting in
-        # only one registry must not provoke that.
-        registered_kinds = ss_registry.keys() | sg_registry.keys()
-        if not config_secrets.DEFAULT_SECRET_SOURCE_KINDS <= registered_kinds:
-            secret_source_entries = first_clear + secret_source_entries
+        sg_registry = config_secrets.SECRET_GETTERS_BY_KIND
+        secret_getter_entries = first_clear + [
+            {"kind": kind, "func": _utils._dotted_name(func)}
+            for kind, func in sg_registry.items()
+        ]
 
         jsonpath_function_registry = authz.registered_jsonpath_functions()
         jsonpath_function_entries = first_clear + [
@@ -702,5 +854,6 @@ class InstallationConfigMeta:
             "agent_capability_types": capability_type_entries,
             "agent_configs": agent_config_entries,
             "secret_sources": secret_source_entries,
+            "secret_getters": secret_getter_entries,
             "jsonpath_functions": jsonpath_function_entries,
         }

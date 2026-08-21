@@ -118,7 +118,12 @@ W_FULL_META_INSTALLATION_CONFIG_KW = {
         "secret_sources": [
             config_meta.SecretSourceMeta(
                 config_klass=config_secrets.EnvVarSecretSource,
-                registered_func=test_meta.secret_source_func,
+            ),
+        ],
+        "secret_getters": [
+            config_meta.SecretGetterConfigMeta(
+                kind=config_secrets.EnvVarSecretSource.kind,
+                func=test_meta.secret_source_func,
             ),
         ],
     },

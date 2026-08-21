@@ -21,9 +21,6 @@ SECRET_RE = re.compile(SECRET_PATTERN)
 # ============================================================================
 
 
-SECRET_GETTERS_BY_KIND = {}
-
-
 class NotASecret(ValueError):
     def __init__(self, config_str):
         self.config_str = config_str
@@ -103,9 +100,6 @@ class EnvVarSecretSource(_BaseSecretSource):
         return {"env_var_name": self.env_var_name}
 
 
-SECRET_GETTERS_BY_KIND[EnvVarSecretSource.kind] = secrets.get_env_var_secret
-
-
 @dataclasses.dataclass(kw_only=True)
 class FilePathSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "file_path"
@@ -124,11 +118,6 @@ class FilePathSecretSource(_BaseSecretSource):
     @property
     def extra_arguments(self) -> dict[str, typing.Any]:
         return {"file_path": self.file_path}
-
-
-SECRET_GETTERS_BY_KIND[FilePathSecretSource.kind] = (
-    secrets.get_file_path_secret
-)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -166,11 +155,6 @@ class SubprocessSecretSource(_BaseSecretSource):
         }
 
 
-SECRET_GETTERS_BY_KIND[SubprocessSecretSource.kind] = (
-    secrets.get_subprocess_secret
-)
-
-
 @dataclasses.dataclass(kw_only=True)
 class RandomCharsSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "random_chars"
@@ -191,11 +175,6 @@ class RandomCharsSecretSource(_BaseSecretSource):
         return {"n_chars": self.n_chars}
 
 
-SECRET_GETTERS_BY_KIND[RandomCharsSecretSource.kind] = (
-    secrets.get_random_chars_secret
-)
-
-
 SecretSource = (
     EnvVarSecretSource
     | FilePathSecretSource
@@ -207,6 +186,11 @@ SecretSource = (
 SecretSources = list[SecretSource]
 
 
+# The two registries a secret source kind lives in. 'SecretConfig
+# .from_yaml' parses a 'sources:' entry via the first; 'get_secret'
+# resolves it via the second. Both are seeded here with the same four
+# built-in kinds; 'meta.secret_sources' and 'meta.secret_getters' add to
+# them (or, with a '$$CLEAR$$' marker, replace them wholesale).
 SourceClassesByKind = {
     klass.kind: klass
     for klass in [
@@ -217,14 +201,12 @@ SourceClassesByKind = {
     ]
 }
 
-
-# The source kinds Soliplex registers itself, captured before any
-# metaconfig registration can add to either registry. 'soliplex.secrets'
-# registers a getter for exactly these kinds, so this is the default key
-# set for both 'SourceClassesByKind' and 'SECRET_GETTERS_BY_KIND'.
-# 'InstallationConfigMeta.as_yaml' compares against it to distinguish a
-# registry a config cleared from one that was never touched.
-DEFAULT_SECRET_SOURCE_KINDS = frozenset(SourceClassesByKind)
+SECRET_GETTERS_BY_KIND = {
+    EnvVarSecretSource.kind: secrets.get_env_var_secret,
+    FilePathSecretSource.kind: secrets.get_file_path_secret,
+    SubprocessSecretSource.kind: secrets.get_subprocess_secret,
+    RandomCharsSecretSource.kind: secrets.get_random_chars_secret,
+}
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -293,8 +275,18 @@ def get_secret(secret_config: SecretConfig) -> str:
     sources = secret_config.sources
     while secret_config.resolved is None and sources:
         source, *sources = sources
-        getter = SECRET_GETTERS_BY_KIND[source.kind]
+        getter = SECRET_GETTERS_BY_KIND.get(source.kind)
         try:
+            # Raised inside the 'try', so a kind whose getter is not
+            # registered counts as one failed source rather than a bare
+            # 'KeyError' aborting resolution: the chain falls through to
+            # the next source, and the miss joins the reported group.
+            if getter is None:
+                raise secrets.NoGetterForSecretSourceKind(
+                    secret_config.secret_name,
+                    source.kind,
+                )
+
             secret_config._resolved = getter(source)
         except secrets.SecretError as exc:
             excs.append(exc)

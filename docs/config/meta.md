@@ -30,6 +30,19 @@ the built-in secret sources rather than merely adding to them.
 meta:
   secret_sources:
   - "$$CLEAR$$"
+  - "my_package.config.VaultSecretSource"
+  secret_getters:
+  - kind: "vault"
+    func: "my_package.secrets.get_vault_secret"
+```
+
+The same lockdown can be written with the combined shorthand, which is
+equivalent -- the kind is read from the class, so it need not be spelled:
+
+```yaml
+meta:
+  secret_sources:
+  - "$$CLEAR$$"
   - config_klass: "my_package.config.VaultSecretSource"
     registered_func: "my_package.secrets.get_vault_secret"
 ```
@@ -46,9 +59,10 @@ cannot meaningfully be separated:
 - `tool_configs` also clears `mcp_server_tool_wrappers`, since a wrapper
   cannot outlive the tool configuration it wraps.
 
-- `secret_sources` clears both the source configuration classes and their
-  corresponding getter functions, since a source kind is registered as a
-  pair.
+- `secret_sources` also clears `secret_getters`, since a getter cannot
+  outlive the source class it resolves. Clearing the sources therefore
+  suppresses the built-in kinds completely, leaving no orphaned getter
+  behind; re-register a getter for every kind the installation keeps.
 
 One subsection clears only part of its registry: `jsonpath_functions`
 removes the functions supplied by configuration but keeps the RFC 9535
@@ -263,40 +277,115 @@ configured with multiple "sources" of different kinds. Each source
 configuration kind corresponds to a Python function which is used to
 retrieve the secret value.
 
-The `meta.secret_sources` section allows configuring new secret source
-configurations and their corresponding functions.
+The `meta.secret_sources` section registers the source configuration
+classes, so that they can be referenced by their `kind`. The functions
+which resolve those sources are registered separately, in
+[`meta.secret_getters`](#registering-secret-getter-functions) below.
 
-The section contains a list of mappings, each of which must include:
+Like most sections above, it contains a list of Python "dotted names".
+Each entry may instead be a mapping with a single `config_klass` key,
+whose value is that same dotted name. The kind a class is registered
+under is taken from the class itself, not spelled separately.
 
-- `config_klass`, a Python "dotted name" which can be used to import the
-  source configuration class. The kind it is registered under is taken
-  from that class, not spelled separately.
-
-- `registered_func`, a Python "dotted name" which can be used to import
-  the callable which resolves a secret from an instance of
-  `config_klass`. It is passed the source configuration instance and
-  returns the secret value, raising a `soliplex.secrets.SecretError`
-  subclass if it cannot.
-
-Unlike the sections above, a bare dotted name is not accepted here: both
-keys are required, because a source kind is only usable when its
-configuration class and its getter are both registered.
-
-By default, these classes are configured to use the corresponding
-functions in `soliplex.secrets`, just as if we configured here:
+By default, Soliplex registers its own source classes, just as though we
+configured explicitly:
 
 ```yaml
 meta:
   secret_sources:
-  - config_klass: "soliplex.config.secrets.EnvVarSecretSource"
-    registered_func: "soliplex.secrets.get_env_var_secret"
-  - config_klass: "soliplex.config.secrets.FilePathSecretSource"
-    registered_func: "soliplex.secrets.get_file_path_secret"
-  - config_klass: "soliplex.config.secrets.SubprocessSecretSource"
-    registered_func: "soliplex.secrets.get_subprocess_secret"
-  - config_klass: "soliplex.config.secrets.RandomCharsSecretSource"
-    registered_func: "soliplex.secrets.get_random_chars_secret"
+  - "soliplex.config.secrets.EnvVarSecretSource"
+  - "soliplex.config.secrets.FilePathSecretSource"
+  - "soliplex.config.secrets.SubprocessSecretSource"
+  - "soliplex.config.secrets.RandomCharsSecretSource"
 ```
+
+## Registering Secret Getter Functions
+
+A source configuration class describes *where* a secret lives; a getter
+function is what actually fetches it. The `meta.secret_getters` section
+registers those functions, one per source kind.
+
+The section contains a list of mappings, each of which must include:
+
+- `kind`, the secret source kind the function resolves. Its source
+  configuration class must already be registered -- a getter for an
+  unregistered kind is an error, not a no-op.
+
+- `func`, a Python "dotted name" which can be used to import the
+  callable. It is passed the source configuration instance and returns
+  the secret value, raising a `soliplex.secrets.SecretError` subclass if
+  it cannot.
+
+By default, Soliplex registers the corresponding functions from
+`soliplex.secrets`, just as though we configured explicitly:
+
+```yaml
+meta:
+  secret_getters:
+  - kind: "env_var"
+    func: "soliplex.secrets.get_env_var_secret"
+  - kind: "file_path"
+    func: "soliplex.secrets.get_file_path_secret"
+  - kind: "subprocess"
+    func: "soliplex.secrets.get_subprocess_secret"
+  - kind: "random_chars"
+    func: "soliplex.secrets.get_random_chars_secret"
+```
+
+Because `secret_sources` is applied first (see [Clearing Default
+Registrations](#clearing-default-registrations) on ordering), a getter
+naming a kind with no registered source class raises
+`GetterForUnknownSecretSource` when the configuration is loaded.
+
+### The combined shorthand
+
+A new source kind almost always ships its class and its getter together,
+so a `secret_sources` entry may carry `registered_func` alongside
+`config_klass` as shorthand for both registrations:
+
+```yaml
+meta:
+  secret_sources:
+  - config_klass: "my_package.config.VaultSecretSource"
+    registered_func: "my_package.secrets.get_vault_secret"
+```
+
+That is exactly equivalent to writing the two sections out, reading the
+`kind` from `config_klass`. The shorthand is expanded while the `meta`
+section is parsed, so an explicit `secret_getters` entry for the same
+kind takes precedence over one implied by `registered_func`. Note that
+`registered_func` is only meaningful in this combined position: it is not
+accepted anywhere else, and `soliplex-cli config` always dumps the two
+sections separately.
+
+### Registering a source without its getter
+
+The two registries are independent, so it is possible to register a
+source class and never register a getter for its kind. Nothing fails at
+load time -- the configuration parses, and a `sources:` entry of that
+kind is accepted -- but resolving a secret from it raises
+`soliplex.secrets.NoGetterForSecretSourceKind`. That counts as one failed
+source, so a secret listing further sources still resolves from the next
+one, and `soliplex-cli audit` reports the miss in its secrets section.
+
+Two configurations reach that state:
+
+- registering a source class alone, with no matching getter;
+
+- clearing `secret_getters` without clearing `secret_sources`, which
+  strands every built-in kind whose getter is not re-registered:
+
+  ```yaml
+  meta:
+    secret_getters:
+    - "$$CLEAR$$"
+    - kind: "env_var"
+      func: "soliplex.secrets.get_env_var_secret"
+  ```
+
+  Here `file_path`, `subprocess` and `random_chars` remain registered as
+  sources but can no longer be resolved. To suppress kinds entirely,
+  clear `secret_sources` instead: the clear cascades to the getters.
 
 ## Registering JSONPath Filter Functions
 

@@ -1,5 +1,7 @@
 import contextlib
 import copy
+import dataclasses
+import typing
 from unittest import mock
 
 import pytest
@@ -32,6 +34,25 @@ ENV_VAR_HIT = config_secrets.EnvVarSecretSource(
     secret_name=SECRET_NAME,
     env_var_name=ENV_VAR_NAME,
 )
+
+
+@dataclasses.dataclass(kw_only=True)
+class _NoGetterSecretSource(config_secrets._BaseSecretSource):
+    """A source kind registered without its getter.
+
+    Reachable via 'meta.secret_sources' alone: registering a source class
+    does not register anything in 'SECRET_GETTERS_BY_KIND'.
+    """
+
+    kind: typing.ClassVar[str] = "no_getter"
+    secret_name: str
+
+    @property
+    def extra_arguments(self) -> dict:  # pragma: NO COVER (never dumped)
+        return {}
+
+
+NO_GETTER = _NoGetterSecretSource(secret_name=SECRET_NAME)
 
 
 @pytest.mark.parametrize(
@@ -514,6 +535,8 @@ def test_strip_secret_prefix(config_str, expectation, expected):
     [
         ([ENV_VAR_MISS], ExcGroup, ERROR_MISS),
         ([ENV_VAR_MISS, ENV_VAR_HIT], NoRaise, SECRET_VALUE),
+        ([NO_GETTER], ExcGroup, ERROR_MISS),
+        ([NO_GETTER, ENV_VAR_HIT], NoRaise, SECRET_VALUE),
     ],
 )
 @mock.patch("os.urandom")
@@ -536,6 +559,21 @@ def test_get_secret_secret_ctor_w_sources(
 
     if expected is not ERROR_MISS:
         assert found == expected
+
+
+def test_get_secret_w_source_kind_wo_registered_getter():
+    secret_config = config_secrets.SecretConfig(
+        secret_name=SECRET_NAME,
+        sources=[NO_GETTER],
+    )
+
+    with pytest.raises(ExceptionGroup) as exc_info:
+        config_secrets.get_secret(secret_config)
+
+    (inner,) = exc_info.value.exceptions
+    assert isinstance(inner, secrets.NoGetterForSecretSourceKind)
+    assert inner.kind == _NoGetterSecretSource.kind
+    assert inner.secret_name == SECRET_NAME
 
 
 @pytest.mark.parametrize(
