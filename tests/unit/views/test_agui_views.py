@@ -1478,7 +1478,6 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     exp_deps = the_installation.get_agent_deps_for_room.return_value
 
     test_run.run_input = None
-    the_threads.get_run.return_value = test_run
 
     # 'add_run_input' now runs on its own short-lived, committed session
     # rather than the request-scoped 'the_threads'. The shared
@@ -1515,7 +1514,6 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             thread_id=TEST_THREAD_ID_UUID,
             run_id=TEST_RUN_ID_UUID,
             the_installation=the_installation,
-            the_threads=the_threads,
             the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
@@ -1585,7 +1583,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             room_id=TEST_ROOM_ID,
             user=USER_PROFILE,
             run_agent_input=exp_adapter.run_input,
-            the_threads=the_threads,
+            thread_persistence_engine=request.state.threads_engine,
             the_logger=the_logger,
         )
 
@@ -1635,7 +1633,6 @@ async def test_post_room_agui_reconnect(
     asei,
     sswk,
     frsr,
-    the_threads,
 ):
     """Reconnect path: Last-Event-ID present."""
     agent = object()
@@ -1669,7 +1666,6 @@ async def test_post_room_agui_reconnect(
         thread_id=TEST_THREAD_ID_UUID,
         run_id=TEST_RUN_ID_UUID,
         the_installation=the_installation,
-        the_threads=the_threads,
         the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,

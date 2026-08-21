@@ -698,7 +698,6 @@ async def post_room_agui_thread_id_run_id(
     thread_id: pydantic.UUID4,
     run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -788,13 +787,6 @@ async def post_room_agui_thread_id_run_id(
         agent=agent,
     )
 
-    # Persist the run input in its own short-lived, committed session
-    # rather than via the request-scoped 'the_threads'. This handler
-    # returns a long-lived StreamingResponse, so the request session's
-    # transaction stays open for the whole stream; committing the input
-    # write here releases its lock immediately (and keeps the request
-    # transaction from holding a writer lock behind the incremental
-    # per-event background saves).
     try:
         async with sqla_asyncio.AsyncSession(
             bind=request.state.threads_engine,
@@ -818,7 +810,7 @@ async def post_room_agui_thread_id_run_id(
         room_id=room_id,
         user=user,
         run_agent_input=agui_adapter.run_input,
-        the_threads=the_threads,
+        thread_persistence_engine=request.state.threads_engine,
         the_logger=the_logger,
     )
 

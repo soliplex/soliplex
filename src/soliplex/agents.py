@@ -10,6 +10,7 @@ from pydantic_ai import agent as ai_agent
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import tools as ai_tools
 from pydantic_ai import toolsets as ai_toolsets
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui
 from soliplex import mcp_client
@@ -45,7 +46,7 @@ class AgentDependencies:
     """
 
     the_installation: typing.Any  # installation.Installation
-    the_threads: agui.ThreadStorage = None
+    thread_persistence_engine: sqla_asyncio.AsyncEngine = None
     state: agui.AGUI_State = dataclasses.field(default_factory=dict)
     room_id: str | None = None
     thread_id: str | None = None
