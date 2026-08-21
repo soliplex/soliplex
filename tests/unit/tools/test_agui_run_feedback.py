@@ -7,6 +7,7 @@ import jsonpatch
 import pydantic_ai
 import pytest
 from ag_ui import core as agui_core
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui
 from soliplex import models
@@ -69,9 +70,11 @@ def deps_user():
 def ctx_w_deps(deps_user):
     ctx = mock.Mock(spec_set=["deps"])
     ctx.deps = mock.Mock(
-        spec_set=["state", "the_threads", "user"],
+        spec_set=["state", "thread_persistence_engine", "user"],
         state={},
-        the_threads=mock.create_autospec(agui_persistence.ThreadStorage),
+        thread_persistence_engine=mock.create_autospec(
+            sqla_asyncio.AsyncEngine,
+        ),
         user=deps_user,
     )
     return ctx
@@ -220,6 +223,23 @@ def test_runfeedbackentry_from_dict_wo_nullable_defaults():
 
 
 @pytest.mark.anyio
+@mock.patch("soliplex.agui.persistence.ThreadStorage")
+async def test__get_threads_storage(ts_klass, fake_async_session, ctx_w_deps):
+    engine = ctx_w_deps.deps.thread_persistence_engine
+
+    with mock.patch(
+        "sqlalchemy.ext.asyncio.AsyncSession",
+        new=fake_async_session.cls,
+    ):
+        async with arf_tools._get_threads_storage(ctx_w_deps) as the_threads:
+            assert the_threads is ts_klass.return_value
+
+    ts_klass.assert_called_once_with(fake_async_session.session)
+
+    fake_async_session.cls.assert_called_once_with(bind=engine)
+
+
+@pytest.mark.anyio
 async def test__do_query(
     the_run,
     the_thread,
@@ -228,12 +248,16 @@ async def test__do_query(
     ctx_w_deps,
     rf_query,
 ):
-    lrrf = ctx_w_deps.deps.the_threads.list_recent_run_feedback
+    the_threads = mock.create_autospec(
+        agui_persistence.ThreadStorage,
+        instance=True,
+    )
+    lrrf = the_threads.list_recent_run_feedback
     lrrf.return_value = [the_run] if the_run else []
 
     review_entries, exp_status = the_review_entries
 
-    found = await arf_tools._do_query(ctx_w_deps, rf_query)
+    found = await arf_tools._do_query(the_threads, rf_query)
 
     if exp_status == FRS.RESOLVED:
         if the_run:
@@ -297,7 +321,16 @@ async def test__do_query(
     ],
 )
 @mock.patch("soliplex.tools.agui_run_feedback._do_query")
-async def test_query_recent_feedback(do_query, ctx_w_deps, rf_query, w_state):
+@mock.patch("soliplex.tools.agui_run_feedback._get_threads_storage")
+async def test_query_recent_feedback(
+    gts,
+    do_query,
+    ctx_w_deps,
+    rf_query,
+    w_state,
+):
+    the_threads = gts.return_value.__aenter__.return_value
+
     query_result = arf_tools.RecentRunFeedbackEntries(
         opened=[
             arf_tools.RunFeedbackEntry(
@@ -351,7 +384,9 @@ async def test_query_recent_feedback(do_query, ctx_w_deps, rf_query, w_state):
     assert found.return_value == query_result
     assert deps.state[STATE_NAMESPACE] == exp_state
 
-    do_query.assert_called_once_with(ctx_w_deps, rf_query)
+    do_query.assert_called_once_with(the_threads, rf_query)
+
+    gts.assert_called_once_with(ctx_w_deps)
 
     deltas = found.metadata
 
@@ -474,9 +509,11 @@ MULTI_RUN_MESSAGES = EARLIER_MESSAGES + SINGLE_RUN_MESSAGES
         (SINGLE_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE, 2),
     ],
 )
+@mock.patch("soliplex.tools.agui_run_feedback._get_threads_storage")
 @mock.patch("soliplex.agui.parser.EventStreamParser")
 async def test_get_feedback_run_info(
     esp,
+    gts,
     run_feedback_entry,
     ctx_w_deps,
     the_thread,
@@ -486,7 +523,7 @@ async def test_get_feedback_run_info(
     exp_response,
     n_invalid,
 ):
-    get_run = ctx_w_deps.deps.the_threads.get_run
+    the_threads = gts.return_value.__aenter__.return_value
 
     rai = agui_constants.FULL_RUN_AGENT_INPUT.model_copy()
     start_event = agui_core.events.RunStartedEvent(
@@ -539,7 +576,7 @@ async def test_get_feedback_run_info(
     )
     run.awaitable_attrs.run_agent_input = _awaitable("run_agent_input", rai)
     run.awaitable_attrs.events = _awaitable("events", db_events)
-    get_run.return_value = run
+    the_threads.get_run.return_value = run
 
     entries = arf_tools.RecentRunFeedbackEntries(
         opened=[run_feedback_entry],
@@ -591,12 +628,15 @@ async def test_get_feedback_run_info(
         (OTHER_RUN_ID, pytest.raises(arf_tools.UnknownFeedback)),
     ],
 )
+@mock.patch("soliplex.tools.agui_run_feedback._get_threads_storage")
 async def test_review_recent_feedback(
+    gts,
     ctx_w_deps,
     run_feedback_entry,
     w_run_id,
     expectation,
 ):
+    the_threads = gts.return_value.__aenter__.return_value
     deps = ctx_w_deps.deps
 
     before_entries = arf_tools.RecentRunFeedbackEntries(
@@ -633,7 +673,7 @@ async def test_review_recent_feedback(
 
     after_feedback_state = deps.state[STATE_NAMESPACE]
 
-    rvw_rf = deps.the_threads.review_run_feedback
+    rvw_rf = the_threads.review_run_feedback
 
     if expected is None:
         assert after_feedback_state == exp_state
@@ -672,10 +712,12 @@ async def test_review_recent_feedback(
         assert (
             jsonpatch.apply_patch(start_agui_state, event.delta) == deps.state
         )
+        gts.assert_called_once_with(ctx_w_deps)
 
     else:
         assert after_feedback_state == before_feedback_state
         rvw_rf.assert_not_awaited()
+        gts.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -687,13 +729,17 @@ async def test_review_recent_feedback(
         (OTHER_RUN_ID, pytest.raises(arf_tools.UnknownFeedback)),
     ],
 )
+@mock.patch("soliplex.tools.agui_run_feedback._get_threads_storage")
 async def test_resolve_recent_feedback(
+    gts,
     ctx_w_deps,
     run_feedback_entry,
     w_run_id,
     expectation,
     w_reviewed,
 ):
+    the_threads = gts.return_value.__aenter__.return_value
+
     if w_reviewed:
         before_entries = arf_tools.RecentRunFeedbackEntries(
             reviewed=[run_feedback_entry],
@@ -741,7 +787,7 @@ async def test_resolve_recent_feedback(
 
     after_feedback_state = deps.state[STATE_NAMESPACE]
 
-    rsv_rf = ctx_w_deps.deps.the_threads.resolve_run_feedback
+    rsv_rf = the_threads.resolve_run_feedback
     if expected is None:
         assert isinstance(found, pydantic_ai.ToolReturn)
 
@@ -784,7 +830,9 @@ async def test_resolve_recent_feedback(
         assert (
             jsonpatch.apply_patch(start_agui_state, event.delta) == deps.state
         )
+        gts.assert_called_once_with(ctx_w_deps)
 
     else:
         assert after_feedback_state == before_feedback_state
         rsv_rf.assert_not_awaited()
+        gts.assert_not_called()

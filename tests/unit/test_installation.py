@@ -11,7 +11,6 @@ from sqlalchemy import pool as sqla_pool  # NullPool
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
-from soliplex import agui
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -1000,7 +999,7 @@ async def test_installation_get_agent_for_completion(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("w_the_threads", [False, True])
+@pytest.mark.parametrize("w_tp_engine", [False, True])
 @pytest.mark.parametrize("w_run_agent_input", [False, True])
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
@@ -1011,7 +1010,7 @@ async def test_installation_get_agent_deps_for_room(
     w_room_id,
     raises,
     w_run_agent_input,
-    w_the_threads,
+    w_tp_engine,
 ):
     tc_config = mock.create_autospec(config_tools.ToolConfig)
     sdtc_config = mock.create_autospec(config_tools.ToolConfig)
@@ -1037,9 +1036,9 @@ async def test_installation_get_agent_deps_for_room(
     if w_run_agent_input:
         kw["run_agent_input"] = RUN_AGENT_INPUT
 
-    the_threads = mock.create_autospec(agui.ThreadStorage)
-    if w_the_threads:
-        kw["the_threads"] = the_threads
+    tp_engine = mock.create_autospec(sqla_asyncio.AsyncEngine)
+    if w_tp_engine:
+        kw["thread_persistence_engine"] = tp_engine
 
     if raises:
         with pytest.raises(KeyError):
@@ -1077,10 +1076,10 @@ async def test_installation_get_agent_deps_for_room(
                 assert found.thread_id == RUN_AGENT_INPUT.thread_id
                 assert found.run_id == RUN_AGENT_INPUT.run_id
 
-            if w_the_threads:
-                assert found.the_threads is the_threads
+            if w_tp_engine:
+                assert found.thread_persistence_engine is tp_engine
             else:
-                assert found.the_threads is None
+                assert found.thread_persistence_engine is None
 
 
 @pytest.mark.anyio
