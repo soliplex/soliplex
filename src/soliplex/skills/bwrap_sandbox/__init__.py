@@ -139,7 +139,7 @@ async def skill_run(
 
     Args:
         command: Shell command to execute.
-        environment_name: name of sandbox environment (defaults to 'bare')
+        environment_name: name of sandbox environment (defaults to 'default')
         workdir: path on host system to mount as the working directory
         timeout: Maximum execution time in seconds. Defaults to the value
             in the 'bubble_sandbox.config.Config' used to construct
@@ -213,7 +213,7 @@ async def skill_run_python(
 
     Args:
         script: Python script to execute.
-        environment_name: name of sandbox environment (defaults to 'bare')
+        environment_name: name of sandbox environment (defaults to 'default')
         workdir: path on host system to mount as the working directory
         timeout: Maximum execution time in seconds. Defaults to the value
             in the 'bubble_sandbox.config.Config' used to construct
@@ -324,7 +324,7 @@ def write_transcript(
 def create_sandbox_toolset(
     *,
     id: str | None = None,
-    default_environment: str = "bare",
+    default_environment: str = "default",
     allowed_environments: AllowedEnvironments = None,
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
@@ -531,7 +531,7 @@ def _instructions() -> str:
 
 @dataclasses.dataclass
 class SandboxCapability(ai_capabilities.AbstractCapability[typing.Any]):
-    default_environment: str = "bare"
+    default_environment: str = "default"
     allowed_environments: AllowedEnvironments = None
     sandbox_config: bs_config.Config | None = None
     volumes: bs_models.VolumeMap | None = None
@@ -556,7 +556,7 @@ class SandboxCapability(ai_capabilities.AbstractCapability[typing.Any]):
 def create_bwrap_sandbox_capability(
     id: str | None = None,
     *,
-    default_environment: str = "bare",
+    default_environment: str = "default",
     allowed_environments: AllowedEnvironments = None,
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
