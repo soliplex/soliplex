@@ -33,7 +33,7 @@ def test_audit_sandbox_exec_records_success(audit_records):
     with sandbox_audit.audit_sandbox_exec(
         _state(),
         action=loggers.AUDIT_SANDBOX_ACTION_RUN,
-        environment="bare",
+        environment="default",
         workdir=WORKDIR,
     ) as access:
         access.record_ref(TRANSCRIPT)
@@ -42,7 +42,7 @@ def test_audit_sandbox_exec_records_success(audit_records):
     assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
     assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
     assert record.workdir == str(WORKDIR)
-    assert record.environment == "bare"
+    assert record.environment == "default"
     assert record.refs == [TRANSCRIPT]
     assert record.claims == {"preferred_username": USERNAME}
     assert record.room_id == ROOM_ID
@@ -73,7 +73,7 @@ def test_audit_sandbox_exec_records_failure(audit_records):
         with sandbox_audit.audit_sandbox_exec(
             _state(),
             action=loggers.AUDIT_SANDBOX_ACTION_RUN,
-            environment="bare",
+            environment="default",
             workdir=WORKDIR,
         ) as access:
             _record_ref_then_raise(access)
@@ -82,7 +82,7 @@ def test_audit_sandbox_exec_records_failure(audit_records):
     assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
     assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
     assert record.workdir == str(WORKDIR)
-    assert record.environment == "bare"
+    assert record.environment == "default"
     # Refs recorded before the failure still land on the failure record.
     assert record.refs == [TRANSCRIPT]
     assert record.reason == "RuntimeError"

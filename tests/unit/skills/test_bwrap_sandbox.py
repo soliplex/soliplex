@@ -571,7 +571,7 @@ def test_create_sandbox_toolset(
         exp_config = sandbox_config
 
     exp_sandbox_kw = {
-        "default_environment": "bare",
+        "default_environment": "default",
         "config": exp_config,
         "volumes": {},
     } | {
@@ -940,7 +940,7 @@ def test_create_bwrap_sandbox_capability(
     exp_toolset_kw = (
         {
             "id": capability.id,
-            "default_environment": "bare",
+            "default_environment": "default",
             "allowed_environments": None,
             "sandbox_config": None,
             "volumes": None,

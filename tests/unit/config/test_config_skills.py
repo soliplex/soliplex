@@ -272,9 +272,9 @@ def test_bwrap_sandbox_config_minimal(installation_config):
 
     assert config.as_yaml == {
         "kind": bwrap_sandbox.CAPABILITY_NAME,
-        "default_environment": "bare",
+        "default_environment": "default",
     }
-    assert config.extra_parameters == {"default_environment": "bare"}
+    assert config.extra_parameters == {"default_environment": "default"}
 
 
 def _round_trip_bwrap_skill(installation_config, config_path, config_dict):

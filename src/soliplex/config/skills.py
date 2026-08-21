@@ -379,7 +379,7 @@ class BwrapSandboxSkillConfig:
     _config_path: pathlib.Path | None = None
 
     id: str | None = None
-    default_environment: str = "bare"
+    default_environment: str = "default"
     allowed_environments: bwrap_sandbox.AllowedEnvironments = None
     sandbox_config: bs_config.Config = None
     volumes: bs_models.VolumeMap = _default_dict_field()
