@@ -4,6 +4,7 @@ import dataclasses
 import enum
 import functools
 import pathlib
+import re
 import typing
 from collections import abc
 
@@ -23,6 +24,9 @@ from . import exceptions
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
+
+HAS_V_NUMBER_SUFFIX = r".*/v\d+"
+has_v_number_suffix = re.compile(HAS_V_NUMBER_SUFFIX)
 
 
 #
@@ -288,7 +292,10 @@ class AgentConfig:
         base_url = self.llm_provider_base_url
 
         if base_url is not None:
-            provider_kw["base_url"] = f"{base_url}/v1"
+            if not has_v_number_suffix.fullmatch(base_url):
+                base_url = f"{base_url}/v1"
+
+            provider_kw["base_url"] = base_url
 
         if self.provider_key is not None:
             provider_kw["api_key"] = self._installation_config.get_secret(

@@ -848,16 +848,28 @@ def test_agentconfig_llm_provider_kw_ollama_w_default_base_url(
         installation_config.get_secret.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "w_base_url, exp_url",
+    [
+        (PROVIDER_BASE_URL, f"{PROVIDER_BASE_URL}/v1"),
+        (f"{PROVIDER_BASE_URL}/v1", f"{PROVIDER_BASE_URL}/v1"),
+        (f"{PROVIDER_BASE_URL}/v4", f"{PROVIDER_BASE_URL}/v4"),
+    ],
+)
 @pytest.mark.parametrize("has_pk", [False, True])
 def test_agentconfig_llm_provider_kw_ollama_w_explicit_base_url(
     installation_config,
     has_pk,
+    w_base_url,
+    exp_url,
 ):
     installation_config.interpolate_environment = lambda value: value
 
-    kw = {}
+    kw = {
+        "provider_base_url": w_base_url,
+    }
     expected = {
-        "base_url": f"{PROVIDER_BASE_URL}/v1",
+        "base_url": exp_url,
     }
 
     if has_pk:
@@ -868,7 +880,6 @@ def test_agentconfig_llm_provider_kw_ollama_w_explicit_base_url(
         id="test-agent",
         system_prompt="You are a test",
         provider_type=config_agents.LLMProviderType.OLLAMA,
-        provider_base_url=PROVIDER_BASE_URL,
         _installation_config=installation_config,
         **kw,
     )
@@ -919,16 +930,28 @@ def test_agentconfig_llm_provider_kw_openai_wo_provider_url(
         installation_config.get_secret.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "w_base_url, exp_url",
+    [
+        (PROVIDER_BASE_URL, f"{PROVIDER_BASE_URL}/v1"),
+        (f"{PROVIDER_BASE_URL}/v1", f"{PROVIDER_BASE_URL}/v1"),
+        (f"{PROVIDER_BASE_URL}/v4", f"{PROVIDER_BASE_URL}/v4"),
+    ],
+)
 @pytest.mark.parametrize("has_pk", [False, True])
-def test_agentconfig_llm_provider_kw_openai_w_provider_url(
+def test_agentconfig_llm_provider_kw_openai_w_explicit_provider_url(
     installation_config,
     has_pk,
+    w_base_url,
+    exp_url,
 ):
     installation_config.interpolate_environment = lambda value: value
 
-    kw = {}
+    kw = {
+        "provider_base_url": w_base_url,
+    }
     expected = {
-        "base_url": f"{PROVIDER_BASE_URL}/v1",
+        "base_url": exp_url,
     }
 
     if has_pk:
@@ -939,7 +962,6 @@ def test_agentconfig_llm_provider_kw_openai_w_provider_url(
         id="test-agent",
         system_prompt="You are a test",
         provider_type=config_agents.LLMProviderType.OPENAI,
-        provider_base_url=PROVIDER_BASE_URL,
         _installation_config=installation_config,
         **kw,
     )
