@@ -15,16 +15,10 @@ SECRET_VALUE = "DEADBEEF"
 OTHER_SECRET_VALUE = "FACEDACE"
 ERROR_MISS = object()
 
-SECRET_NAME_1 = "TEST_SECRET"
-SECRET_NAME_2 = "OTHER_SECRET"
-SECRET_CONFIG_1 = config_secrets.SecretConfig(secret_name=SECRET_NAME_1)
-SECRET_CONFIG_2 = config_secrets.SecretConfig(secret_name=SECRET_NAME_2)
-
 NoRaise = contextlib.nullcontext()
 EnvVarNotFound = pytest.raises(secrets.SecretEnvVarNotFound)
 FilePathNotFound = pytest.raises(secrets.SecretFilePathNotFound)
 SubprocessError = pytest.raises(secrets.SecretSubprocessError)
-ExcGroup = pytest.raises(ExceptionGroup)
 
 
 @pytest.mark.parametrize(
@@ -315,70 +309,3 @@ def test_random_chars_secret_source(o_ur):
     assert found is o_ur.return_value.hex.return_value
 
     o_ur.assert_called_once_with(32)
-
-
-ENV_VAR_MISS = config_secrets.EnvVarSecretSource(
-    secret_name=SECRET_NAME,
-    env_var_name="NONESUCH",
-)
-ENV_VAR_HIT = config_secrets.EnvVarSecretSource(
-    secret_name=SECRET_NAME,
-    env_var_name=ENV_VAR_NAME,
-)
-RANDOM_CHARS = config_secrets.RandomCharsSecretSource(secret_name=SECRET_NAME)
-
-
-@pytest.mark.parametrize(
-    "sources, expectation, expected",
-    [
-        ([ENV_VAR_MISS], ExcGroup, ERROR_MISS),
-        ([ENV_VAR_MISS, ENV_VAR_HIT], NoRaise, SECRET_VALUE),
-    ],
-)
-@mock.patch("os.urandom")
-def test_secret_ctor_w_sources(
-    o_ur,
-    sources,
-    expectation,
-    expected,
-):
-    secret_config = config_secrets.SecretConfig(
-        secret_name=SECRET_NAME,
-        sources=sources,
-    )
-
-    env_patch = {ENV_VAR_NAME: SECRET_VALUE}
-
-    with mock.patch.dict("os.environ", clear=True, **env_patch):
-        with expectation:
-            found = secrets.get_secret(secret_config)
-
-    if expected is not ERROR_MISS:
-        assert found == expected
-
-
-@pytest.mark.parametrize(
-    "secret_configs, expectation",
-    [
-        ((), NoRaise),
-        ([SECRET_CONFIG_1], ExcGroup),
-        ([SECRET_CONFIG_1, SECRET_CONFIG_2], ExcGroup),
-    ],
-)
-@mock.patch("soliplex.secrets.get_secret")
-def test_resolve_secrets(gs, secret_configs, expectation):
-    gs.side_effect = secrets.SecretError("testing")
-
-    with mock.patch("os.environ", clear=True):
-        with expectation as expected:
-            secrets.resolve_secrets(secret_configs)
-
-    if expected is not None:
-        assert len(expected.value.exceptions) == len(secret_configs)
-
-        for secret_config, gs_call in zip(
-            secret_configs,
-            gs.call_args_list,
-            strict=True,
-        ):
-            assert gs_call == mock.call(secret_config)

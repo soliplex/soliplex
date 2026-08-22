@@ -5,6 +5,8 @@ import pathlib
 import re
 import typing
 
+from soliplex import secrets
+
 from . import _utils
 from . import exceptions as config_exc
 
@@ -17,9 +19,6 @@ SECRET_RE = re.compile(SECRET_PATTERN)
 # ============================================================================
 #   Secrets configuration types
 # ============================================================================
-
-
-SECRET_GETTERS_BY_KIND = {}
 
 
 class NotASecret(ValueError):
@@ -187,6 +186,11 @@ SecretSource = (
 SecretSources = list[SecretSource]
 
 
+# The two registries a secret source kind lives in. 'SecretConfig
+# .from_yaml' parses a 'sources:' entry via the first; 'get_secret'
+# resolves it via the second. Both are seeded here with the same four
+# built-in kinds; 'meta.secret_sources' and 'meta.secret_getters' add to
+# them (or, with a '$$CLEAR$$' marker, replace them wholesale).
 SourceClassesByKind = {
     klass.kind: klass
     for klass in [
@@ -197,14 +201,12 @@ SourceClassesByKind = {
     ]
 }
 
-
-# The source kinds Soliplex registers itself, captured before any
-# metaconfig registration can add to either registry. 'soliplex.secrets'
-# registers a getter for exactly these kinds, so this is the default key
-# set for both 'SourceClassesByKind' and 'SECRET_GETTERS_BY_KIND'.
-# 'InstallationConfigMeta.as_yaml' compares against it to distinguish a
-# registry a config cleared from one that was never touched.
-DEFAULT_SECRET_SOURCE_KINDS = frozenset(SourceClassesByKind)
+SECRET_GETTERS_BY_KIND = {
+    EnvVarSecretSource.kind: secrets.get_env_var_secret,
+    FilePathSecretSource.kind: secrets.get_file_path_secret,
+    SubprocessSecretSource.kind: secrets.get_subprocess_secret,
+    RandomCharsSecretSource.kind: secrets.get_random_chars_secret,
+}
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -266,3 +268,45 @@ class SecretConfig:
     @property
     def resolved(self) -> str | None:
         return self._resolved
+
+
+def get_secret(secret_config: SecretConfig) -> str:
+    excs = []
+    sources = secret_config.sources
+    while secret_config.resolved is None and sources:
+        source, *sources = sources
+        getter = SECRET_GETTERS_BY_KIND.get(source.kind)
+        try:
+            # Raised inside the 'try', so a kind whose getter is not
+            # registered counts as one failed source rather than a bare
+            # 'KeyError' aborting resolution: the chain falls through to
+            # the next source, and the miss joins the reported group.
+            if getter is None:
+                raise secrets.NoGetterForSecretSourceKind(
+                    secret_config.secret_name,
+                    source.kind,
+                )
+
+            secret_config._resolved = getter(source)
+        except secrets.SecretError as exc:
+            excs.append(exc)
+
+    if secret_config.resolved is None:
+        raise secrets.SecretSourcesFailed(secret_config.secret_name, excs)
+
+    return secret_config.resolved
+
+
+def resolve_secrets(secret_configs: list[SecretConfig]) -> None:
+    failed_names = []
+    excs = []
+
+    for secret_config in secret_configs:
+        try:
+            get_secret(secret_config)
+        except secrets.SecretError as exc:
+            failed_names.append(secret_config.secret_name)
+            excs.append(exc)
+
+    if failed_names:
+        raise secrets.SecretsNotFound(",".join(failed_names), excs)

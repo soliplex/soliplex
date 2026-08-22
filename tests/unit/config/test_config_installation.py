@@ -118,7 +118,12 @@ W_FULL_META_INSTALLATION_CONFIG_KW = {
         "secret_sources": [
             config_meta.SecretSourceMeta(
                 config_klass=config_secrets.EnvVarSecretSource,
-                registered_func=test_meta.secret_source_func,
+            ),
+        ],
+        "secret_getters": [
+            config_meta.SecretGetterConfigMeta(
+                kind=config_secrets.EnvVarSecretSource.kind,
+                func=test_meta.secret_source_func,
             ),
         ],
     },
@@ -1120,7 +1125,7 @@ RaiseUnknownSecret = pytest.raises(secrets.UnknownSecret)
         ({SECRET_NAME_1: SECRET_CONFIG_1}, NoRaise),
     ],
 )
-@mock.patch("soliplex.secrets.get_secret")
+@mock.patch("soliplex.config.secrets.get_secret")
 def test_installationconfig_get_secret(gs, secret_map, expectation):
     i_config = config_installation.InstallationConfig(
         id="test-ic",
@@ -1161,7 +1166,7 @@ def test_installationconfig_get_secret(gs, secret_map, expectation):
         ),
     ],
 )
-@mock.patch("soliplex.secrets.get_secret")
+@mock.patch("soliplex.config.secrets.get_secret")
 def test_installationconfig_interpolate_secret(
     gs,
     value,
@@ -1451,7 +1456,7 @@ def test_installationconfig_interpolate_environment(
         ),
     ],
 )
-@mock.patch("soliplex.secrets.get_secret")
+@mock.patch("soliplex.config.secrets.get_secret")
 def test_installationconfig_interpolate(
     gs,
     value,

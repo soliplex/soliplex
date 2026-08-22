@@ -30,6 +30,7 @@ BARE_ICMETA_KW = {
     "agent_capability_types": [],
     "agent_configs": [],
     "secret_sources": [],
+    "secret_getters": [],
     "jsonpath_functions": [],
 }
 BARE_ICMETA_YAML = """\
@@ -276,31 +277,94 @@ def secret_source_func(source):  # pragma: NO COVER (registered, not called)
     return "SEEKRIT"
 
 
+_SECRET_SOURCE_META = config_meta.SecretSourceMeta(
+    config_klass=_test_metaconfig.DummySecretSource,
+)
+_SECRET_GETTER_META = config_meta.SecretGetterConfigMeta(
+    kind=_test_metaconfig.DummySecretSource.kind,
+    func=secret_source_func,
+)
+
+# Sources alone: the bare dotted-name spelling '_ConfigKlassOnlyMeta'
+# accepts, with no getter registered for the kind.
 W_SECRET_SOURCE_ICMETA_KW = BARE_ICMETA_KW | {
-    "secret_sources": [
-        config_meta.SecretSourceMeta(
-            config_klass=_test_metaconfig.DummySecretSource,
-            registered_func=secret_source_func,
-        ),
-    ],
+    "secret_sources": [_SECRET_SOURCE_META],
 }
 W_SECRET_SOURCE_ICMETA_YAML = """\
+meta:
+  secret_sources:
+    - "_test_metaconfig.DummySecretSource"
+"""
+
+W_SECRET_SOURCE_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "secret_sources": [
+        config_meta.ClearMetaRegistry(),
+        _SECRET_SOURCE_META,
+    ],
+}
+W_SECRET_SOURCE_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  secret_sources:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
+    - "_test_metaconfig.DummySecretSource"
+"""
+
+# Both subsections spelled out.
+W_SECRET_GETTER_ICMETA_KW = BARE_ICMETA_KW | {
+    "secret_sources": [_SECRET_SOURCE_META],
+    "secret_getters": [_SECRET_GETTER_META],
+}
+W_SECRET_GETTER_ICMETA_YAML = f"""\
+meta:
+  secret_sources:
+    - "_test_metaconfig.DummySecretSource"
+  secret_getters:
+    - "kind": "{_test_metaconfig.DummySecretSource.kind}"
+      "func": "soliplex.config.test_secret_func"
+"""
+
+W_SECRET_GETTER_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "secret_sources": [
+        config_meta.ClearMetaRegistry(),
+        _SECRET_SOURCE_META,
+    ],
+    "secret_getters": [
+        config_meta.ClearMetaRegistry(),
+        _SECRET_GETTER_META,
+    ],
+}
+W_SECRET_GETTER_W_CLEAR_ICMETA_YAML = f"""\
+meta:
+  secret_sources:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
+    - "_test_metaconfig.DummySecretSource"
+  secret_getters:
+    - "{config_meta.ClearMetaRegistry.MARKER}"
+    - "kind": "{_test_metaconfig.DummySecretSource.kind}"
+      "func": "soliplex.config.test_secret_func"
+"""
+
+# The combined form, desugared into one entry per subsection. The getter
+# is *prepended* to 'secret_getters', hence the same KW as the split form.
+W_SECRET_SUGAR_ICMETA_KW = BARE_ICMETA_KW | {
+    "secret_sources": [_SECRET_SOURCE_META],
+    "secret_getters": [_SECRET_GETTER_META],
+}
+W_SECRET_SUGAR_ICMETA_YAML = """\
 meta:
   secret_sources:
     - "config_klass": "_test_metaconfig.DummySecretSource"
       "registered_func": "soliplex.config.test_secret_func"
 """
 
-W_SECRET_SOURCE_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
+W_SECRET_SUGAR_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
     "secret_sources": [
         config_meta.ClearMetaRegistry(),
-        config_meta.SecretSourceMeta(
-            config_klass=_test_metaconfig.DummySecretSource,
-            registered_func=secret_source_func,
-        ),
+        _SECRET_SOURCE_META,
     ],
+    "secret_getters": [_SECRET_GETTER_META],
 }
-W_SECRET_SOURCE_W_CLEAR_ICMETA_YAML = f"""\
+W_SECRET_SUGAR_W_CLEAR_ICMETA_YAML = f"""\
 meta:
   secret_sources:
     - "{config_meta.ClearMetaRegistry.MARKER}"
@@ -382,12 +446,8 @@ FULL_ICMETA_KW = {
             config_klass=_test_metaconfig.DummyAgentConfig,
         ),
     ],
-    "secret_sources": [
-        config_meta.SecretSourceMeta(
-            config_klass=_test_metaconfig.DummySecretSource,
-            registered_func=secret_source_func,
-        ),
-    ],
+    "secret_sources": [_SECRET_SOURCE_META],
+    "secret_getters": [_SECRET_GETTER_META],
     "jsonpath_functions": [
         config_meta.JSONPathFunctionConfigMeta(
             name=JSONPATH_FUNCTION_NAME,
@@ -422,7 +482,37 @@ meta:
         func: "_test_metaconfig.dummy_jsonpath_func"
 """
 
+
+def _expects_secret_getter(config_dict_meta):
+    """Does this 'meta:' mapping end up registering a secret getter?
+
+    Either via an explicit 'secret_getters' entry, or via the combined
+    'config_klass' + 'registered_func' shorthand under 'secret_sources'.
+    """
+    if config_dict_meta.get("secret_getters"):
+        return True
+
+    return any(
+        isinstance(entry, dict) and "registered_func" in entry
+        for entry in config_dict_meta.get("secret_sources", ())
+    )
+
+
 NoRaise = contextlib.nullcontext()
+
+
+def test__configklassonlymeta_from_yaml_w_extraneous_key():
+
+    class _TestMeta(config_meta._ConfigKlassOnlyMeta):
+        pass
+
+    with pytest.raises(config_meta.ExtraneousKeys):
+        _TestMeta.from_yaml(
+            {
+                "config_klass": "_test_metaconfig.DummyToolConfig",
+                "extraneous": True,
+            }
+        )
 
 
 @pytest.mark.parametrize(
@@ -545,20 +635,36 @@ def test_agentconfigmeta_from_yaml(w_bare_str):
     assert found.kind == _test_metaconfig.DummyAgentConfig.kind
 
 
-def test_secretsourcemeta_from_yaml():
-    secret_source_klassname = "_test_metaconfig.DummySecretSource"
-    registered_funcname = "_test_metaconfig.dummy_secret_getter"
-
-    yaml_config = {
-        "config_klass": secret_source_klassname,
-        "registered_func": registered_funcname,
-    }
+@pytest.mark.parametrize(
+    "yaml_config",
+    [
+        pytest.param(
+            "_test_metaconfig.DummySecretSource",
+            id="bare dotted name",
+        ),
+        pytest.param(
+            {"config_klass": "_test_metaconfig.DummySecretSource"},
+            id="mapping",
+        ),
+    ],
+)
+def test_secretsourcemeta_from_yaml(yaml_config):
 
     found = config_meta.SecretSourceMeta.from_yaml(yaml_config)
 
     assert found.config_klass is _test_metaconfig.DummySecretSource
-    assert found.registered_func is _test_metaconfig.dummy_secret_getter
     assert found.kind == _test_metaconfig.DummySecretSource.kind
+
+
+def test_secretgetterconfigmeta_from_yaml():
+    kind = _test_metaconfig.DummySecretSource.kind
+
+    found = config_meta.SecretGetterConfigMeta.from_yaml(
+        {"kind": kind, "func": "_test_metaconfig.dummy_secret_getter"},
+    )
+
+    assert found.kind == kind
+    assert found.func is _test_metaconfig.dummy_secret_getter
 
 
 def test_jsonpathfunctionconfigmeta_from_yaml():
@@ -708,6 +814,14 @@ def test_installationconfigmeta__strip_clear(
             W_SECRET_SOURCE_ICMETA_KW,
         ),
         (
+            W_SECRET_GETTER_ICMETA_YAML,
+            W_SECRET_GETTER_ICMETA_KW,
+        ),
+        (
+            W_SECRET_SUGAR_ICMETA_YAML,
+            W_SECRET_SUGAR_ICMETA_KW,
+        ),
+        (
             W_JSONPATH_FUNCTIONS_ICMETA_YAML,
             W_JSONPATH_FUNCTIONS_ICMETA_KW,
         ),
@@ -844,10 +958,13 @@ def test_installationconfigmeta_from_yaml(
 
         if config_dict_meta and "secret_sources" in config_dict_meta:
             ss_klass = _test_metaconfig.DummySecretSource
+            assert patched_secret_sources == {ss_klass.kind: ss_klass}
+
+        if config_dict_meta and _expects_secret_getter(config_dict_meta):
+            ss_klass = _test_metaconfig.DummySecretSource
             assert patched_secret_getters == {
                 ss_klass.kind: secret_source_func
             }
-            assert patched_secret_sources == {ss_klass.kind: ss_klass}
 
         if config_dict_meta and "jsonpath_functions" in config_dict_meta:
             assert authz.registered_jsonpath_functions() == {
@@ -906,6 +1023,16 @@ def test_installationconfigmeta_from_yaml(
             W_SECRET_SOURCE_W_CLEAR_ICMETA_YAML,
             W_SECRET_SOURCE_W_CLEAR_ICMETA_KW,
             id="secret sources",
+        ),
+        pytest.param(
+            W_SECRET_GETTER_W_CLEAR_ICMETA_YAML,
+            W_SECRET_GETTER_W_CLEAR_ICMETA_KW,
+            id="secret sources and getters",
+        ),
+        pytest.param(
+            W_SECRET_SUGAR_W_CLEAR_ICMETA_YAML,
+            W_SECRET_SUGAR_W_CLEAR_ICMETA_KW,
+            id="secret sources, combined form",
         ),
         pytest.param(
             W_JSONPATH_FUNCTIONS_W_CLEAR_ICMETA_YAML,
@@ -989,6 +1116,10 @@ def test_installationconfigmeta_from_yaml_w_clear(
     if "secret_sources" in config_dict_meta:
         patched_secret_sources.clear()
         patched_secret_sources["before"] = object()
+        patched_secret_getters.clear()
+        patched_secret_getters["before"] = object()
+
+    if "secret_getters" in config_dict_meta:
         patched_secret_getters.clear()
         patched_secret_getters["before"] = object()
 
@@ -1101,12 +1232,16 @@ def test_installationconfigmeta_from_yaml_w_clear(
                 assert kind in patched_agent_configs
 
     if "secret_sources" in config_dict_meta:
-        assert "before" not in patched_secret_getters
         assert "before" not in patched_secret_sources
 
         ss_klass = _test_metaconfig.DummySecretSource
-        assert patched_secret_getters == {ss_klass.kind: secret_source_func}
         assert patched_secret_sources == {ss_klass.kind: ss_klass}
+
+    if _expects_secret_getter(config_dict_meta):
+        assert "before" not in patched_secret_getters
+
+        ss_klass = _test_metaconfig.DummySecretSource
+        assert patched_secret_getters == {ss_klass.kind: secret_source_func}
 
     if "jsonpath_functions" in config_dict_meta:
         assert "before" not in patched_jsonpath_functions
@@ -1203,9 +1338,12 @@ def test_installationconfigmeta_as_yaml(
         patched_secret_sources[klass.kind] = klass
 
         expected["secret_sources"].append(
+            "_test_metaconfig.DummySecretSource",
+        )
+        expected["secret_getters"].append(
             {
-                "config_klass": "_test_metaconfig.DummySecretSource",
-                "registered_func": "_test_metaconfig.dummy_secret_getter",
+                "kind": klass.kind,
+                "func": "_test_metaconfig.dummy_secret_getter",
             }
         )
 
@@ -1227,22 +1365,6 @@ def test_installationconfigmeta_as_yaml(
     assert found == expected
 
 
-def test_installationconfigmeta_as_yaml_wo_secret_source_clear(
-    patched_secret_sources,
-    patched_secret_getters,
-):
-    # Every import-time kind is registered in both registries, so nothing
-    # was suppressed and 'as_yaml' must not ask a reload to clear them.
-    for kind in config_secrets.DEFAULT_SECRET_SOURCE_KINDS:
-        patched_secret_sources[kind] = _test_metaconfig.DummySecretSource
-        patched_secret_getters[kind] = _test_metaconfig.dummy_secret_getter
-
-    found = config_meta.InstallationConfigMeta().as_yaml["secret_sources"]
-
-    assert config_meta.ClearMetaRegistry.MARKER not in found
-    assert len(found) == len(config_secrets.DEFAULT_SECRET_SOURCE_KINDS)
-
-
 def _registry_snapshot():
     """Copy every registry 'InstallationConfigMeta' writes into."""
     return {
@@ -1261,6 +1383,7 @@ def _registry_snapshot():
             config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME,
         ),
         "agent_configs": dict(config_agents.AGENT_CONFIG_CLASSES_BY_KIND),
+        "secret_sources": dict(config_secrets.SourceClassesByKind),
         "secret_getters": dict(config_secrets.SECRET_GETTERS_BY_KIND),
         "jsonpath_functions": dict(authz.registered_jsonpath_functions()),
     }
@@ -1335,6 +1458,8 @@ def _round_trip_icmeta_registries(config_path, config_dict):
         W_AGENT_CAPABILITY_ICMETA_YAML,
         W_AGENT_CONFIGS_ICMETA_YAML,
         W_SECRET_SOURCE_ICMETA_YAML,
+        W_SECRET_GETTER_ICMETA_YAML,
+        W_SECRET_SUGAR_ICMETA_YAML,
         W_JSONPATH_FUNCTIONS_ICMETA_YAML,
         FULL_ICMETA_YAML,
         # YAML which already clears the registries
@@ -1345,6 +1470,8 @@ def _round_trip_icmeta_registries(config_path, config_dict):
         W_AGENT_CAPABILITY_W_CLEAR_ICMETA_YAML,
         W_AGENT_CONFIGS_W_CLEAR_ICMETA_YAML,
         W_SECRET_SOURCE_W_CLEAR_ICMETA_YAML,
+        W_SECRET_GETTER_W_CLEAR_ICMETA_YAML,
+        W_SECRET_SUGAR_W_CLEAR_ICMETA_YAML,
         W_JSONPATH_FUNCTIONS_W_CLEAR_ICMETA_YAML,
     ],
 )
@@ -1473,16 +1600,85 @@ def test_installationconfigmeta_postinit_registers_secret_sources(
     patched_secret_sources,
 ):
     ss_klass = _test_metaconfig.DummySecretSource
-    ss_getter = _test_metaconfig.dummy_secret_getter
-    ss_meta = config_meta.SecretSourceMeta(
-        config_klass=ss_klass,
-        registered_func=ss_getter,
-    )
+    ss_meta = config_meta.SecretSourceMeta(config_klass=ss_klass)
 
     config_meta.InstallationConfigMeta(secret_sources=[ss_meta])
 
-    assert patched_secret_getters[ss_klass.kind] is ss_getter
     assert patched_secret_sources[ss_klass.kind] is ss_klass
+    assert patched_secret_getters == {}
+
+
+@pytest.mark.parametrize(
+    "w_ss_registered, expectation",
+    [
+        (False, pytest.raises(config_meta.GetterForUnknownSecretSource)),
+        (True, contextlib.nullcontext()),
+    ],
+)
+def test_installationconfigmeta_postinit_registers_secret_getters(
+    patched_secret_getters,
+    patched_secret_sources,
+    w_ss_registered,
+    expectation,
+):
+    ss_klass = _test_metaconfig.DummySecretSource
+    if w_ss_registered:
+        patched_secret_sources[ss_klass.kind] = ss_klass
+
+    ss_getter = _test_metaconfig.dummy_secret_getter
+    sg_meta = config_meta.SecretGetterConfigMeta(
+        kind=ss_klass.kind,
+        func=ss_getter,
+    )
+
+    with expectation as expected:
+        config_meta.InstallationConfigMeta(secret_getters=[sg_meta])
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert patched_secret_getters[ss_klass.kind] is ss_getter
+
+
+def test_installationconfigmeta_postinit_clearing_sources_clears_getters(
+    patched_secret_getters,
+    patched_secret_sources,
+):
+    # A getter cannot outlive the source class it resolves, so the marker
+    # cascades -- exactly as 'tool_configs' clears the wrapper registry.
+    other_klass = _test_metaconfig.DummyToolConfig
+    patched_secret_sources["stale"] = other_klass
+    patched_secret_getters["stale"] = _test_metaconfig.dummy_secret_getter
+
+    ss_klass = _test_metaconfig.DummySecretSource
+    ss_meta = config_meta.SecretSourceMeta(config_klass=ss_klass)
+
+    config_meta.InstallationConfigMeta(
+        secret_sources=[config_meta.ClearMetaRegistry(), ss_meta],
+    )
+
+    assert patched_secret_sources == {ss_klass.kind: ss_klass}
+    assert patched_secret_getters == {}
+
+
+def test_installationconfigmeta_postinit_clears_secret_getters_only(
+    patched_secret_getters,
+    patched_secret_sources,
+):
+    ss_klass = _test_metaconfig.DummySecretSource
+    patched_secret_sources[ss_klass.kind] = ss_klass
+    patched_secret_getters["stale"] = _test_metaconfig.dummy_secret_getter
+
+    ss_getter = _test_metaconfig.dummy_secret_getter
+    sg_meta = config_meta.SecretGetterConfigMeta(
+        kind=ss_klass.kind,
+        func=ss_getter,
+    )
+
+    config_meta.InstallationConfigMeta(
+        secret_getters=[config_meta.ClearMetaRegistry(), sg_meta],
+    )
+
+    assert patched_secret_sources == {ss_klass.kind: ss_klass}
+    assert patched_secret_getters == {ss_klass.kind: ss_getter}
 
 
 def test_installationconfigmeta_postinit_registers_jsonpath_functions(

@@ -100,20 +100,33 @@ meta:
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
-  # Register implementation functions for different secret source classes
+  # Register secret source classes, and the functions which resolve them
   #
-  # By default, these classes are configured to use the corresponding
-  # functions in 'soliplex.secrets', just as if we configured here:
+  # By default, Soliplex registers its own source classes and the
+  # corresponding functions in 'soliplex.secrets', just as if we
+  # configured here:
   #
   # secret_sources:
-  # - config_klass: "soliplex.config.secrets.EnvVarSecretSource"
-  #   registered_func: "soliplex.secrets.get_env_var_secret"
-  # - config_klass: "soliplex.config.secrets.FilePathSecretSource"
-  #   registered_func: "soliplex.secrets.get_file_path_secret"
-  # - config_klass: "soliplex.config.secrets.SubprocessSecretSource"
-  #   registered_func: "soliplex.secrets.get_subprocess_secret"
-  # - config_klass: "soliplex.config.secrets.RandomCharsSecretSource"
-  #   registered_func: "soliplex.secrets.get_random_chars_secret"
+  # - "soliplex.config.secrets.EnvVarSecretSource"
+  # - "soliplex.config.secrets.FilePathSecretSource"
+  # - "soliplex.config.secrets.SubprocessSecretSource"
+  # - "soliplex.config.secrets.RandomCharsSecretSource"
+  # secret_getters:
+  # - kind: "env_var"
+  #   func: "soliplex.secrets.get_env_var_secret"
+  # - kind: "file_path"
+  #   func: "soliplex.secrets.get_file_path_secret"
+  # - kind: "subprocess"
+  #   func: "soliplex.secrets.get_subprocess_secret"
+  # - kind: "random_chars"
+  #   func: "soliplex.secrets.get_random_chars_secret"
+  #
+  # A new kind normally ships its class and getter together, and may use
+  # the combined shorthand for both registrations:
+  #
+  # secret_sources:
+  # - config_klass: "my_package.config.VaultSecretSource"
+  #   registered_func: "my_package.secrets.get_vault_secret"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------

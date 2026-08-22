@@ -10,6 +10,12 @@ The default configuration knows of four types of sources:
 - Subprocess commands
 - Randomly-generated strings
 
+A deployment can add a fifth -- fetching secrets from a cloud secret
+store, for instance -- or replace the built-ins entirely. See
+[Registering Secret Source Configurations](meta.md#registering-secret-source-configurations)
+and [Registering Secret Getter
+Functions](meta.md#registering-secret-getter-functions).
+
 ## Secret Source: Environment Variable
 
 A secret source which uses an environment variable can be configured so:

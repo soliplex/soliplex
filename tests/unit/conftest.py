@@ -213,17 +213,22 @@ def patched_agent_configs():
 
 
 @pytest.fixture
-def patched_secret_sources():
+def patched_secret_getters():
     with mock.patch.dict(config_secrets.__dict__) as patched:
-        result = patched["SourceClassesByKind"] = {}
+        result = patched["SECRET_GETTERS_BY_KIND"] = {}
 
         yield result
 
 
 @pytest.fixture
-def patched_secret_getters():
+def patched_secret_sources(patched_secret_getters):
+    # Patching the sources alone would leave the real getters registered
+    # for kinds no longer in 'SourceClassesByKind', violating the
+    # invariant 'InstallationConfigMeta.as_yaml' now assumes. Its dump
+    # would raise 'GetterForUnknownSecretSource' on reload, so take the
+    # getters registry down with the sources.
     with mock.patch.dict(config_secrets.__dict__) as patched:
-        result = patched["SECRET_GETTERS_BY_KIND"] = {}
+        result = patched["SourceClassesByKind"] = {}
 
         yield result
 
