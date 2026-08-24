@@ -33,16 +33,20 @@ class ExtraneousKeys(TypeError):
 
 
 class WrapperForUnknownToolConfig(ValueError):
-    def __init__(self, tool_config_klass, wrapper_klass):
+    def __init__(self, tool_name, tool_config_klass, wrapper_klass):
+        self.tool_name = tool_name
         self.tool_config_klass = tool_config_klass
         self.wrapper_klass = wrapper_klass
 
         tck_dotted = _utils._dotted_name(tool_config_klass)
         wk_dotted = _utils._dotted_name(wrapper_klass)
 
+        # It is the *name* which is unregistered: 'tool_config_klass'
+        # may well be registered, under some other name.
         super().__init__(
-            f"Wrapper class '{wk_dotted}' cannot be "
-            f"registered for unregistered tool config class '{tck_dotted}'"
+            f"Wrapper class '{wk_dotted}' cannot be registered for "
+            f"tool config class '{tck_dotted}' under unregistered "
+            f"tool name '{tool_name}'"
         )
 
 
@@ -94,10 +98,35 @@ class AGUI_FeatureConfigMeta:
 
 
 AllowedKeys = typing.ClassVar[frozenset[str]]
+KeyField = typing.ClassVar[str | None]
 
 
 @dataclasses.dataclass(kw_only=True)
-class _ConfigKlassOnlyMeta:
+class _RegistryKeyMeta:
+    """Mixin for meta classes registering 'config_klass' under a key.
+
+    A derived class names that key in '_KEY_FIELD' and declares a
+    matching optional field. The field defaults to the value
+    'config_klass' declares for itself (see '_key_from_config_klass');
+    passing it explicitly registers the class under an alias instead,
+    which 'as_yaml' then preserves.
+    """
+
+    _KEY_FIELD: KeyField = None
+
+    def __post_init__(self):
+        if self._KEY_FIELD is None:  # no registry key of its own
+            return
+
+        if getattr(self, self._KEY_FIELD) is None:
+            setattr(self, self._KEY_FIELD, self._key_from_config_klass())
+
+    def _key_from_config_klass(self) -> str:
+        return getattr(self.config_klass, self._KEY_FIELD)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigKlassOnlyMeta(_RegistryKeyMeta):
     """Base for config meta classes which take only 'config_klass'
 
     Derived classes may declare ignored, deprecated keys by overriding
@@ -109,6 +138,7 @@ class _ConfigKlassOnlyMeta:
 
     @classmethod
     def from_yaml(cls, yaml_config: _utils.DottedName | dict):
+        extra = {}
 
         if isinstance(yaml_config, _utils.DottedName):
             config_klass = _utils._from_dotted_name(yaml_config)
@@ -121,8 +151,22 @@ class _ConfigKlassOnlyMeta:
             config_klass = _utils._from_dotted_name(
                 yaml_config["config_klass"]
             )
+            # Any remaining allowed key which is also a field of the
+            # derived class is passed through: that is how a category
+            # whose registry key can differ from the one declared by
+            # 'config_klass' (an alias) round-trips.
+            field_names = {
+                field.name
+                for field in dataclasses.fields(cls)
+                if field.name != "config_klass"
+            }
+            extra = {
+                key: value
+                for key, value in yaml_config.items()
+                if key in field_names
+            }
 
-        return cls(config_klass=config_klass)
+        return cls(config_klass=config_klass, **extra)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -143,19 +187,25 @@ class ToolConfigMeta(_ConfigKlassOnlyMeta):
     'registered_func'
         No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
         '_ALLOWED_KEYS') and otherwise ignored.
+
+    'tool_name'
+        (optional) the registry key under which 'config_klass' is
+        registered. Defaults to the class' own 'tool_name'. Supplying it
+        explicitly registers the class under an additional alias, e.g.
+        for backward compatibility with a renamed tool.
     """
 
     _ALLOWED_KEYS: AllowedKeys = frozenset(
         {
             "config_klass",
+            "tool_name",
             "wrapper_klass",
             "registered_func",
         }
     )
+    _KEY_FIELD: KeyField = "tool_name"
 
-    @property
-    def tool_name(self) -> _utils.DottedName:
-        return self.config_klass.tool_name
+    tool_name: _utils.DottedName | None = None
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -176,23 +226,29 @@ class MCP_ToolsetConfigMeta(_ConfigKlassOnlyMeta):
     'registered_func'
         No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
         '_ALLOWED_KEYS') and otherwise ignored.
+
+    'kind'
+        (optional) the registry key under which 'config_klass' is
+        registered. Defaults to the class' own 'kind'. Supplying it
+        explicitly registers the class under an additional alias, e.g.
+        for backward compatibility with a renamed toolset kind.
     """
 
     _ALLOWED_KEYS: AllowedKeys = frozenset(
         {
             "config_klass",
+            "kind",
             "wrapper_klass",
             "registered_func",
         }
     )
+    _KEY_FIELD: KeyField = "kind"
 
-    @property
-    def kind(self) -> str:
-        return self.config_klass.kind
+    kind: str | None = None
 
 
 @dataclasses.dataclass(kw_only=True)
-class MCP_ServerToolWrapperConfigMeta:
+class MCP_ServerToolWrapperConfigMeta(_RegistryKeyMeta):
     """Meta-config class for registering wrapper classes for MCP server tools
 
     'config_klass'
@@ -211,18 +267,28 @@ class MCP_ServerToolWrapperConfigMeta:
     'registered_func'
         No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
         '_ALLOWED_KEYS') and otherwise ignored.
+
+    'tool_name'
+        (optional) the registry key under which 'wrapper_klass' is
+        registered. Defaults to the 'tool_name' declared by
+        'config_klass'. Supplying it explicitly wraps the tool config
+        registered under that alias, e.g. for backward compatibility
+        with a renamed tool.
     """
 
     _ALLOWED_KEYS: AllowedKeys = frozenset(
         {
             "config_klass",
+            "tool_name",
             "wrapper_klass",
             "registered_func",
         }
     )
+    _KEY_FIELD: KeyField = "tool_name"
 
     config_klass: typing.Any
     wrapper_klass: typing.Any
+    tool_name: _utils.DottedName | None = None
 
     @classmethod
     def from_yaml(cls, yaml_config: _utils.DottedName | dict):
@@ -232,11 +298,8 @@ class MCP_ServerToolWrapperConfigMeta:
         return cls(
             config_klass=config_klass,
             wrapper_klass=wrapper_klass,
+            tool_name=yaml_config.get("tool_name"),
         )
-
-    @property
-    def tool_name(self) -> _utils.DottedName:
-        return self.config_klass.tool_name
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -257,23 +320,29 @@ class SkillConfigMeta(_ConfigKlassOnlyMeta):
     'registered_func'
         No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
         '_ALLOWED_KEYS') and otherwise ignored.
+
+    'kind'
+        (optional) the registry key under which 'config_klass' is
+        registered. Defaults to the class' own 'kind'. Supplying it
+        explicitly registers the class under an additional alias, e.g.
+        for backward compatibility with a renamed skill.
     """
 
     _ALLOWED_KEYS: AllowedKeys = frozenset(
         {
             "config_klass",
+            "kind",
             "wrapper_klass",
             "registered_func",
         }
     )
+    _KEY_FIELD: KeyField = "kind"
 
-    @property
-    def kind(self) -> str:
-        return self.config_klass.kind
+    kind: str | None = None
 
 
 @dataclasses.dataclass(kw_only=True)
-class AgentCapabilityMeta(_ConfigKlassOnlyMeta):
+class AgentCapabilityConfigMeta(_ConfigKlassOnlyMeta):
     """Meta-config class for registering agent capability classes
 
     'config_klass'
@@ -290,19 +359,34 @@ class AgentCapabilityMeta(_ConfigKlassOnlyMeta):
     'registered_func'
         No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
         '_ALLOWED_KEYS') and otherwise ignored.
+
+    'capability_name'
+        (optional) the registry key under which 'config_klass' is
+        registered. Unlike the other categories, it defaults to the
+        class' own '__name__': capability classes declare no name of
+        their own. Supplying it explicitly registers the class under an
+        additional alias, e.g. for backward compatibility with a
+        renamed capability class.
     """
 
     _ALLOWED_KEYS: AllowedKeys = frozenset(
         {
+            "capability_name",
             "config_klass",
             "wrapper_klass",
             "registered_func",
         }
     )
+    _KEY_FIELD: KeyField = "capability_name"
 
-    @property
-    def capability_name(self) -> _utils.DottedName:
+    capability_name: _utils.DottedName | None = None
+
+    def _key_from_config_klass(self) -> str:
         return self.config_klass.__name__
+
+
+# Deprecated backward-compatibiity alias (no warning, no removal scheduled).
+AgentCapabilityMeta = AgentCapabilityConfigMeta
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -323,19 +407,25 @@ class AgentConfigMeta(_ConfigKlassOnlyMeta):
     'registered_func'
         No-op fossil from 'ConfigMeta'; accepted by 'from_yaml' (see
         '_ALLOWED_KEYS') and otherwise ignored.
+
+    'kind'
+        (optional) the registry key under which 'config_klass' is
+        registered. Defaults to the class' own 'kind'. Supplying it
+        explicitly registers the class under an additional alias, e.g.
+        for backward compatibility with a renamed agent kind.
     """
 
     _ALLOWED_KEYS: AllowedKeys = frozenset(
         {
             "config_klass",
+            "kind",
             "wrapper_klass",
             "registered_func",
         }
     )
+    _KEY_FIELD: KeyField = "kind"
 
-    @property
-    def kind(self) -> str:
-        return self.config_klass.kind
+    kind: str | None = None
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -354,11 +444,26 @@ class SecretSourceMeta(_ConfigKlassOnlyMeta):
     may still carry 'registered_func' alongside 'config_klass' as
     shorthand: 'InstallationConfigMeta.from_yaml' desugars it into an
     entry here plus one in 'secret_getters'.
+
+    'kind'
+        (optional) the registry key under which 'config_klass' is
+        registered. Defaults to the class' own 'kind'. Supplying it
+        explicitly registers the class under an additional alias, e.g.
+        for backward compatibility with a renamed source kind. Getters
+        are keyed by the same 'kind', so an aliased source needs its own
+        getter registration (the 'registered_func' shorthand supplies
+        one for whichever 'kind' its entry carries).
     """
 
-    @property
-    def kind(self) -> str:
-        return self.config_klass.kind
+    _ALLOWED_KEYS: AllowedKeys = frozenset(
+        {
+            "config_klass",
+            "kind",
+        }
+    )
+    _KEY_FIELD: KeyField = "kind"
+
+    kind: str | None = None
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -440,7 +545,7 @@ class InstallationConfigMeta:
 
     'agent_capability_types'
         a list consisting of strings (importable dotted names of agent
-        capability classes) or `AgentCapabilityMeta' mappings,
+        capability classes) or `AgentCapabilityConfigMeta' mappings,
         defining additional capability types with which agents can be
         configured.
 
@@ -497,7 +602,7 @@ class InstallationConfigMeta:
     ] = ()
     skill_configs: list[str | SkillConfigMeta | ClearMetaRegistry] = ()
     agent_capability_types: list[
-        str | AgentCapabilityMeta | ClearMetaRegistry
+        str | AgentCapabilityConfigMeta | ClearMetaRegistry
     ] = ()
     agent_configs: list[str | AgentConfigMeta | ClearMetaRegistry] = ()
     secret_sources: list[str | SecretSourceMeta | ClearMetaRegistry] = ()
@@ -561,8 +666,12 @@ class InstallationConfigMeta:
                 config_klass = _utils._from_dotted_name(
                     entry["config_klass"],
                 )
+                # Follow the entry's own key: the getter has to land
+                # under the same 'kind' the source is registered as,
+                # alias or not.
+                kind = entry.get("kind", config_klass.kind)
                 desugared.append(
-                    {"kind": config_klass.kind, "func": registered_func},
+                    {"kind": kind, "func": registered_func},
                 )
 
             sources.append(entry)
@@ -620,7 +729,7 @@ class InstallationConfigMeta:
 
             config_dict["agent_capability_types"] = cls._partition_cmrs(
                 config_dict.get("agent_capability_types", ()),
-                config_klass=AgentCapabilityMeta,
+                config_klass=AgentCapabilityConfigMeta,
             )
 
             config_dict["agent_configs"] = cls._partition_cmrs(
@@ -713,6 +822,7 @@ class InstallationConfigMeta:
         for mstw_meta in self.mcp_server_tool_wrappers:
             if mstw_meta.tool_name not in tc_registry:
                 raise WrapperForUnknownToolConfig(
+                    tool_name=mstw_meta.tool_name,
                     tool_config_klass=mstw_meta.config_klass,
                     wrapper_klass=mstw_meta.wrapper_klass,
                 )
@@ -794,17 +904,29 @@ class InstallationConfigMeta:
 
         tc_registry = config_tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME
         tool_config_entries = first_clear + [
-            _utils._dotted_name(klass) for klass in tc_registry.values()
+            {
+                "tool_name": tool_name,
+                "config_klass": _utils._dotted_name(klass),
+            }
+            for tool_name, klass in tc_registry.items()
         ]
 
         mcptc_registry = config_tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND
         mcp_toolset_config_entries = first_clear + [
-            _utils._dotted_name(klass) for klass in mcptc_registry.values()
+            {
+                "kind": kind,
+                "config_klass": _utils._dotted_name(klass),
+            }
+            for kind, klass in mcptc_registry.items()
         ]
 
         mcptw_registry = config_tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME
         mcp_server_tool_wrapper_entries = first_clear + [
             {
+                "tool_name": tool_name,
+                # The tool config registered under this same key: an
+                # alias and the name it aliases resolve to one class,
+                # but each keeps its own wrapper registration.
                 "config_klass": _utils._dotted_name(
                     tc_registry[tool_name],
                 ),
@@ -815,22 +937,38 @@ class InstallationConfigMeta:
 
         sc_registry = config_skills.SKILL_CONFIG_CLASSES_BY_KIND
         skill_config_entries = first_clear + [
-            _utils._dotted_name(klass) for klass in sc_registry.values()
+            {
+                "kind": kind,
+                "config_klass": _utils._dotted_name(klass),
+            }
+            for kind, klass in sc_registry.items()
         ]
 
-        cap_registry = config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME.values()
+        cap_registry = config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME
         capability_type_entries = first_clear + [
-            _utils._dotted_name(klass) for klass in cap_registry
+            {
+                "capability_name": capability_name,
+                "config_klass": _utils._dotted_name(klass),
+            }
+            for capability_name, klass in cap_registry.items()
         ]
 
         ac_registry = config_agents.AGENT_CONFIG_CLASSES_BY_KIND
         agent_config_entries = first_clear + [
-            _utils._dotted_name(klass) for klass in ac_registry.values()
+            {
+                "kind": kind,
+                "config_klass": _utils._dotted_name(klass),
+            }
+            for kind, klass in ac_registry.items()
         ]
 
         ss_registry = config_secrets.SourceClassesByKind
         secret_source_entries = first_clear + [
-            _utils._dotted_name(klass) for klass in ss_registry.values()
+            {
+                "kind": kind,
+                "config_klass": _utils._dotted_name(klass),
+            }
+            for kind, klass in ss_registry.items()
         ]
 
         sg_registry = config_secrets.SECRET_GETTERS_BY_KIND

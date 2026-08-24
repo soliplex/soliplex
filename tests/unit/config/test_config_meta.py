@@ -17,6 +17,15 @@ from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
+# A registry key which is not the one 'DummyToolConfig' declares,
+# standing in for a backward-compatibility alias.
+ALIAS_TOOL_NAME = "_test_metaconfig.legacy_dummy_tool"
+ALIAS_TOOLSET_KIND = "legacy-dummy"
+ALIAS_SKILL_KIND = "LegacyDummySkillConfig"
+ALIAS_CAPABILITY_NAME = "LegacyDummyAgentCapability"
+ALIAS_AGENT_KIND = "legacy-dummy-agent"
+ALIAS_SECRET_KIND = "legacy-dummy-secret"
+
 BOGUS_ICMETA_YAML = """\
 meta:
     tool_configs:
@@ -217,7 +226,7 @@ meta:
 
 W_AGENT_CAPABILITY_ICMETA_KW = BARE_ICMETA_KW | {
     "agent_capability_types": [
-        config_meta.AgentCapabilityMeta(
+        config_meta.AgentCapabilityConfigMeta(
             config_klass=_test_metaconfig.DummyAgentCapability
         ),
     ],
@@ -231,7 +240,7 @@ meta:
 W_AGENT_CAPABILITY_W_CLEAR_ICMETA_KW = BARE_ICMETA_KW | {
     "agent_capability_types": [
         config_meta.ClearMetaRegistry(),
-        config_meta.AgentCapabilityMeta(
+        config_meta.AgentCapabilityConfigMeta(
             config_klass=_test_metaconfig.DummyAgentCapability
         ),
     ],
@@ -437,7 +446,7 @@ FULL_ICMETA_KW = {
         ),
     ],
     "agent_capability_types": [
-        config_meta.AgentCapabilityMeta(
+        config_meta.AgentCapabilityConfigMeta(
             config_klass=_test_metaconfig.DummyAgentCapability,
         ),
     ],
@@ -515,6 +524,16 @@ def test__configklassonlymeta_from_yaml_w_extraneous_key():
         )
 
 
+def test__configklassonlymeta_from_yaml_wo_key_field():
+
+    class _TestMeta(config_meta._ConfigKlassOnlyMeta):
+        pass
+
+    tm_meta = _TestMeta.from_yaml("_test_metaconfig.DummyToolConfig")
+
+    assert tm_meta.config_klass is _test_metaconfig.DummyToolConfig
+
+
 @pytest.mark.parametrize(
     "w_source_kw, exp_source",
     [
@@ -554,6 +573,20 @@ def test_toolconfigmeta_from_yaml(w_bare_str):
     assert found.tool_name == _test_metaconfig.DummyToolConfig.tool_name
 
 
+def test_toolconfigmeta_from_yaml_honors_explicit_tool_name():
+    tc_klass = _test_metaconfig.DummyToolConfig
+
+    tc_meta = config_meta.ToolConfigMeta.from_yaml(
+        {
+            "tool_name": ALIAS_TOOL_NAME,
+            "config_klass": "_test_metaconfig.DummyToolConfig",
+        },
+    )
+
+    assert tc_meta.tool_name == ALIAS_TOOL_NAME
+    assert tc_meta.config_klass is tc_klass
+
+
 @pytest.mark.parametrize("w_bare_str", [False, True])
 def test_mcp_toolsetconfigmeta_from_yaml(w_bare_str):
     tool_config_klassname = "_test_metaconfig.DummyToolConfig"
@@ -571,6 +604,20 @@ def test_mcp_toolsetconfigmeta_from_yaml(w_bare_str):
     assert found.kind == _test_metaconfig.DummyToolConfig.kind
 
 
+def test_mcp_toolsetconfigmeta_from_yaml_honors_explicit_kind():
+    mtc_klass = _test_metaconfig.DummyMCP_ToolsetConfig
+
+    mtc_meta = config_meta.MCP_ToolsetConfigMeta.from_yaml(
+        {
+            "kind": ALIAS_TOOLSET_KIND,
+            "config_klass": "_test_metaconfig.DummyMCP_ToolsetConfig",
+        },
+    )
+
+    assert mtc_meta.kind == ALIAS_TOOLSET_KIND
+    assert mtc_meta.config_klass is mtc_klass
+
+
 def test_mcp_servertoolwrapperconfigmeta_from_yaml():
     tool_config_klassname = "_test_metaconfig.DummyToolConfig"
     wrapper_klassname = "_test_metaconfig.DummyMCPWrapper"
@@ -585,6 +632,21 @@ def test_mcp_servertoolwrapperconfigmeta_from_yaml():
     assert found.config_klass is _test_metaconfig.DummyToolConfig
     assert found.wrapper_klass is _test_metaconfig.DummyMCPWrapper
     assert found.tool_name == _test_metaconfig.DummyToolConfig.tool_name
+
+
+def test_mcp_servertoolwrapperconfigmeta_from_yaml_honors_explicit_name():
+    wrapper_klass = _test_metaconfig.DummyMCPWrapper
+
+    mstw_meta = config_meta.MCP_ServerToolWrapperConfigMeta.from_yaml(
+        {
+            "tool_name": ALIAS_TOOL_NAME,
+            "config_klass": "_test_metaconfig.DummyToolConfig",
+            "wrapper_klass": "_test_metaconfig.DummyMCPWrapper",
+        },
+    )
+
+    assert mstw_meta.tool_name == ALIAS_TOOL_NAME
+    assert mstw_meta.wrapper_klass is wrapper_klass
 
 
 @pytest.mark.parametrize("w_bare_str", [False, True])
@@ -604,6 +666,20 @@ def test_skillconfigmeta_from_yaml(w_bare_str):
     assert found.kind == _test_metaconfig.DummySkillConfig.kind
 
 
+def test_skillconfigmeta_from_yaml_honors_explicit_kind():
+    sc_klass = _test_metaconfig.DummySkillConfig
+
+    sc_meta = config_meta.SkillConfigMeta.from_yaml(
+        {
+            "kind": ALIAS_SKILL_KIND,
+            "config_klass": "_test_metaconfig.DummySkillConfig",
+        },
+    )
+
+    assert sc_meta.kind == ALIAS_SKILL_KIND
+    assert sc_meta.config_klass is sc_klass
+
+
 @pytest.mark.parametrize("w_bare_str", [False, True])
 def test_agentcapabilityconfigmeta_from_yaml(w_bare_str):
     capability_klassname = "_test_metaconfig.DummyAgentCapability"
@@ -614,10 +690,24 @@ def test_agentcapabilityconfigmeta_from_yaml(w_bare_str):
     else:
         yaml_config = {"config_klass": capability_klassname}
 
-    found = config_meta.AgentCapabilityMeta.from_yaml(yaml_config)
+    found = config_meta.AgentCapabilityConfigMeta.from_yaml(yaml_config)
 
     assert found.config_klass is exp_cap_klass
     assert found.capability_name == exp_cap_klass.__name__
+
+
+def test_agentcapabilityconfigmeta_from_yaml_honors_explicit_name():
+    cap_klass = _test_metaconfig.DummyAgentCapability
+
+    found = config_meta.AgentCapabilityConfigMeta.from_yaml(
+        {
+            "capability_name": ALIAS_CAPABILITY_NAME,
+            "config_klass": "_test_metaconfig.DummyAgentCapability",
+        },
+    )
+
+    assert found.capability_name == ALIAS_CAPABILITY_NAME
+    assert found.config_klass is cap_klass
 
 
 @pytest.mark.parametrize("w_bare_str", [False, True])
@@ -633,6 +723,20 @@ def test_agentconfigmeta_from_yaml(w_bare_str):
 
     assert found.config_klass is _test_metaconfig.DummyAgentConfig
     assert found.kind == _test_metaconfig.DummyAgentConfig.kind
+
+
+def test_agentconfigmeta_from_yaml_honors_explicit_kind():
+    ac_klass = _test_metaconfig.DummyAgentConfig
+
+    found = config_meta.AgentConfigMeta.from_yaml(
+        {
+            "kind": ALIAS_AGENT_KIND,
+            "config_klass": "_test_metaconfig.DummyAgentConfig",
+        },
+    )
+
+    assert found.kind == ALIAS_AGENT_KIND
+    assert found.config_klass is ac_klass
 
 
 @pytest.mark.parametrize(
@@ -654,6 +758,20 @@ def test_secretsourcemeta_from_yaml(yaml_config):
 
     assert found.config_klass is _test_metaconfig.DummySecretSource
     assert found.kind == _test_metaconfig.DummySecretSource.kind
+
+
+def test_secretsourcemeta_from_yaml_honors_explicit_kind():
+    ss_klass = _test_metaconfig.DummySecretSource
+
+    found = config_meta.SecretSourceMeta.from_yaml(
+        {
+            "kind": ALIAS_SECRET_KIND,
+            "config_klass": "_test_metaconfig.DummySecretSource",
+        },
+    )
+
+    assert found.kind == ALIAS_SECRET_KIND
+    assert found.config_klass is ss_klass
 
 
 def test_secretgetterconfigmeta_from_yaml():
@@ -745,6 +863,32 @@ def test_installationconfigmeta__partition_cmrs(w_entries, exp_entries):
     )
 
     assert found == exp_entries
+
+
+def test_installationconfigmeta__desugar_secret_sources_w_explicit_kind():
+    icm_klass = config_meta.InstallationConfigMeta
+    source_entries = [
+        {
+            "kind": ALIAS_SECRET_KIND,
+            "config_klass": "_test_metaconfig.DummySecretSource",
+            "registered_func": "_test_metaconfig.dummy_secret_getter",
+        },
+    ]
+
+    sources, getters = icm_klass._desugar_secret_sources(source_entries, [])
+
+    assert sources == [
+        {
+            "kind": ALIAS_SECRET_KIND,
+            "config_klass": "_test_metaconfig.DummySecretSource",
+        },
+    ]
+    assert getters == [
+        {
+            "kind": ALIAS_SECRET_KIND,
+            "func": "_test_metaconfig.dummy_secret_getter",
+        },
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1255,6 +1399,218 @@ def test_installationconfigmeta_from_yaml_w_clear(
         )
 
 
+def test_installationconfigmeta_postinit_registers_tool_configs(
+    patched_tool_configs,
+):
+    tc_klass = _test_metaconfig.DummyToolConfig
+    tc_meta = config_meta.ToolConfigMeta(config_klass=tc_klass)
+
+    config_meta.InstallationConfigMeta(tool_configs=[tc_meta])
+
+    assert patched_tool_configs[tc_klass.tool_name] is tc_klass
+
+
+def test_installationconfigmeta_postinit_registers_mcp_toolset_configs(
+    patched_mcp_toolset_configs,
+):
+    mtc_klass = _test_metaconfig.DummyMCP_ToolsetConfig
+    mtc_meta = config_meta.MCP_ToolsetConfigMeta(config_klass=mtc_klass)
+
+    config_meta.InstallationConfigMeta(mcp_toolset_configs=[mtc_meta])
+
+    assert patched_mcp_toolset_configs[mtc_klass.kind] is mtc_klass
+
+
+@pytest.mark.parametrize(
+    "w_tc_registered, expectation",
+    [
+        (False, pytest.raises(config_meta.WrapperForUnknownToolConfig)),
+        (True, contextlib.nullcontext()),
+    ],
+)
+def test_installationconfigmeta_postinit_registers_mcp_tool_wrappers(
+    patched_tool_configs,
+    patched_mcp_tool_wrappers,
+    w_tc_registered,
+    expectation,
+):
+    cfg_klass = _test_metaconfig.DummyToolConfig
+    if w_tc_registered:
+        patched_tool_configs[cfg_klass.tool_name] = cfg_klass
+
+    wrp_klass = _test_metaconfig.DummyMCPWrapper
+    mstw_meta = config_meta.MCP_ServerToolWrapperConfigMeta(
+        config_klass=cfg_klass,
+        wrapper_klass=wrp_klass,
+    )
+
+    with expectation as expected:
+        config_meta.InstallationConfigMeta(
+            mcp_server_tool_wrappers=[mstw_meta],
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert patched_mcp_tool_wrappers[cfg_klass.tool_name] is wrp_klass
+
+
+def test_installationconfigmeta_postinit_rejects_wrapper_w_unknown_name(
+    patched_tool_configs,
+    patched_mcp_tool_wrappers,
+):
+    # The class is registered; the alias it is named under is not. It is
+    # the name which must be known, not the class.
+    cfg_klass = _test_metaconfig.DummyToolConfig
+    patched_tool_configs[cfg_klass.tool_name] = cfg_klass
+    mstw_meta = config_meta.MCP_ServerToolWrapperConfigMeta(
+        tool_name=ALIAS_TOOL_NAME,
+        config_klass=cfg_klass,
+        wrapper_klass=_test_metaconfig.DummyMCPWrapper,
+    )
+
+    with pytest.raises(config_meta.WrapperForUnknownToolConfig) as exc_info:
+        config_meta.InstallationConfigMeta(
+            mcp_server_tool_wrappers=[mstw_meta],
+        )
+
+    assert exc_info.value.tool_name == ALIAS_TOOL_NAME
+    assert exc_info.value.tool_config_klass is cfg_klass
+    assert not patched_mcp_tool_wrappers
+
+
+def test_installationconfigmeta_postinit_registers_skill_configs(
+    patched_skill_configs,
+):
+    sc_klass = _test_metaconfig.DummySkillConfig
+    sc_meta = config_meta.SkillConfigMeta(config_klass=sc_klass)
+
+    config_meta.InstallationConfigMeta(skill_configs=[sc_meta])
+
+    assert patched_skill_configs[sc_klass.kind] is sc_klass
+
+
+def test_installationconfigmeta_postinit_registers_agent_capabilities(
+    patched_agent_capabilities,
+):
+    cap_klass = _test_metaconfig.DummyAgentCapability
+    ac_meta = config_meta.AgentCapabilityConfigMeta(config_klass=cap_klass)
+
+    config_meta.InstallationConfigMeta(agent_capability_types=[ac_meta])
+
+    assert patched_agent_capabilities[cap_klass.__name__] is cap_klass
+
+
+def test_installationconfigmeta_postinit_registers_agent_configs(
+    patched_agent_configs,
+):
+    ac_klass = _test_metaconfig.DummyAgentConfig
+    ac_meta = config_meta.AgentConfigMeta(config_klass=ac_klass)
+
+    config_meta.InstallationConfigMeta(agent_configs=[ac_meta])
+
+    assert patched_agent_configs[ac_klass.kind] is ac_klass
+
+
+def test_installationconfigmeta_postinit_registers_secret_sources(
+    patched_secret_getters,
+    patched_secret_sources,
+):
+    ss_klass = _test_metaconfig.DummySecretSource
+    ss_meta = config_meta.SecretSourceMeta(config_klass=ss_klass)
+
+    config_meta.InstallationConfigMeta(secret_sources=[ss_meta])
+
+    assert patched_secret_sources[ss_klass.kind] is ss_klass
+    assert patched_secret_getters == {}
+
+
+@pytest.mark.parametrize(
+    "w_ss_registered, expectation",
+    [
+        (False, pytest.raises(config_meta.GetterForUnknownSecretSource)),
+        (True, contextlib.nullcontext()),
+    ],
+)
+def test_installationconfigmeta_postinit_registers_secret_getters(
+    patched_secret_getters,
+    patched_secret_sources,
+    w_ss_registered,
+    expectation,
+):
+    ss_klass = _test_metaconfig.DummySecretSource
+    if w_ss_registered:
+        patched_secret_sources[ss_klass.kind] = ss_klass
+
+    ss_getter = _test_metaconfig.dummy_secret_getter
+    sg_meta = config_meta.SecretGetterConfigMeta(
+        kind=ss_klass.kind,
+        func=ss_getter,
+    )
+
+    with expectation as expected:
+        config_meta.InstallationConfigMeta(secret_getters=[sg_meta])
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert patched_secret_getters[ss_klass.kind] is ss_getter
+
+
+def test_installationconfigmeta_postinit_clearing_sources_clears_getters(
+    patched_secret_getters,
+    patched_secret_sources,
+):
+    # A getter cannot outlive the source class it resolves, so the marker
+    # cascades -- exactly as 'tool_configs' clears the wrapper registry.
+    other_klass = _test_metaconfig.DummyToolConfig
+    patched_secret_sources["stale"] = other_klass
+    patched_secret_getters["stale"] = _test_metaconfig.dummy_secret_getter
+
+    ss_klass = _test_metaconfig.DummySecretSource
+    ss_meta = config_meta.SecretSourceMeta(config_klass=ss_klass)
+
+    config_meta.InstallationConfigMeta(
+        secret_sources=[config_meta.ClearMetaRegistry(), ss_meta],
+    )
+
+    assert patched_secret_sources == {ss_klass.kind: ss_klass}
+    assert patched_secret_getters == {}
+
+
+def test_installationconfigmeta_postinit_clears_secret_getters_only(
+    patched_secret_getters,
+    patched_secret_sources,
+):
+    ss_klass = _test_metaconfig.DummySecretSource
+    patched_secret_sources[ss_klass.kind] = ss_klass
+    patched_secret_getters["stale"] = _test_metaconfig.dummy_secret_getter
+
+    ss_getter = _test_metaconfig.dummy_secret_getter
+    sg_meta = config_meta.SecretGetterConfigMeta(
+        kind=ss_klass.kind,
+        func=ss_getter,
+    )
+
+    config_meta.InstallationConfigMeta(
+        secret_getters=[config_meta.ClearMetaRegistry(), sg_meta],
+    )
+
+    assert patched_secret_sources == {ss_klass.kind: ss_klass}
+    assert patched_secret_getters == {ss_klass.kind: ss_getter}
+
+
+def test_installationconfigmeta_postinit_registers_jsonpath_functions(
+    patched_jsonpath_functions,
+):
+    jp_func = _test_metaconfig.dummy_jsonpath_func
+    jf_meta = config_meta.JSONPathFunctionConfigMeta(
+        name=JSONPATH_FUNCTION_NAME,
+        func=jp_func,
+    )
+
+    config_meta.InstallationConfigMeta(jsonpath_functions=[jf_meta])
+
+    env = authz.the_jsonpath_environment
+    assert env.function_extensions[JSONPATH_FUNCTION_NAME] is jp_func
+
+
 @pytest.mark.parametrize("w_jsonpath", [False, True])
 @pytest.mark.parametrize("w_secret_reg", [False, True])
 @pytest.mark.parametrize("w_agent", [False, True])
@@ -1292,12 +1648,16 @@ def test_installationconfigmeta_as_yaml(
         klass = _test_metaconfig.DummyToolConfig
         patched_tool_configs[klass.tool_name] = klass
         expected["tool_configs"].append(
-            "_test_metaconfig.DummyToolConfig",
+            {
+                "tool_name": "_test_metaconfig.dummy_tool",
+                "config_klass": "_test_metaconfig.DummyToolConfig",
+            },
         )
         wrapper_klass = _test_metaconfig.DummyMCPWrapper
         patched_mcp_tool_wrappers[klass.tool_name] = wrapper_klass
         expected["mcp_server_tool_wrappers"].append(
             {
+                "tool_name": "_test_metaconfig.dummy_tool",
                 "config_klass": "_test_metaconfig.DummyToolConfig",
                 "wrapper_klass": "_test_metaconfig.DummyMCPWrapper",
             }
@@ -1307,28 +1667,40 @@ def test_installationconfigmeta_as_yaml(
         klass = _test_metaconfig.DummyMCP_ToolsetConfig
         patched_mcp_toolset_configs[klass.kind] = klass
         expected["mcp_toolset_configs"].append(
-            "_test_metaconfig.DummyMCP_ToolsetConfig",
+            {
+                "kind": "dummy",
+                "config_klass": "_test_metaconfig.DummyMCP_ToolsetConfig",
+            },
         )
 
     if w_skills:
         klass = _test_metaconfig.DummySkillConfig
         patched_skill_configs[klass.kind] = klass
         expected["skill_configs"].append(
-            "_test_metaconfig.DummySkillConfig",
+            {
+                "kind": "DummySkillConfig",
+                "config_klass": "_test_metaconfig.DummySkillConfig",
+            },
         )
 
     if w_capability:
         klass = _test_metaconfig.DummyAgentCapability
         patched_agent_capabilities[klass.__name__] = klass
         expected["agent_capability_types"].append(
-            "_test_metaconfig.DummyAgentCapability",
+            {
+                "capability_name": "DummyAgentCapability",
+                "config_klass": "_test_metaconfig.DummyAgentCapability",
+            },
         )
 
     if w_agent:
         klass = _test_metaconfig.DummyAgentConfig
         patched_agent_configs[klass.kind] = klass
         expected["agent_configs"].append(
-            "_test_metaconfig.DummyAgentConfig",
+            {
+                "kind": "dummy",
+                "config_klass": "_test_metaconfig.DummyAgentConfig",
+            },
         )
 
     if w_secret_reg:
@@ -1338,7 +1710,10 @@ def test_installationconfigmeta_as_yaml(
         patched_secret_sources[klass.kind] = klass
 
         expected["secret_sources"].append(
-            "_test_metaconfig.DummySecretSource",
+            {
+                "kind": "dummy",
+                "config_klass": "_test_metaconfig.DummySecretSource",
+            },
         )
         expected["secret_getters"].append(
             {
@@ -1508,189 +1883,150 @@ def test_installationconfigmeta_as_yaml_round_trips_registries(
     assert after_second == after_first
 
 
-def test_installationconfigmeta_postinit_registers_tool_configs(
+def test_installationconfigmeta_as_yaml_round_trips_tool_config_alias(
     patched_tool_configs,
+    temp_dir,
 ):
     tc_klass = _test_metaconfig.DummyToolConfig
-    tc_meta = config_meta.ToolConfigMeta(config_klass=tc_klass)
+    patched_tool_configs[tc_klass.tool_name] = tc_klass
+    patched_tool_configs[ALIAS_TOOL_NAME] = tc_klass
+    dumped = config_meta.InstallationConfigMeta().as_yaml
 
-    config_meta.InstallationConfigMeta(tool_configs=[tc_meta])
+    config_meta.InstallationConfigMeta.from_yaml(
+        temp_dir / "installation.yaml",
+        dumped,
+    )
 
-    assert patched_tool_configs[tc_klass.tool_name] is tc_klass
+    assert patched_tool_configs == {
+        tc_klass.tool_name: tc_klass,
+        ALIAS_TOOL_NAME: tc_klass,
+    }
 
 
-def test_installationconfigmeta_postinit_registers_mcp_toolset_configs(
+def test_installationconfigmeta_as_yaml_round_trips_toolset_config_alias(
     patched_mcp_toolset_configs,
+    temp_dir,
 ):
     mtc_klass = _test_metaconfig.DummyMCP_ToolsetConfig
-    mtc_meta = config_meta.MCP_ToolsetConfigMeta(config_klass=mtc_klass)
+    patched_mcp_toolset_configs[mtc_klass.kind] = mtc_klass
+    patched_mcp_toolset_configs[ALIAS_TOOLSET_KIND] = mtc_klass
+    dumped = config_meta.InstallationConfigMeta().as_yaml
 
-    config_meta.InstallationConfigMeta(mcp_toolset_configs=[mtc_meta])
+    config_meta.InstallationConfigMeta.from_yaml(
+        temp_dir / "installation.yaml",
+        dumped,
+    )
 
-    assert patched_mcp_toolset_configs[mtc_klass.kind] is mtc_klass
+    assert patched_mcp_toolset_configs == {
+        mtc_klass.kind: mtc_klass,
+        ALIAS_TOOLSET_KIND: mtc_klass,
+    }
 
 
-@pytest.mark.parametrize(
-    "w_tc_registered, expectation",
-    [
-        (False, pytest.raises(config_meta.WrapperForUnknownToolConfig)),
-        (True, contextlib.nullcontext()),
-    ],
-)
-def test_installationconfigmeta_postinit_registers_mcp_tool_wrappers(
+def test_installationconfigmeta_as_yaml_round_trips_tool_wrapper_alias(
     patched_tool_configs,
     patched_mcp_tool_wrappers,
-    w_tc_registered,
-    expectation,
+    temp_dir,
 ):
-    cfg_klass = _test_metaconfig.DummyToolConfig
-    if w_tc_registered:
-        patched_tool_configs[cfg_klass.tool_name] = cfg_klass
+    # The wrapper is registered under the alias *only*: its key is the
+    # thing which has to survive, not the class it wraps.
+    tc_klass = _test_metaconfig.DummyToolConfig
+    wrapper_klass = _test_metaconfig.DummyMCPWrapper
+    patched_tool_configs[tc_klass.tool_name] = tc_klass
+    patched_tool_configs[ALIAS_TOOL_NAME] = tc_klass
+    patched_mcp_tool_wrappers[ALIAS_TOOL_NAME] = wrapper_klass
+    dumped = config_meta.InstallationConfigMeta().as_yaml
 
-    wrp_klass = _test_metaconfig.DummyMCPWrapper
-    mstw_meta = config_meta.MCP_ServerToolWrapperConfigMeta(
-        config_klass=cfg_klass,
-        wrapper_klass=wrp_klass,
+    config_meta.InstallationConfigMeta.from_yaml(
+        temp_dir / "installation.yaml",
+        dumped,
     )
 
-    with expectation as expected:
-        config_meta.InstallationConfigMeta(
-            mcp_server_tool_wrappers=[mstw_meta],
-        )
-
-    if not isinstance(expected, pytest.ExceptionInfo):
-        assert patched_mcp_tool_wrappers[cfg_klass.tool_name] is wrp_klass
+    assert patched_mcp_tool_wrappers == {ALIAS_TOOL_NAME: wrapper_klass}
 
 
-def test_installationconfigmeta_postinit_registers_skill_configs(
+def test_installationconfigmeta_as_yaml_round_trips_skill_config_alias(
     patched_skill_configs,
+    temp_dir,
 ):
     sc_klass = _test_metaconfig.DummySkillConfig
-    sc_meta = config_meta.SkillConfigMeta(config_klass=sc_klass)
+    patched_skill_configs[sc_klass.kind] = sc_klass
+    patched_skill_configs[ALIAS_SKILL_KIND] = sc_klass
+    dumped = config_meta.InstallationConfigMeta().as_yaml
 
-    config_meta.InstallationConfigMeta(skill_configs=[sc_meta])
+    config_meta.InstallationConfigMeta.from_yaml(
+        temp_dir / "installation.yaml",
+        dumped,
+    )
 
-    assert patched_skill_configs[sc_klass.kind] is sc_klass
+    assert patched_skill_configs == {
+        sc_klass.kind: sc_klass,
+        ALIAS_SKILL_KIND: sc_klass,
+    }
 
 
-def test_installationconfigmeta_postinit_registers_agent_capabilities(
+def test_installationconfigmeta_as_yaml_round_trips_capability_alias(
     patched_agent_capabilities,
+    temp_dir,
 ):
     cap_klass = _test_metaconfig.DummyAgentCapability
-    ac_meta = config_meta.AgentCapabilityMeta(config_klass=cap_klass)
+    patched_agent_capabilities[cap_klass.__name__] = cap_klass
+    patched_agent_capabilities[ALIAS_CAPABILITY_NAME] = cap_klass
+    dumped = config_meta.InstallationConfigMeta().as_yaml
 
-    config_meta.InstallationConfigMeta(agent_capability_types=[ac_meta])
+    config_meta.InstallationConfigMeta.from_yaml(
+        temp_dir / "installation.yaml",
+        dumped,
+    )
 
-    assert patched_agent_capabilities[cap_klass.__name__] is cap_klass
+    assert patched_agent_capabilities == {
+        cap_klass.__name__: cap_klass,
+        ALIAS_CAPABILITY_NAME: cap_klass,
+    }
 
 
-def test_installationconfigmeta_postinit_registers_agent_configs(
+def test_installationconfigmeta_as_yaml_round_trips_agent_config_alias(
     patched_agent_configs,
+    temp_dir,
 ):
     ac_klass = _test_metaconfig.DummyAgentConfig
-    ac_meta = config_meta.AgentConfigMeta(config_klass=ac_klass)
+    patched_agent_configs[ac_klass.kind] = ac_klass
+    patched_agent_configs[ALIAS_AGENT_KIND] = ac_klass
+    dumped = config_meta.InstallationConfigMeta().as_yaml
 
-    config_meta.InstallationConfigMeta(agent_configs=[ac_meta])
-
-    assert patched_agent_configs[ac_klass.kind] is ac_klass
-
-
-def test_installationconfigmeta_postinit_registers_secret_sources(
-    patched_secret_getters,
-    patched_secret_sources,
-):
-    ss_klass = _test_metaconfig.DummySecretSource
-    ss_meta = config_meta.SecretSourceMeta(config_klass=ss_klass)
-
-    config_meta.InstallationConfigMeta(secret_sources=[ss_meta])
-
-    assert patched_secret_sources[ss_klass.kind] is ss_klass
-    assert patched_secret_getters == {}
-
-
-@pytest.mark.parametrize(
-    "w_ss_registered, expectation",
-    [
-        (False, pytest.raises(config_meta.GetterForUnknownSecretSource)),
-        (True, contextlib.nullcontext()),
-    ],
-)
-def test_installationconfigmeta_postinit_registers_secret_getters(
-    patched_secret_getters,
-    patched_secret_sources,
-    w_ss_registered,
-    expectation,
-):
-    ss_klass = _test_metaconfig.DummySecretSource
-    if w_ss_registered:
-        patched_secret_sources[ss_klass.kind] = ss_klass
-
-    ss_getter = _test_metaconfig.dummy_secret_getter
-    sg_meta = config_meta.SecretGetterConfigMeta(
-        kind=ss_klass.kind,
-        func=ss_getter,
+    config_meta.InstallationConfigMeta.from_yaml(
+        temp_dir / "installation.yaml",
+        dumped,
     )
 
-    with expectation as expected:
-        config_meta.InstallationConfigMeta(secret_getters=[sg_meta])
+    assert patched_agent_configs == {
+        ac_klass.kind: ac_klass,
+        ALIAS_AGENT_KIND: ac_klass,
+    }
 
-    if not isinstance(expected, pytest.ExceptionInfo):
-        assert patched_secret_getters[ss_klass.kind] is ss_getter
 
-
-def test_installationconfigmeta_postinit_clearing_sources_clears_getters(
-    patched_secret_getters,
+def test_installationconfigmeta_as_yaml_round_trips_secret_source_alias(
     patched_secret_sources,
-):
-    # A getter cannot outlive the source class it resolves, so the marker
-    # cascades -- exactly as 'tool_configs' clears the wrapper registry.
-    other_klass = _test_metaconfig.DummyToolConfig
-    patched_secret_sources["stale"] = other_klass
-    patched_secret_getters["stale"] = _test_metaconfig.dummy_secret_getter
-
-    ss_klass = _test_metaconfig.DummySecretSource
-    ss_meta = config_meta.SecretSourceMeta(config_klass=ss_klass)
-
-    config_meta.InstallationConfigMeta(
-        secret_sources=[config_meta.ClearMetaRegistry(), ss_meta],
-    )
-
-    assert patched_secret_sources == {ss_klass.kind: ss_klass}
-    assert patched_secret_getters == {}
-
-
-def test_installationconfigmeta_postinit_clears_secret_getters_only(
     patched_secret_getters,
-    patched_secret_sources,
+    temp_dir,
 ):
+    # The getter is keyed by the same 'kind' namespace, and validates
+    # against the source registry: an aliased source has to be there for
+    # a getter registered under the alias to survive alongside it.
     ss_klass = _test_metaconfig.DummySecretSource
+    getter = _test_metaconfig.dummy_secret_getter
     patched_secret_sources[ss_klass.kind] = ss_klass
-    patched_secret_getters["stale"] = _test_metaconfig.dummy_secret_getter
+    patched_secret_sources[ALIAS_SECRET_KIND] = ss_klass
+    patched_secret_getters[ALIAS_SECRET_KIND] = getter
+    dumped = config_meta.InstallationConfigMeta().as_yaml
 
-    ss_getter = _test_metaconfig.dummy_secret_getter
-    sg_meta = config_meta.SecretGetterConfigMeta(
-        kind=ss_klass.kind,
-        func=ss_getter,
+    config_meta.InstallationConfigMeta.from_yaml(
+        temp_dir / "installation.yaml",
+        dumped,
     )
 
-    config_meta.InstallationConfigMeta(
-        secret_getters=[config_meta.ClearMetaRegistry(), sg_meta],
-    )
-
-    assert patched_secret_sources == {ss_klass.kind: ss_klass}
-    assert patched_secret_getters == {ss_klass.kind: ss_getter}
-
-
-def test_installationconfigmeta_postinit_registers_jsonpath_functions(
-    patched_jsonpath_functions,
-):
-    jp_func = _test_metaconfig.dummy_jsonpath_func
-    jf_meta = config_meta.JSONPathFunctionConfigMeta(
-        name=JSONPATH_FUNCTION_NAME,
-        func=jp_func,
-    )
-
-    config_meta.InstallationConfigMeta(jsonpath_functions=[jf_meta])
-
-    env = authz.the_jsonpath_environment
-    assert env.function_extensions[JSONPATH_FUNCTION_NAME] is jp_func
+    assert patched_secret_sources == {
+        ss_klass.kind: ss_klass,
+        ALIAS_SECRET_KIND: ss_klass,
+    }
+    assert patched_secret_getters == {ALIAS_SECRET_KIND: getter}
