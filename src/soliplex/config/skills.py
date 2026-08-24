@@ -365,11 +365,11 @@ class HR_CitationPolicy_SkillConfig(_HaikuRAGEvidenceSkillConfig):
 
 @dataclasses.dataclass(kw_only=True)
 class BwrapSandboxSkillConfig:
-    kind: typing.ClassVar[str] = bwrap_sandbox.CAPABILITY_NAME
+    kind: typing.ClassVar[str] = bwrap_sandbox.SKILL_PROPERTIES.name
     source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
-    name: typing.ClassVar[str] = bwrap_sandbox.CAPABILITY_NAME
+    name: typing.ClassVar[str] = bwrap_sandbox.SKILL_PROPERTIES.name
     description: typing.ClassVar[str] = (
-        bwrap_sandbox.CAPABILITY_DESCRIPTION.strip()
+        bwrap_sandbox.SKILL_PROPERTIES.description.strip()
     )
     state_type: typing.ClassVar[None] = None
     state_namespace: typing.ClassVar[None] = None
@@ -407,7 +407,7 @@ class BwrapSandboxSkillConfig:
         except Exception as exc:
             raise config_exc.FromYamlException(
                 config_path,
-                "bubble-sandbox",
+                cls.kind,
                 config_dict,
             ) from exc
 
@@ -573,6 +573,8 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
         EntrypointCapabilityConfig,
     ]
 }
+# Compatibility for existing installations (no deprecation).
+SKILL_CONFIG_CLASSES_BY_KIND["bubble-sandbox"] = BwrapSandboxSkillConfig
 
 SkillConfigTypes = (
     FilesystemSkillConfig

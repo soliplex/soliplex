@@ -42,6 +42,7 @@ dependencies = [
     "pyjwt >= 2.13.0, < 2.14",  # PYSEC-2026-{175,177,178,179}
     "pymdown-extensions >= 11.0.0",  # CVE-2026-61632
     "python-keycloak",
+    "skills-ref",
     "sqlmodel",
     "starlette >= 1.3.1",  # Multiple CVEs
     "uvicorn[standard]",
