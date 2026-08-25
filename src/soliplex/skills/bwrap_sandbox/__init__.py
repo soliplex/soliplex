@@ -570,11 +570,12 @@ def create_bwrap_sandbox_capability(
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
     installation_config=None,  # noqa F821 cycles
+    defer_loading: bool = False,
 ) -> SandboxCapability:
     return SandboxCapability(
         id=id or SKILL_PROPERTIES.name,
         description=SKILL_PROPERTIES.description.strip(),
-        defer_loading=True,
+        defer_loading=defer_loading,
         default_environment=default_environment,
         allowed_environments=allowed_environments,
         sandbox_config=sandbox_config,

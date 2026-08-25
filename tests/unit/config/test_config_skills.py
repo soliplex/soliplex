@@ -122,7 +122,7 @@ def test_haiku_rag_capability_config(
     capability = config.capability
     assert isinstance(capability, capability_class)
     assert capability.db_path == db_path
-    assert capability.defer_loading is True
+    assert capability.defer_loading is False
 
     assert config.state_namespace == state_namespace
     assert config.agui_feature_names == (state_namespace,)
@@ -732,3 +732,97 @@ def test_haiku_rag_evidence_skill_config_wraps_yaml_errors(
             temp_dir / "room_config.yaml",
             {"kind": klass.kind, "bogus": "nonesuch"},
         )
+
+
+# Omitted, explicitly true, and explicitly false: the three states each
+# configurable skill kind must carry through to its capability, and back
+# out through 'as_yaml'.
+def _defer_loading_states(default):
+    """The three YAML states, against a kind's own default."""
+    return [
+        ({}, default),
+        ({"defer_loading": True}, True),
+        ({"defer_loading": False}, False),
+    ]
+
+
+@pytest.mark.parametrize(
+    "w_yaml, exp_defer_loading", _defer_loading_states(False)
+)
+@pytest.mark.parametrize(
+    "config_class",
+    [
+        config_skills.HR_RAG_SkillConfig,
+        config_skills.HR_Analysis_SkillConfig,
+    ],
+)
+def test_haiku_rag_capability_config_defer_loading(
+    temp_dir,
+    installation_config,
+    config_class,
+    w_yaml,
+    exp_defer_loading,
+):
+    db_path = temp_dir / "rag.lancedb"
+    db_path.mkdir()
+    config = config_class.from_yaml(
+        installation_config,
+        temp_dir / "room.yaml",
+        {
+            "kind": config_class.kind,
+            "rag_lancedb_override_path": str(db_path),
+            **w_yaml,
+        },
+    )
+
+    assert config.defer_loading is exp_defer_loading
+    assert config.capability.defer_loading is exp_defer_loading
+    assert config.as_yaml.get("defer_loading", False) is exp_defer_loading
+
+
+@pytest.mark.parametrize(
+    "w_yaml, exp_defer_loading", _defer_loading_states(False)
+)
+def test_bwrap_sandbox_config_defer_loading(
+    installation_config,
+    temp_dir,
+    w_yaml,
+    exp_defer_loading,
+):
+    config = config_skills.BwrapSandboxSkillConfig.from_yaml(
+        installation_config,
+        temp_dir / "room.yaml",
+        {"kind": bwrap_sandbox.SKILL_PROPERTIES.name, **w_yaml},
+    )
+
+    assert config.defer_loading is exp_defer_loading
+    assert config.capability.defer_loading is exp_defer_loading
+    assert config.as_yaml.get("defer_loading", False) is exp_defer_loading
+
+
+@pytest.mark.parametrize(
+    "w_yaml, exp_defer_loading", _defer_loading_states(True)
+)
+def test_entrypoint_capability_config_defer_loading(
+    monkeypatch,
+    installation_config,
+    temp_dir,
+    w_yaml,
+    exp_defer_loading,
+):
+    _patch_entry_points(monkeypatch, {"my-cap": _stateless_module()})
+    config = config_skills.EntrypointCapabilityConfig.from_yaml(
+        installation_config,
+        temp_dir / "room.yaml",
+        {"kind": "entrypoint", "name": "my-cap", "foo": "bar", **w_yaml},
+    )
+
+    assert config.defer_loading is exp_defer_loading
+    # The flag is Soliplex's, not the plugin's:  it reaches
+    # 'create_capability' as its own argument, never as a parameter.
+    assert config.params == {"foo": "bar"}
+    assert config.capability == {
+        "defer_loading": exp_defer_loading,
+        "params": {"foo": "bar"},
+    }
+    assert config.as_yaml.get("defer_loading", True) is exp_defer_loading

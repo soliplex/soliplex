@@ -192,6 +192,8 @@ class _HaikuRAGCapabilityConfig(
     state_type: typing.ClassVar[type[pydantic.BaseModel]]
     source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
 
+    defer_loading: bool = False
+
     @classmethod
     def from_yaml(
         cls,
@@ -230,7 +232,7 @@ class _HaikuRAGCapabilityConfig(
         return type(self).capability_factory(
             db_path=self.rag_lancedb_path,
             config=self.haiku_rag_config,
-            defer_loading=True,
+            defer_loading=self.defer_loading,
         )
 
     @property
@@ -246,6 +248,8 @@ class _HaikuRAGCapabilityConfig(
             result["rag_lancedb_override_path"] = str(
                 self.rag_lancedb_override_path
             )
+        if self.defer_loading:
+            result["defer_loading"] = self.defer_loading
         return result
 
     @property
@@ -383,6 +387,7 @@ class BwrapSandboxSkillConfig:
     allowed_environments: bwrap_sandbox.AllowedEnvironments = None
     sandbox_config: bs_config.Config = None
     volumes: bs_models.VolumeMap = _default_dict_field()
+    defer_loading: bool = False
 
     @classmethod
     def from_yaml(
@@ -420,6 +425,7 @@ class BwrapSandboxSkillConfig:
             sandbox_config=self.sandbox_config,
             volumes=self.volumes,
             installation_config=self._installation_config,
+            defer_loading=self.defer_loading,
         )
 
     @property
@@ -428,6 +434,8 @@ class BwrapSandboxSkillConfig:
             "kind": self.kind,
             "default_environment": self.default_environment,
         }
+        if self.defer_loading:
+            result["defer_loading"] = self.defer_loading
         if self.id is not None:
             result["id"] = self.id
         if self.allowed_environments is not None:
@@ -475,6 +483,7 @@ class EntrypointCapabilityConfig:
 
     name: str
     params: dict[str, typing.Any] = _default_dict_field()
+    defer_loading: bool = True
 
     def __post_init__(self) -> None:
         # Register the capability's typed AG-UI state feature so the room can
@@ -500,10 +509,13 @@ class EntrypointCapabilityConfig:
         params = dict(config_dict)
         params.pop("kind", None)
         name = params.pop("name", None)
+        # Soliplex's own flag, not one of the plugin's parameters.
+        defer_loading = params.pop("defer_loading", True)
         try:
             return cls(
                 name=name,
                 params=params,
+                defer_loading=defer_loading,
                 _installation_config=installation_config,
                 _config_path=config_path,
             )
@@ -521,7 +533,7 @@ class EntrypointCapabilityConfig:
     @property
     def capability(self) -> ai_capabilities.AbstractCapability:
         return self._module.create_capability(
-            defer_loading=True, **self.params
+            defer_loading=self.defer_loading, **self.params
         )
 
     @property
@@ -543,7 +555,10 @@ class EntrypointCapabilityConfig:
 
     @property
     def as_yaml(self) -> dict:
-        return {"kind": self.kind, "name": self.name, **self.params}
+        result = {"kind": self.kind, "name": self.name, **self.params}
+        if not self.defer_loading:
+            result["defer_loading"] = self.defer_loading
+        return result
 
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:

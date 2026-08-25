@@ -13,7 +13,6 @@ from pydantic_ai import toolsets as ai_toolsets
 from soliplex import agents
 from soliplex import mcp_client
 from soliplex import tools
-from soliplex.capabilities import rag_audit as cap_rag_audit
 from soliplex.config import agents as config_agents
 from soliplex.config import installation as config_installation
 from soliplex.config import tools as config_tools
@@ -262,6 +261,7 @@ def test_get_default_agent_from_configs(
         assert audit_capability.db_paths == {
             "haiku-rag": RAG_LANCEDB_OVERRIDE_PATH
         }
+        assert audit_capability.defer_loading is False
     assert found_capabilities == exp_capabilities
     assert akc_kw["retries"] == exp_retries
 
@@ -377,95 +377,28 @@ def _w_toolset(cap_id: str) -> ai_caps.Capability:
     )
 
 
-@pytest.mark.parametrize("w_audit", [False, True])
+@pytest.mark.parametrize("w_defer_loading", [False, True])
 @pytest.mark.parametrize(
-    "w_caps, exp_defers",
+    "make_capability, is_routing",
     [
-        ([], []),
-        # Single hook cap: don't defer
-        ([hr_caps_compaction.EvidenceCompactionCapability()], False),
-        ([hr_caps_policy.CitationPolicyCapability()], False),
         (
-            # Multiple hook caps: don't defer
-            [
-                hr_caps_compaction.EvidenceCompactionCapability(),
-                hr_caps_policy.CitationPolicyCapability(),
-            ],
-            False,
+            lambda: hr_caps_rag.create_capability(
+                db_path="/tmp/kb.lancedb",
+                config=hr_models.AppConfig(),
+            ),
+            True,
         ),
-        (
-            # Single non-hook cap: don't defer
-            [
-                hr_caps_rag.create_capability(
-                    db_path="/tmp/kb.lancedb",
-                    config=hr_models.AppConfig(),
-                ),
-            ],
-            False,
-        ),
-        (
-            # Single non-hook cap: don't defer, nor hook sibs
-            [
-                hr_caps_rag.create_capability(
-                    db_path="/tmp/kb.lancedb",
-                    config=hr_models.AppConfig(),
-                ),
-                hr_caps_compaction.EvidenceCompactionCapability(),
-                hr_caps_policy.CitationPolicyCapability(),
-            ],
-            False,
-        ),
-        (
-            # Multiple non-hook caps: defer each
-            [
-                hr_caps_rag.create_capability(
-                    db_path="/tmp/foo.lancedb",
-                    config=hr_models.AppConfig(),
-                ),
-                hr_caps_rag.create_capability(
-                    db_path="/tmp/bar.lancedb",
-                    config=hr_models.AppConfig(),
-                ),
-            ],
-            [True, True],
-        ),
-        (
-            [
-                # Multiple non-hook caps: defer each, but not -hook sibs
-                hr_caps_rag.create_capability(
-                    db_path="/tmp/foo.lancedb",
-                    config=hr_models.AppConfig(),
-                ),
-                hr_caps_rag.create_capability(
-                    db_path="/tmp/bar.lancedb",
-                    config=hr_models.AppConfig(),
-                ),
-                hr_caps_compaction.EvidenceCompactionCapability(),
-                hr_caps_policy.CitationPolicyCapability(),
-            ],
-            [True, True, False, False],
-        ),
-        # Capabilities named nowhere in this module, classified by what
-        # they offer the model rather than by their type (#1270).
-        ([_instructions_only("one")], False),
-        ([_instructions_only("one"), _instructions_only("two")], [True, True]),
-        ([_tools_only("one")], False),
-        ([_tools_only("one"), _tools_only("two")], [True, True]),
+        (lambda: _instructions_only("one"), True),
+        (lambda: _tools_only("one"), True),
         # A toolset built elsewhere.
-        ([_w_toolset("one"), _w_toolset("two")], [True, True]),
+        (lambda: _w_toolset("one"), True),
         # Native tools are neither instructions nor a toolset.
-        ([ai_caps.WebSearch(id="one")], False),
-        (
-            [ai_caps.WebSearch(id="one"), ai_caps.WebSearch(id="two")],
-            [True, True],
-        ),
+        (lambda: ai_caps.WebSearch(id="one"), True),
         # Offering nothing to load: hook-only, whatever the type.
-        ([ai_caps.Capability(id="bare")], False),
-        ([ai_caps.Thinking(id="thinking")], False),
-        (
-            [_instructions_only("one"), ai_caps.Capability(id="bare")],
-            False,
-        ),
+        (hr_caps_compaction.EvidenceCompactionCapability, False),
+        (hr_caps_policy.CitationPolicyCapability, False),
+        (lambda: ai_caps.Capability(id="bare"), False),
+        (lambda: ai_caps.Thinking(id="thinking"), False),
     ],
 )
 @mock.patch("soliplex.config.agents.get_model_from_config")
@@ -473,12 +406,12 @@ def _w_toolset(cap_id: str) -> ai_caps.Capability:
 def test_get_default_agent_from_configs_w_caps_defer_loading(
     agent_klass,
     gmfc,
-    w_caps,
-    exp_defers,
-    w_audit,
+    make_capability,
+    is_routing,
+    w_defer_loading,
 ):
-    if exp_defers is False:
-        exp_defers = [False] * len(w_caps)
+    capability = make_capability()
+    capability.defer_loading = w_defer_loading
 
     agent_config = mock.create_autospec(
         config_agents.AgentConfig,
@@ -491,22 +424,9 @@ def test_get_default_agent_from_configs_w_caps_defer_loading(
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
 
     capability_config = mock.Mock(
-        capabilities=w_caps,
-        rag_db_paths=(
-            {"haiku-rag": RAG_LANCEDB_OVERRIDE_PATH} if w_audit else {}
-        ),
+        capabilities=[capability],
+        rag_db_paths={},
     )
-
-    exp_caps = w_caps[:]
-
-    if w_audit:
-        exp_caps.append(
-            cap_rag_audit.RAGAccessAuditCapability(
-                id="soliplex-rag-access-audit",
-                db_paths={"haiku-rag": RAG_LANCEDB_OVERRIDE_PATH},
-            )
-        )
-        exp_defers.append(False)
 
     found = agents.get_default_agent_from_configs(
         agent_config=agent_config,
@@ -518,8 +438,8 @@ def test_get_default_agent_from_configs_w_caps_defer_loading(
     assert found is agent_klass.return_value
     agent_klass.assert_called_once()
 
-    for exp_cap, exp_defer in zip(exp_caps, exp_defers, strict=True):
-        assert exp_cap.defer_loading == exp_defer
+    exp_defer = w_defer_loading if is_routing else False
+    assert capability.defer_loading is exp_defer
 
 
 @pytest.mark.parametrize("w_room_capabilities", [False, True])
