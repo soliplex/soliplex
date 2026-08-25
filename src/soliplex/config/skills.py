@@ -179,6 +179,22 @@ class FilesystemSkillConfig:
     def extra_parameters(self) -> dict[str, pathlib.Path]:
         return {"path": self.path}
 
+    def with_defer_loading(self, defer_loading: bool) -> FilesystemSkillConfig:
+        """A copy whose capability loads as a room asked.
+
+        Installation skill configs are shared between the rooms which name
+        them, so a room's choice cannot be written onto the capability.
+        """
+        if defer_loading == self._capability.defer_loading:
+            return self
+        return dataclasses.replace(
+            self,
+            _capability=dataclasses.replace(
+                self._capability,
+                defer_loading=defer_loading,
+            ),
+        )
+
 
 @dataclasses.dataclass(kw_only=True)
 class _HaikuRAGCapabilityConfig(
@@ -627,10 +643,35 @@ def extract_skill_configs(
 
 
 @dataclasses.dataclass(kw_only=True)
+class InstallationSkillRef:
+    """A room's reference to one of the installation's skills.
+
+    Spelled as a bare name, or as a mapping when the room sets a flag.
+    """
+
+    name: str
+    defer_loading: bool = True
+
+    @classmethod
+    def from_yaml(cls, entry: str | dict):
+        if isinstance(entry, str):
+            return cls(name=entry)
+        return cls(**entry)
+
+    @property
+    def as_yaml(self) -> str | dict:
+        if self.defer_loading:
+            return self.name
+        return {"name": self.name, "defer_loading": self.defer_loading}
+
+
+@dataclasses.dataclass(kw_only=True)
 class RoomSkillsConfig:
     """Select native capabilities for a room."""
 
-    installation_skill_names: list[str] = _default_list_field()
+    installation_skill_names: list[InstallationSkillRef] = (
+        _default_list_field()
+    )
     _skill_configs: SkillConfigMap = _default_dict_field()
     _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
@@ -641,9 +682,9 @@ class RoomSkillsConfig:
     def _check_installation_skills(
         installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
-        config_dict: dict,
+        refs: typing.Sequence[InstallationSkillRef],
     ) -> None:
-        requested = set(config_dict.get("installation_skill_names", ()))
+        requested = {ref.name for ref in refs}
         available = set(installation_config.skill_configs)
         if missing := requested - available:
             raise MissingSkillNames(
@@ -660,11 +701,16 @@ class RoomSkillsConfig:
         config_dict: dict,
     ):
         try:
+            refs = [
+                InstallationSkillRef.from_yaml(entry)
+                for entry in config_dict.get("installation_skill_names", ())
+            ]
             cls._check_installation_skills(
                 installation_config,
                 config_path,
-                config_dict,
+                refs,
             )
+            config_dict["installation_skill_names"] = refs
             config_dict["_skill_configs"] = extract_skill_configs(
                 installation_config,
                 config_path,
@@ -686,7 +732,9 @@ class RoomSkillsConfig:
     def as_yaml(self) -> dict:
         result = {}
         if self.installation_skill_names:
-            result["installation_skill_names"] = self.installation_skill_names
+            result["installation_skill_names"] = [
+                ref.as_yaml for ref in self.installation_skill_names
+            ]
         if self._skill_configs:
             result["skill_configs"] = [
                 config.as_yaml for config in self._skill_configs.values()
@@ -697,8 +745,10 @@ class RoomSkillsConfig:
     def skill_configs(self) -> SkillConfigMap:
         installation_configs = self._installation_config.skill_configs
         return {
-            name: installation_configs[name]
-            for name in self.installation_skill_names
+            ref.name: installation_configs[ref.name].with_defer_loading(
+                ref.defer_loading
+            )
+            for ref in self.installation_skill_names
         } | self._skill_configs
 
     @property

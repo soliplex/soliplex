@@ -826,3 +826,101 @@ def test_entrypoint_capability_config_defer_loading(
         "params": {"foo": "bar"},
     }
     assert config.as_yaml.get("defer_loading", True) is exp_defer_loading
+
+
+@pytest.mark.parametrize(
+    "w_entry, exp_name, exp_defer_loading",
+    [
+        (SKILL_NAME, SKILL_NAME, True),
+        ({"name": SKILL_NAME}, SKILL_NAME, True),
+        ({"name": SKILL_NAME, "defer_loading": True}, SKILL_NAME, True),
+        ({"name": SKILL_NAME, "defer_loading": False}, SKILL_NAME, False),
+    ],
+)
+def test_installation_skill_ref_from_yaml(
+    w_entry,
+    exp_name,
+    exp_defer_loading,
+):
+    ref = config_skills.InstallationSkillRef.from_yaml(w_entry)
+
+    assert ref.name == exp_name
+    assert ref.defer_loading is exp_defer_loading
+
+
+@pytest.mark.parametrize(
+    "w_defer_loading, exp_yaml",
+    [
+        (True, SKILL_NAME),
+        (False, {"name": SKILL_NAME, "defer_loading": False}),
+    ],
+)
+def test_installation_skill_ref_as_yaml(w_defer_loading, exp_yaml):
+    ref = config_skills.InstallationSkillRef(
+        name=SKILL_NAME,
+        defer_loading=w_defer_loading,
+    )
+
+    assert ref.as_yaml == exp_yaml
+
+
+@pytest.mark.parametrize("w_defer_loading", [True, False])
+def test_room_skills_config_installation_skill_defer_loading(
+    installation_config,
+    temp_dir,
+    w_defer_loading,
+):
+    filesystem = config_skills.FilesystemSkillConfig.from_capability(
+        _filesystem_capability(temp_dir / SKILL_NAME)
+    )
+    installation_config.skill_configs = {SKILL_NAME: filesystem}
+
+    config = config_skills.RoomSkillsConfig.from_yaml(
+        installation_config,
+        temp_dir / "room.yaml",
+        {
+            "installation_skill_names": [
+                {"name": SKILL_NAME, "defer_loading": w_defer_loading},
+            ],
+        },
+    )
+
+    (capability,) = config.capabilities
+    assert capability.defer_loading is w_defer_loading
+
+    # Installation skill configs are shared between rooms:  a room's
+    # choice is a copy, never a write to the discovered capability.
+    assert filesystem.capability.defer_loading is True
+    if w_defer_loading:
+        assert capability is filesystem.capability
+    else:
+        assert capability is not filesystem.capability
+
+
+@pytest.mark.parametrize(
+    "w_entry, exp_cause",
+    [
+        ({"nombre": SKILL_NAME}, TypeError),
+        ({"defer_loading": False}, TypeError),
+        ({"name": "missing"}, config_skills.MissingSkillNames),
+    ],
+)
+def test_room_skills_config_rejects_bad_installation_skill_entry(
+    installation_config,
+    temp_dir,
+    w_entry,
+    exp_cause,
+):
+    filesystem = config_skills.FilesystemSkillConfig.from_capability(
+        _filesystem_capability(temp_dir / SKILL_NAME)
+    )
+    installation_config.skill_configs = {SKILL_NAME: filesystem}
+
+    with pytest.raises(config_exc.FromYamlException) as raised:
+        config_skills.RoomSkillsConfig.from_yaml(
+            installation_config,
+            temp_dir / "room.yaml",
+            {"installation_skill_names": [w_entry]},
+        )
+
+    assert isinstance(raised.value.__cause__, exp_cause)
