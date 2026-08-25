@@ -298,3 +298,33 @@ async def test_get_installation_authz(
         resource=loggers.AUDIT_RESOURCE_INSTALLATION_AUTHZ,
         action=loggers.AUDIT_ACTION_READ,
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_admin_access", [False, True])
+async def test_get_user_authz(
+    w_admin_access,
+):
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
+    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
+
+    expected = models.UserAuthorization(is_admin_user=w_admin_access)
+
+    found = await authz_views.get_user_authz(
+        the_admin_users=the_admin_users,
+        the_user_claims=THE_USER_CLAIMS,
+        the_authz_logger=the_authz_logger,
+    )
+
+    assert found == expected
+
+    the_authz_logger.debug.assert_called_once_with(
+        loggers.AUTHZ_GET_USER_AUTHZ,
+    )
+
+    the_admin_users.check_admin_access.assert_awaited_once_with(
+        THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_USER_AUTHZ,
+        action=loggers.AUDIT_ACTION_READ,
+    )

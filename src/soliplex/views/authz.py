@@ -170,3 +170,25 @@ async def get_installation_authz(
             for room_id, room_policy in room_policies.items()
         },
     )
+
+
+@util.logfire_span("GET /v1/user/authz")
+@router.get(
+    "/v1/user/authz",
+    summary="Get authorization info for the user",
+)
+async def get_user_authz(
+    the_installation: installation.Installation = depend_the_installation,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
+) -> models.UserAuthorization:
+    the_authz_logger.debug(loggers.AUTHZ_GET_USER_AUTHZ)
+
+    is_admin_user = await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_USER_AUTHZ,
+        action=loggers.AUDIT_ACTION_READ,
+    )
+
+    return models.UserAuthorization(is_admin_user=is_admin_user)

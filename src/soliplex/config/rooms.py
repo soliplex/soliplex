@@ -218,6 +218,26 @@ class RoomConfig:
         return self.skills.has_sandbox if self.skills is not None else False
 
     @property
+    def has_thread_uploads(self) -> bool:
+        """Can files be uploaded to threads in this room at all?"""
+        upload_path = getattr(
+            self._installation_config,
+            "threads_upload_path",
+            None,
+        )
+        return self.has_sandbox and upload_path is not None
+
+    @property
+    def has_room_uploads(self) -> bool:
+        """Can files be uploaded to this room at all?"""
+        upload_path = getattr(
+            self._installation_config,
+            "rooms_upload_path",
+            None,
+        )
+        return self.has_sandbox and upload_path is not None
+
+    @property
     def agui_feature_names(self) -> tuple[str]:
         agent_features = set(self.agent_config.agui_feature_names)
         room_features = set(self._agui_feature_names)
