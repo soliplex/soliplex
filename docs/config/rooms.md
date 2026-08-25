@@ -161,8 +161,9 @@ for configuring an agent.
 
 ### Skill Configuration
 
-- `installation_skill_names` (a list of strings, default empty);  if set,
-  names the installation skills which are enabled for the room.
+- `installation_skill_names` (a list, default empty);  if set, names the
+  installation skills which are enabled for the room.  Each entry is a
+  skill name, or a mapping of `name` and `defer_loading`.
 
 - `skill_configs` (a list of mappings, default empty); if set, configure
   native capabilities locally for the room.
@@ -173,6 +174,9 @@ E.g.:
   skills:
     installation_skill_names:
         - "bare-bones"           # a filesystem skill
+
+        - name: "stanzas"        # loaded up front, not on demand
+          defer_loading: false
 
     skill_configs:
 
@@ -190,11 +194,39 @@ E.g.:
   budgets to spend.  Two kinds over *different* databases is fine, as
   above.
 
+#### Deferred Loading
+
+A deferred skill's tools and instructions stay hidden until the model asks
+for them through its `load_capability` tool, which is offered a catalogue
+of every deferred capability's id and description.  That id is the
+capability's own and need not match the skill name which configured it:
+the `haiku.rag.skills.rag` skill is named `rag`, and its capability's id
+is `haiku-rag`.  An undeferred skill's tools and instructions are in front
+of the model from the first request.
+
+Each entry sets `defer_loading` to choose between the two.  The default
+differs by kind:
+
+| Kind | Default |
+| --- | --- |
+| `haiku.rag.skills.rag` | `false` |
+| `haiku.rag.skills.analysis` | `false` |
+| `bwrap_sandbox` | `false` |
+| `entrypoint` | `true` |
+| filesystem skills, named in `installation_skill_names` | `true` |
+
+Defer a skill to keep its instructions out of a room whose agent rarely
+needs them;  the cost is a model request spent loading it when it does.
+Rooms configuring several instruction-heavy skills are what deferral is
+for.
+
+The evidence kinds below take no `defer_loading`:  they contribute no
+tools or instructions, so there is nothing to load, and a deferred
+capability's hooks do not fire until it is loaded.
+
 #### Evidence Skill Configuration Kinds
 
 Two further kinds take no configuration:  naming one is the whole switch.
-Both are hook-only, so they add no tools and neither affects whether the
-room's other capabilities load eagerly or on demand.
 
 - `haiku.rag.skills.evidence_compaction`:  on each request, replaces
   earlier questions' evidence with a capsule of the evidence that was

@@ -121,7 +121,13 @@ agent:
   any registered via the
   [`meta.agent_capability_types`](meta.md) stanza.  Capabilities which
   need configuration, or which a room should advertise, are configured as
-  [skills](rooms.md#skill-configuration) instead.
+  [skills](rooms.md#skill-configuration) instead.  `kwargs` reach the
+  capability's constructor, so a model-facing capability's
+  [deferred loading](rooms.md#deferred-loading) is set there as
+  `defer_loading`.  A capability offering the model no tools or
+  instructions is always loaded eagerly, whatever its `kwargs` ask for:
+  there would be nothing to load, and its hooks would not fire until it
+  was.
 
 ### Example Ollama Configuration
 
