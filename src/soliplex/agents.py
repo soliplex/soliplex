@@ -144,18 +144,11 @@ def get_default_agent_from_configs(
         if isinstance(capability, HR_VisionCapabilities):
             capability.vision = agent_config.multimodal
 
-    # A single model-facing capability loads eagerly so its tools are visible;
-    #
-    # Multiple stay deferred so the model routes between them via
-    # 'load_capability'.
-    routing_capabilities = [
-        capability
-        for capability in capabilities
-        if _is_routing_capability(capability)
-    ]
-    defer_loading = len(routing_capabilities) > 1
-    for capability in routing_capabilities:
-        capability.defer_loading = defer_loading
+    # A hook-only capability is never deferred:  nothing would load it, and
+    # its hooks only fire once loaded.
+    for capability in capabilities:
+        if not _is_routing_capability(capability):
+            capability.defer_loading = False
 
     return pydantic_ai.Agent(
         model=model,

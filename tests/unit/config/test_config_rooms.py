@@ -61,7 +61,9 @@ _order: {_ORDER}
 
 W_NON_HR_SKILLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
     "skills": config_skills.RoomSkillsConfig(
-        installation_skill_names=[test_skills.SKILL_NAME],
+        installation_skill_names=[
+            config_skills.InstallationSkillRef(name=test_skills.SKILL_NAME),
+        ],
     ),
 }
 W_NON_HR_SKILLS_ROOM_CONFIG_YAML = f"""\
@@ -187,7 +189,9 @@ FULL_ROOM_CONFIG_KW = {
         ),
     },
     "skills": config_skills.RoomSkillsConfig(
-        installation_skill_names=[test_skills.SKILL_NAME],
+        installation_skill_names=[
+            config_skills.InstallationSkillRef(name=test_skills.SKILL_NAME),
+        ],
     ),
 }
 FULL_ROOM_CONFIG_YAML = f"""\
@@ -541,6 +545,7 @@ def test_roomconfig_skill_configs_bare(installation_config):
 
 def test_roomconfig_skill_configs_w_hit(installation_config):
     skill_config = mock.create_autospec(config_skills.FilesystemSkillConfig)
+    skill_config.with_defer_loading.return_value = skill_config
     installation_config.skill_configs = {
         test_skills.SKILL_NAME: skill_config,
         "other_skill": object(),
@@ -585,15 +590,14 @@ def test_roomconfig_rag_db_paths_w_hit(temp_dir, installation_config):
         rag_lancedb_override_path=OVERRIDE_PATH,
         _haiku_rag_config=HR_CONFIG,
     )
-    installation_config.skill_configs = {
-        test_skills.SKILL_NAME: skill_config,
-        "other_skill": object(),
-    }
+    installation_config.skill_configs = {}
 
     room_config_kw = FULL_ROOM_CONFIG_KW.copy()
     room_config_kw["skills"] = dataclasses.replace(
         room_config_kw["skills"],
+        installation_skill_names=[],
         _installation_config=installation_config,
+        _skill_configs={test_skills.SKILL_NAME: skill_config},
     )
     room_config = config_rooms.RoomConfig(
         **room_config_kw,
@@ -623,7 +627,9 @@ def test_roomconfig_has_sandbox_bare(installation_config):
 
 def test_roomconfig_has_sandbox_w_hit(temp_dir, installation_config):
     installation_config.skill_configs = {
-        "other_skill": object(),
+        "other_skill": config_skills.FilesystemSkillConfig.from_capability(
+            test_skills._filesystem_capability(temp_dir / "other_skill")
+        ),
     }
     sandbox_skill_config = config_skills.BwrapSandboxSkillConfig(
         _installation_config=installation_config,
@@ -632,7 +638,10 @@ def test_roomconfig_has_sandbox_w_hit(temp_dir, installation_config):
     room_config_kw = FULL_ROOM_CONFIG_KW.copy()
     room_config_kw["skills"] = dataclasses.replace(
         room_config_kw["skills"],
-        installation_skill_names=list(installation_config.skill_configs),
+        installation_skill_names=[
+            config_skills.InstallationSkillRef(name=name)
+            for name in installation_config.skill_configs
+        ],
         _installation_config=installation_config,
         _skill_configs={sandbox_skill_config.kind: sandbox_skill_config},
     )

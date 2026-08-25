@@ -935,7 +935,7 @@ def test_create_bwrap_sandbox_capability(
     assert capability.id == w_kwargs.get(
         "id", skills_bwrap_sandbox.SKILL_PROPERTIES.name
     )
-    assert capability.defer_loading is True
+    assert capability.defer_loading is False
     assert "sandbox" in capability.get_instructions().lower()
     assert capability.get_toolset() is csts.return_value
 
@@ -953,6 +953,19 @@ def test_create_bwrap_sandbox_capability(
     )
 
     csts.assert_called_once_with(**exp_toolset_kw)
+
+
+@pytest.mark.parametrize("w_defer_loading", [True, False])
+@mock.patch("soliplex.skills.bwrap_sandbox.create_sandbox_toolset")
+def test_create_bwrap_sandbox_capability_defer_loading(
+    csts,
+    w_defer_loading,
+):
+    capability = skills_bwrap_sandbox.create_bwrap_sandbox_capability(
+        defer_loading=w_defer_loading,
+    )
+
+    assert capability.defer_loading is w_defer_loading
 
 
 @pytest.mark.anyio

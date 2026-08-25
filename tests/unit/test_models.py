@@ -836,7 +836,9 @@ def test_room_from_config_w_fs_skills(
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
         skills=config_skills.RoomSkillsConfig(
-            installation_skill_names=[SKILL_NAME],
+            installation_skill_names=[
+                config_skills.InstallationSkillRef(name=SKILL_NAME),
+            ],
             _installation_config=room_ic,
         ),
         _installation_config=room_ic,
