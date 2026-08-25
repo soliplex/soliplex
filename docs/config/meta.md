@@ -131,8 +131,7 @@ they can be referenced by their `tool_name`.
 
 The section contains a list of Python "dotted names", i.e. strings which
 can be used to import the configuration class. Each entry may instead be
-a mapping with a single `config_klass` key, whose value is that same
-dotted name.
+a mapping with a `config_klass` key, whose value is that same dotted name.
 
 Example:
 
@@ -141,6 +140,23 @@ meta:
   tool_configs:
   - "my_package.config.MyToolConfig"
 ```
+
+The mapping form also accepts an optional `tool_name` key, naming the
+registry key under which the class is registered. It defaults to the
+`tool_name` declared by the class itself; supplying it explicitly
+registers the class under an additional alias, which is how a renamed
+tool keeps accepting its former name:
+
+```yaml
+meta:
+  tool_configs:
+  - "my_package.config.MyToolConfig"
+  - tool_name: "my_package.tools.old_name"
+    config_klass: "my_package.config.MyToolConfig"
+```
+
+`as_yaml` always emits the mapping form, so aliases survive a
+dump-and-reload of the installation configuration.
 
 By default, Soliplex registers its own tool config class, just as though
 we configured explicitly:
@@ -158,8 +174,11 @@ configuration types so that they can be referenced by their 'kind'.
 
 The section contains a list of Python "dotted names", i.e. strings which
 can be used to import the configuration class. Each entry may instead be
-a mapping with a single `config_klass` key, whose value is that same
-dotted name.
+a mapping with a `config_klass` key, whose value is that same dotted
+name, plus an optional `kind` key naming the registry key under which
+the class is registered. `kind` defaults to the one declared by the
+class itself; supplying it explicitly registers the class under an
+additional alias, and `as_yaml` preserves it.
 
 By default, Soliplex registers its own toolset config classes, just as
 though we configured explicitly:
@@ -178,6 +197,9 @@ The `meta.mcp_server_tool_wrappers` section maps tool configuration classes
 to the equivalent wrapper class, used when offering the tool to external
 MCP clients.
 
+Soliplex registers no tool config wrappers by default: this registry is empty
+unless an installation populates it.
+
 The section contains a list of mappings with keys `config_klass` and
 `wrapper_klass`.  Values for both keys are Python "dotted names", i.e.
 strings which can be used to import the corresponding class.
@@ -191,15 +213,22 @@ meta:
     wrapper_klass: "my_package.config.MyMCPWrapper"
 ```
 
-Soliplex registers no wrappers by default: this registry is empty unless
-an installation populates it.
+Each mapping also accepts an optional `tool_name` key, naming the
+tool config registry key for which the wrapper is registered. It defaults
+to the `tool_name` declared by `config_klass`. Supplying a different
+`tool_name` wraps the tool config registered under that alias, and
+`as_yaml` preserves it. Because wrappers are keyed by tool name rather
+than by class, a tool registered under both its own name and an alias
+requires a separate wrapper entry for each registered tool name.
 
-The class named by `config_klass` must already be registered as a tool
-configuration, either by Soliplex itself or by the `meta.tool_configs`
-section of this same installation configuration; `tool_configs` is
-applied first for exactly that reason. Naming an unregistered class is an
-error, and loading the configuration fails rather than silently skipping
-the wrapper.
+That `tool_name` must already be registered as a tool configuration,
+either by Soliplex itself or by the `meta.tool_configs` section of this
+same installation configuration; `tool_configs` is applied first for
+exactly that reason. Naming an unregistered `tool_name` is an error, and
+loading the configuration fails rather than silently skipping the
+wrapper. Note that it is the name which must be registered, not the
+class: naming a registered class under a `tool_name` which is not itself
+registered fails just the same.
 
 ## Registering Skill Configuration Classes
 
@@ -208,8 +237,21 @@ configuration types so that they can be referenced by their 'kind'.
 
 The section contains a list of Python "dotted names", i.e. strings which
 can be used to import the configuration class. Each entry may instead be
-a mapping with a single `config_klass` key, whose value is that same
-dotted name.
+a mapping with a `config_klass` key, whose value is that same dotted
+name, plus an optional `kind` key naming the registry key under which
+the class is registered. `kind` defaults to the one declared by the
+class itself; supplying it explicitly registers the class under an
+additional alias, and `as_yaml` preserves it. A skill whose `kind` has
+been renamed can therefore keep accepting its former spelling in room
+configurations:
+
+```yaml
+meta:
+  skill_configs:
+  - "my_package.config.MySkillConfig"
+  - kind: "my_package.old_skill_name"
+    config_klass: "my_package.config.MySkillConfig"
+```
 
 By default, Soliplex registers its own skill config classes, just as
 though we configured explicitly:
@@ -234,15 +276,19 @@ class name, not a separate `kind` string.
 
 The section contains a list of Python "dotted names", i.e. strings which
 can be used to import the capability class. Each entry may instead be a
-mapping with a single `config_klass` key, whose value is that same dotted
-name.
-
-Example:
+mapping with a `config_klass` key, whose value is that same dotted name,
+plus an optional `capability_name` key naming the registry key under
+which the class is registered. `capability_name` defaults to the class'
+own `__name__`; supplying it explicitly registers the class under an
+additional alias, and `as_yaml` preserves it. A capability class which
+has been renamed can therefore keep answering to its former class name:
 
 ```yaml
 meta:
   agent_capability_types:
   - "my_package.capabilities.MyCapability"
+  - capability_name: "MyOldCapability"
+    config_klass: "my_package.capabilities.MyCapability"
 ```
 
 By default, Soliplex registers the capability types published by
@@ -257,8 +303,21 @@ they can be referenced by their `kind`.
 
 The section contains a list of Python "dotted names", i.e. strings which
 can be used to import the configuration class. Each entry may instead be
-a mapping with a single `config_klass` key, whose value is that same
-dotted name.
+a mapping with a `config_klass` key, whose value is that same dotted
+name, plus an optional `kind` key naming the registry key under which
+the class is registered. `kind` defaults to the one declared by the
+class itself; supplying it explicitly registers the class under an
+additional alias, and `as_yaml` preserves it. An agent whose `kind` has
+been renamed can therefore keep accepting its former spelling in room
+configurations:
+
+```yaml
+meta:
+  agent_configs:
+  - "my_package.config.MyAgentConfig"
+  - kind: "my_package.old_agent_kind"
+    config_klass: "my_package.config.MyAgentConfig"
+```
 
 By default, Soliplex registers its own agent config classes, just as
 though we configured explicitly:
@@ -283,9 +342,11 @@ which resolve those sources are registered separately, in
 [`meta.secret_getters`](#registering-secret-getter-functions) below.
 
 Like most sections above, it contains a list of Python "dotted names".
-Each entry may instead be a mapping with a single `config_klass` key,
-whose value is that same dotted name. The kind a class is registered
-under is taken from the class itself, not spelled separately.
+Each entry may instead be a mapping with a `config_klass` key, whose
+value is that same dotted name, plus an optional `kind` key naming the
+registry key under which the class is registered. `kind` defaults to the
+one declared by the class itself; supplying it explicitly registers the
+class under an additional alias, and `as_yaml` preserves it.
 
 By default, Soliplex registers its own source classes, just as though we
 configured explicitly:
@@ -351,9 +412,11 @@ meta:
 ```
 
 That is exactly equivalent to writing the two sections out, reading the
-`kind` from `config_klass`. The shorthand is expanded while the `meta`
-section is parsed, so an explicit `secret_getters` entry for the same
-kind takes precedence over one implied by `registered_func`. Note that
+`kind` from `config_klass` -- or from the entry's own `kind` key, when
+it carries one, so that an aliased source and its getter land under the
+same kind. The shorthand is expanded while the `meta` section is parsed,
+so an explicit `secret_getters` entry for the same kind takes precedence
+over one implied by `registered_func`. Note that
 `registered_func` is only meaningful in this combined position: it is not
 accepted anywhere else, and `soliplex-cli config` always dumps the two
 sections separately.
@@ -368,9 +431,13 @@ kind is accepted -- but resolving a secret from it raises
 source, so a secret listing further sources still resolves from the next
 one, and `soliplex-cli audit` reports the miss in its secrets section.
 
-Two configurations reach that state:
+Three configurations reach that state:
 
 - registering a source class alone, with no matching getter;
+
+- registering a source class under an additional `kind` alias without a
+  getter for that alias: getters are keyed by kind, so the getter
+  registered for the class' own kind does not cover the alias;
 
 - clearing `secret_getters` without clearing `secret_sources`, which
   strands every built-in kind whose getter is not re-registered:
