@@ -257,15 +257,16 @@ class _HaikuRAGCapabilityConfig(
 
     @property
     def as_yaml(self) -> dict:
-        result = {"kind": self.kind}
+        result = {
+            "kind": self.kind,
+            "defer_loading": self.defer_loading,
+        }
         if self.rag_lancedb_stem is not None:
             result["rag_lancedb_stem"] = self.rag_lancedb_stem
         else:
             result["rag_lancedb_override_path"] = str(
                 self.rag_lancedb_override_path
             )
-        if self.defer_loading:
-            result["defer_loading"] = self.defer_loading
         return result
 
     @property
@@ -449,9 +450,8 @@ class BwrapSandboxSkillConfig:
         result = {
             "kind": self.kind,
             "default_environment": self.default_environment,
+            "defer_loading": self.defer_loading,
         }
-        if self.defer_loading:
-            result["defer_loading"] = self.defer_loading
         if self.id is not None:
             result["id"] = self.id
         if self.allowed_environments is not None:
@@ -571,10 +571,12 @@ class EntrypointCapabilityConfig:
 
     @property
     def as_yaml(self) -> dict:
-        result = {"kind": self.kind, "name": self.name, **self.params}
-        if not self.defer_loading:
-            result["defer_loading"] = self.defer_loading
-        return result
+        return {
+            "kind": self.kind,
+            "name": self.name,
+            "defer_loading": self.defer_loading,
+            **self.params,
+        }
 
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:
@@ -660,8 +662,6 @@ class InstallationSkillRef:
 
     @property
     def as_yaml(self) -> str | dict:
-        if self.defer_loading:
-            return self.name
         return {"name": self.name, "defer_loading": self.defer_loading}
 
 
