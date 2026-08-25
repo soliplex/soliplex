@@ -224,13 +224,29 @@ def test_haiku_rag_capability_config_wraps_yaml_errors(
         )
 
 
+def test_bwrap_sandbox_config_registered_kind():
+    assert (
+        config_skills.SKILL_CONFIG_CLASSES_BY_KIND[
+            config_skills.BwrapSandboxSkillConfig.kind
+        ]
+        is config_skills.BwrapSandboxSkillConfig
+    )
+
+
+def test_bwrap_sandbox_config_registered_bbb_alias_kind():
+    assert (
+        config_skills.SKILL_CONFIG_CLASSES_BY_KIND["bubble-sandbox"]
+        is config_skills.BwrapSandboxSkillConfig
+    )
+
+
 def test_bwrap_sandbox_config_from_yaml(installation_config, temp_dir):
     volume_path = temp_dir / "volume"
     config = config_skills.BwrapSandboxSkillConfig.from_yaml(
         installation_config,
         temp_dir / "room.yaml",
         {
-            "kind": bwrap_sandbox.CAPABILITY_NAME,
+            "kind": bwrap_sandbox.SKILL_PROPERTIES.name,
             "id": "sandbox-id",
             "default_environment": "python",
             "allowed_environments": ["python"],
@@ -248,8 +264,8 @@ def test_bwrap_sandbox_config_from_yaml(installation_config, temp_dir):
     assert isinstance(capability, bwrap_sandbox.SandboxCapability)
     assert capability.id == "sandbox-id"
     assert capability.default_environment == "python"
-    assert config.name == bwrap_sandbox.CAPABILITY_NAME
-    assert config.description
+    assert config.name == bwrap_sandbox.SKILL_PROPERTIES.name
+    assert config.description == bwrap_sandbox.SKILL_PROPERTIES.description
     assert config.state_type is None
     assert config.state_namespace is None
     assert config.agui_feature_names == ()
@@ -271,7 +287,7 @@ def test_bwrap_sandbox_config_minimal(installation_config):
     )
 
     assert config.as_yaml == {
-        "kind": bwrap_sandbox.CAPABILITY_NAME,
+        "kind": bwrap_sandbox.SKILL_PROPERTIES.name,
         "default_environment": "bare",
     }
     assert config.extra_parameters == {"default_environment": "bare"}
@@ -300,7 +316,7 @@ def test_bwrap_sandbox_config_as_yaml_round_trips(
     temp_dir,
     w_full,
 ):
-    config_dict = {"kind": bwrap_sandbox.CAPABILITY_NAME}
+    config_dict = {"kind": bwrap_sandbox.SKILL_PROPERTIES.name}
 
     if w_full:
         config_dict |= {
@@ -335,7 +351,7 @@ def test_bwrap_sandbox_config_wraps_yaml_errors(
             installation_config,
             temp_dir / "room.yaml",
             {
-                "kind": bwrap_sandbox.CAPABILITY_NAME,
+                "kind": bwrap_sandbox.SKILL_PROPERTIES.name,
                 "volumes": {"data": {"unknown": True}},
             },
         )
@@ -350,7 +366,7 @@ def test_extract_skill_configs(installation_config, temp_dir):
                 "kind": config_skills.HR_RAG_SkillConfig.kind,
                 "rag_lancedb_override_path": str(db_path),
             },
-            {"kind": bwrap_sandbox.CAPABILITY_NAME},
+            {"kind": bwrap_sandbox.SKILL_PROPERTIES.name},
         ]
     }
 
@@ -360,7 +376,7 @@ def test_extract_skill_configs(installation_config, temp_dir):
         config_dict,
     )
 
-    assert set(found) == {"rag", bwrap_sandbox.CAPABILITY_NAME}
+    assert set(found) == {"rag", bwrap_sandbox.SKILL_PROPERTIES.name}
     assert config_dict == {}
 
 
@@ -414,7 +430,7 @@ def test_room_skills_config_combines_capabilities(
                     "kind": config_skills.HR_RAG_SkillConfig.kind,
                     "rag_lancedb_override_path": str(db_path),
                 },
-                {"kind": bwrap_sandbox.CAPABILITY_NAME},
+                {"kind": bwrap_sandbox.SKILL_PROPERTIES.name},
             ],
         },
     )
@@ -422,7 +438,7 @@ def test_room_skills_config_combines_capabilities(
     assert set(config.skill_configs) == {
         SKILL_NAME,
         "rag",
-        bwrap_sandbox.CAPABILITY_NAME,
+        bwrap_sandbox.SKILL_PROPERTIES.name,
     }
     assert len(config.capabilities) == 3
     assert config.rag_db_paths == {"haiku-rag": str(db_path)}
@@ -482,7 +498,7 @@ def test_room_skills_config_as_yaml_round_trips(
                 "kind": config_skills.HR_RAG_SkillConfig.kind,
                 "rag_lancedb_override_path": str(db_path),
             },
-            {"kind": bwrap_sandbox.CAPABILITY_NAME},
+            {"kind": bwrap_sandbox.SKILL_PROPERTIES.name},
         ],
     }
 

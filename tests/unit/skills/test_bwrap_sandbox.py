@@ -18,6 +18,8 @@ ROOM_ID = "test_room"
 THREAD_ID = uuid.uuid4()
 RUN_ID = uuid.uuid4()
 USERNAME = "phreddy"
+SANDBOX_VOLUMES_PATH = skills_bwrap_sandbox.SANDBOX_VOLUMES_PATH
+SANDBOX_WORKDIR_PATH = skills_bwrap_sandbox.SANDBOX_WORKDIR_PATH
 
 # 'write_transcript' requests owner-only '0600', which every POSIX host
 # honours -- Linux and macOS (APFS / HFS+) alike, as 'os.name' is 'posix'
@@ -150,8 +152,8 @@ async def test_skill_list_environments(
 @pytest.mark.parametrize(
     "volume, expected",
     [
-        ("thread", ["thread_file.txt"]),
-        ("room", ["room_file.txt"]),
+        ("thread", [f"{SANDBOX_VOLUMES_PATH}/thread/thread_file.txt"]),
+        ("room", [f"{SANDBOX_VOLUMES_PATH}/room/room_file.txt"]),
         ("nonesuch", []),
     ],
 )
@@ -931,7 +933,7 @@ def test_create_bwrap_sandbox_capability(
 
     assert isinstance(capability, skills_bwrap_sandbox.SandboxCapability)
     assert capability.id == w_kwargs.get(
-        "id", skills_bwrap_sandbox.CAPABILITY_NAME
+        "id", skills_bwrap_sandbox.SKILL_PROPERTIES.name
     )
     assert capability.defer_loading is True
     assert "sandbox" in capability.get_instructions().lower()
