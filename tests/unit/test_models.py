@@ -748,9 +748,11 @@ def test_room_from_config_bare(room_ic, which_agent):
     assert room_model.id == ROOM_ID
     assert room_model.name == ROOM_NAME
     assert room_model.description == ROOM_DESCRIPTION
+    assert room_model.welcome_message == ROOM_DESCRIPTION
     assert room_model.suggestions == []
     assert room_model.tools == {}
     assert room_model.skills == {}
+    assert room_model.quizzes == {}
 
     agent_model = room_model.agent
 
@@ -771,7 +773,9 @@ def test_room_from_config_bare(room_ic, which_agent):
             which_agent.agui_feature_names
         )
 
-    assert room_model.welcome_message == ROOM_DESCRIPTION
+    assert not room_model.allow_mcp
+    assert not room_model.has_thread_uploads
+    assert not room_model.has_room_uploads
 
 
 def test_room_from_config_w_welcome(room_ic, default_agent):

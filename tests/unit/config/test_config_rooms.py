@@ -647,6 +647,114 @@ def test_roomconfig_has_sandbox_w_hit(temp_dir, installation_config):
     assert found is True
 
 
+def test_roomconfig_has_thread_uploads_bare(installation_config):
+    installation_config.skill_configs = {}
+
+    room_config_kw = BARE_ROOM_CONFIG_KW.copy()
+    room_config = config_rooms.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    room_config.skills = None
+
+    found = room_config.has_thread_uploads
+
+    assert found is False
+
+
+@pytest.mark.parametrize("w_upload_path", [False, True])
+def test_roomconfig_has_thread_uploads_w_sandbox(
+    temp_dir,
+    installation_config,
+    w_upload_path,
+):
+    if w_upload_path:
+        upload_path = temp_dir / "uploads" / "threads"
+        upload_path.mkdir(parents=True)
+        installation_config.threads_upload_path = upload_path
+    else:
+        installation_config.threads_upload_path = None
+
+    installation_config.skill_configs = {
+        "other_skill": object(),
+    }
+    sandbox_skill_config = config_skills.BwrapSandboxSkillConfig(
+        _installation_config=installation_config,
+    )
+
+    room_config_kw = FULL_ROOM_CONFIG_KW.copy()
+    room_config_kw["skills"] = dataclasses.replace(
+        room_config_kw["skills"],
+        installation_skill_names=list(installation_config.skill_configs),
+        _installation_config=installation_config,
+        _skill_configs={sandbox_skill_config.kind: sandbox_skill_config},
+    )
+
+    room_config = config_rooms.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    found = room_config.has_thread_uploads
+
+    assert found == w_upload_path
+
+
+def test_roomconfig_has_room_uploads_bare(installation_config):
+    installation_config.skill_configs = {}
+
+    room_config_kw = BARE_ROOM_CONFIG_KW.copy()
+    room_config = config_rooms.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    room_config.skills = None
+
+    found = room_config.has_room_uploads
+
+    assert found is False
+
+
+@pytest.mark.parametrize("w_upload_path", [False, True])
+def test_roomconfig_has_room_uploads_w_sandbox(
+    temp_dir,
+    installation_config,
+    w_upload_path,
+):
+    if w_upload_path:
+        upload_path = temp_dir / "uploads" / "rooms"
+        upload_path.mkdir(parents=True)
+        installation_config.rooms_upload_path = upload_path
+    else:
+        installation_config.rooms_upload_path = None
+
+    installation_config.skill_configs = {
+        "other_skill": object(),
+    }
+    sandbox_skill_config = config_skills.BwrapSandboxSkillConfig(
+        _installation_config=installation_config,
+    )
+
+    room_config_kw = FULL_ROOM_CONFIG_KW.copy()
+    room_config_kw["skills"] = dataclasses.replace(
+        room_config_kw["skills"],
+        installation_skill_names=list(installation_config.skill_configs),
+        _installation_config=installation_config,
+        _skill_configs={sandbox_skill_config.kind: sandbox_skill_config},
+    )
+
+    room_config = config_rooms.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    found = room_config.has_room_uploads
+
+    assert found == w_upload_path
+
+
 @pytest.fixture
 def installation_config_w_skill(installation_config):
     skill_config = mock.create_autospec(

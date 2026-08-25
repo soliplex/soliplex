@@ -262,6 +262,8 @@ class Room(pydantic.BaseModel):
     agent: Agent
     agui_feature_names: list[str]
     allow_mcp: bool
+    has_thread_uploads: bool
+    has_room_uploads: bool
 
     @classmethod
     def from_config(cls, room_config: config_rooms.RoomConfig):
@@ -300,9 +302,11 @@ class Room(pydantic.BaseModel):
             quizzes={
                 quiz.id: Quiz.from_config(quiz) for quiz in room_config.quizzes
             },
-            allow_mcp=room_config.allow_mcp,
-            agui_feature_names=list(room_config.agui_feature_names),
             agent=agent,
+            agui_feature_names=list(room_config.agui_feature_names),
+            allow_mcp=room_config.allow_mcp,
+            has_thread_uploads=room_config.has_thread_uploads,
+            has_room_uploads=room_config.has_room_uploads,
         )
 
 
@@ -921,6 +925,10 @@ RoomPolicyMap = dict[str, RoomPolicy | None]
 class InstallationAuthorization(pydantic.BaseModel):
     admin_user_discriminators: list[str] = pydantic.Field(default_factory=list)
     room_policies: RoomPolicyMap = pydantic.Field(default_factory=dict)
+
+
+class UserAuthorization(pydantic.BaseModel):
+    is_admin_user: bool
 
 
 # ----------------------------------------------------------------------------
