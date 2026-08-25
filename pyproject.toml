@@ -19,7 +19,7 @@ dependencies = [
     "aiosqlite",
     "alembic >= 1.18.4, < 1.19",
     "authlib",
-    "bubble-sandbox >= 0.11.0, < 0.12",
+    "bubble-sandbox >= 0.12.0, < 0.13",
     "cryptography >= 50.0.0",  # PYSEC-2026-3552
     "fastapi",
     "fastmcp >= 3.3.0, < 3.4",
