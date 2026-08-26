@@ -4,6 +4,7 @@ import pathlib
 import uuid
 from unittest import mock
 
+import pydantic_ai
 import pytest
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
@@ -36,6 +37,28 @@ ANOTHER_ENVIRONMENT = mock.create_autospec(bs_models.EnvironmentInfo)
 ANOTHER_ENVIRONMENT.name = "another"  # mock quirk
 
 ALL_ENVIRONMENTS = [ONE_ENVIRONMENT, ANOTHER_ENVIRONMENT]
+
+# 'bubble_sandbox' signals a bad environment name with a 'ValueError' or a
+# 'FileNotFoundError' subclass rather than a 'RuntimeError'. Each must come
+# back as an error string the model can act on: one escaping the tool aborts
+# the whole agent run (soliplex#1306).
+EXECUTION_ERROR_CASES = [
+    (
+        bs_config.EnvironmentNotFound(pathlib.Path("/environments/pandas")),
+        skills_bwrap_sandbox.EnvironmentMissing,
+    ),
+    (
+        bs_config.EnvironmentNotInitialized(
+            "one", pathlib.Path("/environments/one/.venv/bin/python")
+        ),
+        skills_bwrap_sandbox.EnvironmentNotBuilt,
+    ),
+    (
+        bs_config.InvalidEnvironmentName("../escape"),
+        skills_bwrap_sandbox.EnvironmentNameInvalid,
+    ),
+    (RuntimeError("test"), skills_bwrap_sandbox.SandboxUnavailable),
+]
 
 
 @pytest.fixture
@@ -150,6 +173,80 @@ async def test_skill_list_environments(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
+    "w_environments, w_name, w_allowed",
+    [
+        (ALL_ENVIRONMENTS, None, None),
+        (ALL_ENVIRONMENTS, "one", None),
+        (ALL_ENVIRONMENTS, "one", ["one"]),
+    ],
+)
+async def test_check_environment_name_w_usable_name(
+    bwrap_sandbox,
+    w_environments,
+    w_name,
+    w_allowed,
+):
+    bwrap_sandbox.config.list_environments.return_value = w_environments
+
+    found = await skills_bwrap_sandbox.check_environment_name(
+        bwrap_sandbox=bwrap_sandbox,
+        environment_name=w_name,
+        allowed_environments=w_allowed,
+    )
+
+    assert found is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_name, w_allowed, exp_choices",
+    [
+        # A name the room does not allow is refused even though it exists:
+        # 'allowed_environments' otherwise only filters 'list_environments'.
+        ("another", ["one"], ["one"]),
+        ("pandas", None, ["one", "another"]),
+    ],
+)
+async def test_check_environment_name_w_guessed_name(
+    bwrap_sandbox,
+    w_name,
+    w_allowed,
+    exp_choices,
+):
+    bwrap_sandbox.config.list_environments.return_value = ALL_ENVIRONMENTS
+
+    with pytest.raises(pydantic_ai.ModelRetry) as exc_info:
+        await skills_bwrap_sandbox.check_environment_name(
+            bwrap_sandbox=bwrap_sandbox,
+            environment_name=w_name,
+            allowed_environments=w_allowed,
+        )
+
+    assert isinstance(exc_info.value, skills_bwrap_sandbox.UnknownEnvironment)
+    assert exc_info.value.name == w_name
+    assert exc_info.value.choices == exp_choices
+
+
+@pytest.mark.anyio
+async def test_check_environment_name_wo_any_environment(bwrap_sandbox):
+    bwrap_sandbox.config.list_environments.return_value = []
+
+    with pytest.raises(pydantic_ai.ToolFailed) as exc_info:
+        await skills_bwrap_sandbox.check_environment_name(
+            bwrap_sandbox=bwrap_sandbox,
+            environment_name="pandas",
+            allowed_environments=None,
+        )
+
+    assert isinstance(
+        exc_info.value,
+        skills_bwrap_sandbox.NoEnvironmentsConfigured,
+    )
+    assert exc_info.value.name == "pandas"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
     "volume, expected",
     [
         ("thread", [f"{SANDBOX_VOLUMES_PATH}/thread/thread_file.txt"]),
@@ -197,7 +294,6 @@ async def test_skill_list_volume_files_wo_configured_path(volume):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("w_att_rte", [False, True])
 @pytest.mark.parametrize("w_exit_code", [0, None, 42])
 @pytest.mark.parametrize("w_truncated", [False, True])
 @pytest.mark.parametrize(
@@ -207,32 +303,27 @@ async def test_skill_list_volume_files_wo_configured_path(volume):
         (["/bin/true"], ["/bin/true"]),
     ],
 )
-async def test_skill_run_w_errors_truncation(
+async def test_skill_run_w_exit_code_truncation(
     ctx_w_deps,
     bwrap_sandbox,
     w_command,
     exp_cmd_args,
     w_truncated,
     w_exit_code,
-    w_att_rte,
 ):
-    if w_att_rte:
-        bwrap_sandbox.execute.side_effect = RuntimeError("test")
-        expected = "Error: test"
+    bwrap_sandbox.execute.return_value = mock.create_autospec(
+        bs_models.ExecuteResult,
+        output="test output",
+        exit_code=w_exit_code,
+        truncated=w_truncated,
+    )
+    if w_truncated:
+        expected = "test output\n\n... (output truncated)"
     else:
-        bwrap_sandbox.execute.return_value = mock.create_autospec(
-            bs_models.ExecuteResult,
-            output="test output",
-            exit_code=w_exit_code,
-            truncated=w_truncated,
-        )
-        if w_truncated:
-            expected = "test output\n\n... (output truncated)"
-        else:
-            expected = "test output"
+        expected = "test output"
 
-        if w_exit_code not in [None, 0]:
-            expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
+    if w_exit_code not in [None, 0]:
+        expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
 
     found = await skills_bwrap_sandbox.skill_run(
         bwrap_sandbox=bwrap_sandbox,
@@ -248,6 +339,28 @@ async def test_skill_run_w_errors_truncation(
         timeout=None,
         extra_volumes=None,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("w_error, exp_klass", EXECUTION_ERROR_CASES)
+async def test_skill_run_w_execution_error(
+    bwrap_sandbox,
+    w_error,
+    exp_klass,
+):
+    bwrap_sandbox.execute.side_effect = w_error
+
+    with pytest.raises(exp_klass) as exc_info:
+        await skills_bwrap_sandbox.skill_run(
+            bwrap_sandbox=bwrap_sandbox,
+            command=["/bin/true"],
+            environment_name="one",
+        )
+
+    assert exc_info.value.__cause__ is w_error
+    assert exc_info.value.environment_name == "one"
+    # The host path 'bubble_sandbox' reports must not reach the model.
+    assert "/environments/" not in exc_info.value.message
 
 
 @pytest.mark.asyncio
@@ -311,33 +424,27 @@ async def test_skill_run_w_extra_args(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("w_att_rte", [False, True])
 @pytest.mark.parametrize("w_exit_code", [0, None, 42])
 @pytest.mark.parametrize("w_truncated", [False, True])
-async def test_skill_run_python_w_errors_truncation(
+async def test_skill_run_python_w_exit_code_truncation(
     ctx_w_deps,
     bwrap_sandbox,
     w_truncated,
     w_exit_code,
-    w_att_rte,
 ):
-    if w_att_rte:
-        bwrap_sandbox.execute_python.side_effect = RuntimeError("test")
-        expected = "Error: test"
+    bwrap_sandbox.execute_python.return_value = mock.create_autospec(
+        bs_models.ExecuteResult,
+        output="test output",
+        exit_code=w_exit_code,
+        truncated=w_truncated,
+    )
+    if w_truncated:
+        expected = "test output\n\n... (output truncated)"
     else:
-        bwrap_sandbox.execute_python.return_value = mock.create_autospec(
-            bs_models.ExecuteResult,
-            output="test output",
-            exit_code=w_exit_code,
-            truncated=w_truncated,
-        )
-        if w_truncated:
-            expected = "test output\n\n... (output truncated)"
-        else:
-            expected = "test output"
+        expected = "test output"
 
-        if w_exit_code not in [None, 0]:
-            expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
+    if w_exit_code not in [None, 0]:
+        expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
 
     found = await skills_bwrap_sandbox.skill_run_python(
         bwrap_sandbox=bwrap_sandbox,
@@ -353,6 +460,50 @@ async def test_skill_run_python_w_errors_truncation(
         timeout=None,
         extra_volumes=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_skill_run_w_execution_error_wo_environment_name(
+    bwrap_sandbox,
+):
+    # The room's configured default is the operator's choice, so the model
+    # is told which environment failed without being handed a name it never
+    # passed -- nor the host path 'bubble_sandbox' names.
+    bwrap_sandbox.execute.side_effect = bs_config.EnvironmentNotFound(
+        pathlib.Path("/environments/bare")
+    )
+
+    with pytest.raises(skills_bwrap_sandbox.EnvironmentMissing) as exc_info:
+        await skills_bwrap_sandbox.skill_run(
+            bwrap_sandbox=bwrap_sandbox,
+            command=["/bin/true"],
+        )
+
+    assert exc_info.value.environment_name is None
+    assert "this room uses by default" in exc_info.value.message
+    assert "/environments/" not in exc_info.value.message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("w_error, exp_klass", EXECUTION_ERROR_CASES)
+async def test_skill_run_python_w_execution_error(
+    bwrap_sandbox,
+    w_error,
+    exp_klass,
+):
+    bwrap_sandbox.execute_python.side_effect = w_error
+
+    with pytest.raises(exp_klass) as exc_info:
+        await skills_bwrap_sandbox.skill_run_python(
+            bwrap_sandbox=bwrap_sandbox,
+            script="print('hello')",
+            environment_name="one",
+        )
+
+    assert exc_info.value.__cause__ is w_error
+    assert exc_info.value.environment_name == "one"
+    # The host path 'bubble_sandbox' reports must not reach the model.
+    assert "/environments/" not in exc_info.value.message
 
 
 @pytest.mark.asyncio
@@ -682,7 +833,7 @@ async def test_create_sandbox_toolset_list_volume_files_wo_upload_paths(
     "w_kw",
     [
         {},
-        {"environment_name": "test-environment"},
+        {"environment_name": "one"},
         {"timeout": 17},
     ],
 )
@@ -705,6 +856,9 @@ async def test_create_sandbox_toolset_run(
     w_iconfig,
     audit_records,
 ):
+    bs_klass.return_value.config.list_environments.return_value = (
+        ALL_ENVIRONMENTS
+    )
     if w_iconfig:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset(
             installation_config=i_config,
@@ -793,7 +947,7 @@ async def test_create_sandbox_toolset_run(
     "w_kw",
     [
         {},
-        {"environment_name": "test-environment"},
+        {"environment_name": "one"},
         {"timeout": 17},
     ],
 )
@@ -816,6 +970,9 @@ async def test_create_sandbox_toolset_run_python(
     w_iconfig,
     audit_records,
 ):
+    bs_klass.return_value.config.list_environments.return_value = (
+        ALL_ENVIRONMENTS
+    )
     if w_iconfig:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset(
             installation_config=i_config,
@@ -891,6 +1048,70 @@ async def test_create_sandbox_toolset_run_python(
             ROOM_ID,
             str(THREAD_ID),
         )
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.skills.bwrap_sandbox.skill_run")
+@mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
+async def test_create_sandbox_toolset_run_w_disallowed_environment(
+    bs_klass,
+    skill_run,
+    ctx_w_deps,
+    audit_records,
+):
+    bs_klass.return_value.config.list_environments.return_value = (
+        ALL_ENVIRONMENTS
+    )
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+        allowed_environments=["one"],
+    )
+    tool = toolset.tools["run"]
+
+    with pytest.raises(pydantic_ai.ModelRetry) as exc_info:
+        await tool.function(
+            ctx=ctx_w_deps,
+            command=["/bin/true"],
+            environment_name="another",
+        )
+
+    assert isinstance(exc_info.value, skills_bwrap_sandbox.UnknownEnvironment)
+    assert exc_info.value.name == "another"
+    assert exc_info.value.choices == ["one"]
+
+    skill_run.assert_not_called()
+    assert audit_records == []
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.skills.bwrap_sandbox.skill_run_python")
+@mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
+async def test_create_sandbox_toolset_run_python_w_disallowed_environment(
+    bs_klass,
+    skill_run_python,
+    ctx_w_deps,
+    audit_records,
+):
+    bs_klass.return_value.config.list_environments.return_value = (
+        ALL_ENVIRONMENTS
+    )
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+        allowed_environments=["one"],
+    )
+    tool = toolset.tools["run_python"]
+
+    with pytest.raises(pydantic_ai.ModelRetry) as exc_info:
+        await tool.function(
+            ctx=ctx_w_deps,
+            script="print('hello')",
+            environment_name="another",
+        )
+
+    assert isinstance(exc_info.value, skills_bwrap_sandbox.UnknownEnvironment)
+    assert exc_info.value.name == "another"
+    assert exc_info.value.choices == ["one"]
+
+    skill_run_python.assert_not_called()
+    assert audit_records == []
 
 
 @pytest.mark.parametrize("w_iconfig", [False, True])
@@ -984,9 +1205,10 @@ async def test_create_sandbox_toolset_run_audits_failure(
     audit_records,
 ):
     # An exception escaping the tool body is recorded as a failure and
-    # re-raised (the skill's own 'skill_run' swallows 'RuntimeError', so this
-    # mocks it to raise). The transcript is written before execution, so its
-    # ref still lands on the failure record.
+    # re-raised -- which is now the live path for a sandbox that cannot
+    # start, since 'skill_run' translates those into 'ToolFailed' subclasses
+    # rather than swallowing them. The transcript is written before
+    # execution, so its ref still lands on the failure record.
     skill_run.side_effect = RuntimeError("boom")
     toolset = skills_bwrap_sandbox.create_sandbox_toolset(
         installation_config=i_config,
