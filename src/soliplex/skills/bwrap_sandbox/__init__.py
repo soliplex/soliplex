@@ -31,6 +31,10 @@ SANDBOX_WORKDIR_PATH = SKILL_PROPERTIES.metadata["sandbox_workdir_path"]
 LIST_ENVIRONMENTS_DESCRIPTION = """
 Return a list of information about available sandbox environments
 
+Call this tool before the first ``run`` or ``run_python`` of a turn: \
+their ``environment_name`` argument accepts nothing but the names \
+returned here.
+
 Each entry will contain these fields:
 - 'name' (string) pass this value to the ``run`` and ``run_python`` \
 tools to run the tool in the environment.
@@ -55,6 +59,164 @@ async def skill_list_environments(
         return candidates
 
 
+class UnknownEnvironment(pydantic_ai.ModelRetry):
+    def __init__(self, name, choices):
+        self.name = name
+        self.choices = choices
+        c_list = ", ".join(repr(name) for name in choices)
+        super().__init__(
+            f"{name!r} is not an available sandbox environment. "
+            "Environment names cannot be guessed or copied from examples: "
+            "call 'list_environments' and pass one of the names it returns. "
+            f"Available environments: {c_list}."
+        )
+
+
+class NoEnvironmentsConfigured(pydantic_ai.ToolFailed):
+    def __init__(self, name):
+        self.name = name
+        super().__init__(
+            f"{name!r} is not an available sandbox environment, "
+            "and this room has none configured. "
+            "Tell the user the sandbox skill is not configured."
+        )
+
+
+async def check_environment_name(
+    *,
+    bwrap_sandbox: bs_sandbox.BwrapSandbox,
+    environment_name: str | None,
+    allowed_environments: AllowedEnvironments = None,
+) -> None:
+    """Reject an 'environment_name' the model invented, before anything runs.
+
+    Guards 'run' / 'run_python' against a name the model guessed rather than
+    read from a 'list_environments' result. Without it, an unknown name
+    aborts the whole agent run, and a name which exists but is *not* in
+    'allowed_environments' runs anyway -- 'allowed_environments' otherwise
+    only filters what 'list_environments' reports.
+
+    The two failures differ in whether the model can do anything about them,
+    so they are reported differently. A name outside the choices is fixable
+    by calling 'list_environments' and passing one of them, which is what
+    'ModelRetry' asks for (and matches how 'pydantic_ai' itself reports an
+    unknown *tool* name). A room with no environments at all is the
+    operator's to fix: 'ToolFailed' shows the model a failed call to report
+    rather than one to retry, and spends none of the tool's retry budget.
+
+    'None' passes through unchecked: it selects the environment the skill was
+    configured with, which is the operator's choice rather than the model's.
+    """
+    if environment_name is None:
+        return
+
+    available = [
+        env.name
+        for env in await skill_list_environments(
+            bwrap_sandbox=bwrap_sandbox,
+            allowed_environments=allowed_environments,
+        )
+    ]
+
+    if environment_name in available:
+        return
+
+    if not available:
+        raise NoEnvironmentsConfigured(name=environment_name)
+
+    raise UnknownEnvironment(
+        name=environment_name,
+        choices=available,
+    )
+
+
+def _environment_label(environment_name):
+    """Name the environment a run asked for, without leaking host paths.
+
+    'bubble_sandbox' builds its messages from the resolved filesystem path
+    ("Environment not found: PosixPath('/app/sandbox/environments/...')"),
+    which is meaningless inside the sandbox and not something to put in
+    front of the model. The requested name says the same thing.
+    """
+    if environment_name is None:
+        return "the environment this room uses by default"
+    return f"the {environment_name!r} environment"
+
+
+class EnvironmentMissing(pydantic_ai.ToolFailed):
+    def __init__(self, environment_name):
+        self.environment_name = environment_name
+        super().__init__(
+            f"The sandbox cannot run: {_environment_label(environment_name)} "
+            "is not installed on this server. Report this to the user as a "
+            "sandbox configuration problem; retrying will not fix it."
+        )
+
+
+class EnvironmentNotBuilt(pydantic_ai.ToolFailed):
+    def __init__(self, environment_name):
+        self.environment_name = environment_name
+        super().__init__(
+            f"The sandbox cannot run: {_environment_label(environment_name)} "
+            "is installed but its Python virtualenv is missing. Report this "
+            "to the user as a sandbox configuration problem; retrying will "
+            "not fix it."
+        )
+
+
+class EnvironmentNameInvalid(pydantic_ai.ToolFailed):
+    def __init__(self, environment_name):
+        self.environment_name = environment_name
+        super().__init__(
+            f"The sandbox cannot run: {_environment_label(environment_name)} "
+            "is not a usable environment name. Report this to the user as a "
+            "sandbox configuration problem; retrying will not fix it."
+        )
+
+
+class SandboxUnavailable(pydantic_ai.ToolFailed):
+    def __init__(self, environment_name, reason):
+        self.environment_name = environment_name
+        self.reason = reason
+        super().__init__(
+            "The sandbox could not be started in "
+            f"{_environment_label(environment_name)}: {reason}. Report this "
+            "to the user; retrying will not fix it."
+        )
+
+
+# 'bubble_sandbox' reports a bad environment name with 'ValueError' and
+# 'FileNotFoundError' subclasses, not 'RuntimeError'; letting one escape
+# aborts the agent run (soliplex#1306) instead of handing the model an
+# error it can act on.
+EXECUTION_ERRORS = (
+    RuntimeError,
+    OSError,
+    bs_config.InvalidEnvironmentName,
+)
+
+
+def translate_execution_error(exc, *, environment_name):
+    """Return the error the model should see for a failed sandbox start.
+
+    Every case here is the operator's to fix rather than the model's --
+    'check_environment_name' has already rejected any name the model could
+    have chosen differently -- so each maps to a 'ToolFailed' subclass: the
+    model sees a failed call to report, spends none of the tool's retry
+    budget, and is told plainly that retrying will not help.
+    """
+    if isinstance(exc, bs_config.EnvironmentNotFound):
+        return EnvironmentMissing(environment_name)
+
+    if isinstance(exc, bs_config.EnvironmentNotInitialized):
+        return EnvironmentNotBuilt(environment_name)
+
+    if isinstance(exc, bs_config.InvalidEnvironmentName):
+        return EnvironmentNameInvalid(environment_name)
+
+    return SandboxUnavailable(environment_name, str(exc))
+
+
 RUN_DESCRIPTION = f"""\
 Run a shell command inside the bubblewrap sandbox.
 
@@ -69,8 +231,10 @@ pass ``command`` as a single string; it is run via "sh -c".
 - Otherwise pass ``command`` as a list of strings: the executable name \
 or path first, then one element per argument. This form needs no \
 quoting and is the safer default.
-- ``environment_name`` selects the environment to run in; omit it to \
-use the configured default. Call ``list_environments`` for the choices.
+- ``environment_name`` selects the environment to run in. Pass only a \
+``name`` that ``list_environments`` returned in this conversation -- \
+never a guessed name, a package name, or a name copied from an example. \
+Omit it to use the configured default.
 - ``timeout`` caps the run in seconds; omit it to use the configured \
 default.
 - Paths must be absolute and sandbox-visible: read inputs from \
@@ -159,8 +323,11 @@ async def skill_run(
             timeout=timeout,
             extra_volumes=extra_volumes,
         )
-    except RuntimeError as e:
-        return f"Error: {e}"
+    except EXECUTION_ERRORS as exc:
+        raise translate_execution_error(
+            exc,
+            environment_name=environment_name,
+        ) from exc
 
     output = result.output
     if result.truncated:
@@ -182,9 +349,10 @@ Do NOT pass shell commands — use the ``run`` tool for those.
 - Pass a complete, self-contained Python script as the ``script`` string.
 - The script runs via the Python interpreter built into the chosen \
 environment, with access to its pre-installed packages.
-- Use ``list_environments`` first to discover available environments \
-and their installed packages. ``environment_name`` selects one; omit \
-it to use the configured default.
+- Call ``list_environments`` first to discover available environments \
+and their installed packages. ``environment_name`` must be one of the \
+``name`` values it returned -- never a guessed name, a package name, or \
+a name copied from an example. Omit it to use the configured default.
 - ``timeout`` caps the run in seconds; omit it to use the configured \
 default.
 - Print results to stdout — the output is captured and returned.
@@ -235,8 +403,11 @@ async def skill_run_python(
             timeout=timeout,
             extra_volumes=extra_volumes,
         )
-    except RuntimeError as e:
-        return f"Error: {e}"
+    except EXECUTION_ERRORS as exc:
+        raise translate_execution_error(
+            exc,
+            environment_name=environment_name,
+        ) from exc
 
     output = result.output
     if result.truncated:
@@ -434,6 +605,12 @@ def create_sandbox_toolset(
         environment_name: str | None = None,
         timeout: float | None = None,  # seconds
     ) -> str:
+        await check_environment_name(
+            bwrap_sandbox=bwrap_sandbox,
+            environment_name=environment_name,
+            allowed_environments=allowed_environments,
+        )
+
         deps = ctx.deps
         workdir = get_workdir(
             workdirs_path,
@@ -486,6 +663,12 @@ def create_sandbox_toolset(
         environment_name: str | None = None,
         timeout: float | None = None,  # seconds
     ) -> str:
+        await check_environment_name(
+            bwrap_sandbox=bwrap_sandbox,
+            environment_name=environment_name,
+            allowed_environments=allowed_environments,
+        )
+
         deps = ctx.deps
         workdir = get_workdir(
             workdirs_path,

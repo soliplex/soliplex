@@ -55,11 +55,30 @@ Do NOT use the sandbox if **any** of these is true:
 - `run_python(script, environment_name=None, timeout=None)` — run a Python
   script. `script` is the full source as one string.
 
-When calling `run` and `run_python`, `environment_name` and `timeout` are both
-optional and fall back to the values this skill was configured with.
-Always pass `environment_name` explicitly, using a name that
-`list_environments` returned — the configured default is not visible to you
-and may not be the environment you want.
+## Environment names come only from `list_environments`
+
+**Never guess an environment name.** The only values `environment_name`
+accepts are the exact `name` strings that a `list_environments` call
+returned **to you, in this conversation**.
+
+- Call `list_environments` before the first `run` or `run_python` of a
+  turn. It is cheap; skipping it is the most common way this skill fails.
+- Every environment name written in this document is a placeholder —
+  `<name from list_environments>` — standing in for a name you have yet to
+  look up. No placeholder names a real environment.
+- A name that appears in a task, a filename, a library you plan to import,
+  or an earlier conversation is not an environment name. Neither is the
+  name of a package: an environment's `name` and its `dependencies` are
+  different things, and are usually spelled differently.
+- Passing a name that was not in the `list_environments` result fails the
+  call. The failure names the environments you may actually use — call
+  `list_environments` and retry with one of those, rather than guessing
+  again.
+
+`environment_name` and `timeout` are both optional and fall back to the
+values this skill was configured with. Always pass `environment_name`
+explicitly: the configured default is not visible to you and may not be
+the environment you want.
 
 ## Workflow
 
@@ -68,9 +87,9 @@ and may not be the environment you want.
 
    ```python
    {
-      "name": "pandas",
-      "description": "Minimal Python with Pandas",
-      "dependencies": ["pandas"],
+      "name": "<name from list_environments>",
+      "description": "<what this environment is for>",
+      "dependencies": ["<installed package>"],
    }
    ```
 
@@ -78,10 +97,11 @@ and may not be the environment you want.
    - If the list is empty, stop and tell the user the skill
      is not configured — do not proceed.
    - If the list contains exactly one environment, use its `name`.
-   - Otherwise, pick the `name` of the first environment whose `dependencies`
-     include a library the task needs (e.g. `pandas` for tabular data,
-     `numpy` for numeric work, `pillow` for images).  If no environments
-     match, use the `name` of the first entry in the list.
+   - Otherwise, compare the task against each entry's `dependencies` —
+     a `pandas` dependency suits tabular data, `numpy` numeric work,
+     `pillow` images — and use the `name` of the first entry that matches.
+     Use the entry's `name`, not the name of the dependency that matched.
+     If no entry matches, use the `name` of the first entry in the list.
 
 2. **List files in both volumes.**  This step is mandatory — do not skip it,
    even if the task seems to involve one volume.  Run both:
@@ -113,7 +133,7 @@ and may not be the environment you want.
 
    ```python
    run(command=["head", "-n", "5", "/sandbox/volumes/thread/orders.csv"],
-       environment_name="<selected-environment>")
+       environment_name="<name from list_environments>")
    ```
 
    (or `["wc", "-l", <path>]`, `["file", <path>]`, etc.).  For anything
@@ -125,7 +145,8 @@ and may not be the environment you want.
    argument to `run_python`:
 
    ```python
-   run_python(script="<python source>", environment_name="<selected-environment>")
+   run_python(script="<python source>",
+              environment_name="<name from list_environments>")
    ```
 
    Write the whole program as a single string, and use real newlines between
@@ -147,7 +168,10 @@ and may not be the environment you want.
    ```
 
 5. **On failure.**
-   - Change exactly one thing per retry.
+   - If the failure says the environment is not available, you guessed a
+     name. Call `list_environments` and retry with a name it returned —
+     do not try a different guess.
+   - Otherwise change exactly one thing per retry.
    - After 3 failed runs, stop. Report the error to the user (paste the
      `Exited with code: <N>` line and any traceback), instead of retrying
      further.
@@ -168,8 +192,10 @@ and may not be the environment you want.
 Task: user uploads `orders.csv` and asks "what's the total order value?".
 A full run looks like:
 
-1. `list_environments()` — shows one environment named `pandas`
-   with `pandas` in its dependencies. Use it.
+1. `list_environments()` — returns exactly one environment, whose
+   `dependencies` include `pandas`. Use that entry's `name`; in step 3 it
+   is written as `<name from list_environments>`, because what the name
+   actually is can only be read off this call's result.
 
 2. `list_volume_files("thread")` — returns
    `["/sandbox/volumes/thread/orders.csv"]`.
@@ -184,7 +210,7 @@ A full run looks like:
    df = pd.read_csv('/sandbox/volumes/thread/orders.csv')
    print(f"Total: {df['amount'].sum():.2f}")
    """,
-       environment_name="pandas",
+       environment_name="<name from list_environments>",
    )
    ```
 
