@@ -655,7 +655,9 @@ class InstallationSkillRef:
     defer_loading: bool = True
 
     @classmethod
-    def from_yaml(cls, entry: str | dict):
+    def from_yaml(cls, entry: str | dict | InstallationSkillRef):
+        if isinstance(entry, cls):
+            return entry
         if isinstance(entry, str):
             return cls(name=entry)
         return cls(**entry)
@@ -677,6 +679,14 @@ class RoomSkillsConfig:
         _no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
+
+    def __post_init__(self) -> None:
+        # Callers which build the config directly, rather than via
+        # 'from_yaml', may spell the entries as bare names.
+        self.installation_skill_names = [
+            InstallationSkillRef.from_yaml(entry)
+            for entry in self.installation_skill_names
+        ]
 
     @staticmethod
     def _check_installation_skills(

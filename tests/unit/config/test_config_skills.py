@@ -537,6 +537,36 @@ def test_room_skills_config_combines_capabilities(
     }
 
 
+@pytest.mark.parametrize(
+    "w_entry",
+    [
+        SKILL_NAME,
+        {"name": SKILL_NAME},
+        config_skills.InstallationSkillRef(name=SKILL_NAME),
+    ],
+    ids=["bare-name", "mapping", "ref"],
+)
+def test_room_skills_config_ctor_normalizes_installation_skill_names(
+    installation_config,
+    temp_dir,
+    w_entry,
+):
+    filesystem = config_skills.FilesystemSkillConfig.from_capability(
+        _filesystem_capability(temp_dir / SKILL_NAME)
+    )
+    installation_config.skill_configs = {SKILL_NAME: filesystem}
+
+    config = config_skills.RoomSkillsConfig(
+        installation_skill_names=[w_entry],
+        _installation_config=installation_config,
+    )
+
+    assert config.installation_skill_names == [
+        config_skills.InstallationSkillRef(name=SKILL_NAME),
+    ]
+    assert config.skill_configs == {SKILL_NAME: filesystem}
+
+
 def test_empty_room_skills_config(installation_config):
     config = config_skills.RoomSkillsConfig(
         _installation_config=installation_config
