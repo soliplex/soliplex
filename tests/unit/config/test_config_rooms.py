@@ -685,8 +685,12 @@ def test_roomconfig_has_thread_uploads_w_sandbox(
     else:
         installation_config.threads_upload_path = None
 
+    other_skill_config = mock.create_autospec(
+        config_skills.FilesystemSkillConfig
+    )
+    other_skill_config.with_defer_loading.return_value = other_skill_config
     installation_config.skill_configs = {
-        "other_skill": object(),
+        "other_skill": other_skill_config,
     }
     sandbox_skill_config = config_skills.BwrapSandboxSkillConfig(
         _installation_config=installation_config,
@@ -739,8 +743,12 @@ def test_roomconfig_has_room_uploads_w_sandbox(
     else:
         installation_config.rooms_upload_path = None
 
+    other_skill_config = mock.create_autospec(
+        config_skills.FilesystemSkillConfig
+    )
+    other_skill_config.with_defer_loading.return_value = other_skill_config
     installation_config.skill_configs = {
-        "other_skill": object(),
+        "other_skill": other_skill_config,
     }
     sandbox_skill_config = config_skills.BwrapSandboxSkillConfig(
         _installation_config=installation_config,
