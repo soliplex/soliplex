@@ -379,14 +379,18 @@ below for output details and JSON-error shapes.
 6. **Admin users** — every `AdminUser.json_path` is listed; any that
    no longer compile against the currently-loaded JSONPath
    environment (e.g. because the meta-config filter function they
-   referenced has been removed) are reported. (See
+   referenced has been removed) are reported. An authorization
+   database that cannot be reached is itself reported, rather than
+   aborting the run. (See
    [`audit admin-users`](#audit-admin-users) for the full output and
    JSON shape.)
 7. **Room authorization** — configured rooms are bucketed by their
    `RoomPolicy` state (default / public / private), stale policy rows
    are surfaced, and any `ACLEntry.json_path` that no longer compiles
-   is reported. (See [`audit room-authz`](#audit-room-authz) for the
-   full output and JSON shape.)
+   is reported. As with **Admin users**, an unreachable authorization
+   database is reported rather than aborting the run. (See
+   [`audit room-authz`](#audit-room-authz) for the full output and
+   JSON shape.)
 8. **Completions** — every completion endpoint is listed with its
    name; runtime-model failures are flagged with `ERROR:`.
 9. **Quizzes** — every `*.json` question file under each configured
@@ -873,6 +877,15 @@ When the installation's `authorization_dburi` is the in-memory
 default (`sqlite://`), no admin rows are persisted; both blocks read
 as `(none)`.
 
+When the authorization database cannot be reached at all — e.g. its
+`authorization_dburi` names a Postgres server that isn't listening —
+neither block is printed. A single line reports the driver's error
+instead:
+
+```text
+ERROR: authorization database unreachable: <error>
+```
+
 #### Exit Status
 
 - `0` when every stored `AdminUser.json_path` validates.
@@ -885,6 +898,13 @@ as `(none)`.
       "invalid_json_paths": [["<json_path>", "<error>"], "..."]
     }
   }
+  ```
+
+- `1` when the authorization database is unreachable, reported in
+  `-q` / `--quiet` mode as:
+
+  ```json
+  {"admin_users": {"unreachable": "<error>"}}
   ```
 
 #### Examples
@@ -959,6 +979,15 @@ default (`sqlite://`), every configured room falls into the
 **Default** bucket, the other three state buckets are empty, and no
 ACL rows are persisted so the invalid-JSONPath block is empty.
 
+When the authorization database cannot be reached at all — e.g. its
+`authorization_dburi` names a Postgres server that isn't listening —
+none of the blocks are printed. A single line reports the driver's
+error instead:
+
+```text
+ERROR: authorization database unreachable: <error>
+```
+
 #### Exit Status
 
 - `0` when the **Stale** bucket is empty and no ACL `json_path` fails
@@ -979,6 +1008,13 @@ ACL rows are persisted so the invalid-JSONPath block is empty.
   ```
 
   Either sub-key may be absent if its corresponding bucket is empty.
+
+- `1` when the authorization database is unreachable, reported in
+  `-q` / `--quiet` mode as:
+
+  ```json
+  {"room_authz": {"unreachable": "<error>"}}
+  ```
 
 #### Examples
 
