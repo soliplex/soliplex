@@ -22,6 +22,7 @@ TESTING_MODEL_ERROR = "testing model error"
 TESTING_RAG_ERROR = "testing rag error"
 TESTING_QUIZ_ERROR = "testing quiz error"
 TESTING_SKILL_ERROR = "testing skill error"
+TESTING_AUTHZ_DB_ERROR = "testing authz db error"
 
 no_error_none = contextlib.nullcontext()
 
@@ -44,6 +45,22 @@ class QuizError(ValueError):
 class SkillError(ValueError):
     def __init__(self):
         super().__init__(TESTING_SKILL_ERROR)
+
+
+class AuthzDBError(OSError):
+    """Stand-in for whatever the DB driver raises when it can't connect."""
+
+    def __init__(self):
+        super().__init__(TESTING_AUTHZ_DB_ERROR)
+
+
+# The authz-DB readers prefix the exception type: a bare 'str(exc)' on e.g.
+# the 'FileNotFoundError' asyncpg raises for a missing unix socket reads as
+# a stray "[Errno 2] No such file or directory".
+EXP_AUTHZ_DB_ERROR = f"AuthzDBError: {TESTING_AUTHZ_DB_ERROR}"
+
+_RAM_DBURI = config_installation.ASYNC_MEMORY_ENGINE_URL
+_FILE_DBURI = "sqlite+aiosqlite:///x.db"
 
 
 class _OkRagCfg:
@@ -757,20 +774,56 @@ async def test__list_admin_discriminators(authz_policy):
 
 
 @pytest.mark.parametrize(
-    "is_ram, configured_rooms, policy_specs, exp_groups",
+    "dburi, policies, exc, exp_queried, exp_policies, exp_error",
     [
-        # RAM DB: all configured rooms land in 'default'; DB
-        # query is not invoked.
+        # RAM DB: no rows can be persisted, so the DB is never queried.
+        (_RAM_DBURI, None, None, False, [], None),
+        # File DB, no stored rows.
+        (_FILE_DBURI, [], None, True, [], None),
+        # File DB: stored rows pass through in the order they are read.
+        (_FILE_DBURI, ["p1", "p2"], None, True, ["p1", "p2"], None),
+        # File DB the driver cannot reach: reported, not raised.
+        (_FILE_DBURI, None, AuthzDBError, True, [], EXP_AUTHZ_DB_ERROR),
+    ],
+)
+@mock.patch("soliplex.cli.audit._list_room_policies")
+def test__room_policies(
+    list_room_policies,
+    the_installation,
+    dburi,
+    policies,
+    exc,
+    exp_queried,
+    exp_policies,
+    exp_error,
+):
+    # The helper is a pass-through, so opaque stand-ins stand in for the
+    # 'models.RoomPolicyUnchecked' instances the policy yields.
+    the_installation._config.authorization_dburi_async = dburi
+    if exc is not None:
+        list_room_policies.side_effect = exc()
+    else:
+        list_room_policies.return_value = policies
+
+    found_policies, found_error = cli_audit._room_policies(the_installation)
+
+    assert found_policies == exp_policies
+    assert found_error == exp_error
+    if exp_queried:
+        list_room_policies.assert_called_once_with(dburi)
+    else:
+        list_room_policies.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "configured_rooms, policy_specs, exp_groups",
+    [
+        # Empty configuration + empty DB.
+        ([], [], {"default": [], "public": [], "private": [], "stale": []}),
+        # Configured rooms but no DB rows -> all default.
         (
-            True,
-            [],
-            None,
-            {"default": [], "public": [], "private": [], "stale": []},
-        ),
-        (
-            True,
             ["alpha", "beta"],
-            None,
+            [],
             {
                 "default": ["alpha", "beta"],
                 "public": [],
@@ -778,28 +831,8 @@ async def test__list_admin_discriminators(authz_policy):
                 "stale": [],
             },
         ),
-        # Non-RAM, empty configuration + empty DB.
+        # Only DB rows for unconfigured rooms -> all stale.
         (
-            False,
-            [],
-            [],
-            {"default": [], "public": [], "private": [], "stale": []},
-        ),
-        # Non-RAM, configured rooms but no DB rows -> all default.
-        (
-            False,
-            ["alpha", "beta"],
-            [],
-            {
-                "default": ["alpha", "beta"],
-                "public": [],
-                "private": [],
-                "stale": [],
-            },
-        ),
-        # Non-RAM, only DB rows for unconfigured rooms -> all stale.
-        (
-            False,
             [],
             [("old", "ALLOW"), ("removed", "DENY")],
             {
@@ -809,9 +842,8 @@ async def test__list_admin_discriminators(authz_policy):
                 "stale": ["old", "removed"],
             },
         ),
-        # Non-RAM, mixed: one row in each of the four buckets.
+        # Mixed: one row in each of the four buckets.
         (
-            False,
             ["alpha", "beta", "gamma", "delta"],
             [
                 ("beta", "ALLOW"),
@@ -827,11 +859,8 @@ async def test__list_admin_discriminators(authz_policy):
         ),
     ],
 )
-@mock.patch("soliplex.cli.audit._list_room_policies")
 def test__room_authz_groups(
-    list_room_policies,
     the_installation,
-    is_ram,
     configured_rooms,
     policy_specs,
     exp_groups,
@@ -839,63 +868,44 @@ def test__room_authz_groups(
     the_installation._config.room_configs = {
         rid: mock.Mock() for rid in configured_rooms
     }
-
-    if is_ram:
-        the_installation._config.authorization_dburi_async = (
-            config_installation.ASYNC_MEMORY_ENGINE_URL
+    room_policies = [
+        models.RoomPolicyUnchecked(
+            room_id=room_id,
+            default_allow_deny=(
+                authz.AllowDeny.ALLOW
+                if allow_deny == "ALLOW"
+                else authz.AllowDeny.DENY
+            ),
         )
-    else:
-        the_installation._config.authorization_dburi_async = (
-            "sqlite+aiosqlite:///x.db"
-        )
-        list_room_policies.return_value = [
-            models.RoomPolicyUnchecked(
-                room_id=room_id,
-                default_allow_deny=(
-                    authz.AllowDeny.ALLOW
-                    if allow_deny == "ALLOW"
-                    else authz.AllowDeny.DENY
-                ),
-            )
-            for room_id, allow_deny in policy_specs
-        ]
+        for room_id, allow_deny in policy_specs
+    ]
 
-    found = cli_audit._room_authz_groups(the_installation)
+    found = cli_audit._room_authz_groups(the_installation, room_policies)
 
     assert found == exp_groups
 
-    if is_ram:
-        list_room_policies.assert_not_called()
-    else:
-        list_room_policies.assert_called_once_with("sqlite+aiosqlite:///x.db")
-
 
 @pytest.mark.parametrize(
-    "is_ram, policy_specs, exp_invalid",
+    "policy_specs, exp_invalid",
     [
-        # RAM dburi -> no DB rows, returns empty.
-        (True, [], {}),
-        # Non-RAM, no policies.
-        (False, [], {}),
-        # Non-RAM, all entries valid.
+        # No policies.
+        ([], {}),
+        # All entries valid.
         (
-            False,
             [
                 ("chat", [None, '$[?$.email == "alice@example.com"]']),
             ],
             {},
         ),
-        # Non-RAM, one invalid entry.
+        # One invalid entry.
         (
-            False,
             [
                 ("chat", ["$[?missing_func($.email)]"]),
             ],
             {"chat": [("$[?missing_func($.email)]", "<error>")]},
         ),
-        # Non-RAM, mix of valid and invalid across rooms.
+        # Mix of valid and invalid across rooms.
         (
-            False,
             [
                 (
                     "chat",
@@ -914,37 +924,22 @@ def test__room_authz_groups(
         ),
     ],
 )
-@mock.patch("soliplex.cli.audit._list_room_policies")
-def test__invalid_acl_json_paths(
-    list_room_policies,
-    the_installation,
-    is_ram,
-    policy_specs,
-    exp_invalid,
-):
-    if is_ram:
-        the_installation._config.authorization_dburi_async = (
-            config_installation.ASYNC_MEMORY_ENGINE_URL
+def test__invalid_acl_json_paths(policy_specs, exp_invalid):
+    room_policies = [
+        models.RoomPolicyUnchecked(
+            room_id=room_id,
+            acl_entries=[
+                models.ACLEntryUnchecked(
+                    allow_deny=authz.AllowDeny.DENY,
+                    json_path=jp,
+                )
+                for jp in json_paths
+            ],
         )
-    else:
-        the_installation._config.authorization_dburi_async = (
-            "sqlite+aiosqlite:///x.db"
-        )
-        list_room_policies.return_value = [
-            models.RoomPolicyUnchecked(
-                room_id=room_id,
-                acl_entries=[
-                    models.ACLEntryUnchecked(
-                        allow_deny=authz.AllowDeny.DENY,
-                        json_path=jp,
-                    )
-                    for jp in json_paths
-                ],
-            )
-            for room_id, json_paths in policy_specs
-        ]
+        for room_id, json_paths in policy_specs
+    ]
 
-    found = cli_audit._invalid_acl_json_paths(the_installation)
+    found = cli_audit._invalid_acl_json_paths(room_policies)
 
     # The error message is implementation-detail; normalize for compare.
     normalized = {
@@ -953,61 +948,64 @@ def test__invalid_acl_json_paths(
     }
     assert normalized == exp_invalid
 
-    if is_ram:
-        list_room_policies.assert_not_called()
-    else:
-        list_room_policies.assert_called_once_with("sqlite+aiosqlite:///x.db")
-
 
 # _audit_room_authz_section: ui only
 # audit_room_authz: command
 
 
 @pytest.mark.parametrize(
-    "is_ram, json_paths, exp",
+    "dburi, json_paths, exc, exp_queried, exp_json_paths, exp_error",
     [
-        # RAM dburi -> no DB rows.
-        (True, [], []),
-        # Non-RAM, no admins.
-        (False, [], []),
-        # Non-RAM, populated.
+        # RAM DB: no rows can be persisted, so the DB is never queried.
+        (_RAM_DBURI, None, None, False, [], None),
+        # File DB, no stored admins.
+        (_FILE_DBURI, [], None, True, [], None),
+        # File DB: stored rows pass through in the order they are read.
         (
-            False,
+            _FILE_DBURI,
             [
                 '$[?$.email == "alice@example.com"]',
                 "$[?some_func($.email)]",
             ],
+            None,
+            True,
             [
                 '$[?$.email == "alice@example.com"]',
                 "$[?some_func($.email)]",
             ],
+            None,
         ),
+        # File DB the driver cannot reach: reported, not raised.
+        (_FILE_DBURI, None, AuthzDBError, True, [], EXP_AUTHZ_DB_ERROR),
     ],
 )
 @mock.patch("soliplex.cli.audit._list_admin_discriminators")
 def test__admin_user_json_paths(
-    list_admin_discriminators, the_installation, is_ram, json_paths, exp
+    list_admin_discriminators,
+    the_installation,
+    dburi,
+    json_paths,
+    exc,
+    exp_queried,
+    exp_json_paths,
+    exp_error,
 ):
-    if is_ram:
-        the_installation._config.authorization_dburi_async = (
-            config_installation.ASYNC_MEMORY_ENGINE_URL
-        )
+    the_installation._config.authorization_dburi_async = dburi
+    if exc is not None:
+        list_admin_discriminators.side_effect = exc()
     else:
-        the_installation._config.authorization_dburi_async = (
-            "sqlite+aiosqlite:///x.db"
-        )
         list_admin_discriminators.return_value = json_paths
 
-    found = cli_audit._admin_user_json_paths(the_installation)
+    found_json_paths, found_error = cli_audit._admin_user_json_paths(
+        the_installation
+    )
 
-    assert found == exp
-
-    if is_ram:
-        list_admin_discriminators.assert_not_called()
+    assert found_json_paths == exp_json_paths
+    assert found_error == exp_error
+    if exp_queried:
+        list_admin_discriminators.assert_called_once_with(dburi)
     else:
-        list_admin_discriminators.assert_called_once_with(
-            "sqlite+aiosqlite:///x.db"
-        )
+        list_admin_discriminators.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -1041,21 +1039,11 @@ def test__admin_user_json_paths(
         ),
     ],
 )
-@mock.patch("soliplex.cli.audit._admin_user_json_paths")
-def test__invalid_admin_user_json_paths(
-    admin_user_json_paths,
-    the_installation,
-    json_paths,
-    exp_invalid,
-):
-    admin_user_json_paths.return_value = json_paths
-
-    found = cli_audit._invalid_admin_user_json_paths(the_installation)
+def test__invalid_admin_user_json_paths(json_paths, exp_invalid):
+    found = cli_audit._invalid_admin_user_json_paths(json_paths)
 
     normalized = [(jp, "<error>") for (jp, _err) in found]
     assert normalized == exp_invalid
-
-    admin_user_json_paths.assert_called_once_with(the_installation)
 
 
 # _audit_admin_users_section: ui only

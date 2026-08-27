@@ -49,11 +49,35 @@ STALE_ACL_MARKER = "stale_filter_func"
 # A room configured in 'example/minimal.yaml' whose agent needs no LLM, so
 # loading the installation for a 'room-authz' command requires no provider.
 ROOM = "faux"
+# The phrase the DB-reading 'audit' sections print for an authz DBURI that
+# cannot be opened.
+UNREACHABLE_MARKER = "authorization database unreachable"
 
 
 @pytest.fixture
 def scratch_installation(tmp_path, authz_dburi_sync, authz_dburi_async):
     """A copy of 'example/minimal.yaml' backed by a fresh, empty authz DB."""
+    return _scratch_installation(tmp_path, authz_dburi_sync, authz_dburi_async)
+
+
+@pytest.fixture
+def unreachable_authz_installation(tmp_path):
+    """A scratch installation whose authz DBURI the driver cannot open.
+
+    The sqlite file sits under a directory that does not exist, standing in
+    for any authz DBURI that fails to resolve -- the reported case was a
+    Postgres unix socket nothing was listening on.
+    """
+    db_path = tmp_path / "no-such-dir" / "authz.sqlite"
+    return _scratch_installation(
+        tmp_path,
+        sqlite_dburi(db_path),
+        sqlite_dburi(db_path, "+aiosqlite"),
+    )
+
+
+def _scratch_installation(tmp_path, authz_dburi_sync, authz_dburi_async):
+    """Copy 'example/' to 'tmp_path', repointed at the given authz DBURIs."""
     dst = tmp_path / "example"
     shutil.copytree(_EXAMPLE_DIR, dst)
     config_path = dst / "minimal.yaml"
@@ -325,6 +349,23 @@ def test_audit_smoketest(scratch_installation, authz_db_path):
     assert audited_rooms.returncode == 1, audited_rooms.stdout
     assert STALE_ACL_MARKER in audited_rooms.stdout
     assert BOB not in audited_rooms.stdout
+
+
+def test_audit_unreachable_authz_db_smoketest(unreachable_authz_installation):
+    # An authz DBURI the driver cannot resolve is an audit finding, not a
+    # crash: both DB-reading sections report it and exit non-zero rather
+    # than letting the driver's exception escape as a traceback.
+    # Deliberately one multi-step sequence (a smoke test), not one-act
+    # unit tests.
+    audited_admins = _audit(unreachable_authz_installation, "admin-users")
+    assert audited_admins.returncode == 1, audited_admins.stdout
+    assert UNREACHABLE_MARKER in audited_admins.stdout
+    assert "Traceback" not in audited_admins.stderr
+
+    audited_rooms = _audit(unreachable_authz_installation, "room-authz")
+    assert audited_rooms.returncode == 1, audited_rooms.stdout
+    assert UNREACHABLE_MARKER in audited_rooms.stdout
+    assert "Traceback" not in audited_rooms.stderr
 
 
 def test_ask_smoketest(scratch_installation):
