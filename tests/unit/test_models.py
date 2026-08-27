@@ -527,6 +527,14 @@ def installation_config():
 
 
 @pytest.mark.parametrize(
+    "agent_model_kw",
+    [
+        {},
+        {"model_name": AGENT_MODEL},
+        {"model_name": "env:CHAT_MODEL"},
+    ],
+)
+@pytest.mark.parametrize(
     "agent_provider_kw, exp_base",
     [
         (  # Ollama, default URL
@@ -568,14 +576,15 @@ def test_defaultagent_from_config(
     installation_config,
     agent_provider_kw,
     exp_base,
+    agent_model_kw,
 ):
     agent_config = config_agents.AgentConfig(
         id=AGENT_ID,
-        model_name=AGENT_MODEL,
         system_prompt=AGENT_PROMPT,
         _installation_config=installation_config,
         **agent_retries,
         **agent_provider_kw,
+        **agent_model_kw,
     )
 
     if not agent_retries:
@@ -586,7 +595,7 @@ def test_defaultagent_from_config(
     agent_model = models.DefaultAgent.from_config(agent_config)
 
     assert agent_model.id == AGENT_ID
-    assert agent_model.model_name == AGENT_MODEL
+    assert agent_model.model_name == agent_config.llm_model_name
     assert agent_model.retries == exp_retries
     assert agent_model.system_prompt == AGENT_PROMPT
     assert agent_model.provider_base_url == exp_base

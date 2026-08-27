@@ -52,7 +52,7 @@ def get_quiz_judge_agent(quiz: config_quizzes.QuizConfig):
         model_provider = ollama_providers.OllamaProvider(**llm_provider_kw)
 
     ollama_model = openai_models.OpenAIChatModel(
-        model_name=quiz.judge_agent.model_name,
+        model_name=quiz.judge_agent.llm_model_name,
         provider=model_provider,
     )
 

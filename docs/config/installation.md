@@ -89,6 +89,9 @@ installation secrets:
 The value may embed one or more `env:` markers, resolved from the
 installation environment:
 
+- `model_name`, in the `agent_configs:` stanza of the main installation
+  configuration, or in the `agent_config:` stanza of a completion, room,
+  or skill configuration.
 - `provider_base_url`, in the `agent_configs:` stanza of the main
   installation configuration, or in the `agent_config:` stanza of a
   completion, room, or skill configuration.
