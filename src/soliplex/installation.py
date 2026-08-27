@@ -178,7 +178,7 @@ class Installation:
                 type_info = found.setdefault(provider_type, {})
                 base_url = agent_config.llm_provider_base_url
                 url_models = type_info.setdefault(base_url, set())
-                url_models.add(agent_config.model_name)
+                url_models.add(agent_config.llm_model_name)
 
         return found
 

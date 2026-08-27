@@ -32,6 +32,11 @@ agent:
 - `model_name`: a string, should be the identifier of an LLM model for the
   agent.
 
+  The value can
+  [interpolate](installation.md#installation-secret-environment-interpolation)
+  installation configuration environment variables, e.g.,
+  `"env:MY_CHAT_MODEL"`.
+
   **NOTE**: this value was previously optional, defaulting to the value
             of the now-removed `DEFAULT_AGENT_MODEL` key in the
             installation environment.

@@ -746,6 +746,59 @@ def test_agentconfig_get_system_prompt_w_non_ascii(temp_dir):
 
 @pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
+    "kw, expected",
+    [
+        ({}, None),
+        (
+            {"model_name": MODEL_NAME},
+            MODEL_NAME,
+        ),
+        (
+            {"model_name": "env:CHAT_MODEL_NAME"},
+            MODEL_NAME,
+        ),
+    ],
+)
+def test_agentconfig_llm_model_name(
+    installation_config,
+    kw,
+    expected,
+    w_iconfig,
+):
+    ic_environ = {
+        "CHAT_MODEL_NAME": MODEL_NAME,
+    }
+
+    def _interpolate_environment(maybe_key):
+        if maybe_key is not None:
+            return (
+                ic_environ[maybe_key[4:]]
+                if maybe_key.startswith("env:")
+                else maybe_key
+            )
+
+    installation_config.interpolate_environment = _interpolate_environment
+
+    if w_iconfig:
+        w_iconfig_kwargs = {"_installation_config": installation_config}
+    else:
+        w_iconfig_kwargs = {}
+        expected = kw.get("model_name")
+
+    aconfig = config_agents.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        **w_iconfig_kwargs,
+        **kw,
+    )
+
+    found = aconfig.llm_model_name
+
+    assert found == expected
+
+
+@pytest.mark.parametrize("w_iconfig", [False, True])
+@pytest.mark.parametrize(
     "provider_type, kw, expected",
     [
         (config_agents.LLMProviderType.OLLAMA, {}, OLLAMA_BASE_URL),
@@ -1495,10 +1548,13 @@ def test_get_model_from_config(
     llm_provider_kw,
     w_model_settings,
 ):
+    exp_model_name = f"interpolated-{MODEL}"
+
     agent_config = mock.create_autospec(config_agents.AgentConfig)
     agent_config.kind = "default"
     agent_config.id = AGENT_ID
     agent_config.model_name = MODEL
+    agent_config.llm_model_name = exp_model_name
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
     agent_config.model_settings = w_model_settings
     agent_config.provider_type = provider_type
@@ -1510,13 +1566,13 @@ def test_get_model_from_config(
         assert model is google_model_klass.return_value
         if w_model_settings:
             google_model_klass.assert_called_once_with(
-                model_name=MODEL,
+                model_name=exp_model_name,
                 settings=w_model_settings,
                 provider=google_provider_klass.return_value,
             )
         else:
             google_model_klass.assert_called_once_with(
-                model_name=MODEL,
+                model_name=exp_model_name,
                 provider=google_provider_klass.return_value,
             )
         google_provider_klass.assert_called_once_with(**llm_provider_kw)
@@ -1533,7 +1589,7 @@ def test_get_model_from_config(
         if llm_provider_kw.get("base_url"):
             expected_kw["profile"] = config_agents._OPENAI_COMPAT_PROFILE
         oai_model_klass.assert_called_once_with(
-            model_name=MODEL,
+            model_name=exp_model_name,
             provider=oai_provider_klass.return_value,
             **expected_kw,
         )
@@ -1549,7 +1605,7 @@ def test_get_model_from_config(
         if w_model_settings:
             expected_kw["settings"] = w_model_settings
         oai_model_klass.assert_called_once_with(
-            model_name=MODEL,
+            model_name=exp_model_name,
             provider=oll_provider_klass.return_value,
             **expected_kw,
         )

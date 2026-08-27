@@ -174,7 +174,7 @@ ConfiguredSkills = dict[str, Skill]
 
 class DefaultAgent(pydantic.BaseModel):
     id: str
-    model_name: str
+    model_name: str | None
     retries: int
     system_prompt: str | None
     provider_type: config_agents.LLMProviderType  # enum, not dataclass
@@ -187,7 +187,7 @@ class DefaultAgent(pydantic.BaseModel):
         llm_provider_kw = agent_config.llm_provider_kw
         return cls(
             id=agent_config.id,
-            model_name=agent_config.model_name,
+            model_name=agent_config.llm_model_name,
             retries=agent_config.retries,
             system_prompt=agent_config.get_system_prompt(),
             provider_type=agent_config.provider_type,

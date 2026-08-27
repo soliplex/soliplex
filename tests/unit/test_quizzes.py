@@ -128,7 +128,7 @@ def test_get_quiz_judge_agent(
 
     if is_openai:
         model_klass.assert_called_once_with(
-            model_name=a_quiz.judge_agent.model_name,
+            model_name=a_quiz.judge_agent.llm_model_name,
             provider=openai_provider_klass.return_value,
         )
         openai_provider_klass.assert_called_once_with(
@@ -137,7 +137,7 @@ def test_get_quiz_judge_agent(
         ollama_provider_klass.assert_not_called()
     else:
         model_klass.assert_called_once_with(
-            model_name=a_quiz.judge_agent.model_name,
+            model_name=a_quiz.judge_agent.llm_model_name,
             provider=ollama_provider_klass.return_value,
         )
         openai_provider_klass.assert_not_called()

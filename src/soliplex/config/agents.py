@@ -272,6 +272,16 @@ class AgentConfig:
             pass
 
     @property
+    def llm_model_name(self) -> str | None:
+        model_name = self.model_name
+        i_config = self._installation_config
+
+        if i_config is not None:
+            model_name = i_config.interpolate_environment(model_name)
+
+        return model_name
+
+    @property
     def llm_provider_base_url(self) -> str | None:
         ic = self._installation_config
 
@@ -324,7 +334,7 @@ class AgentConfig:
         return {
             "id": self.id,
             "kind": self.kind,
-            "model_name": self.model_name,
+            "model_name": self.model_name,  # not interpolated
             "retries": self.retries,
             "system_prompt": prompt,
             "model_settings": self.model_settings,
@@ -478,6 +488,7 @@ def get_model_from_config(
     provider_kw = agent_config.llm_provider_kw
 
     model_settings_kw = {}
+    model_name = agent_config.llm_model_name
 
     if agent_config.model_settings:
         model_settings_kw["settings"] = ai_settings.ModelSettings(
@@ -487,7 +498,7 @@ def get_model_from_config(
     if agent_config.provider_type == LLMProviderType.GOOGLE:
         provider = google_providers.GoogleProvider(**provider_kw)
         return google_models.GoogleModel(
-            model_name=agent_config.model_name,
+            model_name=model_name,
             provider=provider,
             **model_settings_kw,
         )
@@ -496,7 +507,7 @@ def get_model_from_config(
         provider_kw["api_key"] = "dummy"
         provider = ollama_providers.OllamaProvider(**provider_kw)
         return openai_models.OpenAIChatModel(
-            model_name=agent_config.model_name,
+            model_name=model_name,
             provider=provider,
             profile=_OPENAI_COMPAT_PROFILE,
             **model_settings_kw,
@@ -510,7 +521,7 @@ def get_model_from_config(
         )
         provider = openai_providers.OpenAIProvider(**provider_kw)
         return openai_models.OpenAIChatModel(
-            model_name=agent_config.model_name,
+            model_name=model_name,
             provider=provider,
             **profile_kw,
             **model_settings_kw,

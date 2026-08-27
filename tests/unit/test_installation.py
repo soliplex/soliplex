@@ -266,7 +266,7 @@ def rooms_with_agents(request, room_quizzes):
             id="room-agent",
             provider_type=config_agents.LLMProviderType.OLLAMA,
             llm_provider_base_url=OLLAMA_BASE_URL,
-            model_name="room-model",
+            llm_model_name="room-model",
         )
         room_config = mock.create_autospec(
             config_rooms.RoomConfig,
@@ -290,7 +290,7 @@ def completions_with_agents(request):
             id="completion-agent",
             provider_type=config_agents.LLMProviderType.OLLAMA,
             llm_provider_base_url=OLLAMA_BASE_URL,
-            model_name="completion-model",
+            llm_model_name="completion-model",
         )
         completion_config = mock.create_autospec(
             config_completions.CompletionConfig,
@@ -375,7 +375,7 @@ def test_installation_agent_provider_info(
             url_models = type_urls.setdefault(
                 agent.llm_provider_base_url, set()
             )
-            url_models.add(agent.model_name)
+            url_models.add(agent.llm_model_name)
 
     if standalone_agents["agent_configs"]:
         for agent in standalone_agents["agent_configs"]:
@@ -494,7 +494,7 @@ def test_installation_all_provider_info_wo_already(
             url_models = type_urls.setdefault(
                 agent.llm_provider_base_url, set()
             )
-            url_models.add(agent.model_name)
+            url_models.add(agent.llm_model_name)
 
     if standalone_agents["agent_configs"]:
         for agent in standalone_agents["agent_configs"]:
