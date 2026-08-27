@@ -568,22 +568,39 @@ async def _list_admin_discriminators(dburi):
         return await policy.list_admin_user_discriminators()
 
 
-def _room_authz_groups(the_installation):
-    """Bucket configured rooms by authorization state; collect stale rows."""
-    configured = sorted(the_installation._config.room_configs)
+def _room_policies(the_installation) -> tuple[list, str | None]:
+    """Return ``(policies, error)`` for the stored room policies.
+
+    ``policies`` holds the unchecked policy models read via
+    'RoomAuthorizationPolicy.list_room_policies' and ``error`` is ``None``
+    on success. A RAM-based authz DB can hold no persisted rows, so it
+    short-circuits to ``([], None)`` without touching the database.
+
+    When the database itself cannot be reached -- e.g. its DBURI names a
+    Postgres server that isn't listening -- ``policies`` is empty and
+    ``error`` carries the exception message, so the audit can report the
+    unreachable DB instead of dying on the traceback.
+    """
     dburi = the_installation.authorization_dburi_async
 
     if dburi in cli_util._RAM_DBURIS:
-        return {
-            "default": list(configured),
-            "public": [],
-            "private": [],
-            "stale": [],
-        }
+        return [], None
+
+    try:
+        return list(asyncio.run(_list_room_policies(dburi))), None
+    except Exception as exc:
+        return [], f"{type(exc).__name__}: {exc}"
+
+
+def _room_authz_groups(the_installation, room_policies):
+    """Bucket configured rooms by authorization state; collect stale rows.
+
+    ``room_policies`` is the policy list from '_room_policies'.
+    """
+    configured = sorted(the_installation._config.room_configs)
 
     policies = {
-        policy.room_id: policy.default_allow_deny
-        for policy in asyncio.run(_list_room_policies(dburi))
+        policy.room_id: policy.default_allow_deny for policy in room_policies
     }
 
     configured_set = set(configured)
@@ -606,26 +623,21 @@ def _room_authz_groups(the_installation):
     }
 
 
-def _invalid_acl_json_paths(the_installation) -> dict:
+def _invalid_acl_json_paths(room_policies) -> dict:
     """Collect ACL entries whose stored 'json_path' fails to validate.
 
-    Reads every room policy via 'RoomAuthorizationPolicy.list_room_policies'
-    -- which returns the unchecked models, tolerating entries that would
-    fail 'policy.as_model' -- and re-validates each surfaced 'json_path'
-    against the currently-loaded JSONPath environment. Typically an
-    entry lands here when it was authored under a meta-config that
-    registered filter functions which are no longer present.
+    ``room_policies`` is the policy list from '_room_policies' -- the
+    unchecked models, which tolerate entries that would fail
+    'policy.as_model'. Each surfaced 'json_path' is re-validated against
+    the currently-loaded JSONPath environment. Typically an entry lands
+    here when it was authored under a meta-config that registered filter
+    functions which are no longer present.
 
     Returns a dict mapping 'room_id' to a list of '(json_path, error)'
-    pairs. A RAM-based authz DB has no persisted rows and returns '{}'.
+    pairs.
     """
-    dburi = the_installation.authorization_dburi_async
-
-    if dburi in cli_util._RAM_DBURIS:
-        return {}
-
     invalid: dict = {}
-    for policy in asyncio.run(_list_room_policies(dburi)):
+    for policy in room_policies:
         for entry in policy.acl_entries:
             if entry.json_path is None:
                 continue
@@ -651,7 +663,13 @@ def _audit_room_authz_section(
     tc_rule("Configured rooms by authorization state")
     tc_line()
 
-    groups = _room_authz_groups(the_installation)
+    room_policies, db_error = _room_policies(the_installation)
+    if db_error is not None:
+        tc_print(f"ERROR: authorization database unreachable: {db_error}")
+        tc_line()
+        return {"room_authz": {"unreachable": db_error}}
+
+    groups = _room_authz_groups(the_installation, room_policies)
 
     for label, room_ids in (
         (
@@ -677,7 +695,7 @@ def _audit_room_authz_section(
         tc_print("  (none)")
     tc_line()
 
-    invalid_acls = _invalid_acl_json_paths(the_installation)
+    invalid_acls = _invalid_acl_json_paths(room_policies)
     tc_print("ACL entries with invalid JSONPath:")
     if invalid_acls:
         for room_id in sorted(invalid_acls):
@@ -699,36 +717,47 @@ def _audit_room_authz_section(
     return errors
 
 
-def _admin_user_json_paths(the_installation) -> list[str]:
-    """Return every stored 'AdminUser.json_path', in insertion order.
+def _admin_user_json_paths(
+    the_installation,
+) -> tuple[list[str], str | None]:
+    """Return ``(json_paths, error)`` for the stored admin rows.
 
-    Reads them via
-    'AdminUserPolicy.list_admin_user_discriminators'. Returns an
-    empty list when the authz DB is RAM-based (no persisted rows can
-    exist).
+    ``json_paths`` holds every stored 'AdminUser.json_path', in insertion
+    order, read via 'AdminUserPolicy.list_admin_user_discriminators';
+    ``error`` is ``None`` on success. A RAM-based authz DB can hold no
+    persisted rows, so it short-circuits to ``([], None)`` without
+    touching the database.
+
+    When the database itself cannot be reached -- e.g. its DBURI names a
+    Postgres server that isn't listening -- ``json_paths`` is empty and
+    ``error`` carries the exception message, so the audit can report the
+    unreachable DB instead of dying on the traceback.
     """
     dburi = the_installation.authorization_dburi_async
 
     if dburi in cli_util._RAM_DBURIS:
-        return []
+        return [], None
 
-    return asyncio.run(_list_admin_discriminators(dburi))
+    try:
+        return list(asyncio.run(_list_admin_discriminators(dburi))), None
+    except Exception as exc:
+        return [], f"{type(exc).__name__}: {exc}"
 
 
 def _invalid_admin_user_json_paths(
-    the_installation,
+    json_paths,
 ) -> list[tuple[str, str]]:
     """Collect admin entries whose 'json_path' fails to validate.
 
     Same intent as '_invalid_acl_json_paths' but for the 'AdminUser'
     table: a row typically lands here when it was authored under a
     meta-config that registered filter functions which are no longer
-    present.
+    present. ``json_paths`` is the list from '_admin_user_json_paths'.
 
     Returns a list of '(json_path, error)' pairs.
     """
     invalid: list[tuple[str, str]] = []
-    for json_path in _admin_user_json_paths(the_installation):
+    for json_path in json_paths:
         try:
             authz.validate_json_path(json_path)
         except authz.InvalidJSONPath as exc:
@@ -749,7 +778,12 @@ def _audit_admin_users_section(
     tc_rule("Configured admin users")
     tc_line()
 
-    json_paths = _admin_user_json_paths(the_installation)
+    json_paths, db_error = _admin_user_json_paths(the_installation)
+    if db_error is not None:
+        tc_print(f"ERROR: authorization database unreachable: {db_error}")
+        tc_line()
+        return {"admin_users": {"unreachable": db_error}}
+
     tc_print(f"Admin users ({len(json_paths)}):")
     if json_paths:
         for json_path in json_paths:
@@ -763,7 +797,7 @@ def _audit_admin_users_section(
         tc_print("  (none)")
     tc_line()
 
-    invalid = _invalid_admin_user_json_paths(the_installation)
+    invalid = _invalid_admin_user_json_paths(json_paths)
     tc_print("Admin users with invalid JSONPath:")
     if invalid:
         for json_path, error in invalid:
