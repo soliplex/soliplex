@@ -4,9 +4,14 @@ on:
     types: [published]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
       - name: Install uv
@@ -15,7 +20,67 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version-file: "pyproject.toml"
+      # PyPI indexes the project version, which need not match the tag
+      # name. Read it from the checked-out project so the announcement below
+      # links to the distribution this run actually uploads.
+      - name: Read the project version
+        id: version
+        run: echo "version=$(uv version --short)" >> "$GITHUB_OUTPUT"
       - name: Build soliplex
         run: uv build --sdist --wheel
       - name: Publish soliplex
         run: uv publish --token ${{ secrets.PYPI_API_TOKEN }}
+
+  # Announce the release once the distribution is actually on PyPI, so the
+  # link in the message always resolves (#1041). `workflow_dispatch` runs
+  # have no `github.event.release`, so they are skipped.
+  notify:
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    env:
+      # A real newline; `toJSON` below escapes it as `\n` in the payload.
+      NEWLINE: "\n"
+    steps:
+      # The release body is free-form Markdown of unbounded length. Pass it
+      # through the environment rather than interpolating it into the script,
+      # and cap it so a long changelog cannot blow the Slack payload limit.
+      - name: Trim the release notes
+        id: notes
+        env:
+          BODY: ${{ github.event.release.body }}
+          MAX_CHARS: "2500"
+        run: |
+          python3 <<'PY'
+          import os
+          import uuid
+
+          body = os.environ["BODY"].strip()
+          limit = int(os.environ["MAX_CHARS"])
+          if len(body) > limit:
+              body = body[:limit].rstrip() + "\n[...]"
+          if not body:
+              body = "(no release notes)"
+          delimiter = f"EOF_{uuid.uuid4().hex}"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"body<<{delimiter}\n{body}\n{delimiter}\n")
+          PY
+
+      - name: Send Slack notification for the published release
+        uses: slackapi/slack-github-action@v3
+        with:
+          webhook: ${{ secrets.SLACK_NOTIFY_URL }}
+          webhook-type: incoming-webhook
+          # The release title and notes are maintainer-authored Markdown.
+          # Build the message with `format` and let `toJSON` emit it as a
+          # single, correctly escaped JSON string instead of splicing raw
+          # text into the payload.
+          payload: |
+            {
+              "channel": "#soliplex",
+              "username": "soliplex",
+              "text": ${{ toJSON(format(':rocket: Released *{0}*{4}PyPI: https://pypi.org/project/soliplex/{1}/{4}Release notes: {2}{4}{4}{3}', github.event.release.name || github.event.release.tag_name, needs.build.outputs.version, github.event.release.html_url, steps.notes.outputs.body, env.NEWLINE)) }},
+              "icon_emoji": ":ghost:"
+            }
