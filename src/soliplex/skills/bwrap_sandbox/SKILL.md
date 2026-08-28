@@ -45,6 +45,10 @@ Do NOT use the sandbox if **any** of these is true:
 
 ## Tools
 
+Call these tools by the exact names below. The names are not
+namespaced: never prefix one with this skill's name, a capability id,
+or anything else, and never write `<something>:<tool name>`.
+
 - `list_environments()` — returns available Python environments,
   each with a `name`, `description`, and set of installed `dependencies`.
 - `list_volume_files(volume)` — returns the sandbox paths of the files in
@@ -54,6 +58,11 @@ Do NOT use the sandbox if **any** of these is true:
   list of strings (executable first, then one element per argument).
 - `run_python(script, environment_name=None, timeout=None)` — run a Python
   script. `script` is the full source as one string.
+
+A prefixed or otherwise altered tool name is not a tool this skill
+provides, and the call fails. The failure lists the tools you may
+actually call — retry with one of those, spelled exactly as above,
+rather than guessing again.
 
 ## Environment names come only from `list_environments`
 
