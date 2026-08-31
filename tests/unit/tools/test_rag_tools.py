@@ -52,6 +52,8 @@ async def test_search_documents(
     search.return_value = search_results
 
     sd_tool_config.rag_lancedb_path = "/db/tool"
+    sd_tool_config.rag_databases = []
+    sd_tool_config.rag_db_audit_path = "/db/tool"
     ctx_w_deps.deps.user = None
     ctx_w_deps.deps.room_id = "room-1"
     ctx_w_deps.deps.thread_id = "thread-1"
@@ -92,6 +94,35 @@ async def test_search_documents(
 
 @pytest.mark.anyio
 @mock.patch("soliplex.tools.rag.hr_client")
+async def test_search_documents_w_rag_databases(
+    hr_client, ctx_w_deps, sd_tool_config, audit_records
+):
+    """Named databases open one federated client, audited by name"""
+    AUDIT_PATH = "papers=/db/papers, wiki=/db/wiki"
+    hr_class = hr_client.HaikuRAG = mock.MagicMock()
+    client = hr_class.return_value.__aenter__.return_value
+    client.search.return_value = []
+
+    sd_tool_config.rag_databases = [mock.Mock(), mock.Mock()]
+    sd_tool_config.rag_db_audit_path = AUDIT_PATH
+    sd_tool_config.search_documents_limit = 5
+    ctx_w_deps.deps.user = None
+    ctx_w_deps.deps.room_id = "room-1"
+    ctx_w_deps.deps.thread_id = "thread-1"
+    ctx_w_deps.deps.run_id = "run-1"
+
+    await rag_tools.search_documents(ctx_w_deps, query=QUESTION)
+
+    hr_class.assert_called_once_with(
+        db_path=None,
+        config=sd_tool_config.haiku_rag_config,
+        read_only=True,
+    )
+    assert audit_records[-1].db_path == AUDIT_PATH
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.tools.rag.hr_client")
 async def test_search_documents_records_failure(
     hr_client, ctx_w_deps, sd_tool_config, audit_records
 ):
@@ -100,6 +131,8 @@ async def test_search_documents_records_failure(
     client.search.side_effect = RuntimeError("boom")
 
     sd_tool_config.rag_lancedb_path = "/db/tool"
+    sd_tool_config.rag_databases = []
+    sd_tool_config.rag_db_audit_path = "/db/tool"
     sd_tool_config.search_documents_limit = 5
     ctx_w_deps.deps.user = None
     ctx_w_deps.deps.room_id = "room-1"

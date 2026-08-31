@@ -352,6 +352,12 @@ class SearchDocumentsToolConfig(
             cls._adjust_yaml_agui_feature_names(config_dict)
             cls._adjust_yaml_ai_tool_params(config_dict, config_path)
 
+            config_rag.adjust_yaml_rag_databases(
+                installation_config,
+                config_path,
+                config_dict,
+            )
+
             instance = cls(**config_dict)
         except Exception as exc:
             raise config_exc.FromYamlException(
@@ -366,7 +372,11 @@ class SearchDocumentsToolConfig(
     def as_yaml(self) -> dict:
         result = super().as_yaml
 
-        if self.rag_lancedb_stem is not None:
+        if self.rag_databases:
+            result["rag_databases"] = [
+                entry.as_yaml for entry in self.rag_databases
+            ]
+        elif self.rag_lancedb_stem is not None:
             result["rag_lancedb_stem"] = self.rag_lancedb_stem
         else:
             result["rag_lancedb_override_path"] = (

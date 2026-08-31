@@ -839,6 +839,54 @@ def test_toolconfig_extra_parameters():
 
     assert tool_config.extra_parameters == {}
 
+def test_sdtc_w_rag_databases(installation_config, temp_dir):
+    """Named databases round-trip and report a path each"""
+    db_rag_path = temp_dir / "db" / "rag"
+    db_rag_path.mkdir(parents=True)
+    papers = db_rag_path / "papers.lancedb"
+    papers.mkdir()
+    wiki = db_rag_path / "wiki.lancedb"
+    wiki.mkdir()
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+
+    config_dir = temp_dir / "rooms" / "test_room"
+    config_dir.mkdir(parents=True)
+    config_path = config_dir / "room_config.yaml"
+
+    config_yaml = {
+        "tool_name": config_tools.SDTC_TOOL_NAME,
+        "rag_databases": [
+            {"name": "papers", "rag_lancedb_stem": "papers"},
+            {"name": "wiki", "rag_lancedb_override_path": str(wiki)},
+        ],
+    }
+
+    sdt_config = config_tools.SearchDocumentsToolConfig.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(config_yaml),
+    )
+
+    assert [entry.name for entry in sdt_config.rag_databases] == [
+        "papers",
+        "wiki",
+    ]
+    assert sdt_config.rag_db_audit_path == f"papers={papers}, wiki={wiki}"
+    assert sdt_config.get_extra_parameters() == {
+        "rag_lancedb_paths": {"papers": papers, "wiki": wiki},
+        "search_documents_limit": 5,
+    }
+
+    reloaded = config_tools.SearchDocumentsToolConfig.from_yaml(
+        installation_config,
+        config_path,
+        copy.deepcopy(sdt_config.as_yaml),
+    )
+
+    assert reloaded.rag_databases == sdt_config.rag_databases
+
 
 def test_sdtc_ctor(installation_config, temp_dir):
     db_rag_path = temp_dir / "db" / "rag"
