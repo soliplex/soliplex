@@ -328,6 +328,51 @@ def test__rde_yaml_roundtrip(installation_config, temp_dir, stem, override):
     assert entry.as_yaml == entry_yaml
 
 
+@pytest.mark.parametrize("rag_databases", [None, []])
+def test_adjust_yaml_rag_databases_wo_entries(
+    installation_config,
+    temp_dir,
+    rag_databases,
+):
+    """An empty or omitted 'rag_databases' leaves the field at its default"""
+    config_dict = {"rag_databases": rag_databases}
+
+    config_rag.adjust_yaml_rag_databases(
+        installation_config,
+        temp_dir / "room_config.yaml",
+        config_dict,
+    )
+
+    assert (
+        config_rag._RAGDatabaseBase(
+            rag_lancedb_stem="papers",
+            **config_dict,
+        ).rag_databases
+        == []
+    )
+
+
+def test_adjust_yaml_rag_databases_w_entries(
+    installation_config,
+    temp_dir,
+    db_rag_path,
+):
+    (db_rag_path / "papers.lancedb").mkdir()
+    config_dict = {
+        "rag_databases": [{"name": "papers", "rag_lancedb_stem": "papers"}],
+    }
+
+    config_rag.adjust_yaml_rag_databases(
+        installation_config,
+        temp_dir / "room_config.yaml",
+        config_dict,
+    )
+
+    (entry,) = config_dict["rag_databases"]
+    assert isinstance(entry, config_rag.RAGDatabaseEntry)
+    assert entry.name == "papers"
+
+
 def test__rdb_ctor_w_databases_and_stem(make_entry):
     with pytest.raises(config_rag.RagDbSingleAndMultiConflict):
         config_rag._RAGDatabaseBase(

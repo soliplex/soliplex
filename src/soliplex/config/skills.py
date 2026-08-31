@@ -230,6 +230,12 @@ class _HaikuRAGCapabilityConfig(
                     rldb_override_path
                 )
 
+            config_rag.adjust_yaml_rag_databases(
+                installation_config,
+                config_path,
+                config_dict,
+            )
+
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
             return cls(**config_dict)
@@ -246,8 +252,12 @@ class _HaikuRAGCapabilityConfig(
 
     @property
     def capability(self) -> ai_capabilities.AbstractCapability:
+        # Named databases reach haiku.rag through the config, which
+        # resolves them into one capability covering the set.
+        db_path = None if self.rag_databases else self.rag_lancedb_path
+
         return type(self).capability_factory(
-            db_path=self.rag_lancedb_path,
+            db_path=db_path,
             config=self.haiku_rag_config,
             defer_loading=self.defer_loading,
         )
@@ -262,7 +272,11 @@ class _HaikuRAGCapabilityConfig(
             "kind": self.kind,
             "defer_loading": self.defer_loading,
         }
-        if self.rag_lancedb_stem is not None:
+        if self.rag_databases:
+            result["rag_databases"] = [
+                entry.as_yaml for entry in self.rag_databases
+            ]
+        elif self.rag_lancedb_stem is not None:
             result["rag_lancedb_stem"] = self.rag_lancedb_stem
         else:
             result["rag_lancedb_override_path"] = str(
@@ -774,7 +788,7 @@ class RoomSkillsConfig:
                 capability = config.capability
                 # Paranoid defence against a "can't get here" condition
                 assert capability.id is not None
-                paths[capability.id] = str(config.rag_lancedb_path)
+                paths[capability.id] = config.rag_db_audit_path
         return paths
 
     @property

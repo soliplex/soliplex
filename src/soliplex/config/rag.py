@@ -304,6 +304,31 @@ class _RAGDatabaseBase:
         }
 
 
+def adjust_yaml_rag_databases(
+    installation_config: InstallationConfig,  # noqa F821 cycle
+    config_path: pathlib.Path,
+    config_dict: dict,
+) -> None:
+    """Replace 'rag_databases' mappings with 'RAGDatabaseEntry's, in place
+
+    A key with nothing under it parses as None, which is the field's
+    default spelled out, so it is dropped rather than passed along.
+    """
+    rag_databases = config_dict.pop("rag_databases", None)
+
+    if rag_databases is None:
+        return
+
+    config_dict["rag_databases"] = [
+        RAGDatabaseEntry.from_yaml(
+            installation_config,
+            config_path,
+            entry_dict,
+        )
+        for entry_dict in rag_databases
+    ]
+
+
 @dataclasses.dataclass(kw_only=True)
 class RAGDatabaseEntry(_RAGDatabaseBase):
     """One named database in a config's 'rag_databases'

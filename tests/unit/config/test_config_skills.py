@@ -13,6 +13,7 @@ from haiku.rag.capabilities import rag as hr_rag
 from soliplex.capabilities import filesystem as cap_fs
 from soliplex.config import agui as config_agui
 from soliplex.config import exceptions as config_exc
+from soliplex.config import rag as config_rag
 from soliplex.config import skills as config_skills
 from soliplex.skills import bwrap_sandbox
 
@@ -167,6 +168,132 @@ def test_haiku_rag_capability_config_with_stem(
         "rag_lancedb_stem": "example",
         "defer_loading": False,
     }
+
+
+def _rag_databases_yaml(config_class, wiki_path):
+    return {
+        "kind": config_class.kind,
+        "rag_databases": [
+            {"name": "papers", "rag_lancedb_stem": "papers"},
+            {"name": "wiki", "rag_lancedb_override_path": str(wiki_path)},
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "config_class",
+    [
+        config_skills.HR_RAG_SkillConfig,
+        config_skills.HR_Analysis_SkillConfig,
+    ],
+)
+def test_haiku_rag_capability_config_w_rag_databases(
+    temp_dir,
+    installation_config,
+    config_class,
+):
+    """Named databases become one capability covering them all"""
+    papers = temp_dir / "papers.lancedb"
+    papers.mkdir()
+    wiki = temp_dir / "wiki.lancedb"
+    wiki.mkdir()
+
+    config = config_class.from_yaml(
+        installation_config,
+        temp_dir / "room.yaml",
+        _rag_databases_yaml(config_class, wiki),
+    )
+
+    assert [entry.name for entry in config.rag_databases] == [
+        "papers",
+        "wiki",
+    ]
+
+    capability = config.capability
+    assert [(ref.name, ref.db_path) for ref in capability.scope.databases] == [
+        ("papers", papers),
+        ("wiki", wiki),
+    ]
+
+    assert config.extra_parameters == {
+        "rag_lancedb_paths": {"papers": papers, "wiki": wiki},
+    }
+
+
+@pytest.mark.parametrize(
+    "config_class",
+    [
+        config_skills.HR_RAG_SkillConfig,
+        config_skills.HR_Analysis_SkillConfig,
+    ],
+)
+def test_haiku_rag_capability_config_w_rag_databases_round_trips(
+    temp_dir,
+    installation_config,
+    config_class,
+):
+    wiki = temp_dir / "wiki.lancedb"
+    wiki.mkdir()
+    (temp_dir / "papers.lancedb").mkdir()
+
+    original, reloaded = _round_trip_hr_skill(
+        config_class,
+        installation_config,
+        temp_dir / "room.yaml",
+        _rag_databases_yaml(config_class, wiki),
+    )
+
+    assert reloaded == original
+    assert reloaded.rag_db_audit_path == original.rag_db_audit_path
+
+
+def test_room_skills_config_rag_db_paths_w_rag_databases(
+    temp_dir,
+    installation_config,
+):
+    """The audit map names every database a capability reads"""
+    papers = temp_dir / "papers.lancedb"
+    papers.mkdir()
+    wiki = temp_dir / "wiki.lancedb"
+    wiki.mkdir()
+
+    config = config_skills.RoomSkillsConfig.from_yaml(
+        installation_config,
+        temp_dir / "room.yaml",
+        {
+            "skill_configs": [
+                _rag_databases_yaml(config_skills.HR_RAG_SkillConfig, wiki),
+            ],
+        },
+    )
+
+    assert config.rag_db_paths == {
+        "haiku-rag": f"papers={papers}, wiki={wiki}",
+    }
+
+
+def test_haiku_rag_capability_config_rejects_databases_and_stem(
+    temp_dir,
+    installation_config,
+):
+    """The two ways of naming a database are mutually exclusive"""
+    with pytest.raises(config_exc.FromYamlException) as exc:
+        config_skills.HR_RAG_SkillConfig.from_yaml(
+            installation_config,
+            temp_dir / "room.yaml",
+            {
+                "kind": config_skills.HR_RAG_SkillConfig.kind,
+                "rag_lancedb_stem": "papers",
+                "rag_databases": [
+                    {"name": "papers", "rag_lancedb_stem": "papers"},
+                ],
+            },
+        )
+
+    assert isinstance(
+        exc.value.__cause__,
+        config_rag.RagDbSingleAndMultiConflict,
+    )
 
 
 def _round_trip_hr_skill(
