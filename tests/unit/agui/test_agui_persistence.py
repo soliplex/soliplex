@@ -1,4 +1,5 @@
 import datetime
+import itertools
 from types import SimpleNamespace
 from unittest import mock
 
@@ -1484,3 +1485,212 @@ async def test_drive_agui_turn_swallows_save_errors(
     ]
 
     assert collected == events
+
+
+async def _named_thread(ts, *, room_id, name, user_name=USER_NAME):
+    """Create a thread carrying 'name' as its metadata name."""
+    thread = await ts.new_thread(
+        user_name=user_name,
+        email=EMAIL,
+        room_id=room_id,
+        thread_metadata={"name": name},
+    )
+    return await thread.awaitable_attrs.thread_id
+
+
+async def _page_names(ts, *, room_ids, limit=50, offset=0):
+    """Return (room_id, name) pairs for one page, in page order."""
+    threads, total = await ts.list_user_threads_page(
+        user_name=USER_NAME,
+        room_ids=room_ids,
+        limit=limit,
+        offset=offset,
+    )
+    pairs = []
+    for a_thread in threads:
+        meta = await a_thread.awaitable_attrs.thread_metadata
+        pairs.append((a_thread.room_id, None if meta is None else meta.name))
+    return pairs, total
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_no_rooms_short_circuits(
+    the_async_session,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    # An empty room set means "the user may see nothing", which must not
+    # degrade into an unfiltered listing.
+    threads, total = await ts.list_user_threads_page(
+        user_name=USER_NAME,
+        room_ids=[],
+        limit=10,
+        offset=0,
+    )
+
+    assert threads == []
+    assert total == 0
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_sorts_names_within_a_room(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="charlie")
+        await _named_thread(ts, room_id=ROOM_ID, name="Alpha")
+        await _named_thread(ts, room_id=ROOM_ID, name="bravo")
+
+    pairs, total = await _page_names(ts, room_ids=[ROOM_ID])
+
+    # Case-insensitive: "Alpha" sorts before "bravo", not after it.
+    assert [name for _, name in pairs] == ["Alpha", "bravo", "charlie"]
+    assert total == 3
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_orders_rooms_by_activity(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        stale = await _named_thread(ts, room_id=ROOM_ID, name="stale")
+        fresh = await _named_thread(ts, room_id=ROOM_ID_2, name="fresh")
+
+        for thread_id, room_id, when in (
+            (stale, ROOM_ID, T_OLD),
+            (fresh, ROOM_ID_2, T_NEW),
+        ):
+            run = await ts.new_run(
+                user_name=USER_NAME,
+                room_id=room_id,
+                thread_id=thread_id,
+            )
+            run.created = when
+            run.finished = when
+
+    pairs, _total = await _page_names(ts, room_ids=[ROOM_ID, ROOM_ID_2])
+
+    # The more recently active room leads, and each room's threads stay
+    # contiguous so a client can divide on room change.
+    assert [room_id for room_id, _ in pairs] == [ROOM_ID_2, ROOM_ID]
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_keeps_rooms_contiguous(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        # Interleave names across rooms: were the sort name-major rather
+        # than room-major, these would alternate room in the page.
+        await _named_thread(ts, room_id=ROOM_ID, name="a")
+        await _named_thread(ts, room_id=ROOM_ID_2, name="b")
+        await _named_thread(ts, room_id=ROOM_ID, name="c")
+        await _named_thread(ts, room_id=ROOM_ID_2, name="d")
+
+    pairs, _total = await _page_names(ts, room_ids=[ROOM_ID, ROOM_ID_2])
+    room_order = [room_id for room_id, _ in pairs]
+
+    # Each room appears as exactly one contiguous block.
+    assert len(set(room_order)) == 2
+    assert room_order == sorted(room_order, key=room_order.index)
+    blocks = [key for key, _ in itertools.groupby(room_order)]
+    assert len(blocks) == 2
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_includes_unnamed_threads(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        # No metadata row at all -- the outer join must still yield it.
+        await ts.new_thread(
+            user_name=USER_NAME,
+            email=EMAIL,
+            room_id=ROOM_ID,
+        )
+        await _named_thread(ts, room_id=ROOM_ID, name="named")
+
+    pairs, total = await _page_names(ts, room_ids=[ROOM_ID])
+
+    assert total == 2
+    assert sorted(name or "" for _, name in pairs) == ["", "named"]
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_paginates_without_gaps(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        for index in range(5):
+            await _named_thread(ts, room_id=ROOM_ID, name=f"thread-{index}")
+
+    first, total = await _page_names(ts, room_ids=[ROOM_ID], limit=2)
+    second, _ = await _page_names(ts, room_ids=[ROOM_ID], limit=2, offset=2)
+    third, _ = await _page_names(ts, room_ids=[ROOM_ID], limit=2, offset=4)
+
+    assert total == 5
+    assert len(first) == 2
+    assert len(second) == 2
+    assert len(third) == 1
+
+    # 'total' counts every match, not the page, and paging neither skips
+    # nor repeats a thread.
+    seen = [name for _, name in first + second + third]
+    assert seen == sorted(seen)
+    assert len(set(seen)) == 5
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_excludes_unlisted_rooms(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="visible")
+        await _named_thread(ts, room_id=ROOM_ID_2, name="hidden")
+
+    pairs, total = await _page_names(ts, room_ids=[ROOM_ID])
+
+    # A room absent from 'room_ids' contributes nothing -- this is the
+    # cross-room authorization boundary.
+    assert [name for _, name in pairs] == ["visible"]
+    assert total == 1
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_scopes_to_the_user(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="mine")
+        await _named_thread(
+            ts,
+            room_id=ROOM_ID,
+            name="theirs",
+            user_name=OTHER_USER_NAME,
+        )
+
+    pairs, total = await _page_names(ts, room_ids=[ROOM_ID])
+
+    assert [name for _, name in pairs] == ["mine"]
+    assert total == 1

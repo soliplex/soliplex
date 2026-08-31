@@ -99,6 +99,87 @@ async def _check_user_room_agent(
     return user_profile, agent
 
 
+#   Cap the page size so a client cannot ask for the whole table in one
+#   request; the default matches what the lobby's threads tab renders.
+_THREADS_PAGE_DEFAULT = 50
+_THREADS_PAGE_MAX = 200
+
+
+@util.logfire_span("GET /v1/agui/threads")
+@router.get("/v1/agui/threads")
+async def get_agui_threads(
+    limit: int = fastapi.Query(
+        default=_THREADS_PAGE_DEFAULT,
+        ge=1,
+        le=_THREADS_PAGE_MAX,
+    ),
+    offset: int = fastapi.Query(default=0, ge=0),
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui.ThreadStorage = depend_the_threads,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.AGUI_ThreadPage:
+    """Return a page of the user's threads across every room they may see"""
+    the_logger.debug(loggers.AGUI_GET_THREADS)
+
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+
+    # There is no room in the path to authorize against, so the room set
+    # has to be resolved up front. Going through 'get_room_configs' means
+    # this endpoint inherits exactly the filtering that 'GET /v1/rooms'
+    # already applies -- rather than reimplementing authz here, where a
+    # mistake would leak other users' threads.
+    room_configs = await the_installation.get_room_configs(
+        user=the_user_claims,
+        the_room_authz=the_room_authz,
+        the_logger=the_logger,
+    )
+
+    threads, total = await the_threads.list_user_threads_page(
+        user_name=user_name,
+        room_ids=list(room_configs),
+        limit=limit,
+        offset=offset,
+    )
+
+    # Per-thread last activity comes from the same grouped-query trick the
+    # per-room listing uses, asked once per room appearing on this page
+    # (rooms are contiguous, so a page spans very few of them) rather than
+    # once per thread.
+    page_room_ids = {a_thread.room_id for a_thread in threads}
+    last_activity = {}
+    for a_room_id in page_room_ids:
+        last_activity.update(
+            await the_threads.get_threads_last_activity(
+                user_name=user_name,
+                room_id=a_room_id,
+            )
+        )
+
+    model_threads = []
+    for a_thread in threads:
+        thread_meta = await a_thread.awaitable_attrs.thread_metadata
+
+        model_threads.append(
+            models.AGUI_Thread.from_thread(
+                a_thread,
+                a_thread_meta=models.AGUI_ThreadMetadata.from_thread_meta(
+                    thread_meta,
+                ),
+                a_thread_runs=None,
+                a_thread_last_activity=last_activity.get(a_thread.thread_id),
+            )
+        )
+
+    return models.AGUI_ThreadPage(
+        threads=model_threads,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @util.logfire_span("GET /v1/rooms/{room_id}/agui")
 @router.get("/v1/rooms/{room_id}/agui")
 async def get_room_agui(
