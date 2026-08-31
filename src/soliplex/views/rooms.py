@@ -410,7 +410,8 @@ async def get_search(
                     document_uri=hit.document_uri,
                     document_title=hit.document_title,
                     document_meta=hit.document_meta,
-                    headings=hit.headings,
+                    # A chunk with no heading metadata has no headings.
+                    headings=hit.headings or [],
                     page_numbers=hit.page_numbers,
                     labels=hit.labels,
                 )

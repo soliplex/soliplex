@@ -1011,6 +1011,60 @@ async def test_get_chunk_visualization_federated_wo_chunk(
 
 
 @pytest.mark.anyio
+@mock.patch("haiku.rag.client.HaikuRAG")
+async def test_get_search_wo_title_uri_or_headings(hr_klass, audit_records):
+    """A document with no title, URI or headings is a hit like any other"""
+    ROOM_ID = "foo"
+    QUERY = "waaa"
+
+    hit = hr_chunk.SearchResult(
+        content="Test content",
+        score=1.0,
+        chunk_id="test-chunk",
+        document_id="test-document",
+        document_uri=None,
+        document_title=None,
+        headings=None,
+    )
+
+    rag = mock.AsyncMock()
+    rag.search.return_value = [hit]
+    hr_inst = mock.AsyncMock()
+    hr_inst.__aenter__.return_value = rag
+    hr_klass.side_effect = [hr_inst]
+
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.list_haiku_rag_client_kw = mock.Mock(
+        spec_set=(),
+        return_value=[
+            {
+                "source": "skill:rag",
+                "db_path": "/db/rag",
+                "audit_db_path": "/db/rag",
+            },
+        ],
+    )
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_room_config.return_value = room_config
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    found = await rooms_views.get_search(
+        query=QUERY,
+        room_id=ROOM_ID,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    (f_hit,) = found.hits
+    assert f_hit.document_title is None
+    assert f_hit.document_uri is None
+    assert f_hit.headings == []
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("w_search_type", [False, True])
 @pytest.mark.parametrize(
     "w_hrc_kws",

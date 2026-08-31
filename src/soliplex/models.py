@@ -604,8 +604,10 @@ class SearchHit(pydantic.BaseModel):
     score: float
     chunk_id: str
     document_id: str
-    document_uri: str
-    document_title: str
+    # A document need not carry either: haiku.rag leaves both unset for
+    # content added without a URI, or never given a title.
+    document_uri: str | None = None
+    document_title: str | None = None
     document_meta: dict[str, typing.Any] = {}
     headings: list[str]
     page_numbers: list[int]
