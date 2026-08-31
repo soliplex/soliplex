@@ -269,6 +269,31 @@ configuring the RAG database and RAG client:
   - `rag_lancedb_override_path`: a string, a pathname, including the
     suffix, of the LanceDB directory.
 
+  - `rag_databases`: a list of mappings, to search several databases at
+    once.  Each entry carries a `name`, plus exactly one of
+    `rag_lancedb_stem` or `rag_lancedb_override_path`, resolved the same
+    way as above.  Names must be unique within the list.
+
+    ```yaml
+    skills:
+      skill_configs:
+        - kind: "haiku.rag.skills.rag"
+          rag_databases:
+            - name: "papers"
+              rag_lancedb_stem: "papers"
+            - name: "wiki"
+              rag_lancedb_override_path: "../wiki.lancedb"
+    ```
+
+    The name is how a database identifies itself outside the
+    configuration: it is what the agent sees as the collection a result
+    came from, what the room's search, document and chunk endpoints
+    return as `database`, and what audit records name.  The location
+    stays in the configuration.
+
+    All the databases in a list must have been written with the same
+    embedding model, since one query is embedded once for all of them.
+
 - `haiku_rag_config`: a path to the `haiku.rag.yaml` file used to configure
   the RAG client.  If not absolute, this path is resolved relative to
   the directory containing the room configuration file.  If passed,
@@ -321,8 +346,11 @@ any additional options.
 
 ## Location of RAG database files
 
-Rooms using the `haiku_chat` agent kind need to be able to find the
-LanceDB database containing the chunks and embeddings extracted by
-Haiku-RAG.  At present, there should be a single database per room,
-named by convention `<stem>.lancedb`, and stored in the `db/rag/`
-subdirectory of the project root.
+Rooms need to be able to find the LanceDB database containing the chunks
+and embeddings extracted by Haiku-RAG.  A database is named by convention
+`<stem>.lancedb`, and stored in the `db/rag/` subdirectory of the project
+root.
+
+A room's RAG skill or tool reads one such database, or several named ones
+through `rag_databases` (see above), in which case a search covers them
+all and each result reports the database it came from.

@@ -33,3 +33,25 @@ reranking:
     name: "gpt-oss:20b"
     provider: "ollama"
 ```
+
+## Searching Several Databases
+
+A RAG skill or tool which configures `rag_databases` (see
+[rooms](rooms.md)) reads them as one set.  Soliplex resolves each entry's
+path and writes the result into the client configuration's
+`lancedb.databases`, as a mapping of name to location, then opens a single
+client over the set.  Because `haiku.rag` treats `lancedb.uri` and
+`lancedb.databases` as mutually exclusive, naming databases this way
+clears any inherited `uri`.
+
+Candidates from the covered databases are combined by the configured
+reranker.  Without one, they are ordered by cosine similarity to the
+query: the databases in a set share an embedding model, so similarity in
+that one space compares across them, where each database's own retrieval
+scores do not.  A full-text search, which has no query vector, orders by
+retrieval score instead.  A result carries the name of the database it
+came from, never its location.
+
+Chunk IDs are unique within a database but repeat between copies of one,
+so the room's chunk endpoint asks each covered database in turn and the
+first one holding the ID answers.
