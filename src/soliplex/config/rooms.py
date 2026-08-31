@@ -309,14 +309,19 @@ class RoomConfig:
             if not isinstance(cfg, config_rag.SingleRAGDatabaseProtocol):
                 continue
 
+            # Named databases travel in the config as 'lancedb.databases',
+            # which haiku.rag federates into one client.
+            db_path = None if cfg.rag_databases else cfg.rag_lancedb_path
+
             hrc_kw = {
-                "db_path": cfg.rag_lancedb_path,
+                "db_path": db_path,
                 "config": cfg.haiku_rag_config,
                 "read_only": True,
             }
 
             if include_source:
                 hrc_kw["source"] = source
+                hrc_kw["audit_db_path"] = cfg.rag_db_audit_path
 
             yield hrc_kw
 

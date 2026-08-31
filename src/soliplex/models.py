@@ -599,6 +599,7 @@ class RAGSource(pydantic.BaseModel):
 
 class SearchHit(pydantic.BaseModel):
     source: RAGSource
+    database: str | None = None  # haiku.rag database name, if named
     content: str
     score: float
     chunk_id: str
@@ -619,6 +620,7 @@ class SearchResults(pydantic.BaseModel):
 
 class RAGDocument(pydantic.BaseModel):
     source: RAGSource
+    database: str | None = None  # haiku.rag database name, if named
     id: str
     uri: str | None
     title: str | None
@@ -940,6 +942,7 @@ class ChunkVisualization(pydantic.BaseModel):
     """Page images for a chunk, with chunk text highlighted"""
 
     source: RAGSource
+    database: str | None = None  # haiku.rag database name, if named
     chunk_id: str
     document_uri: str | None
     images_base_64: list[str]

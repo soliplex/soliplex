@@ -122,6 +122,8 @@ W_HR_TOOLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
         "hr_tool": mock.create_autospec(
             config_tools.ToolConfig,
             rag_lancedb_path=LANCE_DB_OVERRIDE_PATH,
+            rag_databases=[],
+            rag_db_audit_path=str(LANCE_DB_OVERRIDE_PATH),
             haiku_rag_config=HR_CONFIG,
         ),
     },
@@ -950,13 +952,19 @@ async def test_roomconfig_list_haiku_rag_client_kws(
     db_path.mkdir()
 
     expected = [
-        exp_kw | {"db_path": db_path} if "db_path" in exp_kw else exp_kw
+        exp_kw | {"db_path": db_path, "audit_db_path": str(db_path)}
+        if "db_path" in exp_kw
+        else exp_kw
         for exp_kw in expected
     ]
 
     if not incl_source_kwargs.get("include_source"):
         expected = [
-            {key: value for key, value in exp_kw.items() if key != "source"}
+            {
+                key: value
+                for key, value in exp_kw.items()
+                if key not in ("source", "audit_db_path")
+            }
             for exp_kw in expected
         ]
 
@@ -983,6 +991,7 @@ async def test_roomconfig_list_haiku_rag_client_kws(
             rldbp = getattr(value, "rag_lancedb_path", None)
             if rldbp is not None:
                 value.rag_lancedb_path = db_path
+                value.rag_db_audit_path = str(db_path)
 
     room_config = config_rooms.RoomConfig(
         _installation_config=installation_config_w_skill,
@@ -992,6 +1001,52 @@ async def test_roomconfig_list_haiku_rag_client_kws(
     found = list(room_config.list_haiku_rag_client_kw(**incl_source_kwargs))
 
     assert found == expected
+
+
+def test_roomconfig_list_haiku_rag_client_kws_w_rag_databases(
+    installation_config,
+    temp_dir,
+):
+    """Named databases yield one federated client, not one client each"""
+    papers = temp_dir / "papers.lancedb"
+    papers.mkdir()
+    wiki = temp_dir / "wiki.lancedb"
+    wiki.mkdir()
+    installation_config.haiku_rag_config = hr_config.AppConfig()
+
+    skill_config = config_skills.HR_RAG_SkillConfig(
+        rag_databases=[
+            config_rag.RAGDatabaseEntry(
+                name="papers",
+                rag_lancedb_override_path=papers,
+            ),
+            config_rag.RAGDatabaseEntry(
+                name="wiki",
+                rag_lancedb_override_path=wiki,
+            ),
+        ],
+        _installation_config=installation_config,
+        _config_path=temp_dir / "room_config.yaml",
+    )
+    room_config = config_rooms.RoomConfig(
+        _installation_config=installation_config,
+        skills=config_skills.RoomSkillsConfig(
+            _skill_configs={"rag": skill_config},
+            _installation_config=installation_config,
+        ),
+        **BARE_ROOM_CONFIG_KW,
+    )
+
+    (found,) = room_config.list_haiku_rag_client_kw(include_source=True)
+
+    assert found["db_path"] is None
+    assert found["read_only"] is True
+    assert found["source"] == "skill:rag"
+    assert found["audit_db_path"] == f"papers={papers}, wiki={wiki}"
+    assert found["config"].lancedb.databases == {
+        "papers": str(papers),
+        "wiki": str(wiki),
+    }
 
 
 def test_roomconfig_list_haiku_rag_client_kws_wo_database(
