@@ -133,7 +133,7 @@ def test_haiku_rag_capability_config(
 
     capability = config.capability
     assert isinstance(capability, capability_class)
-    assert capability.db_path == db_path
+    assert [ref.db_path for ref in capability.scope.databases] == [db_path]
     assert capability.defer_loading is False
 
     assert config.state_namespace == state_namespace

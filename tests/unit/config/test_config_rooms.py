@@ -12,6 +12,7 @@ from haiku.rag.capabilities import rag as hr_rag
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
 from soliplex.config import quizzes as config_quizzes
+from soliplex.config import rag as config_rag
 from soliplex.config import rooms as config_rooms
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
@@ -991,3 +992,16 @@ async def test_roomconfig_list_haiku_rag_client_kws(
     found = list(room_config.list_haiku_rag_client_kw(**incl_source_kwargs))
 
     assert found == expected
+
+
+def test_roomconfig_list_haiku_rag_client_kws_wo_database(
+    installation_config,
+):
+    """A config exposing a haiku-rag config but no database yields nothing"""
+    room_config = config_rooms.RoomConfig(
+        _installation_config=installation_config,
+        tool_configs={"db_less": config_rag._RAGConfigBase()},
+        **BARE_ROOM_CONFIG_KW,
+    )
+
+    assert list(room_config.list_haiku_rag_client_kw()) == []

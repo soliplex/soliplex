@@ -303,29 +303,22 @@ class RoomConfig:
         )
 
         for source, cfg in candidates:
-            if isinstance(cfg, config_rag.RAGConfigProtocol):
-                haiku_rag_config = cfg.haiku_rag_config
+            if not isinstance(cfg, config_rag.RAGConfigProtocol):
+                continue
 
-                if isinstance(cfg, config_rag.SingleRAGDatabaseProtocol):
-                    rag_lancedb_paths = [cfg.rag_lancedb_path]
-                elif isinstance(
-                    cfg, config_rag.MultipleRAGDatabasesProtocol
-                ):  # pragma: NO COVER
-                    rag_lancedb_paths = cfg.rag_lancedb_paths
-                else:  # pragma: NO COVER
-                    rag_lancedb_path = ()
+            if not isinstance(cfg, config_rag.SingleRAGDatabaseProtocol):
+                continue
 
-                for rag_lancedb_path in rag_lancedb_paths:
-                    hrc_kw = {
-                        "db_path": rag_lancedb_path,
-                        "config": haiku_rag_config,
-                        "read_only": True,
-                    }
+            hrc_kw = {
+                "db_path": cfg.rag_lancedb_path,
+                "config": cfg.haiku_rag_config,
+                "read_only": True,
+            }
 
-                    if include_source:
-                        hrc_kw["source"] = source
+            if include_source:
+                hrc_kw["source"] = source
 
-                    yield hrc_kw
+            yield hrc_kw
 
 
 RoomConfigMap = dict[str, RoomConfig]

@@ -1,4 +1,5 @@
 import contextlib
+import dataclasses
 import pathlib
 
 import pytest
@@ -228,21 +229,217 @@ def test__rdb_override_path_expands_user(db_rag_path, monkeypatch):
     assert rdb_config.rag_lancedb_path == db_override_path.resolve()
 
 
-def test__mrdb_ctor_wo_db_configs():
-    mrdb_config = config_rag._MultiRAGDatabasesBase()
-
-    assert isinstance(mrdb_config, config_rag.MultipleRAGDatabasesProtocol)
-    assert mrdb_config.rag_lancedb_paths == []
+@dataclasses.dataclass(kw_only=True)
+class _MultiDBConfig(config_rag._RAGConfigBase, config_rag._RAGDatabaseBase):
+    """Mirror the bases a real RAG skill / tool config mixes in"""
 
 
-def test__mrdb_ctor_w_db_configs(db_rag_path):
-    db_override_path = db_rag_path / "test.lancedb"
-    db_override_path.mkdir()
+@pytest.fixture
+def stem_environ(installation_config, db_rag_path):
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+    return installation_config
 
-    db_config = config_rag._RAGDatabaseBase(
-        rag_lancedb_override_path=db_override_path,
+
+@pytest.fixture
+def make_entry(stem_environ, db_rag_path):
+    def _make_entry(name, stem=None, mkdir=True):
+        stem = name if stem is None else stem
+
+        if mkdir:
+            (db_rag_path / f"{stem}.lancedb").mkdir()
+
+        return config_rag.RAGDatabaseEntry(
+            name=name,
+            rag_lancedb_stem=stem,
+            _installation_config=stem_environ,
+        )
+
+    return _make_entry
+
+
+def test__rde_ctor_w_stem(stem_environ, db_rag_path):
+    entry = config_rag.RAGDatabaseEntry(
+        name="papers",
+        rag_lancedb_stem="papers",
+        _installation_config=stem_environ,
     )
-    mrdb_config = config_rag._MultiRAGDatabasesBase(db_configs=[db_config])
+    expected = db_rag_path / "papers.lancedb"
+    expected.mkdir()
 
-    assert isinstance(mrdb_config, config_rag.MultipleRAGDatabasesProtocol)
-    assert mrdb_config.rag_lancedb_paths == [db_override_path]
+    assert isinstance(entry, config_rag.SingleRAGDatabaseProtocol)
+    assert entry.rag_lancedb_path == expected.resolve()
+
+
+@pytest.mark.parametrize("name", [None, "", "   "])
+def test__rde_ctor_wo_name(name):
+    with pytest.raises(config_rag.RagDbEntryRequiresName):
+        config_rag.RAGDatabaseEntry(name=name, rag_lancedb_stem="papers")
+
+
+def test__rde_ctor_w_nested_databases():
+    with pytest.raises(config_rag.RagDbNestedDatabases):
+        config_rag.RAGDatabaseEntry(
+            name="papers",
+            rag_lancedb_stem="papers",
+            rag_databases=[
+                config_rag.RAGDatabaseEntry(
+                    name="wiki",
+                    rag_lancedb_stem="wiki",
+                ),
+            ],
+        )
+
+
+def test__rde_ctor_wo_stem_or_override():
+    with rdb_exactly_one:
+        config_rag.RAGDatabaseEntry(name="papers")
+
+
+@pytest.mark.parametrize(
+    "stem, override",
+    [
+        ("papers", None),
+        (None, "../papers.lancedb"),
+    ],
+)
+def test__rde_yaml_roundtrip(installation_config, temp_dir, stem, override):
+    config_path = temp_dir / "rooms" / "test" / "room_config.yaml"
+    entry_yaml = {"name": "papers"}
+
+    if stem is not None:
+        entry_yaml["rag_lancedb_stem"] = stem
+    else:
+        entry_yaml["rag_lancedb_override_path"] = override
+
+    entry = config_rag.RAGDatabaseEntry.from_yaml(
+        installation_config,
+        config_path,
+        entry_yaml,
+    )
+
+    assert entry.name == "papers"
+    assert entry._config_path == config_path
+    assert entry._installation_config is installation_config
+
+    if override is not None:
+        assert entry.rag_lancedb_override_path == pathlib.Path(override)
+
+    assert entry.as_yaml == entry_yaml
+
+
+def test__rdb_ctor_w_databases_and_stem(make_entry):
+    with pytest.raises(config_rag.RagDbSingleAndMultiConflict):
+        config_rag._RAGDatabaseBase(
+            rag_lancedb_stem="papers",
+            rag_databases=[make_entry("papers")],
+        )
+
+
+def test__rdb_ctor_w_duplicate_database_names(make_entry):
+    with pytest.raises(config_rag.RagDbDuplicateDatabaseName):
+        config_rag._RAGDatabaseBase(
+            rag_databases=[
+                make_entry("papers"),
+                make_entry("papers", stem="wiki"),
+            ],
+        )
+
+
+def test__rdb_lancedb_path_w_databases(make_entry):
+    """The single-database path is not a thing when several are named"""
+    rdb_config = config_rag._RAGDatabaseBase(
+        rag_databases=[make_entry("papers")],
+    )
+
+    with pytest.raises(config_rag.RagDbNamesSeveralDatabases):
+        _ = rdb_config.rag_lancedb_path
+
+
+def test__rdb_audit_path_w_single_database(stem_environ, db_rag_path):
+    expected = db_rag_path / "papers.lancedb"
+    expected.mkdir()
+    rdb_config = config_rag._RAGDatabaseBase(
+        rag_lancedb_stem="papers",
+        _installation_config=stem_environ,
+    )
+
+    assert rdb_config.rag_db_audit_path == str(expected.resolve())
+
+
+def test__rdb_audit_path_w_databases(make_entry, db_rag_path):
+    papers = db_rag_path / "papers.lancedb"
+    wiki = db_rag_path / "wiki.lancedb"
+    rdb_config = config_rag._RAGDatabaseBase(
+        rag_databases=[make_entry("papers"), make_entry("wiki")],
+    )
+
+    assert rdb_config.rag_db_audit_path == (
+        f"papers={papers.resolve()}, wiki={wiki.resolve()}"
+    )
+
+
+def test__rdb_extra_parameters_w_databases(make_entry, db_rag_path):
+    papers = db_rag_path / "papers.lancedb"
+    rdb_config = config_rag._RAGDatabaseBase(
+        rag_databases=[
+            make_entry("papers"),
+            make_entry("wiki", mkdir=False),
+        ],
+    )
+
+    found = rdb_config.get_extra_parameters()["rag_lancedb_paths"]
+
+    assert found["papers"] == papers.resolve()
+    assert found["wiki"].startswith("MISSING:")
+
+
+def test__rcb_haiku_rag_config_w_databases(
+    stem_environ,
+    make_entry,
+    temp_dir,
+    db_rag_path,
+):
+    stem_environ.haiku_rag_config = hr_config_module.AppConfig(
+        lancedb=hr_config_module.LanceDBConfig(uri="/from/installation"),
+    )
+    room_config_dir = temp_dir / "rooms" / "test"
+    room_config_dir.mkdir(parents=True)
+    papers = db_rag_path / "papers.lancedb"
+    wiki = db_rag_path / "wiki.lancedb"
+
+    config = _MultiDBConfig(
+        rag_databases=[make_entry("papers"), make_entry("wiki")],
+        _installation_config=stem_environ,
+        _config_path=room_config_dir / "room_config.yaml",
+    )
+
+    found = config.haiku_rag_config
+
+    assert found.lancedb.databases == {
+        "papers": str(papers.resolve()),
+        "wiki": str(wiki.resolve()),
+    }
+    assert found.lancedb.uri == ""
+    # The installation's own config is never mutated in place.
+    assert stem_environ.haiku_rag_config.lancedb.uri == "/from/installation"
+    assert config.haiku_rag_config is found
+
+
+def test__rcb_haiku_rag_config_w_missing_database(
+    stem_environ,
+    make_entry,
+    temp_dir,
+):
+    stem_environ.haiku_rag_config = hr_config_module.AppConfig()
+    room_config_dir = temp_dir / "rooms" / "test"
+    room_config_dir.mkdir(parents=True)
+
+    config = _MultiDBConfig(
+        rag_databases=[make_entry("papers", mkdir=False)],
+        _installation_config=stem_environ,
+        _config_path=room_config_dir / "room_config.yaml",
+    )
+
+    with rdb_not_found:
+        _ = config.haiku_rag_config

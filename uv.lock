@@ -1009,7 +1009,7 @@ wheels = [
 
 [[package]]
 name = "haiku-rag-slim"
-version = "0.78.0"
+version = "0.82.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docling-core" },
@@ -1030,9 +1030,9 @@ dependencies = [
     { name = "watchfiles" },
     { name = "zstandard", marker = "python_full_version < '3.14'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/51/a7/a78d0f11e7246603ce73205be27fdcd0b415890edaace87f5dff32e854cb/haiku_rag_slim-0.78.0.tar.gz", hash = "sha256:d381779c87fc5c6c8d23522bf2572c5f8960781bba81f16d1d8b7f9ee2cd0ef7", size = 262440, upload-time = "2026-08-24T13:07:02.087Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/de/37ceddd1f34139207fe1d107a96a86f7679cc11c6630fedf08e62e3daef2/haiku_rag_slim-0.82.1.tar.gz", hash = "sha256:5f49a15a8a2142a81b7564edbd4919c321bd689f5729a56be4e2b4c0786ab40c", size = 289492, upload-time = "2026-09-03T15:02:07.833Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/4d/7a4aeffa352fc762e5efed149129360602fbba09bf86b37ff6924a815a83/haiku_rag_slim-0.78.0-py3-none-any.whl", hash = "sha256:92f250436efe6f79716baf5e64b4190228f8c8683ef49111218c19ac257328be", size = 345873, upload-time = "2026-08-24T13:07:00.45Z" },
+    { url = "https://files.pythonhosted.org/packages/28/2e/e62cbdea84544b4fd3536bb88cd1a1a00e19b0aad06e437b9928437d5af7/haiku_rag_slim-0.82.1-py3-none-any.whl", hash = "sha256:79e4016daafd20503d52c97e69fbf48ade668cc432a54ea61a3838cd49c23088", size = 375748, upload-time = "2026-09-03T15:02:06.314Z" },
 ]
 
 [[package]]
@@ -1411,7 +1411,7 @@ wheels = [
 
 [[package]]
 name = "lancedb"
-version = "0.34.0"
+version = "0.37.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "deprecation" },
@@ -1423,10 +1423,10 @@ dependencies = [
     { name = "tqdm" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/f7/5262b9aa593f790757163c0165ab0da1dda054758901bea7e4f02c9cb633/lancedb-0.34.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:c462f2e6f933cad659fd0179394eaab578acbc9151fe2ef41bc29b36ecca5058", size = 52654213, upload-time = "2026-07-02T17:13:31.102Z" },
-    { url = "https://files.pythonhosted.org/packages/69/99/05ea0d32229ebea695193ff20c15d6ecae25785ad82a9d4723d98832a284/lancedb-0.34.0-cp39-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:48829e88e708947d0520454ab9e4f8efa35f3e3626469eadd3a6e061b89cb223", size = 55434501, upload-time = "2026-07-02T17:13:34.81Z" },
-    { url = "https://files.pythonhosted.org/packages/cd/4e/4325c13d5afa93c466428a5a0f168ad4d96f5eb4a77bbe7c5100d39c9897/lancedb-0.34.0-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:05ba8a5b58e064edfbe5be71b1abf2e411b4eaf295d1a173dcb1a55c5bfb5285", size = 58659359, upload-time = "2026-07-02T17:13:38.424Z" },
-    { url = "https://files.pythonhosted.org/packages/d9/5d/8ca165f1386caf6c4d1c515afd52f345b66432264eecfdfb7fd33eefd9af/lancedb-0.34.0-cp39-abi3-win_amd64.whl", hash = "sha256:51cbc11808f9e3332819b9367c975b3a888541447a8e7bea09c57c852a279153", size = 63530726, upload-time = "2026-07-02T17:13:41.612Z" },
+    { url = "https://files.pythonhosted.org/packages/23/2f/4ddcab82bb618c6c8de00725f3cf59585dcb9040964dde13cb0cae6ed3cd/lancedb-0.37.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:c15c46f23cf6959c79fb93cdba2c76536cf784d3134386662da03dc6ccac3c26", size = 58474767, upload-time = "2026-08-10T10:41:45.675Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/5e/dac0fd9478a21685444f23e6ec937babf4ff48b1616b68e8137778d6ecb9/lancedb-0.37.1-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:35d872d920cbfdc3771fbcd33f2c63bff6ff7203d6d2ba8fe4330e98eb859d12", size = 61666580, upload-time = "2026-08-10T10:41:49.535Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/fa/ee1cdb1e904872d75fa0ff44ad35cd23494e810299c33e68de0687de7a71/lancedb-0.37.1-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:86597f4dbc51a33a07341550dc77d21a1ddd1f7539266eda5bb64c4f3bd11cca", size = 64802395, upload-time = "2026-08-10T10:41:52.969Z" },
+    { url = "https://files.pythonhosted.org/packages/42/55/65c69307373b7f05dea38465b7d3836c86390f0ebc79b5c56d2c0919f229/lancedb-0.37.1-cp310-abi3-win_amd64.whl", hash = "sha256:488eca15361dfc34439500c9e2607c4fb2b8bf190fa1003bd54b1d6eb40e0316", size = 70994296, upload-time = "2026-08-10T10:41:56.609Z" },
 ]
 
 [[package]]
@@ -3159,7 +3159,7 @@ requires-dist = [
     { name = "fastapi" },
     { name = "fastmcp", specifier = ">=3.3.0,<3.4" },
     { name = "greenlet" },
-    { name = "haiku-rag-slim", specifier = ">=0.78.0,<0.79" },
+    { name = "haiku-rag-slim", specifier = ">=0.82.0,<0.83" },
     { name = "idna", specifier = ">=3.15" },
     { name = "itsdangerous" },
     { name = "joserfc", specifier = ">=1.6.7,<1.7" },
