@@ -26,6 +26,7 @@ from soliplex.config import tools as config_tools
 
 NOW = datetime.datetime.now(datetime.UTC)
 
+
 QUIZ_ID = "test_quiz"
 QUIZ_TITLE = "Test Quiz"
 QUIZ_MAX_QUESTIONS = 14
@@ -70,6 +71,8 @@ OTHER_AGENT_KIND = "other-agent-kind"
 FACTORY_NAME = "some.package.function"
 
 INSTALLATION_ID = "test-installation"
+SERVER_NAME = "test-server"
+SERVER_DESC = "Test Installation"
 INSTALLATION_SECRET = "Seeeeeekrit!"
 INSTALLATION_ENVVAR_NAME = "TEST_ENVVAR"
 INSTALLATION_ENVVAR_STR_VALUE = "Test Envvar"
@@ -351,11 +354,24 @@ def test_quiz_from_config(
         assert quiz_model.questions == exp_questions
 
 
-def test_tool_from_config_w_toolconfig():
+class TCWithParms(config_tools.ToolConfig):
+    @property
+    def extra_parameters(self):
+        return {"test": "extra"}
+
+
+@pytest.mark.parametrize(
+    "w_tc_klass, exp_ep",
+    [
+        (config_tools.ToolConfig, {}),
+        (TCWithParms, {"test": "extra"}),
+    ],
+)
+def test_tool_from_config_w_toolconfig(w_tc_klass, exp_ep):
     def test_tool():
         """This is a test tool"""
 
-    tool_config = config_tools.ToolConfig(
+    tool_config = w_tc_klass(
         tool_name="soliplex.tools.test_tool",
     )
 
@@ -368,7 +384,7 @@ def test_tool_from_config_w_toolconfig():
     assert tool_model.tool_requires == config_tools.ToolRequires.BARE
     assert tool_model.allow_mcp is False
     assert tool_model.agui_feature_names == []
-    assert tool_model.extra_parameters == {}
+    assert tool_model.extra_parameters == exp_ep
 
 
 def test_mcp_client_toolset_from_config_w_stdio():
@@ -454,7 +470,7 @@ def test_skill_from_config_w_fssc(filesystem_skill_config):
     assert found.description == filesystem_skill_config.description
     assert found.state_type_schema is None
     assert found.state_namespace is None
-    assert found.extra_parameters == {"path": filesystem_skill_config.path}
+    assert found.extra_parameters == {}
 
 
 @pytest.fixture
@@ -476,7 +492,7 @@ def test_skill_from_config_w_hrrsc(hr_rag_skill_config):
     assert found.state_type_schema == hr_rag.RAGState.model_json_schema()
     assert found.state_namespace == hr_rag.STATE_NAMESPACE
     assert found.extra_parameters == {
-        "rag_lancedb_path": hr_rag_skill_config.rag_lancedb_path,
+        "database_names": [hr_rag_skill_config.rag_lancedb_path.stem],
     }
 
 
@@ -520,7 +536,12 @@ def agent_retries(request):
 @pytest.fixture
 def installation_config():
     environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
-    installation = mock.create_autospec(config_installation.InstallationConfig)
+    installation = mock.create_autospec(
+        config_installation.InstallationConfig,
+        id=INSTALLATION_ID,
+        server_name=SERVER_NAME,
+        server_description=SERVER_DESC,
+    )
     installation.get_environment = environ.get
     installation.interpolate_environment = lambda to_interp: to_interp
     return installation
@@ -1204,6 +1225,15 @@ def test_installation_from_config_w_agui_feature(
         assert m_feature.name == c_feature.name
         assert m_feature.description == c_feature.description
         assert m_feature.source == c_feature.source
+
+
+def test_serverinfo_from_config(installation_config):
+
+    found = models.ServerInfo.from_config(installation_config)
+
+    assert found.installation_id == INSTALLATION_ID
+    assert found.name == SERVER_NAME
+    assert found.description == SERVER_DESC
 
 
 @pytest.mark.parametrize(
