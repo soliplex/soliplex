@@ -832,6 +832,14 @@ def test_toolconfig_get_extra_parameters():
     assert tool_config.get_extra_parameters() == {}
 
 
+def test_toolconfig_extra_parameters():
+    tool_config = config_tools.ToolConfig(
+        tool_name="soliplex.tools.test_tool",
+    )
+
+    assert tool_config.extra_parameters == {}
+
+
 def test_sdtc_ctor(installation_config, temp_dir):
     db_rag_path = temp_dir / "db" / "rag"
     db_rag_path.mkdir(parents=True)
@@ -857,7 +865,7 @@ def test_sdtc_ctor(installation_config, temp_dir):
     assert found.resolve() == from_stem.resolve()
 
     expected_ep = {
-        "rag_lancedb_path": from_stem.resolve(),
+        "database_names": ["stem"],
         "search_documents_limit": 5,
     }
 
@@ -1041,7 +1049,7 @@ def test_sdtc_get_extra_parameters_w_missing_file(
 
     ep = sdt_config.get_extra_parameters()
 
-    assert ep["rag_lancedb_path"] == f"MISSING: {exp_filename.resolve()}"
+    assert ep["database_names"] == [f"MISSING: {exp_filename.stem}"]
 
 
 @pytest.mark.parametrize(

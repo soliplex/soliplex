@@ -177,7 +177,7 @@ class FilesystemSkillConfig:
 
     @property
     def extra_parameters(self) -> dict[str, pathlib.Path]:
-        return {"path": self.path}
+        return {}
 
     def with_defer_loading(self, defer_loading: bool) -> FilesystemSkillConfig:
         """A copy whose capability loads as a room asked.

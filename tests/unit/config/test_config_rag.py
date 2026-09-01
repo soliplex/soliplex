@@ -195,12 +195,14 @@ def test__rdb_ctor(
             assert found.resolve() == expected.resolve()
 
             expected_ep = {
-                "rag_lancedb_path": expected.resolve(),
+                "database_names": [expected.resolve().stem],
             }
             assert rdb_config.get_extra_parameters() == expected_ep
         else:
+            exc = rlp_which.value
             w_missing = rdb_config.get_extra_parameters()
-            assert w_missing["rag_lancedb_path"].startswith("MISSING:")
+            (err,) = w_missing["database_names"]
+            assert err == f"MISSING: {exc.rag_db_filename.stem}"
 
 
 def test__rdb_override_path_expands_user(db_rag_path, monkeypatch):

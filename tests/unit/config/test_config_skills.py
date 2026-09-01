@@ -69,7 +69,7 @@ def test_filesystem_skill_config_properties(temp_dir):
     assert config.state_type is None
     assert config.state_namespace is None
     assert config.agui_feature_names == ()
-    assert config.extra_parameters == {"path": path}
+    assert config.extra_parameters == {}
 
 
 def test_filesystem_skill_config_from_path(temp_dir):
@@ -141,7 +141,7 @@ def test_haiku_rag_capability_config(
     assert state_namespace in config_agui.AGUI_FEATURES_BY_NAME
 
     assert config.source is config_skills.SkillKind.NATIVE
-    assert config.extra_parameters == {"rag_lancedb_path": db_path}
+    assert config.extra_parameters == {"database_names": ["rag"]}
     assert config.rag_lancedb_override_path == db_path
     assert config.as_yaml == {
         "kind": config.kind,

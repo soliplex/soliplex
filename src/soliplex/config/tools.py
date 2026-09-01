@@ -315,6 +315,10 @@ class ToolConfig:
     def get_extra_parameters(self) -> dict:
         return {}
 
+    @property
+    def extra_parameters(self) -> dict:
+        return self.get_extra_parameters()
+
 
 SDTC_TOOL_NAME = "soliplex.tools.rag.search_documents"
 _, SDTC_TOOL_KIND = SDTC_TOOL_NAME.rsplit(".", 1)
