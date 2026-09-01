@@ -111,7 +111,7 @@ class Tool(pydantic.BaseModel):
             tool_requires=tool_config.tool_requires,
             allow_mcp=tool_config.allow_mcp,
             agui_feature_names=list(tool_config.agui_feature_names),
-            extra_parameters=tool_config.get_extra_parameters(),
+            extra_parameters=tool_config.extra_parameters,
         )
 
 

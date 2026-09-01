@@ -177,10 +177,13 @@ class _RAGDatabaseBase:
         try:
             rag_lancedb_path = self.rag_lancedb_path
         except RagDbFileNotFound as exc:
-            rag_lancedb_path = f"MISSING: {exc.rag_db_filename}"
+            missing = exc.rag_db_filename
+            db_name = f"MISSING: {missing.stem}"
+        else:
+            db_name = rag_lancedb_path.stem
 
         return {
-            "rag_lancedb_path": rag_lancedb_path,
+            "database_names": [db_name],
         }
 
 
