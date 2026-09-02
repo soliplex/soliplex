@@ -96,14 +96,6 @@ async def get_uploads_room_id_thread_thread_id(
     response_class=responses.FileResponse,
 )
 async def get_uploads_room_id_thread_thread_id_filename(
-    """Download a file from the thread uploads directory
-
-    Unlike sandbox workdir files, which are created by a possibly-
-    hallucinating or mischievous agent, files in the thread-uploads tree
-    are durable.  The operator may choose to add a symlink into a particular
-    thread's directory to share a large dataset, without requiring that
-    the user download it from somewhere and then re-upload it here.
-    """
     room_id: str,
     thread_id: pydantic.UUID4,
     filename: str,
@@ -113,7 +105,14 @@ async def get_uploads_room_id_thread_thread_id_filename(
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
-    """Download a file from the room uploads directory"""
+    """Download a file from the thread uploads directory
+
+    Unlike sandbox workdir files, which are created by a possibly-
+    hallucinating or mischievous agent, files in the thread-uploads tree
+    are durable.  The operator may choose to add a symlink into a particular
+    thread's directory to share a large dataset, without requiring that
+    the user download it from somewhere and then re-upload it here.
+    """
     thread_id = str(thread_id)
 
     the_logger.debug(loggers.UPLOADS_GET_ROOM_THREAD_FILE)
