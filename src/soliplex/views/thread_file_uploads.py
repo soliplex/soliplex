@@ -96,6 +96,14 @@ async def get_uploads_room_id_thread_thread_id(
     response_class=responses.FileResponse,
 )
 async def get_uploads_room_id_thread_thread_id_filename(
+    """Download a file from the thread uploads directory
+
+    Unlike sandbox workdir files, which are created by a possibly-
+    hallucinating or mischievous agent, files in the thread-uploads tree
+    are durable.  The operator may choose to add a symlink into a particular
+    thread's directory to share a large dataset, without requiring that
+    the user download it from somewhere and then re-upload it here.
+    """
     room_id: str,
     thread_id: pydantic.UUID4,
     filename: str,
