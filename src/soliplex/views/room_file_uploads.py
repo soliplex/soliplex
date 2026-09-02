@@ -134,7 +134,7 @@ async def get_uploads_room_filename(
     if not room_dir.is_dir():
         raise fastapi.HTTPException(
             status_code=404,
-            detail="No uploads in room: {room_id}",
+            detail=f"No uploads in room: {room_id}",
         )
 
     file_path = room_dir / filename

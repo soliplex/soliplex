@@ -19,7 +19,9 @@ THE_USER_CLAIMS = {"preferred_username": USER_NAME, "email": EMAIL}
 
 TEST_ROOM_ID = "test-room-id"
 TEST_THREAD_ID = uuid.uuid4()
+TEST_THREAD_ID_STR = str(TEST_THREAD_ID)
 TEST_RUN_ID = uuid.uuid4()
+TEST_RUN_ID_STR = str(TEST_RUN_ID)
 TEST_FILENAME = "test_file.txt"
 
 URL_PREFIX = "http://test.example.com/api"
@@ -62,9 +64,10 @@ def sandbox_path(temp_dir):
         ),
     ],
 )
-@mock.patch("soliplex.views.agui._check_user_in_room")
+@mock.patch("soliplex.views.agui._check_thread_ownership")
 async def test_get_workdirs_room_thread_run_only(
-    cuir,
+    cto,
+    the_threads,
     sandbox_path,
     w_sandbox_path,
     w_workdir_path,
@@ -75,8 +78,8 @@ async def test_get_workdirs_room_thread_run_only(
     run_path = (
         sandbox_workdirs_path
         / TEST_ROOM_ID
-        / str(TEST_THREAD_ID)
-        / str(TEST_RUN_ID)
+        / TEST_THREAD_ID_STR
+        / TEST_RUN_ID_STR
     )
 
     # Note: this is the name of the view function, and not the path
@@ -101,8 +104,8 @@ async def test_get_workdirs_room_thread_run_only(
             exp_filename_urls[filename] = download_url(
                 ROUTE_NAME,
                 TEST_ROOM_ID,
-                str(TEST_THREAD_ID),
-                str(TEST_RUN_ID),
+                TEST_THREAD_ID_STR,
+                TEST_RUN_ID_STR,
                 filename,
             )
 
@@ -110,7 +113,7 @@ async def test_get_workdirs_room_thread_run_only(
     request.url_for.side_effect = download_url
 
     room_config = mock.create_autospec(config_rooms.RoomConfig)
-    cuir.return_value = room_config
+    cto.return_value = room_config
 
     the_installation = mock.create_autospec(
         installation.Installation,
@@ -128,9 +131,10 @@ async def test_get_workdirs_room_thread_run_only(
         found = await workdir_views.get_workdirs_room_thread_run(
             request=request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
             the_installation=the_installation,
+            the_threads=the_threads,
             the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
@@ -139,8 +143,8 @@ async def test_get_workdirs_room_thread_run_only(
     if expected is None:
         assert isinstance(found, models.RunWorkdirFiles)
         assert found.room_id == TEST_ROOM_ID
-        assert found.thread_id == str(TEST_THREAD_ID)
-        assert found.run_id == str(TEST_RUN_ID)
+        assert found.thread_id == TEST_THREAD_ID_STR
+        assert found.run_id == TEST_RUN_ID_STR
 
         if w_workdir_path:
             found_files = {f_up.filename: f_up.url for f_up in found.files}
@@ -152,6 +156,16 @@ async def test_get_workdirs_room_thread_run_only(
         else:
             assert found.files == []
 
+    cto.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
     the_logger.debug.assert_called_once_with(
         loggers.WORKDIRS_GET_ROOM_THREAD_RUN,
     )
@@ -182,9 +196,10 @@ async def test_get_workdirs_room_thread_run_only(
         ),
     ],
 )
-@mock.patch("soliplex.views.agui._check_user_in_room")
+@mock.patch("soliplex.views.agui._check_thread_ownership")
 async def test_get_workdirs_room_thread_run_filename(
-    cuir,
+    cto,
+    the_threads,
     sandbox_path,
     w_sandbox_path,
     w_workdir_path,
@@ -195,8 +210,8 @@ async def test_get_workdirs_room_thread_run_filename(
     workdir_path = (
         sandbox_workdirs_path
         / TEST_ROOM_ID
-        / str(TEST_THREAD_ID)
-        / str(TEST_RUN_ID)
+        / TEST_THREAD_ID_STR
+        / TEST_RUN_ID_STR
     )
 
     if w_workdir_path:
@@ -207,7 +222,7 @@ async def test_get_workdirs_room_thread_run_filename(
             file_path.write_text(f"filename: {TEST_FILENAME}")
 
     room_config = mock.create_autospec(config_rooms.RoomConfig)
-    cuir.return_value = room_config
+    cto.return_value = room_config
 
     the_installation = mock.create_autospec(
         installation.Installation,
@@ -228,6 +243,7 @@ async def test_get_workdirs_room_thread_run_filename(
             run_id=TEST_RUN_ID,
             filename=TEST_FILENAME,
             the_installation=the_installation,
+            the_threads=the_threads,
             the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
@@ -236,6 +252,16 @@ async def test_get_workdirs_room_thread_run_filename(
     if expected is None:
         assert found == str(file_path)
 
+    cto.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
     the_logger.debug.assert_called_once_with(
         loggers.WORKDIRS_GET_ROOM_THREAD_RUN_FILE,
     )
