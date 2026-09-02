@@ -165,11 +165,6 @@ def run_input():
     )
 
 
-@pytest.fixture
-def the_threads():
-    return mock.create_autospec(agui.ThreadStorage)
-
-
 def _awaitable(name, value):
     async def getter():
         return value
@@ -274,6 +269,154 @@ async def test__check_user_room_agent(w_miss, expectation):
         the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_miss, expectation",
+    [
+        (None, no_error(USER_NAME)),
+        ("room", raises_httpexc(code=404, match="No such room")),
+        ("thread", raises_httpexc(code=404, match="No such thread")),
+        ("mismatch", raises_httpexc(code=404, match="No such thread")),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test__check_thread_ownership_wo_run(
+    cuir,
+    the_threads,
+    w_miss,
+    expectation,
+):
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    if w_miss == "room":
+        cuir.side_effect = fastapi.HTTPException(
+            status_code=404,
+            detail=f"No such room: {TEST_ROOM_ID}",
+        )
+    elif w_miss == "thread":
+        the_threads.get_thread.side_effect = agui.UnknownThread(
+            USER_NAME,
+            TEST_THREAD_ID_STR,
+        )
+    elif w_miss == "mismatch":
+        the_threads.get_thread.side_effect = agui.ThreadRoomMismatch(
+            TEST_ROOM_ID,
+            "other-room_id",
+        )
+
+    with expectation as expected:
+        found = await agui_views._check_thread_ownership(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if isinstance(expected, str):
+        assert found is cuir.return_value
+
+    cuir.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+    if w_miss != "room":
+        the_threads.get_thread.assert_awaited_once_with(
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+        )
+    else:
+        the_threads.get_thread.assert_not_awaited()
+
+    the_threads.get_run.assert_not_awaited()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_miss, expectation",
+    [
+        (None, no_error(USER_NAME)),
+        ("room", raises_httpexc(code=404, match="No such room")),
+        ("thread", raises_httpexc(code=404, match="No such thread")),
+        ("run", raises_httpexc(code=404, match="No such run")),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test__check_thread_ownership_w_run(
+    cuir,
+    the_threads,
+    w_miss,
+    expectation,
+):
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    if w_miss == "room":
+        cuir.side_effect = fastapi.HTTPException(
+            status_code=404,
+            detail=f"No such room: {TEST_ROOM_ID}",
+        )
+    elif w_miss == "thread":
+        the_threads.get_thread.side_effect = agui.UnknownThread(
+            USER_NAME,
+            TEST_THREAD_ID_STR,
+        )
+    elif w_miss == "run":
+        the_threads.get_run.side_effect = agui.UnknownRun(
+            TEST_THREAD_ID_STR,
+        )
+
+    with expectation as expected:
+        found = await agui_views._check_thread_ownership(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if isinstance(expected, str):
+        assert found is cuir.return_value
+
+    cuir.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+    if w_miss != "room":
+        the_threads.get_thread.assert_awaited_once_with(
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+        )
+    else:
+        the_threads.get_thread.assert_not_awaited()
+
+    if w_miss not in ("room", "thread"):
+        the_threads.get_run.assert_awaited_once_with(
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+        )
+    else:
+        the_threads.get_run.assert_not_awaited()
 
 
 @pytest.mark.anyio
