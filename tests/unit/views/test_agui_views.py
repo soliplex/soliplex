@@ -1418,6 +1418,65 @@ async def test_init_agent_stream_adds_final_state(ces, dls):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    "w_bogus_thread_id, w_bogus_run_id",
+    [
+        (None, "bogus-run-id"),
+        ("bogus-thread-id", None),
+        ("bogus-thread-id", "bogus-run-id"),
+    ],
+)
+@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
+@mock.patch("soliplex.views.agui._check_user_room_agent")
+@mock.patch("soliplex.views.agui.logfire")
+async def test_post_room_agui_thread_id_run_id_w_bogus_ids(
+    logfire,
+    cura,
+    aga,
+    run_input,
+    w_bogus_thread_id,
+    w_bogus_run_id,
+):
+    if w_bogus_thread_id is not None:
+        run_input.thread_id = w_bogus_thread_id
+
+    if w_bogus_run_id is not None:
+        run_input.run_id = w_bogus_run_id
+
+    USER_PROFILE = models.UserProfile(**AUTH_USER)
+    agent = object()
+    cura.return_value = (USER_PROFILE, agent)
+
+    request = fastapi.Request(
+        scope={
+            "type": "http",
+            "headers": [],
+        },
+    )
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_agent_for_room.return_value = agent
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    aga.from_request = mock.AsyncMock()
+    exp_adapter = aga.from_request.return_value
+    exp_adapter.run_input = run_input
+
+    with raises_httpexc(code=400, match="Invalid run input"):
+        await agui_views.post_room_agui_thread_id_run_id(
+            request,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            run_id=TEST_RUN_ID_UUID,
+            the_installation=the_installation,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "ari_side_effect, expectation",
     [
         (None, no_error()),
@@ -1644,8 +1703,12 @@ async def test_post_room_agui_reconnect(
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
-    aga.from_request = mock.AsyncMock()
-    exp_adapter = aga.from_request.return_value
+    # SSE reconnect branch does not call 'from_request', because it does
+    # not need an 'agent' or 'run_input' for its only role, which is to
+    # encode the event stream read from the database.
+    # Instead, it creates the adapter directly.
+    aga.from_request = object()
+    exp_adapter = aga.return_value
     exp_adapter.encode_stream = mock.MagicMock()
 
     last_event_id = f"{TEST_RUN_ID_STR}:5"
