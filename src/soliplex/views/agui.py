@@ -99,6 +99,61 @@ async def _check_user_room_agent(
     return user_profile, agent
 
 
+async def _check_thread_ownership(
+    *,
+    room_id: str,
+    thread_id: str,
+    run_id: str | None = None,
+    the_installation: installation.Installation,
+    the_threads: agui.ThreadStorage,
+    the_room_authz: authz.RoomAuthorizationPolicy,
+    the_user_claims: authn.UserClaims,
+    the_logger: loggers.LogWrapper,
+) -> config_rooms.RoomConfig:
+    """Raise if user is not the owner of the thread
+
+    If 'run_id' is passed, also check that it is a valid member of the thread.
+    """
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+
+    _room_config = await _check_user_in_room(  # raises
+        room_id=room_id,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=the_user_claims,
+        the_logger=the_logger,
+    )
+
+    try:  # verify user's ownership of the thread
+        await the_threads.get_thread(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+        )
+    except agui.AGUI_Exception:
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail="No such thread",
+        ) from None
+
+    if run_id is not None:
+        try:
+            await the_threads.get_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+            )
+
+        except agui.AGUI_Exception:
+            raise fastapi.HTTPException(
+                status_code=404,
+                detail="No such run",
+            ) from None
+
+    return _room_config
+
+
 @util.logfire_span("GET /v1/rooms/{room_id}/agui")
 @router.get("/v1/rooms/{room_id}/agui")
 async def get_room_agui(

@@ -5,7 +5,7 @@ import pydantic
 from fastapi import responses
 
 from soliplex import agui
-from soliplex import authn as authn_package
+from soliplex import authn
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
@@ -32,18 +32,21 @@ async def get_uploads_room_id_thread_thread_id(
     room_id: str,
     thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
-    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
-) -> models.RoomUploads:
+) -> models.ThreadUploads:
     """Return a list of files uploaded to the thread"""
     thread_id = str(thread_id)
 
     the_logger.debug(loggers.UPLOADS_GET_ROOM_THREAD)
 
-    _room_config = await soliplex_views_agui._check_user_in_room(
+    await soliplex_views_agui._check_thread_ownership(
         room_id=room_id,
+        thread_id=thread_id,
         the_installation=the_installation,
+        the_threads=the_threads,
         the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
@@ -97,8 +100,9 @@ async def get_uploads_room_id_thread_thread_id_filename(
     thread_id: pydantic.UUID4,
     filename: str,
     the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
-    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
     """Download a file from the room uploads directory"""
@@ -106,9 +110,11 @@ async def get_uploads_room_id_thread_thread_id_filename(
 
     the_logger.debug(loggers.UPLOADS_GET_ROOM_THREAD_FILE)
 
-    _room_config = await soliplex_views_agui._check_user_in_room(
+    await soliplex_views_agui._check_thread_ownership(
         room_id=room_id,
+        thread_id=thread_id,
         the_installation=the_installation,
+        the_threads=the_threads,
         the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
@@ -127,7 +133,7 @@ async def get_uploads_room_id_thread_thread_id_filename(
     if not thread_dir.is_dir():
         raise fastapi.HTTPException(
             status_code=404,
-            detail="No uploads in thread: {thread_id}",
+            detail=f"No uploads in thread: {thread_id}",
         )
 
     file_path = thread_dir / filename
@@ -152,7 +158,7 @@ async def post_uploads_room_id_thread_thread_id(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
-    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
     """Upload a file for a thread within the given room
@@ -164,16 +170,17 @@ async def post_uploads_room_id_thread_thread_id(
 
     the_logger.debug(loggers.UPLOADS_POST_ROOM_THREAD)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
-    _room_config = await soliplex_views_agui._check_user_in_room(
+    room_config = await soliplex_views_agui._check_thread_ownership(
         room_id=room_id,
+        thread_id=thread_id,
         the_installation=the_installation,
+        the_threads=the_threads,
         the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
 
-    if not _room_config.has_sandbox:
+    if not room_config.has_sandbox:
         raise fastapi.HTTPException(
             status_code=405,
             detail="Sandbox not configured",
@@ -188,18 +195,6 @@ async def post_uploads_room_id_thread_thread_id(
             detail="Thread uploads not configured",
             headers={"Allow": "GET"},
         )
-
-    try:
-        await the_threads.get_thread(
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-        )
-    except agui.AGUI_Exception as exc:
-        raise fastapi.HTTPException(
-            status_code=exc.status_code,
-            detail=exc.args,
-        ) from None
 
     thread_dir = pathlib.Path(uploads_path) / thread_id
     thread_dir.mkdir(parents=True, exist_ok=True)
