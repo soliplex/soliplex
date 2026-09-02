@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import pathlib
@@ -557,6 +558,53 @@ async def test_skill_run_python_w_extra_args(
         script="print('hello')",
         **exp_kw,
     )
+
+
+no_raise = contextlib.nullcontext()
+invalid_subdir = pytest.raises(skills_bwrap_sandbox.InvalidSubdir)
+
+
+@pytest.mark.parametrize(
+    "subpath, expectation",
+    [
+        ("foo", no_raise),
+        ("\x00", invalid_subdir),
+        ("/", invalid_subdir),
+        (".", invalid_subdir),
+        ("..", invalid_subdir),
+        ("foo/..", invalid_subdir),
+        ("foo/bar", invalid_subdir),
+        ("foo/./bar", invalid_subdir),
+        ("../foo", invalid_subdir),
+        ("", invalid_subdir),
+        ("/tmp/foo", invalid_subdir),
+    ],
+)
+def test__check_is_subdir(temp_dir, subpath, expectation):
+    with expectation:
+        skills_bwrap_sandbox._check_is_subdir(temp_dir / subpath, temp_dir)
+
+
+@pytest.mark.parametrize(
+    "paths, expectation",
+    [
+        ([], no_raise),
+        (["foo"], no_raise),
+        (["foo", "bar"], no_raise),
+        (["../foo", "bar"], invalid_subdir),
+        (["foo", "../bar"], invalid_subdir),
+    ],
+)
+def test__check_subdirs(temp_dir, paths, expectation):
+    with expectation as exc:
+        found = skills_bwrap_sandbox._check_subdirs(temp_dir, paths)
+
+    if not isinstance(exc, pytest.ExceptionInfo):
+        expected = temp_dir
+        for path in paths:
+            expected /= path
+
+        assert found == expected
 
 
 @pytest.mark.parametrize(

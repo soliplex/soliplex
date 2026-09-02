@@ -419,6 +419,36 @@ async def skill_run_python(
     return str(output)
 
 
+class InvalidSubdir(ValueError):
+    def __init__(self, path, expected_parent):
+        self.path = path
+        self.expected_parent = expected_parent
+        super().__init__(f"{path} not a subdir of {expected_parent}")
+
+
+def _check_is_subdir(path: pathlib.Path, expected_parent: pathlib.Path):
+    ep_resolved = expected_parent.resolve()
+
+    try:
+        resolved = path.resolve()
+    except ValueError as exc:
+        raise InvalidSubdir(path, ep_resolved) from exc
+    else:
+        if resolved.parent == ep_resolved:
+            return
+
+    raise InvalidSubdir(path, ep_resolved)
+
+
+def _check_subdirs(base: pathlib.Path, paths: list[str]) -> pathlib.Path:
+    current = base
+    for path in paths:
+        on_deck = current / path
+        _check_is_subdir(on_deck, current)
+        current = on_deck
+    return current.resolve()
+
+
 def get_workdir(
     workdirs_path: pathlib.Path | None,
     room_id: str | None,
@@ -431,9 +461,10 @@ def get_workdir(
         and thread_id is not None
         and run_id is not None
     ):
-        workdir = (
-            workdirs_path / room_id / str(thread_id) / str(run_id)
-        )  # XXX check subdir
+        workdir = _check_subdirs(
+            workdirs_path,
+            [room_id, str(thread_id), str(run_id)],
+        )
         workdir.mkdir(parents=True, exist_ok=True)
         return workdir
     else:
@@ -445,8 +476,8 @@ def _get_upload_volume(
     volume_id: str | None,
 ):
     if upload_path is not None and volume_id is not None:
-        volume_dir = upload_path / str(volume_id)
-        if volume_dir.exists():  # XXX check subdir
+        volume_dir = _check_subdirs(upload_path, [str(volume_id)])
+        if volume_dir.exists():
             return bs_models.VolumeInfo(
                 host_path=volume_dir,
                 writable=False,
@@ -502,9 +533,10 @@ def write_transcript(
         and thread_id is not None
         and run_id is not None
     ):
-        run_dir = (
-            transcripts_path / room_id / str(thread_id) / str(run_id)
-        )  # XXX check subdir
+        run_dir = _check_subdirs(
+            transcripts_path,
+            [room_id, str(thread_id), str(run_id)],
+        )
         run_dir.mkdir(parents=True, exist_ok=True)
         target = run_dir / f"{uuid.uuid4()}{suffix}"
         target.write_text(content, encoding="utf-8")
@@ -596,19 +628,22 @@ def create_sandbox_toolset(
 
         else:
             deps = ctx.deps
-            room_id = deps.room_id or ""
-            thread_id = deps.thread_id or ""
+            room_id = deps.room_id
+            thread_id = deps.thread_id
 
             return await skill_list_volume_files(
                 volume=volume,
                 room_upload_path=(
-                    rooms_upload_path / room_id
-                    if rooms_upload_path is not None
+                    _check_subdirs(rooms_upload_path, [room_id])
+                    if (rooms_upload_path is not None and room_id is not None)
                     else None
                 ),
                 thread_upload_path=(
-                    threads_upload_path / thread_id
-                    if threads_upload_path is not None
+                    _check_subdirs(threads_upload_path, [thread_id])
+                    if (
+                        threads_upload_path is not None
+                        and thread_id is not None
+                    )
                     else None
                 ),
             )
