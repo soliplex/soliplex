@@ -732,16 +732,12 @@ async def post_room_agui_thread_id_run_id(
             the_logger=the_logger,
         )
 
-        agui_adapter = await ai_ag_ui.AGUIAdapter.from_request(
-            request=request,
-            agent=(
-                await the_installation.get_agent_for_room(
-                    room_id=room_id,
-                    user=the_user_claims,
-                    the_room_authz=the_room_authz,
-                    the_logger=the_logger,
-                )
-            ),
+        # This adapter is only used to encode the stream from the database:
+        # it doesn't need an 'agent' or a 'run_input' for that job.
+        agui_adapter = ai_ag_ui.AGUIAdapter(
+            agent=None,
+            run_input=None,
+            accept=request.headers.get("accept"),
         )
 
         db_event_stream = streaming_views.stream_from_db(
@@ -786,6 +782,17 @@ async def post_room_agui_thread_id_run_id(
         request=request,
         agent=agent,
     )
+
+    # Ensure IDs in request body match the checked URL path IDs.
+    # The values must match the ones minted / serialized earlier
+    # by us *exactly*: client must return them verbatim.  See #1325.
+    run_input = agui_adapter.run_input
+
+    if thread_id != run_input.thread_id or run_id != run_input.run_id:
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Invalid run input",
+        )
 
     try:
         async with sqla_asyncio.AsyncSession(
