@@ -196,8 +196,15 @@ async def get_workdirs_room_thread_run_filename(
 
     stream = streamer()
 
+    # Declare one fixed, inert type rather than guessing from the
+    # filename as 'FileResponse' did: the name is chosen by
+    # model-authored code, so a guess would hand the browser a
+    # content type derived from untrusted input. Together with the
+    # 'attachment' disposition and 'nosniff', this makes the browser
+    # download the file and never interpret it.
     return responses.StreamingResponse(
         stream,
+        media_type="application/octet-stream",
         headers={
             "content-length": str(size),
             "content-disposition": _disposition(file_path),

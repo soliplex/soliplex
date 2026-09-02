@@ -344,6 +344,7 @@ async def test_get_workdirs_room_thread_run_filename(
 
         frsr.assert_called_once_with(
             streamer.return_value,
+            media_type="application/octet-stream",
             headers={
                 "content-length": str(file_size),
                 "content-disposition": disposition.return_value,
