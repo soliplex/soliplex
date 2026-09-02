@@ -1,6 +1,5 @@
 import pathlib
 import shutil
-import uuid
 
 import pytest
 
@@ -9,6 +8,7 @@ from soliplex.config import installation as config_installation
 ROOM_ID = "chat"
 
 new_thread_request = {"metadata": {"name": "functest"}}
+
 
 @pytest.fixture(scope="module")
 def workdirs_path() -> pathlib.Path:
