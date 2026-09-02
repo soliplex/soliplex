@@ -110,7 +110,13 @@ async def get_uploads_room_filename(
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
-    """Download a file from the room uploads directory"""
+    """Download a file from the room uploads directory
+
+    Unlike sandbox workdir files, which are created by a possibly-
+    hallucinating or mischievous agent, files in the room-uploads tree
+    are under purview of the admin / operator:  symlinks to share e.g.
+    large datasets between rooms may be intentional and appropriate.
+    """
     the_logger.debug(loggers.UPLOADS_GET_ROOM_FILE)
 
     _room_config = await soliplex_views_agui._check_user_in_room(

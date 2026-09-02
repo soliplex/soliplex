@@ -38,8 +38,17 @@ from typing import NamedTuple
 REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_TARGET = REPO_DIR / "src" / "soliplex"
 
-# 'pathlib.Path' text helpers, plus builtin 'open' / 'Path.open'.
-TEXT_IO_NAMES = frozenset({"read_text", "write_text", "open"})
+# 'pathlib.Path' text helpers, plus builtin 'open' / 'Path.open', and
+# 'os.fdopen', which wraps a descriptor in a text stream by default.
+TEXT_IO_NAMES = frozenset(
+    {"read_text", "write_text", "open", "fdopen"},
+)
+
+# Qualified calls whose trailing name collides with one above, but which
+# do no text IO at all. 'os.open' is the POSIX 'open(2)' wrapper: it
+# returns an integer file descriptor, takes flags rather than a mode
+# string, and raises 'TypeError' if handed an 'encoding='.
+NOT_TEXT_IO_QUALNAMES = frozenset({"os.open"})
 
 
 class Finding(NamedTuple):
@@ -55,9 +64,20 @@ class Finding(NamedTuple):
 
 
 def _call_name(node: ast.Call) -> str | None:
-    """Return the called attribute / bare name, or 'None' if neither."""
+    """Return the called attribute / bare name, or 'None' if neither.
+
+    A qualified call listed in 'NOT_TEXT_IO_QUALNAMES' returns 'None':
+    matching on the trailing attribute alone cannot tell 'os.open' from
+    the builtin 'open', and the former admits no 'encoding='.
+    """
     func = node.func
     if isinstance(func, ast.Attribute):
+        base = getattr(func.value, "id", None)
+
+        if base is not None:
+            if f"{base}.{func.attr}" in NOT_TEXT_IO_QUALNAMES:
+                return None
+
         return func.attr
 
     return getattr(func, "id", None)
@@ -194,11 +214,13 @@ def report(scanned: Scan, verbose: bool) -> None:
 # Every form the check must catch, and every form it must let through.
 # Line numbers are asserted on below, so keep the layout stable.
 SELF_TEST_SOURCE = """\
+import os
 import pathlib
 
 path = pathlib.Path("f")
 data = "x"
 mode = "rb"
+fd = 0
 
 path.read_text()
 path.read_text(encoding="utf-8")
@@ -208,6 +230,9 @@ path.open()
 path.open("rb")
 path.open(mode)
 open("f")
+os.open("f", os.O_RDONLY)
+os.fdopen(fd)
+os.fdopen(fd, "rb")
 len("not file io")
 path.write_text(
     data,
@@ -216,15 +241,18 @@ path.write_text(
 """
 
 SELF_TEST_EXPECTED = [
-    Finding("self-test", 7, 7, "read_text"),
-    Finding("self-test", 9, 9, "write_text"),
-    Finding("self-test", 11, 11, "open"),
-    # Non-literal mode: reported rather than assumed binary.
+    Finding("self-test", 9, 9, "read_text"),
+    Finding("self-test", 11, 11, "write_text"),
     Finding("self-test", 13, 13, "open"),
+    # Non-literal mode: reported rather than assumed binary.
+    Finding("self-test", 15, 15, "open"),
     # Builtin, not a method.
-    Finding("self-test", 14, 14, "open"),
-    # Multi-line call: spans lines 16-19.
-    Finding("self-test", 16, 19, "write_text"),
+    Finding("self-test", 16, 16, "open"),
+    # 'os.open' on line 17 is absent: a POSIX descriptor call, which
+    # takes no 'encoding='. 'os.fdopen' below it is text IO by default.
+    Finding("self-test", 18, 18, "fdopen"),
+    # Multi-line call: spans lines 21-24.
+    Finding("self-test", 21, 24, "write_text"),
 ]
 
 
