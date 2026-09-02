@@ -17,7 +17,9 @@ from soliplex.skills import bwrap_sandbox as skills_bwrap_sandbox
 
 ROOM_ID = "test_room"
 THREAD_ID = uuid.uuid4()
+THREAD_ID_STR = str(THREAD_ID)
 RUN_ID = uuid.uuid4()
+RUN_ID_STR = str(RUN_ID)
 USERNAME = "phreddy"
 SANDBOX_VOLUMES_PATH = skills_bwrap_sandbox.SANDBOX_VOLUMES_PATH
 SANDBOX_WORKDIR_PATH = skills_bwrap_sandbox.SANDBOX_WORKDIR_PATH
@@ -69,8 +71,8 @@ def ctx_w_deps():
     ctx.deps = mock.Mock(
         spec_set=["room_id", "thread_id", "run_id", "user"],
         room_id=ROOM_ID,
-        thread_id=str(THREAD_ID),
-        run_id=str(RUN_ID),
+        thread_id=THREAD_ID_STR,
+        run_id=RUN_ID_STR,
         user=user,
     )
     return ctx
@@ -267,7 +269,7 @@ async def test_skill_list_volume_files(
     room_file = room_upload_path / "room_file.txt"
     room_file.write_text("ROOM FILE")
 
-    thread_upload_path = threads_upload_path / str(THREAD_ID)
+    thread_upload_path = threads_upload_path / THREAD_ID_STR
     thread_upload_path.mkdir(parents=True)
     thread_file = thread_upload_path / "thread_file.txt"
     thread_file.write_text("THREAD FILE")
@@ -557,20 +559,39 @@ async def test_skill_run_python_w_extra_args(
     )
 
 
-@pytest.mark.parametrize("w_wd_path", [False, True])
-def test_get_workdir(workdirs_path, w_wd_path):
+@pytest.mark.parametrize(
+    "w_wd_path, w_room_id, w_thread_id, w_run_id, exp_path",
+    [
+        (False, True, True, True, False),
+        (True, False, True, True, False),
+        (True, True, False, True, False),
+        (True, True, True, False, False),
+        (True, True, True, True, True),
+    ],
+)
+def test_get_workdir(
+    workdirs_path,
+    w_wd_path,
+    w_room_id,
+    w_thread_id,
+    w_run_id,
+    exp_path,
+):
     if w_wd_path:
         wd_path = workdirs_path
-        expected = workdirs_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
     else:
         wd_path = None
+
+    if exp_path:
+        expected = workdirs_path / ROOM_ID / THREAD_ID_STR / RUN_ID_STR
+    else:
         expected = None
 
     found = skills_bwrap_sandbox.get_workdir(
         wd_path,
-        ROOM_ID,
-        THREAD_ID,
-        RUN_ID,
+        ROOM_ID if w_room_id else None,
+        THREAD_ID_STR if w_thread_id else None,
+        RUN_ID_STR if w_run_id else None,
     )
 
     assert found == expected
@@ -579,66 +600,122 @@ def test_get_workdir(workdirs_path, w_wd_path):
         assert expected.is_dir()
 
 
-@pytest.mark.parametrize("w_thread_path", [None, False, True])
-@pytest.mark.parametrize("w_room_path", [None, False, True])
+@pytest.mark.parametrize(
+    "w_upload_path, w_volume_id, w_exists, exp_hp",
+    [
+        (False, False, None, None),
+        (True, False, None, None),
+        (False, True, None, None),
+        (True, True, False, False),
+        (True, True, True, True),
+    ],
+)
+def test__get_upload_volume(
+    temp_dir,
+    w_upload_path,
+    w_volume_id,
+    w_exists,
+    exp_hp,
+):
+
+    if w_upload_path:
+        upload_path = temp_dir
+    else:
+        upload_path = None
+
+    if w_volume_id:
+        volume_id = "test-vol"
+    else:
+        volume_id = None
+
+    exp_vol_info = w_upload_path and w_volume_id
+
+    if exp_vol_info:
+        v_path = upload_path / volume_id
+
+        if w_exists:
+            v_path.mkdir()
+
+    found = skills_bwrap_sandbox._get_upload_volume(upload_path, volume_id)
+
+    if exp_vol_info:
+        assert isinstance(found, bs_models.VolumeInfo)
+        assert not (found.writable)
+
+        if exp_hp:
+            assert found.host_path == v_path
+        else:
+            assert found.host_path is None
+
+    else:
+        assert found is None
+
+
+@pytest.mark.parametrize("w_thread_volume", [False, True])
+@pytest.mark.parametrize("w_room_volume", [False, True])
+@mock.patch("soliplex.skills.bwrap_sandbox._get_upload_volume")
 def test_get_extra_volumes(
+    _guv,
     rooms_upload_path,
     threads_upload_path,
-    w_room_path,
-    w_thread_path,
+    w_room_volume,
+    w_thread_volume,
 ):
     expected = {}
+    vols = []
+    room_volume = mock.Mock(spec_set=())
+    thread_volume = mock.Mock(spec_set=())
 
-    if w_room_path is not None:
-        ru_path = rooms_upload_path
-        if w_room_path:
-            room_path = ru_path / ROOM_ID
-            room_path.mkdir(parents=True)
-            expected["room"] = bs_models.VolumeInfo(
-                host_path=room_path,
-                writable=False,
-            )
-        else:
-            expected["room"] = bs_models.VolumeInfo(
-                host_path=None,
-                writable=False,
-            )
+    if w_room_volume:
+        expected["room"] = room_volume
+        vols.append(room_volume)
     else:
-        ru_path = None
+        vols.append(None)
 
-    if w_thread_path is not None:
-        tu_path = threads_upload_path
-        if w_thread_path:
-            thread_path = tu_path / str(THREAD_ID)
-            thread_path.mkdir(parents=True)
-            expected["thread"] = bs_models.VolumeInfo(
-                host_path=thread_path,
-                writable=False,
-            )
-        else:
-            expected["thread"] = bs_models.VolumeInfo(
-                host_path=None,
-                writable=False,
-            )
+    if w_thread_volume:
+        expected["thread"] = thread_volume
+        vols.append(thread_volume)
     else:
-        tu_path = None
+        vols.append(None)
+
+    _guv.side_effect = vols
 
     found = skills_bwrap_sandbox.get_extra_volumes(
-        ru_path,
-        tu_path,
+        rooms_upload_path,
+        threads_upload_path,
         ROOM_ID,
         THREAD_ID,
     )
 
     assert found == expected
 
+    room_call, thread_call = _guv.call_args_list
 
-def test_write_transcript_wo_transcripts_path():
+    assert room_call == mock.call(rooms_upload_path, ROOM_ID)
+    assert thread_call == mock.call(threads_upload_path, str(THREAD_ID))
+
+
+@pytest.mark.parametrize(
+    "w_tx_path, w_room_id, w_thread_id, w_run_id",
+    [
+        (False, True, True, True),
+        (True, False, True, True),
+        (True, True, False, True),
+        (True, True, True, False),
+    ],
+)
+def test_write_transcript_wo_transcripts_path(
+    transcripts_path,
+    w_tx_path,
+    w_room_id,
+    w_thread_id,
+    w_run_id,
+):
     found = skills_bwrap_sandbox.write_transcript(
-        None,
-        ROOM_ID,
-        str(THREAD_ID),
-        str(RUN_ID),
+        transcripts_path if w_tx_path else None,
+        ROOM_ID if w_room_id else None,
+        THREAD_ID_STR if w_thread_id else None,
+        RUN_ID_STR if w_run_id else None,
         content="print('hi')",
         suffix=".py",
     )
@@ -657,15 +734,15 @@ def test_write_transcript(transcripts_path, content, suffix):
     found = skills_bwrap_sandbox.write_transcript(
         transcripts_path,
         ROOM_ID,
-        str(THREAD_ID),
-        str(RUN_ID),
+        THREAD_ID_STR,
+        RUN_ID_STR,
         content=content,
         suffix=suffix,
     )
 
     found_path = pathlib.Path(found)
     assert found_path.parent == (
-        transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+        transcripts_path / ROOM_ID / THREAD_ID_STR / RUN_ID_STR
     )
     assert found_path.suffix == suffix
     assert found_path.read_text(encoding="utf-8") == content
@@ -793,7 +870,7 @@ async def test_create_sandbox_toolset_list_volume_files(
         skill_list_volume_files.assert_called_once_with(
             volume="foo",
             room_upload_path=rooms_upload_path / str(ROOM_ID),
-            thread_upload_path=threads_upload_path / str(THREAD_ID),
+            thread_upload_path=threads_upload_path / THREAD_ID_STR,
         )
     else:
         assert found == []
@@ -897,14 +974,14 @@ async def test_create_sandbox_toolset_run(
     assert record.environment == w_kw.get("environment_name")
     assert record.claims == {"preferred_username": USERNAME}
     assert record.room_id == ROOM_ID
-    assert record.thread_id == str(THREAD_ID)
-    assert record.run_id == str(RUN_ID)
+    assert record.thread_id == THREAD_ID_STR
+    assert record.run_id == RUN_ID_STR
 
     if w_iconfig:
         (ref,) = record.refs
         ref_path = pathlib.Path(ref)
         assert ref_path.parent == (
-            transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+            transcripts_path / ROOM_ID / THREAD_ID_STR / RUN_ID_STR
         )
         assert ref_path.suffix == ".txt"
         assert ref_path.read_text(encoding="utf-8") == json.dumps(
@@ -917,27 +994,27 @@ async def test_create_sandbox_toolset_run(
         gw.assert_called_once_with(
             workdirs_path,
             ROOM_ID,
-            str(THREAD_ID),
-            str(RUN_ID),
+            THREAD_ID_STR,
+            RUN_ID_STR,
         )
         gev.assert_called_once_with(
             rooms_upload_path,
             threads_upload_path,
             ROOM_ID,
-            str(THREAD_ID),
+            THREAD_ID_STR,
         )
     else:
         gw.assert_called_once_with(
             None,
             ROOM_ID,
-            str(THREAD_ID),
-            str(RUN_ID),
+            THREAD_ID_STR,
+            RUN_ID_STR,
         )
         gev.assert_called_once_with(
             None,
             None,
             ROOM_ID,
-            str(THREAD_ID),
+            THREAD_ID_STR,
         )
 
 
@@ -1015,7 +1092,7 @@ async def test_create_sandbox_toolset_run_python(
         (ref,) = record.refs
         ref_path = pathlib.Path(ref)
         assert ref_path.parent == (
-            transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+            transcripts_path / ROOM_ID / THREAD_ID_STR / RUN_ID_STR
         )
         assert ref_path.suffix == ".py"
         assert ref_path.read_text(encoding="utf-8") == "print('hello')"
@@ -1026,27 +1103,27 @@ async def test_create_sandbox_toolset_run_python(
         gw.assert_called_once_with(
             workdirs_path,
             ROOM_ID,
-            str(THREAD_ID),
-            str(RUN_ID),
+            THREAD_ID_STR,
+            RUN_ID_STR,
         )
         gev.assert_called_once_with(
             rooms_upload_path,
             threads_upload_path,
             ROOM_ID,
-            str(THREAD_ID),
+            THREAD_ID_STR,
         )
     else:
         gw.assert_called_once_with(
             None,
             ROOM_ID,
-            str(THREAD_ID),
-            str(RUN_ID),
+            THREAD_ID_STR,
+            RUN_ID_STR,
         )
         gev.assert_called_once_with(
             None,
             None,
             ROOM_ID,
-            str(THREAD_ID),
+            THREAD_ID_STR,
         )
 
 
@@ -1228,6 +1305,6 @@ async def test_create_sandbox_toolset_run_audits_failure(
     (ref,) = record.refs
     ref_path = pathlib.Path(ref)
     assert ref_path.parent == (
-        transcripts_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+        transcripts_path / ROOM_ID / THREAD_ID_STR / RUN_ID_STR
     )
     assert ref_path.read_text(encoding="utf-8") == json.dumps(["/bin/true"])
