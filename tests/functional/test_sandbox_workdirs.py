@@ -55,7 +55,11 @@ def test_get_workdir_file_returns_file_bytes(client_no_llm, run_workdir):
 
     assert response.status_code == 200
     assert response.content == file_bytes
-    assert response.headers["content-type"].startswith("text/plain")
+    assert response.headers["content-type"] == "application/octet-stream"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["content-disposition"] == (
+        "attachment; filename*=UTF-8''result.txt"
+    )
 
 
 def test_get_workdir_file_404_when_file_missing(client_no_llm, run_workdir):
