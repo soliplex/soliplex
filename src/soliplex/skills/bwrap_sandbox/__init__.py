@@ -419,63 +419,102 @@ async def skill_run_python(
     return str(output)
 
 
+class InvalidSubdir(ValueError):
+    def __init__(self, path, expected_parent):
+        self.path = path
+        self.expected_parent = expected_parent
+        super().__init__(f"{path} not a subdir of {expected_parent}")
+
+
+def _check_is_subdir(path: pathlib.Path, expected_parent: pathlib.Path):
+    ep_resolved = expected_parent.resolve()
+
+    try:
+        resolved = path.resolve()
+    except ValueError as exc:
+        raise InvalidSubdir(path, ep_resolved) from exc
+    else:
+        if resolved.parent == ep_resolved:
+            return
+
+    raise InvalidSubdir(path, ep_resolved)
+
+
+def _check_subdirs(base: pathlib.Path, paths: list[str]) -> pathlib.Path:
+    current = base
+    for path in paths:
+        on_deck = current / path
+        _check_is_subdir(on_deck, current)
+        current = on_deck
+    return current.resolve()
+
+
 def get_workdir(
     workdirs_path: pathlib.Path | None,
-    room_id: str,
-    thread_id: str,
-    run_id: str,
+    room_id: str | None,
+    thread_id: str | None,
+    run_id: str | None,
 ):
-    if workdirs_path is not None:
-        workdir = workdirs_path / room_id / str(thread_id) / str(run_id)
+    if (
+        workdirs_path is not None
+        and room_id is not None
+        and thread_id is not None
+        and run_id is not None
+    ):
+        workdir = _check_subdirs(
+            workdirs_path,
+            [room_id, str(thread_id), str(run_id)],
+        )
         workdir.mkdir(parents=True, exist_ok=True)
+        return workdir
     else:
-        workdir = None
+        return None
 
-    return workdir
+
+def _get_upload_volume(
+    upload_path: pathlib.Path | None,
+    volume_id: str | None,
+):
+    if upload_path is not None and volume_id is not None:
+        volume_dir = _check_subdirs(upload_path, [str(volume_id)])
+        if volume_dir.exists():
+            return bs_models.VolumeInfo(
+                host_path=volume_dir,
+                writable=False,
+            )
+        else:
+            return bs_models.VolumeInfo(
+                host_path=None,
+                writable=False,
+            )
 
 
 def get_extra_volumes(
     rooms_upload_path: pathlib.Path | None,
     threads_upload_path: pathlib.Path | None,
-    room_id: str,
-    thread_id: str,
+    room_id: str | None,
+    thread_id: str | None,
 ):
     result = {}
 
-    if rooms_upload_path is not None:
-        room_dir = rooms_upload_path / room_id
-        if room_dir.exists():
-            result["room"] = bs_models.VolumeInfo(
-                host_path=room_dir,
-                writable=False,
-            )
-        else:
-            result["room"] = bs_models.VolumeInfo(
-                host_path=None,
-                writable=False,
-            )
+    room_volume = _get_upload_volume(rooms_upload_path, room_id)
 
-    if threads_upload_path is not None:
-        thread_dir = threads_upload_path / str(thread_id)
-        if thread_dir.exists():
-            result["thread"] = bs_models.VolumeInfo(
-                host_path=thread_dir,
-                writable=False,
-            )
-        else:
-            result["thread"] = bs_models.VolumeInfo(
-                host_path=None,
-                writable=False,
-            )
+    if room_volume is not None:
+        result["room"] = room_volume
+
+    thread_volume = _get_upload_volume(threads_upload_path, str(thread_id))
+
+    if thread_volume is not None:
+        result["thread"] = thread_volume
 
     return result
 
 
 def write_transcript(
     transcripts_path: pathlib.Path | None,
-    room_id: str,
-    thread_id: str,
-    run_id: str,
+    room_id: str | None,
+    thread_id: str | None,
+    run_id: str | None,
     *,
     content: str,
     suffix: str,
@@ -488,16 +527,24 @@ def write_transcript(
     with the saved transcript. Returns 'None' (writing nothing) when no
     'transcripts_path' is configured.
     """
-    if transcripts_path is None:
+    if (
+        transcripts_path is not None
+        and room_id is not None
+        and thread_id is not None
+        and run_id is not None
+    ):
+        run_dir = _check_subdirs(
+            transcripts_path,
+            [room_id, str(thread_id), str(run_id)],
+        )
+        run_dir.mkdir(parents=True, exist_ok=True)
+        target = run_dir / f"{uuid.uuid4()}{suffix}"
+        target.write_text(content, encoding="utf-8")
+        target.chmod(0o600)
+
+        return str(target)
+    else:
         return None
-
-    run_dir = transcripts_path / room_id / str(thread_id) / str(run_id)
-    run_dir.mkdir(parents=True, exist_ok=True)
-    target = run_dir / f"{uuid.uuid4()}{suffix}"
-    target.write_text(content, encoding="utf-8")
-    target.chmod(0o600)
-
-    return str(target)
 
 
 def create_sandbox_toolset(
@@ -581,19 +628,22 @@ def create_sandbox_toolset(
 
         else:
             deps = ctx.deps
-            room_id = deps.room_id or ""
-            thread_id = deps.thread_id or ""
+            room_id = deps.room_id
+            thread_id = deps.thread_id
 
             return await skill_list_volume_files(
                 volume=volume,
                 room_upload_path=(
-                    rooms_upload_path / room_id
-                    if rooms_upload_path is not None
+                    _check_subdirs(rooms_upload_path, [room_id])
+                    if (rooms_upload_path is not None and room_id is not None)
                     else None
                 ),
                 thread_upload_path=(
-                    threads_upload_path / thread_id
-                    if threads_upload_path is not None
+                    _check_subdirs(threads_upload_path, [thread_id])
+                    if (
+                        threads_upload_path is not None
+                        and thread_id is not None
+                    )
                     else None
                 ),
             )
@@ -614,16 +664,16 @@ def create_sandbox_toolset(
         deps = ctx.deps
         workdir = get_workdir(
             workdirs_path,
-            deps.room_id or "",
-            deps.thread_id or "",
-            deps.run_id or "",
+            deps.room_id,
+            deps.thread_id,
+            deps.run_id,
         )
 
         extra_volumes = get_extra_volumes(
             rooms_upload_path,
             threads_upload_path,
-            deps.room_id or "",
-            deps.thread_id or "",
+            deps.room_id,
+            deps.thread_id,
         )
 
         with sandbox_audit.audit_sandbox_exec(
@@ -634,9 +684,9 @@ def create_sandbox_toolset(
         ) as access:
             ref = write_transcript(
                 transcripts_path,
-                deps.room_id or "",
-                deps.thread_id or "",
-                deps.run_id or "",
+                deps.room_id,
+                deps.thread_id,
+                deps.run_id,
                 content=(
                     command
                     if isinstance(command, str)
@@ -672,16 +722,16 @@ def create_sandbox_toolset(
         deps = ctx.deps
         workdir = get_workdir(
             workdirs_path,
-            deps.room_id or "",
-            deps.thread_id or "",
-            deps.run_id or "",
+            deps.room_id,
+            deps.thread_id,
+            deps.run_id,
         )
 
         extra_volumes = get_extra_volumes(
             rooms_upload_path,
             threads_upload_path,
-            deps.room_id or "",
-            deps.thread_id or "",
+            deps.room_id,
+            deps.thread_id,
         )
 
         with sandbox_audit.audit_sandbox_exec(
@@ -692,9 +742,9 @@ def create_sandbox_toolset(
         ) as access:
             ref = write_transcript(
                 transcripts_path,
-                deps.room_id or "",
-                deps.thread_id or "",
-                deps.run_id or "",
+                deps.room_id,
+                deps.thread_id,
+                deps.run_id,
                 content=script,
                 suffix=".py",
             )
