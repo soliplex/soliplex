@@ -252,12 +252,7 @@ class _HaikuRAGCapabilityConfig(
 
     @property
     def capability(self) -> ai_capabilities.AbstractCapability:
-        # Named databases reach haiku.rag through the config, which
-        # resolves them into one capability covering the set.
-        db_path = None if self.rag_databases else self.rag_lancedb_path
-
         return type(self).capability_factory(
-            db_path=db_path,
             config=self.haiku_rag_config,
             defer_loading=self.defer_loading,
         )

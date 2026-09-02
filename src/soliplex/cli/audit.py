@@ -535,9 +535,6 @@ def _audit_rooms_section(
                     tc_print(f"   - {failed_label:20}: ERROR: {exc}")
                 else:
                     rag = hr_client.HaikuRAG(
-                        db_path=(
-                            None if cfg.rag_databases else cfg.rag_lancedb_path
-                        ),
                         config=cfg.haiku_rag_config,
                         read_only=True,
                     )

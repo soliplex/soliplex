@@ -168,23 +168,22 @@ class _RAGConfigBase:
     ) -> hr_config.AppConfig:
         """Name this config's databases in 'lancedb.databases'
 
-        'rag_databases' comes from '_RAGDatabaseBase', which DB-bearing
-        configs mix in alongside this class.  haiku.rag treats 'lancedb.uri'
-        and 'lancedb.databases' as mutually exclusive, so naming databases
-        clears the URI.  Copies rather than mutates: the installation's own
-        config object is shared with every other room.
+        'rag_lancedb_databases' comes from '_RAGDatabaseBase', which
+        DB-bearing configs mix in alongside this class.  haiku.rag treats
+        'lancedb.uri' and 'lancedb.databases' as mutually exclusive, so
+        naming databases clears the URI.  Copies rather than mutates: the
+        installation's own config object is shared with every other room.
         """
-        rag_databases = getattr(self, "rag_databases", None)
+        databases = getattr(self, "rag_lancedb_databases", None)
 
-        if not rag_databases:
+        if not databases:
             return room_hr_config
 
         lancedb = room_hr_config.lancedb.model_copy(
             update={
                 "uri": "",
                 "databases": {
-                    entry.name: str(entry.rag_lancedb_path)
-                    for entry in rag_databases
+                    name: str(path) for name, path in databases.items()
                 },
             },
         )
@@ -270,6 +269,36 @@ class _RAGDatabaseBase:
             return rspdb
 
     @property
+    def database_name(self) -> str:
+        """The name this database answers to, marked when it is missing.
+
+        A config written with a stem or an override path names no database,
+        so the file's stem is its name.
+        """
+        try:
+            return self.rag_lancedb_path.stem
+        except RagDbFileNotFound as exc:
+            return f"MISSING: {exc.rag_db_filename.stem}"
+
+    @property
+    def rag_lancedb_databases(self) -> dict[str, pathlib.Path]:
+        """Every database this config names, keyed by name"""
+        if self.rag_databases:
+            return {
+                entry.name: entry.rag_lancedb_path
+                for entry in self.rag_databases
+            }
+
+        return {self.database_name: self.rag_lancedb_path}
+
+    @property
+    def rag_database_names(self) -> list[str]:
+        if self.rag_databases:
+            return [entry.database_name for entry in self.rag_databases]
+
+        return [self.database_name]
+
+    @property
     def rag_db_audit_path(self) -> str:
         """Identify the database(s) this config reads, for audit records"""
         if self.rag_databases:
@@ -281,27 +310,7 @@ class _RAGDatabaseBase:
         return str(self.rag_lancedb_path)
 
     def get_extra_parameters(self) -> dict:
-        if self.rag_databases:
-            return {
-                "rag_lancedb_paths": {
-                    entry.name: entry.get_extra_parameters()[
-                        "rag_lancedb_path"
-                    ]
-                    for entry in self.rag_databases
-                },
-            }
-
-        try:
-            rag_lancedb_path = self.rag_lancedb_path
-        except RagDbFileNotFound as exc:
-            missing = exc.rag_db_filename
-            db_name = f"MISSING: {missing.stem}"
-        else:
-            db_name = rag_lancedb_path.stem
-
-        return {
-            "database_names": [db_name],
-        }
+        return {"database_names": self.rag_database_names}
 
 
 def adjust_yaml_rag_databases(
@@ -338,6 +347,15 @@ class RAGDatabaseEntry(_RAGDatabaseBase):
     """
 
     name: str = None
+
+    @property
+    def database_name(self) -> str:
+        try:
+            self.rag_lancedb_path  # noqa B018
+        except RagDbFileNotFound:
+            return f"MISSING: {self.name}"
+
+        return self.name
 
     def __post_init__(self):
         if not self.name or not self.name.strip():

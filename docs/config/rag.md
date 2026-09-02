@@ -37,12 +37,20 @@ reranking:
 ## Searching Several Databases
 
 A RAG skill or tool which configures `rag_databases` (see
-[rooms](rooms.md)) reads them as one set.  Soliplex resolves each entry's
-path and writes the result into the client configuration's
-`lancedb.databases`, as a mapping of name to location, then opens a single
-client over the set.  Because `haiku.rag` treats `lancedb.uri` and
-`lancedb.databases` as mutually exclusive, naming databases this way
-clears any inherited `uri`.
+[rooms](rooms.md)) reads them as one set.  Soliplex resolves the path of
+every database a config names and writes them into the client
+configuration's `lancedb.databases`, as a mapping of name to location,
+then opens a single client over the set.  A config naming one database
+this way is read as one database, not as a set of one.
+
+A config written with `rag_lancedb_stem` or `rag_lancedb_override_path`
+names one database the same way, taking its name from the file's stem, so
+`papers.lancedb` is `papers`.  That name is what the room's endpoints
+report as `database`.
+
+Because `haiku.rag` treats `lancedb.uri` and `lancedb.databases` as
+mutually exclusive, naming databases this way clears any inherited
+`uri`.
 
 Candidates from the covered databases are combined by the configured
 reranker.  Without one, they are ordered by cosine similarity to the

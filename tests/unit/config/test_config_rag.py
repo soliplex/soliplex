@@ -424,8 +424,8 @@ def test__rdb_audit_path_w_databases(make_entry, db_rag_path):
     )
 
 
-def test__rdb_extra_parameters_w_databases(make_entry, db_rag_path):
-    papers = db_rag_path / "papers.lancedb"
+def test__rdb_extra_parameters_w_databases(make_entry):
+    """Every database is named, and a missing one says so"""
     rdb_config = config_rag._RAGDatabaseBase(
         rag_databases=[
             make_entry("papers"),
@@ -433,10 +433,35 @@ def test__rdb_extra_parameters_w_databases(make_entry, db_rag_path):
         ],
     )
 
-    found = rdb_config.get_extra_parameters()["rag_lancedb_paths"]
+    assert rdb_config.get_extra_parameters() == {
+        "database_names": ["papers", "MISSING: wiki"],
+    }
 
-    assert found["papers"] == papers.resolve()
-    assert found["wiki"].startswith("MISSING:")
+
+def test__rdb_lancedb_databases_w_stem(stem_environ, db_rag_path):
+    """A config with no 'rag_databases' names its database for the stem"""
+    expected = db_rag_path / "papers.lancedb"
+    expected.mkdir()
+    rdb_config = config_rag._RAGDatabaseBase(
+        rag_lancedb_stem="papers",
+        _installation_config=stem_environ,
+    )
+
+    assert rdb_config.rag_lancedb_databases == {"papers": expected.resolve()}
+    assert rdb_config.get_extra_parameters() == {
+        "database_names": ["papers"],
+    }
+
+
+def test__rdb_lancedb_databases_w_databases(make_entry, db_rag_path):
+    rdb_config = config_rag._RAGDatabaseBase(
+        rag_databases=[make_entry("papers"), make_entry("wiki")],
+    )
+
+    assert rdb_config.rag_lancedb_databases == {
+        "papers": (db_rag_path / "papers.lancedb").resolve(),
+        "wiki": (db_rag_path / "wiki.lancedb").resolve(),
+    }
 
 
 def test__rcb_haiku_rag_config_w_databases(

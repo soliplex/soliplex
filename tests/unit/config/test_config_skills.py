@@ -216,7 +216,7 @@ def test_haiku_rag_capability_config_w_rag_databases(
     ]
 
     assert config.extra_parameters == {
-        "rag_lancedb_paths": {"papers": papers, "wiki": wiki},
+        "database_names": ["papers", "wiki"],
     }
 
 

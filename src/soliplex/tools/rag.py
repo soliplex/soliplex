@@ -28,13 +28,6 @@ async def search_documents(
 
     hr_config = tool_config.haiku_rag_config
 
-    # Named databases reach haiku.rag through the config, which federates
-    # them into one client.
-    if tool_config.rag_databases:
-        db_path = None
-    else:
-        db_path = tool_config.rag_lancedb_path
-
     with rag_audit.audit_tool_access(
         ctx.deps,
         audit_method="search",
@@ -42,7 +35,6 @@ async def search_documents(
         selector=query,
     ) as access:
         async with hr_client.HaikuRAG(
-            db_path=db_path,
             config=hr_config,
             read_only=True,
         ) as rag:

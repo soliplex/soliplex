@@ -839,6 +839,7 @@ def test_toolconfig_extra_parameters():
 
     assert tool_config.extra_parameters == {}
 
+
 def test_sdtc_w_rag_databases(installation_config, temp_dir):
     """Named databases round-trip and report a path each"""
     db_rag_path = temp_dir / "db" / "rag"
@@ -875,7 +876,7 @@ def test_sdtc_w_rag_databases(installation_config, temp_dir):
     ]
     assert sdt_config.rag_db_audit_path == f"papers={papers}, wiki={wiki}"
     assert sdt_config.get_extra_parameters() == {
-        "rag_lancedb_paths": {"papers": papers, "wiki": wiki},
+        "database_names": ["papers", "wiki"],
         "search_documents_limit": 5,
     }
 

@@ -75,7 +75,6 @@ async def test_search_documents(
     search.assert_awaited_once_with(QUESTION, limit=exp_limit)
 
     hr_class.assert_called_once_with(
-        db_path=sd_tool_config.rag_lancedb_path,
         config=sd_tool_config.haiku_rag_config,
         read_only=True,
     )
@@ -114,7 +113,6 @@ async def test_search_documents_w_rag_databases(
     await rag_tools.search_documents(ctx_w_deps, query=QUESTION)
 
     hr_class.assert_called_once_with(
-        db_path=None,
         config=sd_tool_config.haiku_rag_config,
         read_only=True,
     )

@@ -952,7 +952,8 @@ async def test_roomconfig_list_haiku_rag_client_kws(
     db_path.mkdir()
 
     expected = [
-        exp_kw | {"db_path": db_path, "audit_db_path": str(db_path)}
+        {key: value for key, value in exp_kw.items() if key != "db_path"}
+        | {"audit_db_path": str(db_path)}
         if "db_path" in exp_kw
         else exp_kw
         for exp_kw in expected
@@ -1039,7 +1040,7 @@ def test_roomconfig_list_haiku_rag_client_kws_w_rag_databases(
 
     (found,) = room_config.list_haiku_rag_client_kw(include_source=True)
 
-    assert found["db_path"] is None
+    assert "db_path" not in found
     assert found["read_only"] is True
     assert found["source"] == "skill:rag"
     assert found["audit_db_path"] == f"papers={papers}, wiki={wiki}"
