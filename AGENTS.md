@@ -66,9 +66,14 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
 
 - `ruff-check` / `ruff-format` -- lint and format Python sources
 - `pymarkdown` -- lint Markdown files
+- `agentskills-validate` -- validate the published `soliplex-docs` agent
+  skill; runs only when something under `skills/soliplex-docs/` changes
 - `lint-textio` -- reject text file IO in `src/soliplex/` without an
   explicit `encoding=` (falls back to the host locale encoding, `cp1252` on
-  Windows); `scripts/lint_textio.py`, stdlib-only, with a `--self-test` mode
+  Windows); `scripts/lint_textio.py`, stdlib-only
+- `lint-textio-self-test` -- run `scripts/lint_textio.py --self-test` when
+  that script itself changes, so a check gone blind fails loudly instead of
+  passing by finding nothing
 - `actionlint` -- lint GitHub Actions workflow files
 - `check-toml` / `check-yaml` -- validate TOML and YAML syntax
 - `gitleaks` -- scan for committed secrets

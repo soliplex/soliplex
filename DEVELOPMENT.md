@@ -123,10 +123,19 @@ The configured hooks (see `.pre-commit-config.yaml`) enforce:
 - **ruff-check** -- lint Python sources (auto-fixing where possible).
 - **ruff-format** -- format Python sources.
 - **pymarkdown** -- lint Markdown files.
+- **agentskills-validate** -- validate the published `soliplex-docs` agent
+  skill, using the `agentskills` console script from the `soliplex-skills`
+  dev dependency. Runs only when something under `skills/soliplex-docs/`
+  changes.
 - **lint-textio** -- reject text file IO in `src/soliplex/` that passes no
   explicit `encoding=` and so falls back to the host locale encoding
   (`cp1252` on a typical Windows host); see `scripts/lint_textio.py`, which
-  also runs standalone and carries a `--self-test` mode.
+  also runs standalone.
+- **lint-textio-self-test** -- run `scripts/lint_textio.py --self-test`
+  whenever that script itself is touched. The self-test guards the guard:
+  a check that has silently stopped matching anything would otherwise pass
+  by finding no violations, so it runs before the check proper (in CI too
+  -- see `.github/workflows/python-lint.yaml`).
 - **actionlint** -- lint GitHub Actions workflow files.
 - **check-toml** / **check-yaml** -- validate TOML and YAML syntax.
 - **gitleaks** -- scan for committed secrets.
