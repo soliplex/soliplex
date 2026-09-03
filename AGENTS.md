@@ -24,12 +24,16 @@ uv sync --group dev
 # Run unit tests with 100% coverage requirement
 uv run pytest
 
-# Run a specific test file / test
-uv run pytest tests/unit/test_agents.py
-uv run pytest tests/unit/test_agents.py::test_name
+# Run a specific test file / test.  '--no-cov' is required: 'addopts'
+# always applies the 100% gate, which a partial run cannot satisfy.
+uv run pytest --no-cov tests/unit/test_agents.py
+uv run pytest --no-cov tests/unit/test_agents.py::test_name
 
-# Run functional tests (require a running LLM)
-uv run pytest tests/functional/ -m needs_llm
+# Run the unit tests in parallel (pytest-xdist); see below for '-n'
+uv run pytest -n 8
+
+# Run functional tests (require a running LLM); never pass '-n' here
+uv run pytest --no-cov tests/functional/ -m needs_llm
 
 # Lint and format
 uv run ruff check
@@ -95,6 +99,30 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
 - Use pytest-asyncio for async tests
 - Functional tests (`tests/functional/`) require a running LLM and are
   skipped by default (marker: `needs_llm`)
+- `--cov-fail-under=100` lives in `addopts`, so it applies to *every*
+  `pytest` invocation, not just full runs. Pass `--no-cov` when running a
+  subset -- a single file, a single test, or the functional suite --
+  otherwise the run fails on the threshold no matter how the tests
+  themselves fared
+- `pytest-xdist` is a dev dependency, but no `-n` appears in `addopts`, so
+  runs are serial unless you ask for parallelism
+- **Unit tests are parallel-safe.** Choosing `-n`: start from `nproc` and
+  take about half the logical cores (so `-n 8` on a 16-core box). Each
+  worker pays a fixed startup and collection cost, so the gain flattens
+  well before one-worker-per-core, and leaving half the cores free keeps
+  the machine usable while the suite runs. Tune from there if a run feels
+  slow -- the best value is machine-specific
+- `-n auto` means one worker per logical core. It is the right choice only
+  where the core count is not known ahead of time, which is why CI uses it
+  and you generally should not
+- **Functional tests must stay serial -- never pass `-n` to them.** They
+  share on-disk state and module-scoped app fixtures: e.g.
+  `tests/functional/test_sandbox_workdirs.py` creates, and on teardown
+  `rmtree`s, a workdir tree keyed by a constant `ROOM_ID`, so parallel
+  workers delete each other's fixtures. CI runs them in a separate,
+  `-n`-less step
+- Coverage and xdist compose (pytest-cov merges the workers' data), so
+  `-n` does not weaken the 100% gate
 
 ## Repository Structure
 

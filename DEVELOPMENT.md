@@ -160,6 +160,10 @@ The configured hooks (see `.pre-commit-config.yaml`) enforce:
   since the TUI is deliberately untested. Everything else under
   `src/soliplex/` has to reach 100%, so new code there cannot slip past the
   gate by simply having no test import it.
+- `--cov-fail-under=100` is set in `addopts`, so it applies to every
+  `pytest` invocation rather than only to full runs. Any subset -- one
+  file, one test, the functional suite -- needs `--no-cov`, or the run
+  fails on the coverage threshold whatever the tests themselves did.
 - Async tests use pytest-asyncio.
 - Functional tests in `tests/functional/` require a running LLM and are
   skipped by default (marker: `needs_llm`).
@@ -168,13 +172,59 @@ The configured hooks (see `.pre-commit-config.yaml`) enforce:
 # Run the unit tests (100% coverage required)
 uv run pytest
 
-# Run a single file or test
-uv run pytest tests/unit/test_agents.py
-uv run pytest tests/unit/test_agents.py::test_name
+# Run a single file or test ('--no-cov': see below)
+uv run pytest --no-cov tests/unit/test_agents.py
+uv run pytest --no-cov tests/unit/test_agents.py::test_name
+
+# Run tests for a sub-package, measuring coverage only for the target
+# (can help finding implicitly-covered items):
+uv run pytest --cov-reset --cov soliplex.agui tests/unit/agui
 
 # Run functional tests (require a running LLM)
-uv run pytest tests/functional/ -m needs_llm
+uv run pytest --no-cov tests/functional/ -m needs_llm
 ```
+
+### Running tests in parallel
+
+`pytest-xdist` is a dev dependency, but no `-n` is baked into `addopts`, so
+a plain `uv run pytest` is serial. Parallelism is opt-in, and it is only
+safe for the unit suite:
+
+```bash
+# Unit tests, in parallel (see below for choosing '-n')
+uv run pytest -n 8
+
+# Functional tests -- serial, deliberately: no '-n'
+uv run pytest --no-cov -m "not needs_llm" tests/functional/
+```
+
+Choosing a value for `-n`: start from `nproc` and take about half the
+logical cores -- `-n 8` on a 16-core box, `-n 4` on an 8-core one. Two
+things push the useful number below one-worker-per-core. Each worker pays a
+fixed cost to start up and collect the suite before it runs anything, so
+the marginal worker buys less and less; and a run that saturates every core
+leaves nothing for the editor, browser, or language server you are using
+meanwhile. Half is a starting point rather than a rule -- the best value
+depends on the machine, so if a run feels slow, time a couple of values and
+keep the winner.
+
+`-n auto` asks xdist for one worker per logical core. That is the right
+choice when the core count is not known ahead of time, which is exactly
+CI's situation: `.github/workflows/python-test.yaml` runs the unit suite
+with `-n auto` so the same workflow adapts to whatever runner size GitHub
+provides. On a machine whose core count you do know, prefer an explicit
+number.
+
+The functional suite has to stay serial. Its tests share on-disk state and
+module-scoped application fixtures -- `test_sandbox_workdirs.py`, for
+instance, creates a sandbox workdir tree keyed by a constant `ROOM_ID` and
+`rmtree`s it on teardown -- so xdist workers would race, and tear down
+directories still in use by their peers. CI runs the functional tests in
+their own step with no `-n`.
+
+Coverage is unaffected by `-n`: pytest-cov collects each worker's data and
+merges it, so a parallel run enforces the same 100% threshold as a serial
+one.
 
 ## Configuration system
 
