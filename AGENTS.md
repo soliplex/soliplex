@@ -79,9 +79,19 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
 
 - Unit tests live in `tests/unit/`, mirroring the `src/soliplex/` structure
 - 100% branch coverage is enforced via pytest-cov (`--cov-fail-under=100`)
-- Coverage omits `cli.py`, `examples.py`, and `tui.py` (see
-  `[tool.coverage.run]` in `pyproject.toml`) -- new code in those modules
-  silently bypasses the threshold
+- Coverage measures four targets (see `addopts` in `pyproject.toml`):
+  `src/soliplex`, `tests/unit`, `scripts`, and
+  `skills/soliplex-docs/scripts` -- the test suite and the helper scripts
+  are held to the same 100% bar as `src/`
+- Those targets are *paths*, not importable names, and must stay that way.
+  `soliplex` is a namespace package (there is no
+  `src/soliplex/__init__.py`); coverage cannot enumerate one by walking the
+  filesystem, so `--cov=soliplex` would measure only the modules some test
+  happened to import, and a module nobody imports would pass unnoticed
+- `[tool.coverage.run] omit` is therefore the single place that decides
+  what is exempt: `scripts/lint_textio.py` (it runs its own `--self-test`
+  during lint) and `src/soliplex/tui/*` (the TUI is deliberately
+  untested). Everything else under `src/soliplex/` must reach 100%
 - Use pytest-asyncio for async tests
 - Functional tests (`tests/functional/`) require a running LLM and are
   skipped by default (marker: `needs_llm`)

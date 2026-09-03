@@ -143,9 +143,23 @@ The configured hooks (see `.pre-commit-config.yaml`) enforce:
 - Unit tests live in `tests/unit/`, mirroring the `src/soliplex/`
   structure.
 - 100% branch coverage is enforced via pytest-cov
-  (`--cov-fail-under=100`). `cli.py`, `examples.py`, and `tui.py` are
-  omitted from coverage (see `[tool.coverage.run]` in `pyproject.toml`) --
-  new code in those modules silently bypasses the threshold.
+  (`--cov-fail-under=100`). Coverage is measured over four targets (see
+  `addopts` in `pyproject.toml`): `src/soliplex`, `tests/unit`, `scripts`,
+  and `skills/soliplex-docs/scripts` -- the test suite and the helper
+  scripts are held to the same 100% bar as `src/`.
+- Those targets are spelled as *paths* rather than importable names, and
+  need to stay that way. `soliplex` is a namespace package (there is no
+  `src/soliplex/__init__.py`), and coverage cannot enumerate a namespace
+  package by walking the filesystem: given `--cov=soliplex` it reports only
+  the modules that were imported during the run, so a module no test
+  imports never appears in the report and never trips the threshold. A path
+  target is walked, and unexecuted files under it are reported at 0%.
+- `[tool.coverage.run]` `omit` is consequently the one place that decides
+  what is exempt from the threshold. It lists `scripts/lint_textio.py`,
+  which runs its own `--self-test` during lint, and `src/soliplex/tui/*`,
+  since the TUI is deliberately untested. Everything else under
+  `src/soliplex/` has to reach 100%, so new code there cannot slip past the
+  gate by simply having no test import it.
 - Async tests use pytest-asyncio.
 - Functional tests in `tests/functional/` require a running LLM and are
   skipped by default (marker: `needs_llm`).
