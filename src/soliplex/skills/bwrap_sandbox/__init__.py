@@ -1,3 +1,5 @@
+from __future__ import annotations  # forward refs in typing decls
+
 import dataclasses
 import json
 import pathlib
@@ -14,6 +16,9 @@ from pydantic_ai import toolsets as ai_toolests
 
 from soliplex import loggers
 from soliplex import sandbox_audit
+
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from soliplex.config import installation as config_installation
 
 VolumeName = typing.Literal["thread"] | typing.Literal["room"]
 
@@ -555,7 +560,7 @@ def create_sandbox_toolset(
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
-    installation_config=None,  # noqa F821 cycles
+    installation_config: config_installation.InstallationConfig | None = None,
 ) -> ai_toolests.FunctionToolset:
     """Create a sandbox toolset for shell / script execution.
 
@@ -802,7 +807,7 @@ def create_bwrap_sandbox_capability(
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
-    installation_config=None,  # noqa F821 cycles
+    installation_config: config_installation.InstallationConfig | None = None,
     defer_loading: bool = False,
 ) -> SandboxCapability:
     return SandboxCapability(

@@ -160,6 +160,7 @@ class FilesystemSkillConfig:
 
     @property
     def name(self) -> str:
+        # Paranoid defence against a "can't get here" condition
         assert self._capability.id is not None
         return self._capability.id
 
@@ -771,6 +772,7 @@ class RoomSkillsConfig:
         for config in self.skill_configs.values():
             if isinstance(config, _HaikuRAGCapabilityConfig):
                 capability = config.capability
+                # Paranoid defence against a "can't get here" condition
                 assert capability.id is not None
                 paths[capability.id] = str(config.rag_lancedb_path)
         return paths

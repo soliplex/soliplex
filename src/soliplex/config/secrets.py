@@ -10,6 +10,9 @@ from soliplex import secrets
 from . import _utils
 from . import exceptions as config_exc
 
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from . import installation as config_installation
+
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
 SECRET_PREFIX = "secret:"
@@ -87,7 +90,7 @@ class EnvVarSecretSource(_BaseSecretSource):
 
     # Set by `InstallationConfig.__post_init__`, because the IC instance
     # does not exist yet when our `from_yaml` is called.
-    _installation_config: InstallationConfig = (  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
 
@@ -111,7 +114,7 @@ class FilePathSecretSource(_BaseSecretSource):
 
     # Set by `InstallationConfig.__post_init__`, because the IC instance
     # does not exist yet when our `from_yaml` is called.
-    _installation_config: InstallationConfig = (  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
 
@@ -132,7 +135,7 @@ class SubprocessSecretSource(_BaseSecretSource):
 
     # Set by `InstallationConfig.__post_init__`, because the IC instance
     # does not exist yet when our `from_yaml` is called.
-    _installation_config: InstallationConfig = (  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
 
@@ -166,7 +169,7 @@ class RandomCharsSecretSource(_BaseSecretSource):
 
     # Set by `InstallationConfig.__post_init__`, because the IC instance
     # does not exist yet when our `from_yaml` is called.
-    _installation_config: InstallationConfig = (  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
 
@@ -219,7 +222,7 @@ class SecretConfig:
 
     # Set by `InstallationConfig.__post_init__`, because the IC instance
     # does not exist yet when our `from_yaml` is called.
-    _installation_config: InstallationConfig = (  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
 

@@ -10,6 +10,9 @@ from haiku.rag import config as hr_config
 from . import _utils
 from . import exceptions
 
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from . import installation as config_installation
+
 
 def _deep_merge(base: dict, override: dict) -> dict:
     out = dict(base)
@@ -81,7 +84,7 @@ class _RAGConfigBase:
     _haiku_rag_config: hr_config.AppConfig | None = None
 
     # Normally set via subclass 'from_yaml'
-    _installation_config: InstallationConfig = (  # noqa F821 cycle
+    _installation_config: config_installation.InstallationConfig = (
         _utils._no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
@@ -128,7 +131,7 @@ class _RAGDatabaseBase:
     rag_lancedb_override_path: str = None
 
     # Normally set via subclass 'from_yaml'
-    _installation_config: InstallationConfig = (  # noqa F821 cycle
+    _installation_config: config_installation.InstallationConfig = (
         _utils._no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None

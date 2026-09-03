@@ -3,6 +3,10 @@ from __future__ import annotations  # forward refs in typing decls
 import os
 import pathlib
 import subprocess
+import typing
+
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from soliplex.config import secrets as config_secrets
 
 
 class SecretError(ValueError):
@@ -73,7 +77,7 @@ class SecretsNotFound(ExceptionGroup, SecretError):
 
 
 def get_env_var_secret(
-    source: config_secrets.EnvVarSecretSource,  # noqa F821 avoid cycle
+    source: config_secrets.EnvVarSecretSource,
 ):
     if source._installation_config is not None:
         from_dotenv = source._installation_config.from_dotenv
@@ -92,7 +96,7 @@ def get_env_var_secret(
 
 
 def get_file_path_secret(
-    source: config_secrets.FilePathSecretSource,  # noqa F821 avoid cycle
+    source: config_secrets.FilePathSecretSource,
 ):
     file_path = pathlib.Path(source.file_path)
     if not file_path.is_absolute():
@@ -109,7 +113,7 @@ def get_file_path_secret(
 
 
 def get_subprocess_secret(
-    source: config_secrets.SubprocessSecretSource,  # noqa F821 avoid cycle
+    source: config_secrets.SubprocessSecretSource,
 ):
     try:
         found = subprocess.check_output(
@@ -132,6 +136,6 @@ def get_subprocess_secret(
 
 
 def get_random_chars_secret(
-    source: config_secrets.RandomCharsSecretSource,  # noqa F821 avoid cycle
+    source: config_secrets.RandomCharsSecretSource,
 ):
     return os.urandom(source.n_chars).hex()

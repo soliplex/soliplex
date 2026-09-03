@@ -9,7 +9,9 @@ import typing
 import jsonpath
 
 # Avoid circular import when only used for typing
-# from soliplex import models
+
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from soliplex import models
 
 UserToken = dict[str, typing.Any]
 
@@ -249,14 +251,14 @@ class RoomAuthorizationPolicy(abc.ABC):
     async def get_room_policy(
         self,
         room_id: str,
-    ) -> models.RoomPolicy | None:  # noqa: F821
+    ) -> models.RoomPolicy | None:
         """Return the authorization policy for the room"""
 
     @abc.abstractmethod
     async def update_room_policy(
         self,
         room_id: str,
-        room_policy: models.RoomPolicy,  # noqa: F821
+        room_policy: models.RoomPolicy,
     ) -> None:
         """Update the authorization policy for the room"""
 
@@ -271,13 +273,13 @@ class RoomAuthorizationPolicy(abc.ABC):
     async def get_room_policy_unchecked(
         self,
         room_id: str,
-    ) -> models.RoomPolicyUnchecked | None:  # noqa: F821
+    ) -> models.RoomPolicyUnchecked | None:
         """Return the room policy, tolerating non-compiling 'json_path's."""
 
     @abc.abstractmethod
     async def list_room_policies(
         self,
-    ) -> list[models.RoomPolicyUnchecked]:  # noqa: F821
+    ) -> list[models.RoomPolicyUnchecked]:
         """List every stored room policy as an unchecked model.
 
         Each policy is returned as the unchecked model -- the analogue
@@ -298,7 +300,7 @@ class RoomAuthorizationPolicy(abc.ABC):
     async def add_acl_entry(
         self,
         room_id: str,
-        entry: models.ACLEntry,  # noqa: F821
+        entry: models.ACLEntry,
     ) -> None:
         """Add an ACL entry to the room's policy, replacing any entry with
         the same discriminator."""
@@ -307,7 +309,7 @@ class RoomAuthorizationPolicy(abc.ABC):
     async def remove_acl_entry(
         self,
         room_id: str,
-        entry: models.ACLEntryUnchecked,  # noqa: F821
+        entry: models.ACLEntryUnchecked,
     ) -> None:
         """Remove the matching ACL entry from the room's policy."""
 

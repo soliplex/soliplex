@@ -15,6 +15,9 @@ from . import _utils
 from . import exceptions as config_exc
 from . import rag as config_rag
 
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from . import installation as config_installation
+
 # ============================================================================
 #   Tool configuration types
 # ============================================================================
@@ -193,7 +196,7 @@ class ToolConfig:
     _tool: abc.Callable[..., typing.Any] = None
 
     # Set in 'from_yaml' below
-    _installation_config: InstallationConfig = (  # noqa F821 cycle
+    _installation_config: config_installation.InstallationConfig = (
         _utils._no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
@@ -215,7 +218,7 @@ class ToolConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycle
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict[str, typing.Any],
     ):
@@ -338,7 +341,7 @@ class SearchDocumentsToolConfig(
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycle
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict[str, typing.Any],
     ):
@@ -397,7 +400,7 @@ ToolConfigMap = dict[str, ToolConfig]
 
 
 def extract_tool_configs(
-    installation_config: InstallationConfig,  # noqa F821 cycle
+    installation_config: config_installation.InstallationConfig,
     config_path: pathlib.Path,
     config_dict: dict,
 ) -> ToolConfigMap:
@@ -439,7 +442,7 @@ class Stdio_MCP_ClientToolsetConfig:
     allowed_tools: list[str] = None
 
     # set in 'from_yaml' class factory
-    _installation_config: InstallationConfig = (  # noqa F821 cycle
+    _installation_config: config_installation.InstallationConfig = (
         _utils._no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
@@ -452,7 +455,7 @@ class Stdio_MCP_ClientToolsetConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycle
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict[str, typing.Any],
     ):
@@ -507,7 +510,7 @@ class _Remote_MCP_ClientToolsetConfig:
     allowed_tools: list[str] = None
 
     # set in 'from_yaml' class factory
-    _installation_config: InstallationConfig = (  # noqa F821 cycle
+    _installation_config: config_installation.InstallationConfig = (
         _utils._no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
@@ -520,7 +523,7 @@ class _Remote_MCP_ClientToolsetConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycle
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict[str, typing.Any],
     ):
@@ -598,7 +601,7 @@ MCP_TOOLSET_CONFIG_CLASSES_BY_KIND = {
 
 
 def extract_mcp_client_toolset_configs(
-    installation_config: InstallationConfig,  # noqa F821 cycle
+    installation_config: config_installation.InstallationConfig,
     config_path: pathlib.Path,
     config_dict: dict,
 ):

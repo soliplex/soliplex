@@ -17,7 +17,9 @@ class QuestionNotFound(ValueError):
         )
 
 
-ANSWER_EQUIVALENCE_RUBRIC = """You are evaluating whether two answers to the same question are semantically equivalent.
+ANSWER_EQUIVALENCE_RUBRIC = """\
+You are evaluating whether two answers to the same question are \
+semantically equivalent.
 
 EVALUATION CRITERIA:
 Rate as EQUIVALENT if:
@@ -38,8 +40,8 @@ GUIDELINES:
 - Focus on semantic meaning rather than exact wording
 - Consider both answers correct if they convey the same essential information
 - Be tolerant of different levels of detail if the core answer is preserved
-- Evaluate based on what a person asking this question would need to know
-/no_think"""  # noqa: E501 first line is important to the LLM.
+- Evaluate based on what a person asking this question would need to know\
+"""
 
 
 def get_quiz_judge_agent(quiz: config_quizzes.QuizConfig):

@@ -1464,6 +1464,11 @@ async def test_drive_agui_turn_adds_final_state(
     assert saved == expected
 
 
+class Boom(sqla_exc.SQLAlchemyError):
+    def __init__(self):
+        super().__init__("db down")
+
+
 @pytest.mark.anyio
 async def test_drive_agui_turn_swallows_save_errors(
     monkeypatch,
@@ -1472,7 +1477,7 @@ async def test_drive_agui_turn_swallows_save_errors(
     events = [_event("A")]
 
     async def boom(engine, **kwargs):
-        raise sqla_exc.SQLAlchemyError("db down")  # noqa: TRY003
+        raise Boom()
 
     monkeypatch.setattr(agui_persistence, "logfire", mock.Mock())
     monkeypatch.setattr(agui_persistence, "save_single_event", boom)

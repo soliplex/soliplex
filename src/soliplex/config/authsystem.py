@@ -8,6 +8,9 @@ import typing
 from . import _utils
 from . import exceptions as config_exc
 
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from . import installation as config_installation
+
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
 
@@ -31,7 +34,7 @@ class OIDCAuthSystemConfig:
     oidc_client_pem_path: pathlib.Path = None
 
     # Set in 'from_yaml' below
-    _installation_config: InstallationConfig = (  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
@@ -39,7 +42,7 @@ class OIDCAuthSystemConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict[str, typing.Any],
     ):
