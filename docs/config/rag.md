@@ -48,9 +48,18 @@ names one database the same way, taking its name from the file's stem, so
 `papers.lancedb` is `papers`.  That name is what the room's endpoints
 report as `database`.
 
-Because `haiku.rag` treats `lancedb.uri` and `lancedb.databases` as
-mutually exclusive, naming databases this way clears any inherited
-`uri`.
+A config naming no database of its own reads the ones this file places in
+`lancedb.databases`, under the names it gives them:
+
+```yaml
+lancedb:
+  databases:
+    medic: "s3://bucket/lancedb/medic.lancedb"
+```
+
+This is the only way to read a database that is not a local directory.
+`lancedb.databases` is where `haiku.rag` places every database; a
+configuration carrying the older `lancedb.uri` fails to load.
 
 Candidates from the covered databases are combined by the configured
 reranker.  Without one, they are ordered by cosine similarity to the

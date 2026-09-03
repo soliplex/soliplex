@@ -9,7 +9,8 @@ from haiku.rag import config as hr_config_module
 from soliplex.config import exceptions as config_exc
 from soliplex.config import rag as config_rag
 
-rdb_exactly_one = pytest.raises(config_rag.RagDbExactlyOneOfStemOrOverride)
+rdb_stem_and_override = pytest.raises(config_rag.RagDbStemAndOverrideConflict)
+rde_requires_db = pytest.raises(config_rag.RagDbEntryRequiresDatabase)
 rdb_not_found = pytest.raises(config_rag.RagDbFileNotFound)
 no_config_path = pytest.raises(config_exc.NoConfigPath)
 ok_stem = contextlib.nullcontext("stem")
@@ -127,8 +128,7 @@ def db_rag_path(temp_dir):
 @pytest.mark.parametrize(
     "w_config_path, stem, override, ctor_expectation, rlp_expectation",
     [
-        (False, None, None, rdb_exactly_one, None),
-        (False, "testing", "/dev/null", rdb_exactly_one, None),
+        (False, "testing", "/dev/null", rdb_stem_and_override, None),
         (False, "bogus", None, ok_stem, rdb_not_found),
         (False, "testing", None, ok_stem, ok_stem),
         (False, None, "./override", ok_ovr, rdb_not_found),
@@ -292,7 +292,7 @@ def test__rde_ctor_w_nested_databases():
 
 
 def test__rde_ctor_wo_stem_or_override():
-    with rdb_exactly_one:
+    with rde_requires_db:
         config_rag.RAGDatabaseEntry(name="papers")
 
 
@@ -409,7 +409,7 @@ def test__rdb_audit_path_w_single_database(stem_environ, db_rag_path):
         _installation_config=stem_environ,
     )
 
-    assert rdb_config.rag_db_audit_path == str(expected.resolve())
+    assert rdb_config.rag_db_audit_path == f"papers={expected.resolve()}"
 
 
 def test__rdb_audit_path_w_databases(make_entry, db_rag_path):
@@ -470,9 +470,8 @@ def test__rcb_haiku_rag_config_w_databases(
     temp_dir,
     db_rag_path,
 ):
-    stem_environ.haiku_rag_config = hr_config_module.AppConfig(
-        lancedb=hr_config_module.LanceDBConfig(uri="/from/installation"),
-    )
+    installation_hr_config = hr_config_module.AppConfig()
+    stem_environ.haiku_rag_config = installation_hr_config
     room_config_dir = temp_dir / "rooms" / "test"
     room_config_dir.mkdir(parents=True)
     papers = db_rag_path / "papers.lancedb"
@@ -490,9 +489,8 @@ def test__rcb_haiku_rag_config_w_databases(
         "papers": str(papers.resolve()),
         "wiki": str(wiki.resolve()),
     }
-    assert found.lancedb.uri == ""
     # The installation's own config is never mutated in place.
-    assert stem_environ.haiku_rag_config.lancedb.uri == "/from/installation"
+    assert installation_hr_config.lancedb.databases == {}
     assert config.haiku_rag_config is found
 
 
@@ -513,3 +511,146 @@ def test__rcb_haiku_rag_config_w_missing_database(
 
     with rdb_not_found:
         _ = config.haiku_rag_config
+
+
+def _hr_config_naming(**databases):
+    return hr_config_module.AppConfig(
+        lancedb=hr_config_module.LanceDBConfig(databases=databases),
+    )
+
+
+def _deferring_config(stem_environ, temp_dir, hr_config, **kw):
+    stem_environ.haiku_rag_config = hr_config
+    room_config_dir = temp_dir / "rooms" / "test"
+    room_config_dir.mkdir(parents=True, exist_ok=True)
+
+    return _MultiDBConfig(
+        _installation_config=stem_environ,
+        _config_path=room_config_dir / "room_config.yaml",
+        **kw,
+    )
+
+
+def test__rdb_ctor_wo_stem_or_override():
+    """Naming no database defers placement to the haiku.rag config"""
+    rdb_config = config_rag._RAGDatabaseBase()
+
+    assert rdb_config.rag_databases == []
+
+    with pytest.raises(config_rag.RagDbNamesNoDatabase):
+        _ = rdb_config.rag_lancedb_path
+
+
+def test__rcb_deferred_databases(stem_environ, temp_dir):
+    """A config naming nothing reports what its haiku.rag config places"""
+    config = _deferring_config(
+        stem_environ,
+        temp_dir,
+        _hr_config_naming(medic="s3://bucket/medic.lancedb"),
+    )
+
+    assert config.rag_lancedb_databases == {
+        "medic": "s3://bucket/medic.lancedb",
+    }
+    assert config.rag_database_names == ["medic"]
+    assert config.rag_db_audit_path == "medic=s3://bucket/medic.lancedb"
+    assert config.get_extra_parameters() == {"database_names": ["medic"]}
+
+
+def test__rcb_deferred_databases_several(stem_environ, temp_dir):
+    config = _deferring_config(
+        stem_environ,
+        temp_dir,
+        _hr_config_naming(
+            medic="s3://bucket/medic.lancedb",
+            papers="/data/papers.lancedb",
+        ),
+    )
+
+    assert config.rag_database_names == ["medic", "papers"]
+    assert config.rag_db_audit_path == (
+        "medic=s3://bucket/medic.lancedb, papers=/data/papers.lancedb"
+    )
+
+
+def test__rcb_deferred_databases_leaves_config_alone(stem_environ, temp_dir):
+    """Placing nothing of its own, the config is passed through as it is"""
+    hr_config = _hr_config_naming(medic="s3://bucket/medic.lancedb")
+    config = _deferring_config(stem_environ, temp_dir, hr_config)
+
+    assert config.haiku_rag_config.lancedb.databases == {
+        "medic": "s3://bucket/medic.lancedb",
+    }
+
+
+def test__rcb_deferred_default_database(stem_environ, temp_dir):
+    """Placing nothing anywhere, haiku.rag's default database is the one"""
+    hr_config = hr_config_module.AppConfig()
+    config = _deferring_config(stem_environ, temp_dir, hr_config)
+
+    expected = hr_config.storage.data_dir / "haiku.rag.lancedb"
+
+    assert config.rag_lancedb_databases == {"haiku.rag": expected}
+    assert config.rag_database_names == ["haiku.rag"]
+
+
+def _placing_config(stem_environ, temp_dir, **kw):
+    stem_environ.haiku_rag_config = _hr_config_naming(
+        medic="s3://bucket/medic.lancedb"
+    )
+    room_config_dir = temp_dir / "rooms" / "test"
+    room_config_dir.mkdir(parents=True, exist_ok=True)
+
+    return _MultiDBConfig(
+        _installation_config=stem_environ,
+        _config_path=room_config_dir / "room_config.yaml",
+        **kw,
+    )
+
+
+@pytest.mark.parametrize("w_override", [False, True])
+def test__rcb_two_placements(stem_environ, db_rag_path, temp_dir, w_override):
+    """Naming a database beside a configured one is two placements
+
+    The two sets need not overlap, so both are named.
+    """
+    (db_rag_path / "blank.lancedb").mkdir()
+
+    if w_override:
+        kw = {"rag_lancedb_override_path": str(db_rag_path / "blank.lancedb")}
+    else:
+        kw = {"rag_lancedb_stem": "blank"}
+
+    config = _placing_config(stem_environ, temp_dir, **kw)
+
+    with pytest.raises(config_rag.RagDbTwoPlacements) as exc_info:
+        _ = config.haiku_rag_config
+
+    message = str(exc_info.value)
+    assert "blank" in message
+    assert "medic" in message
+    assert "lancedb.databases" in message
+
+
+def test__rcb_two_placements_wo_local_file(stem_environ, temp_dir):
+    """Two placements is the diagnosis even when the named path is absent
+
+    The database named beside a configured one is typically a placeholder
+    that was never created, so resolving it first answers the wrong
+    question.
+    """
+    config = _placing_config(stem_environ, temp_dir, rag_lancedb_stem="blank")
+
+    with pytest.raises(config_rag.RagDbTwoPlacements):
+        _ = config.haiku_rag_config
+
+
+def test__rcb_two_placements_w_entries(stem_environ, make_entry, temp_dir):
+    config = _placing_config(
+        stem_environ, temp_dir, rag_databases=[make_entry("papers")]
+    )
+
+    with pytest.raises(config_rag.RagDbTwoPlacements) as exc_info:
+        _ = config.haiku_rag_config
+
+    assert "papers" in str(exc_info.value)

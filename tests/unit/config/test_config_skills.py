@@ -134,7 +134,7 @@ def test_haiku_rag_capability_config(
 
     capability = config.capability
     assert isinstance(capability, capability_class)
-    assert [ref.db_path for ref in capability.scope.databases] == [db_path]
+    assert [ref.location for ref in capability.scope.databases] == [db_path]
     assert capability.defer_loading is False
 
     assert config.state_namespace == state_namespace
@@ -210,7 +210,9 @@ def test_haiku_rag_capability_config_w_rag_databases(
     ]
 
     capability = config.capability
-    assert [(ref.name, ref.db_path) for ref in capability.scope.databases] == [
+    assert [
+        (ref.name, ref.location) for ref in capability.scope.databases
+    ] == [
         ("papers", papers),
         ("wiki", wiki),
     ]
@@ -361,7 +363,11 @@ def test_haiku_rag_capability_config_wraps_yaml_errors(
         config_skills.HR_RAG_SkillConfig.from_yaml(
             installation_config,
             temp_dir / "room.yaml",
-            {"kind": config_skills.HR_RAG_SkillConfig.kind},
+            {
+                "kind": config_skills.HR_RAG_SkillConfig.kind,
+                "rag_lancedb_stem": "papers",
+                "rag_lancedb_override_path": "/dev/null",
+            },
         )
 
 
@@ -641,7 +647,7 @@ def test_room_skills_config_combines_capabilities(
         bwrap_sandbox.SKILL_PROPERTIES.name,
     }
     assert len(config.capabilities) == 3
-    assert config.rag_db_paths == {"haiku-rag": str(db_path)}
+    assert config.rag_db_paths == {"haiku-rag": f"rag={db_path}"}
     assert config.has_sandbox is True
     assert config.as_yaml["installation_skill_names"] == [
         {"name": SKILL_NAME, "defer_loading": True},

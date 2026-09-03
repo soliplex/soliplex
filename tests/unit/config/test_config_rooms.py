@@ -123,7 +123,7 @@ W_HR_TOOLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
             config_tools.ToolConfig,
             rag_lancedb_path=LANCE_DB_OVERRIDE_PATH,
             rag_databases=[],
-            rag_db_audit_path=str(LANCE_DB_OVERRIDE_PATH),
+            rag_db_audit_path=f"rag={LANCE_DB_OVERRIDE_PATH}",
             haiku_rag_config=HR_CONFIG,
         ),
     },
@@ -609,7 +609,7 @@ def test_roomconfig_rag_db_paths_w_hit(temp_dir, installation_config):
 
     found = room_config.rag_db_paths
 
-    assert found == {"haiku-rag": str(OVERRIDE_PATH)}
+    assert found == {"haiku-rag": f"rag={OVERRIDE_PATH}"}
 
 
 def test_roomconfig_has_sandbox_bare(installation_config):
@@ -953,7 +953,7 @@ async def test_roomconfig_list_haiku_rag_client_kws(
 
     expected = [
         {key: value for key, value in exp_kw.items() if key != "db_path"}
-        | {"audit_db_path": str(db_path)}
+        | {"audit_db_path": f"rag={db_path}"}
         if "db_path" in exp_kw
         else exp_kw
         for exp_kw in expected
@@ -992,7 +992,7 @@ async def test_roomconfig_list_haiku_rag_client_kws(
             rldbp = getattr(value, "rag_lancedb_path", None)
             if rldbp is not None:
                 value.rag_lancedb_path = db_path
-                value.rag_db_audit_path = str(db_path)
+                value.rag_db_audit_path = f"rag={db_path}"
 
     room_config = config_rooms.RoomConfig(
         _installation_config=installation_config_w_skill,
