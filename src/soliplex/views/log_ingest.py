@@ -147,7 +147,8 @@ async def ingest_logs(
         for run_id, entries in run_buckets.items():
             if run_id is not None:
                 run = entries[0].active_run
-                assert run is not None  # noqa: S101 — guaranteed by grouping
+                # Parnoid defence against a "can't get here" condition
+                assert run is not None
                 with logfire.span(
                     "ActiveRun",
                     thread_id=run.thread_id,

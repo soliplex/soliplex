@@ -309,6 +309,7 @@ async def _do_query(
             entries.reviewed.insert(0, entry)
 
         else:
+            # Parnoid defence against a "can't get here" condition
             assert entry.status is None
             entries.opened.insert(0, entry)
 
