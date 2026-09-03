@@ -9,6 +9,9 @@ import logfire
 from . import _utils
 from . import exceptions as config_exc
 
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from . import installation as config_installation
+
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
 
@@ -117,7 +120,7 @@ class LogfireConfig:
     instrument_fast_api: LogfireInstrumentFastAPI = None
 
     # Set by `from_yaml` factory
-    _installation_config: InstallationConfig = (  # noqa F821 cycles
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
@@ -208,7 +211,7 @@ class LogfireConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycles
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):

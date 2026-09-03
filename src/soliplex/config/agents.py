@@ -21,6 +21,9 @@ from pydantic_ai.providers import openai as openai_providers
 from . import _utils
 from . import exceptions
 
+if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
+    from . import installation as config_installation
+
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
@@ -186,7 +189,7 @@ class AgentConfig:
     agui_feature_names: tuple[str] = ()
 
     # Set by `from_yaml` factory
-    _installation_config: InstallationConfig = (  # noqa F821 cycle
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
@@ -207,7 +210,7 @@ class AgentConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycle
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
@@ -362,7 +365,7 @@ class FactoryAgentConfig:
     _factory: AgentFactory = None
 
     # Set by `from_yaml` factory
-    _installation_config: InstallationConfig = (  # noqa F821 cycle
+    _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
     _config_path: pathlib.Path = None
@@ -394,7 +397,7 @@ class FactoryAgentConfig:
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycle
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ):
@@ -449,7 +452,7 @@ AgentConfigMap = dict[str, AgentConfigTypes]
 
 
 def extract_agent_config(
-    installation_config: InstallationConfig,  # noqa F821 cycle
+    installation_config: config_installation.InstallationConfig,
     config_path: pathlib.Path,
     config_dict: dict,
 ) -> AgentConfig:  # or subclass
