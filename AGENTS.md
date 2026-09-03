@@ -172,6 +172,48 @@ Key files:
 - Secrets resolved via a configurable source chain (env vars, files,
   subprocess, random generation) in `config/secrets.py`
 
+## Database Migrations
+
+Alembic drives **two** databases from one revision tree (`alembic.ini`:
+`databases = agui, authz`):
+
+- `agui` -- `thread_persistence_dburi`, schema `soliplex.agui.schema`
+- `authz` -- `authorization_dburi`, schema `soliplex.authz.schema`
+
+Every revision therefore has `upgrade_agui()` / `upgrade_authz()` pairs
+behind an `upgrade(engine_name)` dispatcher.
+
+```bash
+# Upgrade both databases
+uv run alembic -x soliplex.installation_path=<dir> upgrade head
+
+# Emit SQL instead: writes 'agui.sql' and 'authz.sql' into the cwd
+uv run alembic -x soliplex.installation_path=<dir> upgrade head --sql
+
+# New revision (per-database stubs from 'alembic/script.py.mako')
+uv run alembic -x soliplex.installation_path=<dir> revision -m "soliplex-vX.Y"
+```
+
+- The DB URIs come from the installation config, not `alembic.ini`, so
+  `-x soliplex.installation_path=` is mandatory; without it `env.py` prints
+  its usage and exits 2
+- `env.py` builds both engines at import with `init_schema=True`, so *every*
+  command -- `current` and `history` and `--sql` included -- connects and
+  runs `metadata.create_all()`. There is no read-only command; use a
+  throwaway installation when experimenting
+- Revisions must not import live app code: freeze any borrowed helper into
+  the revision, so replaying history never depends on the current tree
+- Mode-dependent logic splits into `_x_online()` / `_x_offline()` behind a
+  `context.is_offline_mode()` dispatcher; offline has no bind, so express it
+  as set-based `op.execute()` SQL
+- Branch on `op.get_context().dialect.name` where SQLite and PostgreSQL
+  differ
+- Config is split by what Alembic can load from where, not by accident: the
+  logging sections and `databases` must stay in `alembic.ini`
+  (`fileConfig()` needs an ini; `databases` is read via `get_main_option()`,
+  which ignores `pyproject.toml`), while `prepend_sys_path` and
+  `post_write_hooks` live in `[tool.alembic]`
+
 ## Adding a New Tool
 
 1. Create or modify a tool module in `src/soliplex/tools/`

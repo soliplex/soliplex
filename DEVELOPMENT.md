@@ -251,6 +251,107 @@ one.
 
 The full configuration reference is in [docs/config/](docs/config/).
 
+## Database migrations
+
+Soliplex runs [Alembic](https://alembic.sqlalchemy.org/) against **two**
+databases from a single revision tree:
+
+| Alembic name | Installation setting | Schema module |
+| --- | --- | --- |
+| `agui` | `thread_persistence_dburi` | `soliplex.agui.schema` |
+| `authz` | `authorization_dburi` | `soliplex.authz.schema` |
+
+`alembic.ini` declares them (`databases = agui, authz`), so every revision
+carries a `upgrade_<name>()` / `downgrade_<name>()` pair per database, plus
+a dispatcher Alembic calls once for each:
+
+```python
+def upgrade(engine_name: str) -> None:
+    """Upgrade schema."""
+    globals()[f"upgrade_{engine_name}"]()
+```
+
+### Running migrations
+
+The database URIs are *not* in `alembic.ini`. `alembic/env.py` loads an
+installation config and resolves them -- secrets included -- from
+`thread_persistence_dburi_sync` and `authorization_dburi_sync`. Every
+invocation therefore has to say which installation it acts on:
+
+```bash
+# Upgrade both databases to the latest revision
+uv run alembic -x soliplex.installation_path=<installation-dir> upgrade head
+
+# Inspect
+uv run alembic -x soliplex.installation_path=<installation-dir> current
+uv run alembic -x soliplex.installation_path=<installation-dir> history
+```
+
+Omit `-x soliplex.installation_path=...` and `env.py` prints its usage
+docstring and exits 2.
+
+**Every command touches the databases.** `env.py` builds both engines at
+import time with `init_schema=True`, which calls `metadata.create_all()`.
+So `current`, `history`, and even `--sql` connect to the configured
+databases and create any missing tables. That call is idempotent and drops
+nothing, but it does mean there is no read-only Alembic command here --
+point `-x soliplex.installation_path` at a throwaway installation when
+experimenting.
+
+### Offline (`--sql`) mode
+
+`--sql` emits SQL instead of applying it, writing **one file per database
+into the current working directory**, `agui.sql` and `authz.sql`:
+
+```bash
+uv run alembic -x soliplex.installation_path=<installation-dir> \
+    upgrade head --sql
+```
+
+### Writing a revision
+
+```bash
+uv run alembic -x soliplex.installation_path=<installation-dir> \
+    revision -m "soliplex-vX.Y"
+```
+
+`alembic/script.py.mako` stamps out the per-database function pairs, and
+the `[[tool.alembic.post_write_hooks]]` entry in `pyproject.toml` runs
+`ruff check --fix` over the generated file.
+
+Three conventions this tree follows. See
+`alembic/versions/63edaa5987f6_soliplex_v0_67.py` for a worked example of
+all three:
+
+- **Freeze anything borrowed from application code.** A revision must keep
+  replaying correctly long after the code moves on, so copy the helper into
+  the revision instead of importing it. v0.67 carries its own
+  `_token_field_json_path` for exactly this reason.
+- **Split mode-dependent work.** Offline mode has no connection to read
+  from, so a data migration cannot iterate rows there. Branch on
+  `context.is_offline_mode()` in a small dispatcher, and write `_x_online()`
+  row-by-row against the bind while `_x_offline()` expresses the same change
+  as set-based `op.execute()` SQL.
+- **Branch on dialect where the SQL differs.** Both SQLite and PostgreSQL
+  are supported; read the backend from `op.get_context().dialect.name`.
+
+### Where the configuration lives
+
+Alembic settings are split across `alembic.ini` and `[tool.alembic]` in
+`pyproject.toml`. That is an artifact of Alembic's partial `pyproject.toml`
+support (added in 1.16), not two competing config files: the division
+follows what Alembic can actually load from each.
+
+| Setting | Lives in | Because |
+| --- | --- | --- |
+| `[loggers]` / `[handlers]` / `[formatters]` | `alembic.ini` | `env.py` calls `logging.config.fileConfig()`, which requires an ini file |
+| `databases` | `alembic.ini` | `alembic/script.py.mako` reads it via `config.get_main_option()`, which does not consult `pyproject.toml` |
+| `script_location` | `alembic.ini` | read via `get_alembic_option()`, which *does* support `[tool.alembic]` -- so this one sits in the ini by convention rather than necessity |
+| `prepend_sys_path`, `post_write_hooks` | `pyproject.toml` | tool-level knobs; Alembic falls back to `[tool.alembic]` when the ini omits them, which it does |
+
+The rule of thumb: tool-level knobs go in `pyproject.toml`; anything
+Alembic can only reach through the ini stays in `alembic.ini`.
+
 ## Common tasks
 
 ### Adding a tool
