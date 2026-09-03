@@ -17,7 +17,7 @@ from soliplex.agui import schema as agui_schema
 from soliplex.agui import util as agui_util
 
 # Temporary backward-compatibility:  to be removed in 'v0.45'
-from soliplex.agui.schema import *  # noqa F403
+from soliplex.agui.schema import *  # noqa: F403
 
 FeedbackReviewStatus = agui.FeedbackReviewStatus
 

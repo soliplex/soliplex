@@ -7,7 +7,6 @@ import itertools
 import os
 import pathlib
 import re
-import sys
 import typing
 
 import dotenv
@@ -161,12 +160,7 @@ def _resolved_tokens(value, split_re, resolve):
     """
     tokens = split_re.split(value)
 
-    # Python 3.12 has no 'itertools.batched(strict=...)'.  Dropping 3.12
-    # support collapses this gate and its three QA escapes:  see #1333.
-    if sys.version_info >= (3, 13):  # noqa: UP036
-        batch = itertools.batched(tokens, 2, strict=False)
-    else:  # pragma: NO COVER
-        batch = itertools.batched(tokens, 2)  # noqa: B911
+    batch = itertools.batched(tokens, 2, strict=False)
 
     for two_or_one in batch:
         yield two_or_one[0]

@@ -16,7 +16,7 @@ frontend lives in a sibling repo at
 
 Prerequisites:
 
-- Python 3.12+
+- Python 3.13+
 - [uv](https://docs.astral.sh/uv/) (used for everything -- do not use `pip`)
 
 Set up a working tree:

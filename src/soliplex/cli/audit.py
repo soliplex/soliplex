@@ -438,7 +438,7 @@ def _invalid_room_rag_dbs(
 
         for source, cfg in _iter_room_rag_candidates(room_config):
             try:
-                cfg.rag_lancedb_path  # noqa B018
+                cfg.rag_lancedb_path  # noqa: B018
             except Exception as exc:
                 per_room[source] = str(exc)
 

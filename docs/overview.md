@@ -65,7 +65,7 @@ The system consists of three main components:
 
 ### 1. Backend Server (`src/soliplex/`)
 
-- **Technology**: FastAPI with Python 3.12+
+- **Technology**: FastAPI with Python 3.13+
 - **Purpose**: Handles API requests, RAG processing, and AI model integration
 - **Features**:
   - OpenAI API integration
