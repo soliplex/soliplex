@@ -3,6 +3,7 @@ import copy
 import dataclasses
 import operator
 import pathlib
+import re
 from unittest import mock
 
 import _test_features as agui_features
@@ -696,21 +697,88 @@ authorization_dburi:
 """
 
 
-def test_check_is_dict_passes_through_dict():
+def test__check_is_dict_passes_through_dict():
     value = {"foo": "bar"}
 
     assert config_installation._check_is_dict(value) is value
 
 
 @pytest.mark.parametrize("not_a_dict", [None, [], "string", 42])
-def test_check_is_dict_raises_on_non_dict(not_a_dict):
+def test__check_is_dict_raises_on_non_dict(not_a_dict):
     with pytest.raises(config_exc.NotADict) as exc_info:
         config_installation._check_is_dict(not_a_dict)
 
     assert exc_info.value.found == not_a_dict
 
 
-def test_find_configs_yaml_direct_hit(temp_dir):
+def test__load_config_yaml_w_hit(temp_dir):
+    """A UTF-8 config decodes the same whatever the host locale is."""
+    config_path = temp_dir / "config.yaml"
+    yaml_text = 'id: "some-value"\n'
+    config_path.write_bytes(yaml_text.encode("utf-8"))
+
+    found = config_installation._load_config_yaml(config_path)
+
+    assert found == {"id": "some-value"}
+
+
+def test__load_config_yaml_w_missing(temp_dir):
+    config_path = temp_dir / "oidc"
+    config_path.mkdir()
+    missing_cfg = config_path / "config.yaml"
+
+    with pytest.raises(config_exc.NoSuchConfig) as exc:
+        config_installation._load_config_yaml(missing_cfg)
+
+    assert exc.value._config_path == missing_cfg
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        b"\xde\xad\xbe\xef",  # raises UnicodeDecodeError
+        "",  # parses as None
+        "123",  # parses as int
+        "4.56",  # parses as float
+        '"foo"',  # parses as str
+        '- "abc"\n- "def"',  # parses as list of str
+    ],
+)
+def test__load_config_yaml_w_invalid(temp_dir, invalid):
+    config_path = temp_dir / "oidc"
+    config_path.mkdir()
+    invalid_cfg = config_path / "config.yaml"
+
+    if isinstance(invalid, bytes):
+        invalid_cfg.write_bytes(invalid)
+    else:
+        invalid_cfg.write_text(invalid)
+
+    with pytest.raises(config_exc.FromYamlException) as exc:
+        config_installation._load_config_yaml(invalid_cfg)
+
+    assert exc.value._config_path == invalid_cfg
+
+
+# Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
+# 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
+# and raises outright. Written as bytes so the fixture is UTF-8 on any
+# host, whatever the locale encoding.
+NON_ASCII_PROSE = "Ada Lovelace’s notes — Łódź"
+
+
+def test__load_config_yaml_w_non_ascii(temp_dir):
+    """A UTF-8 config decodes the same whatever the host locale is."""
+    config_path = temp_dir / "config.yaml"
+    yaml_text = f'id: "{NON_ASCII_PROSE}"\n'
+    config_path.write_bytes(yaml_text.encode("utf-8"))
+
+    found = config_installation._load_config_yaml(config_path)
+
+    assert found == {"id": NON_ASCII_PROSE}
+
+
+def test__find_configs_yaml_direct_hit(temp_dir):
     config_file = temp_dir / "target.yaml"
     config_file.write_text('id: "direct"')
 
@@ -721,7 +789,7 @@ def test_find_configs_yaml_direct_hit(temp_dir):
     assert found == [(config_file, {"id": "direct"})]
 
 
-def test_find_configs_yaml_walks_subdirs(temp_dir):
+def test__find_configs_yaml_walks_subdirs(temp_dir):
     # No direct hit at 'temp_dir/target.yaml', so subdirectories are walked.
     dotted = temp_dir / ".hidden"
     dotted.mkdir()
@@ -744,35 +812,169 @@ def test_find_configs_yaml_walks_subdirs(temp_dir):
     assert found == [(sub_yaml, {"id": "sub"})]
 
 
-def test_resolve_file_prefix_w_file_prefix(temp_dir):
-    config_path = temp_dir / "installation.yaml"
-    (temp_dir / "some.file").write_text("")
+def test__find_configs_yaml_w_multiple(temp_dir):
+    THING_IDS = ["foo", "bar", "baz", "qux"]
+    CONFIG_FILENAME = "config.yaml"
 
-    found = config_installation.resolve_file_prefix(
-        "file:some.file",
-        config_path,
+    expected_things = []
+
+    for thing_id in sorted(THING_IDS):
+        thing_path = temp_dir / thing_id
+        if thing_id == "baz":  # file, not dir
+            thing_path.write_text("DEADBEEF")
+        elif thing_id == "qux":  # empty dir
+            thing_path.mkdir()
+        else:
+            thing_path.mkdir()
+            config_file = thing_path / CONFIG_FILENAME
+            config_file.write_text(f"id: {thing_id}")
+            expected_thing = {"id": thing_id}
+            expected_things.append((config_file, expected_thing))
+
+    found_things = list(
+        config_installation._find_configs_yaml(temp_dir, CONFIG_FILENAME)
     )
 
-    assert found == str((temp_dir / "some.file").resolve())
+    for (f_key, f_thing), (e_key, e_thing) in zip(
+        sorted(found_things),
+        sorted(expected_things),
+        strict=True,
+    ):
+        assert f_key == e_key
+        assert f_thing == e_thing
 
 
-def test_resolve_file_prefix_wo_file_prefix(temp_dir):
-    config_path = temp_dir / "installation.yaml"
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("", [""]),
+        ("plain", ["plain"]),
+        ("<FOO>", ["", "resolved:FOO", ""]),
+        ("a <FOO> b", ["a ", "resolved:FOO", " b"]),
+        ("<FOO><BAR>", ["", "resolved:FOO", "", "resolved:BAR", ""]),
+        (
+            "a <FOO> b <BAR> c",
+            ["a ", "resolved:FOO", " b ", "resolved:BAR", " c"],
+        ),
+    ],
+)
+def test__resolved_tokens(value, expected):
+    split_re = re.compile(r"<(\w+)>")
 
-    found = config_installation.resolve_file_prefix(
-        "plain-string",
-        config_path,
+    def resolve(marker):
+        return f"resolved:{marker}"
+
+    found = list(
+        config_installation._resolved_tokens(value, split_re, resolve)
     )
 
-    assert found == "plain-string"
+    assert found == expected
 
 
-def test_resolve_file_prefix_non_string(temp_dir):
-    config_path = temp_dir / "installation.yaml"
+@pytest.mark.parametrize(
+    "config_value, expected",
+    [
+        ("no_prefix", "no_prefix"),
+        ("file:test.foo", "{temp_dir}/test.foo"),
+        (1234, 1234),
+    ],
+)
+def test_resolve_file_prefix(temp_dir, config_value, expected):
+    config_path = temp_dir / "config.yaml"
 
-    found = config_installation.resolve_file_prefix(42, config_path)
+    if isinstance(expected, str):
+        expected = str(
+            pathlib.Path(expected.format(temp_dir=temp_dir.resolve()))
+        )
 
-    assert found == 42
+    found = config_installation.resolve_file_prefix(config_value, config_path)
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "env_name, env_value, dotenv_env, osenv_patch, expectation",
+    [
+        (
+            "ENVVAR",
+            None,
+            {},
+            {},
+            pytest.raises(config_installation.MissingEnvVar),
+        ),
+        (
+            "ENVVAR",
+            None,
+            {"ENVVAR": "dotenv"},
+            {},
+            contextlib.nullcontext("dotenv"),
+        ),
+        (
+            "ENVVAR",
+            None,
+            {},
+            {"ENVVAR": "osenv"},
+            contextlib.nullcontext("osenv"),
+        ),
+        (
+            "ENVVAR",
+            None,
+            {"ENVVAR": "dotenv"},
+            {"ENVVAR": "osenv"},
+            contextlib.nullcontext("dotenv"),  # dotenv_env wins
+        ),
+        (
+            "ENVVAR",
+            "baz",
+            {},
+            {},
+            contextlib.nullcontext("baz"),
+        ),
+        (
+            "ENVVAR",
+            "baz",
+            {"ENVVAR": "dotenv"},
+            {},
+            contextlib.nullcontext("baz"),
+        ),
+        (
+            "ENVVAR",
+            "baz",
+            {},
+            {"ENVVAR": "osenv"},
+            contextlib.nullcontext("baz"),
+        ),
+        (
+            "ENVVAR",
+            "baz",
+            {"ENVVAR": "dotenv"},
+            {"ENVVAR": "osenv"},
+            contextlib.nullcontext("baz"),
+        ),
+    ],
+)
+def test_resolve_environment_entry(
+    env_name,
+    env_value,
+    dotenv_env,
+    osenv_patch,
+    expectation,
+):
+    with (
+        mock.patch.dict("os.environ", **osenv_patch),
+        expectation as expected,
+    ):
+        found = config_installation.resolve_environment_entry(
+            env_name,
+            env_value,
+            dotenv_env,
+        )
+
+    if isinstance(expected, str):
+        assert found == expected
+
+    else:
+        assert expected.value.env_var == "ENVVAR"
 
 
 @pytest.mark.parametrize(
@@ -1249,6 +1451,23 @@ def test_installationconfig_get_environment_sources(
 
     for f_item, candidate in zip(found, candidates, strict=True):
         assert f_item.source_type == candidate
+
+
+@mock.patch("os.getenv")
+def test_installationconfig_get_environment_sources_w_dotenv_wo_key(
+    os_getenv,
+):
+    KEY = "TEST_KEY"
+    os_getenv.return_value = None
+    i_config = config_installation.InstallationConfig(
+        id="test-ic",
+        _environment_from_config={},
+        _from_dotenv={"OTHER_KEY": "DOTENV"},
+    )
+
+    found = i_config.get_environment_sources(KEY)
+
+    assert found == []
 
 
 @pytest.mark.parametrize("w_default", [False, True])
@@ -2143,6 +2362,30 @@ def test_installationconfig_from_yaml_rejects_legacy_upload_path(temp_dir):
 
     assert "rooms_upload_path" in str(exc.value)
     assert "threads_upload_path" in str(exc.value)
+
+
+def test_installationconfig_from_yaml_reraises_nested_from_yaml_exception(
+    temp_dir,
+):
+    yaml_file = temp_dir / "installation.yaml"
+    yaml_file.write_text(BARE_INSTALLATION_CONFIG_YAML)
+    config_dict = yaml.safe_load(BARE_INSTALLATION_CONFIG_YAML)
+    nested = config_exc.FromYamlException(yaml_file, "meta", {})
+
+    with (
+        mock.patch.object(
+            config_meta.InstallationConfigMeta,
+            "from_yaml",
+            side_effect=nested,
+        ),
+        pytest.raises(config_exc.FromYamlException) as exc,
+    ):
+        config_installation.InstallationConfig.from_yaml(
+            yaml_file, config_dict
+        )
+
+    # Passed through, not rewrapped as an 'installation' failure.
+    assert exc.value is nested
 
 
 AS_YAML_ONLY_AGENT_CONFIG_ID = "test-agent"
@@ -3301,24 +3544,6 @@ def test_load_installation(populated_temp_dir, rel_path, raises, expected_id):
         installation = config_installation.load_installation(target)
 
         assert installation.id == expected_id
-
-
-# Mixes both cp1252 failure modes: '’' / '—' mojibake silently, while
-# 'Ł' (U+0141 -> b"\xc5\x81") lands in one of cp1252's undefined slots
-# and raises outright. Written as bytes so the fixture is UTF-8 on any
-# host, whatever the locale encoding.
-NON_ASCII_PROSE = "Ada Lovelace’s notes — Łódź"
-
-
-def test__load_config_yaml_w_non_ascii(temp_dir):
-    """A UTF-8 config decodes the same whatever the host locale is."""
-    config_path = temp_dir / "config.yaml"
-    yaml_text = f'id: "{NON_ASCII_PROSE}"\n'
-    config_path.write_bytes(yaml_text.encode("utf-8"))
-
-    found = config_installation._load_config_yaml(config_path)
-
-    assert found == {"id": NON_ASCII_PROSE}
 
 
 def test__load_dotenv_w_non_ascii(temp_dir):

@@ -1,12 +1,13 @@
-import contextlib
-import pathlib
+import dataclasses
 from unittest import mock
 
-import pytest
-
 from soliplex.config import _utils as config__utils
-from soliplex.config import exceptions as config_exc
-from soliplex.config import installation as config_installation
+
+
+def test__dotted_name():
+    found = config__utils._dotted_name(config__utils._no_repr)
+
+    assert found == "soliplex.config._utils._no_repr"
 
 
 @mock.patch("importlib.import_module")
@@ -20,193 +21,58 @@ def test__from_dotted_name(im):
     assert klass is faux_module.SomeClass
 
 
-def test__load_config_yaml_w_missing(temp_dir):
-    config_path = temp_dir / "oidc"
-    config_path.mkdir()
-    missing_cfg = config_path / "config.yaml"
+def test__no_repr():
+    found = config__utils._no_repr()
 
-    with pytest.raises(config_exc.NoSuchConfig) as exc:
-        config_installation._load_config_yaml(missing_cfg)
-
-    assert exc.value._config_path == missing_cfg
+    assert found.repr is False
+    assert found.compare is True
+    assert found.default is dataclasses.MISSING
+    assert found.default_factory is dataclasses.MISSING
 
 
-@pytest.mark.parametrize(
-    "invalid",
-    [
-        b"\xde\xad\xbe\xef",  # raises UnicodeDecodeError
-        "",  # parses as None
-        "123",  # parses as int
-        "4.56",  # parses as float
-        '"foo"',  # parses as str
-        '- "abc"\n- "def"',  # parses as list of str
-    ],
-)
-def test__load_config_yaml_w_invalid(temp_dir, invalid):
-    config_path = temp_dir / "oidc"
-    config_path.mkdir()
-    invalid_cfg = config_path / "config.yaml"
+def test__no_repr_w_kw():
+    found = config__utils._no_repr(init=False)
 
-    if isinstance(invalid, bytes):
-        invalid_cfg.write_bytes(invalid)
-    else:
-        invalid_cfg.write_text(invalid)
-
-    with pytest.raises(config_exc.FromYamlException) as exc:
-        config_installation._load_config_yaml(invalid_cfg)
-
-    assert exc.value._config_path == invalid_cfg
+    assert found.repr is False
+    assert found.init is False
 
 
-def test__find_configs_yaml_w_single(temp_dir):
-    THING_ID = "testing"
-    CONFIG_FILENAME = "config.yaml"
-    to_search = temp_dir / "to_search"
-    to_search.mkdir()
-    config_file = to_search / CONFIG_FILENAME
-    config_file.write_text(f"id: {THING_ID}")
-    expected = {"id": THING_ID}
+def test__no_repr_no_compare():
+    found = config__utils._no_repr_no_compare()
 
-    found = list(
-        config_installation._find_configs_yaml(to_search, CONFIG_FILENAME)
-    )
-
-    assert found == [(config_file, expected)]
+    assert found.repr is False
+    assert found.compare is False
+    assert found.default is dataclasses.MISSING
+    assert found.default_factory is dataclasses.MISSING
 
 
-def test__find_configs_w_multiple(temp_dir):
-    THING_IDS = ["foo", "bar", "baz", "qux"]
-    CONFIG_FILENAME = "config.yaml"
+def test__no_repr_no_compare_none():
+    found = config__utils._no_repr_no_compare_none()
 
-    expected_things = []
-
-    for thing_id in sorted(THING_IDS):
-        thing_path = temp_dir / thing_id
-        if thing_id == "baz":  # file, not dir
-            thing_path.write_text("DEADBEEF")
-        elif thing_id == "qux":  # empty dir
-            thing_path.mkdir()
-        else:
-            thing_path.mkdir()
-            config_file = thing_path / CONFIG_FILENAME
-            config_file.write_text(f"id: {thing_id}")
-            expected_thing = {"id": thing_id}
-            expected_things.append((config_file, expected_thing))
-
-    found_things = list(
-        config_installation._find_configs_yaml(temp_dir, CONFIG_FILENAME)
-    )
-
-    for (f_key, f_thing), (e_key, e_thing) in zip(
-        sorted(found_things),
-        sorted(expected_things),
-        strict=True,
-    ):
-        assert f_key == e_key
-        assert f_thing == e_thing
+    assert found.repr is False
+    assert found.compare is False
+    assert found.default is None
 
 
-@pytest.mark.parametrize(
-    "config_value, expected",
-    [
-        ("no_prefix", "no_prefix"),
-        ("file:test.foo", "{temp_dir}/test.foo"),
-        (1234, 1234),
-    ],
-)
-def test_resolve_file_prefix(temp_dir, config_value, expected):
-    config_path = temp_dir / "config.yaml"
+def test__no_repr_no_compare_dict():
+    found = config__utils._no_repr_no_compare_dict()
 
-    if isinstance(expected, str):
-        expected = str(
-            pathlib.Path(expected.format(temp_dir=temp_dir.resolve()))
-        )
-
-    found = config_installation.resolve_file_prefix(config_value, config_path)
-
-    assert found == expected
+    assert found.repr is False
+    assert found.compare is False
+    assert found.default_factory is dict
 
 
-@pytest.mark.parametrize(
-    "env_name, env_value, dotenv_env, osenv_patch, expectation",
-    [
-        (
-            "ENVVAR",
-            None,
-            {},
-            {},
-            pytest.raises(config_installation.MissingEnvVar),
-        ),
-        (
-            "ENVVAR",
-            None,
-            {"ENVVAR": "dotenv"},
-            {},
-            contextlib.nullcontext("dotenv"),
-        ),
-        (
-            "ENVVAR",
-            None,
-            {},
-            {"ENVVAR": "osenv"},
-            contextlib.nullcontext("osenv"),
-        ),
-        (
-            "ENVVAR",
-            None,
-            {"ENVVAR": "dotenv"},
-            {"ENVVAR": "osenv"},
-            contextlib.nullcontext("dotenv"),  # dotenv_env wins
-        ),
-        (
-            "ENVVAR",
-            "baz",
-            {},
-            {},
-            contextlib.nullcontext("baz"),
-        ),
-        (
-            "ENVVAR",
-            "baz",
-            {"ENVVAR": "dotenv"},
-            {},
-            contextlib.nullcontext("baz"),
-        ),
-        (
-            "ENVVAR",
-            "baz",
-            {},
-            {"ENVVAR": "osenv"},
-            contextlib.nullcontext("baz"),
-        ),
-        (
-            "ENVVAR",
-            "baz",
-            {"ENVVAR": "dotenv"},
-            {"ENVVAR": "osenv"},
-            contextlib.nullcontext("baz"),
-        ),
-    ],
-)
-def test_resolve_environment_entry(
-    env_name,
-    env_value,
-    dotenv_env,
-    osenv_patch,
-    expectation,
-):
-    with (
-        mock.patch.dict("os.environ", **osenv_patch),
-        expectation as expected,
-    ):
-        found = config_installation.resolve_environment_entry(
-            env_name,
-            env_value,
-            dotenv_env,
-        )
+def test__default_list_field():
+    found = config__utils._default_list_field()
 
-    if isinstance(expected, str):
-        assert found == expected
+    assert found.repr is True
+    assert found.compare is True
+    assert found.default_factory is list
 
-    else:
-        assert expected.value.env_var == "ENVVAR"
+
+def test__default_dict_field():
+    found = config__utils._default_dict_field()
+
+    assert found.repr is True
+    assert found.compare is True
+    assert found.default_factory is dict
