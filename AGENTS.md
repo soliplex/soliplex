@@ -24,12 +24,16 @@ uv sync --group dev
 # Run unit tests with 100% coverage requirement
 uv run pytest
 
-# Run a specific test file / test
-uv run pytest tests/unit/test_agents.py
-uv run pytest tests/unit/test_agents.py::test_name
+# Run a specific test file / test.  '--no-cov' is required: 'addopts'
+# always applies the 100% gate, which a partial run cannot satisfy.
+uv run pytest --no-cov tests/unit/test_agents.py
+uv run pytest --no-cov tests/unit/test_agents.py::test_name
 
-# Run functional tests (require a running LLM)
-uv run pytest tests/functional/ -m needs_llm
+# Run the unit tests in parallel (pytest-xdist); see below for '-n'
+uv run pytest -n 8
+
+# Run functional tests (require a running LLM); never pass '-n' here
+uv run pytest --no-cov tests/functional/ -m needs_llm
 
 # Lint and format
 uv run ruff check
@@ -62,9 +66,14 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
 
 - `ruff-check` / `ruff-format` -- lint and format Python sources
 - `pymarkdown` -- lint Markdown files
+- `agentskills-validate` -- validate the published `soliplex-docs` agent
+  skill; runs only when something under `skills/soliplex-docs/` changes
 - `lint-textio` -- reject text file IO in `src/soliplex/` without an
   explicit `encoding=` (falls back to the host locale encoding, `cp1252` on
-  Windows); `scripts/lint_textio.py`, stdlib-only, with a `--self-test` mode
+  Windows); `scripts/lint_textio.py`, stdlib-only
+- `lint-textio-self-test` -- run `scripts/lint_textio.py --self-test` when
+  that script itself changes, so a check gone blind fails loudly instead of
+  passing by finding nothing
 - `actionlint` -- lint GitHub Actions workflow files
 - `check-toml` / `check-yaml` -- validate TOML and YAML syntax
 - `gitleaks` -- scan for committed secrets
@@ -79,12 +88,46 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
 
 - Unit tests live in `tests/unit/`, mirroring the `src/soliplex/` structure
 - 100% branch coverage is enforced via pytest-cov (`--cov-fail-under=100`)
-- Coverage omits `cli.py`, `examples.py`, and `tui.py` (see
-  `[tool.coverage.run]` in `pyproject.toml`) -- new code in those modules
-  silently bypasses the threshold
+- Coverage measures four targets (see `addopts` in `pyproject.toml`):
+  `src/soliplex`, `tests/unit`, `scripts`, and
+  `skills/soliplex-docs/scripts` -- the test suite and the helper scripts
+  are held to the same 100% bar as `src/`
+- Those targets are *paths*, not importable names, and must stay that way.
+  `soliplex` is a namespace package (there is no
+  `src/soliplex/__init__.py`); coverage cannot enumerate one by walking the
+  filesystem, so `--cov=soliplex` would measure only the modules some test
+  happened to import, and a module nobody imports would pass unnoticed
+- `[tool.coverage.run] omit` is therefore the single place that decides
+  what is exempt: `scripts/lint_textio.py` (it runs its own `--self-test`
+  during lint) and `src/soliplex/tui/*` (the TUI is deliberately
+  untested). Everything else under `src/soliplex/` must reach 100%
 - Use pytest-asyncio for async tests
 - Functional tests (`tests/functional/`) require a running LLM and are
   skipped by default (marker: `needs_llm`)
+- `--cov-fail-under=100` lives in `addopts`, so it applies to *every*
+  `pytest` invocation, not just full runs. Pass `--no-cov` when running a
+  subset -- a single file, a single test, or the functional suite --
+  otherwise the run fails on the threshold no matter how the tests
+  themselves fared
+- `pytest-xdist` is a dev dependency, but no `-n` appears in `addopts`, so
+  runs are serial unless you ask for parallelism
+- **Unit tests are parallel-safe.** Choosing `-n`: start from `nproc` and
+  take about half the logical cores (so `-n 8` on a 16-core box). Each
+  worker pays a fixed startup and collection cost, so the gain flattens
+  well before one-worker-per-core, and leaving half the cores free keeps
+  the machine usable while the suite runs. Tune from there if a run feels
+  slow -- the best value is machine-specific
+- `-n auto` means one worker per logical core. It is the right choice only
+  where the core count is not known ahead of time, which is why CI uses it
+  and you generally should not
+- **Functional tests must stay serial -- never pass `-n` to them.** They
+  share on-disk state and module-scoped app fixtures: e.g.
+  `tests/functional/test_sandbox_workdirs.py` creates, and on teardown
+  `rmtree`s, a workdir tree keyed by a constant `ROOM_ID`, so parallel
+  workers delete each other's fixtures. CI runs them in a separate,
+  `-n`-less step
+- Coverage and xdist compose (pytest-cov merges the workers' data), so
+  `-n` does not weaken the 100% gate
 
 ## Repository Structure
 
@@ -128,6 +171,48 @@ Key files:
 - Environment variables resolved via `Installation.get_environment()`
 - Secrets resolved via a configurable source chain (env vars, files,
   subprocess, random generation) in `config/secrets.py`
+
+## Database Migrations
+
+Alembic drives **two** databases from one revision tree (`alembic.ini`:
+`databases = agui, authz`):
+
+- `agui` -- `thread_persistence_dburi`, schema `soliplex.agui.schema`
+- `authz` -- `authorization_dburi`, schema `soliplex.authz.schema`
+
+Every revision therefore has `upgrade_agui()` / `upgrade_authz()` pairs
+behind an `upgrade(engine_name)` dispatcher.
+
+```bash
+# Upgrade both databases
+uv run alembic -x soliplex.installation_path=<dir> upgrade head
+
+# Emit SQL instead: writes 'agui.sql' and 'authz.sql' into the cwd
+uv run alembic -x soliplex.installation_path=<dir> upgrade head --sql
+
+# New revision (per-database stubs from 'alembic/script.py.mako')
+uv run alembic -x soliplex.installation_path=<dir> revision -m "soliplex-vX.Y"
+```
+
+- The DB URIs come from the installation config, not `alembic.ini`, so
+  `-x soliplex.installation_path=` is mandatory; without it `env.py` prints
+  its usage and exits 2
+- `env.py` builds both engines at import with `init_schema=True`, so *every*
+  command -- `current` and `history` and `--sql` included -- connects and
+  runs `metadata.create_all()`. There is no read-only command; use a
+  throwaway installation when experimenting
+- Revisions must not import live app code: freeze any borrowed helper into
+  the revision, so replaying history never depends on the current tree
+- Mode-dependent logic splits into `_x_online()` / `_x_offline()` behind a
+  `context.is_offline_mode()` dispatcher; offline has no bind, so express it
+  as set-based `op.execute()` SQL
+- Branch on `op.get_context().dialect.name` where SQLite and PostgreSQL
+  differ
+- Config is split by what Alembic can load from where, not by accident: the
+  logging sections and `databases` must stay in `alembic.ini`
+  (`fileConfig()` needs an ini; `databases` is read via `get_main_option()`,
+  which ignores `pyproject.toml`), while `prepend_sys_path` and
+  `post_write_hooks` live in `[tool.alembic]`
 
 ## Adding a New Tool
 

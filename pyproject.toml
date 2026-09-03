@@ -84,7 +84,13 @@ pythonpath = [".", "tests/unit"]
 python_files = "test_*.py"
 # skip 'tests/functional' by default
 testpaths = ["tests/unit"]
-addopts = "--cov=soliplex --cov=tests/unit --cov=scripts --cov=skills/soliplex-docs/scripts --cov-branch --cov-fail-under=100"
+# 'src/soliplex' (a path), not 'soliplex' (the importable name):
+# 'soliplex' is a namespace package, and coverage cannot enumerate one
+# by walking the filesystem, so a package-name target silently measures
+# only the modules some test happened to import.  A path target reports
+# never-imported modules at 0%, which is what makes 'omit' below the
+# single place that decides what is exempt.
+addopts = "--cov=src/soliplex --cov=tests/unit --cov=scripts --cov=skills/soliplex-docs/scripts --cov-branch --cov-fail-under=100"
 filterwarnings = [
     # "ignore::DeprecationWarning:<source-package>",
 ]
@@ -95,8 +101,7 @@ markers = [
 [tool.coverage.run]
 omit = [
     "scripts/lint_textio.py",   # runs its own '--self-test' during lint
-    "src/soliplex/cli/__init__.py",
-    "src/soliplex/tui.py",
+    "src/soliplex/tui/*",       # the TUI is deliberately untested
 ]
 
 [tool.coverage.report]

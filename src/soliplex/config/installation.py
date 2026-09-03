@@ -148,8 +148,31 @@ def _find_configs_yaml(
                     yield sub_config, _load_config_yaml(sub_config)
                 except config_exc.NoSuchConfig:
                     continue
-            else:  # pragma: NO COVER
+            else:
                 pass
+
+
+def _resolved_tokens(value, split_re, resolve):
+    """Yield 'value' tokenized on 'split_re', resolving the markers.
+
+    'split_re' has a single capturing group, so 'split' alternates literal
+    text with captured marker names.  Batching the tokens in pairs makes
+    the second element of each pair (when present) the marker to resolve.
+    """
+    tokens = split_re.split(value)
+
+    # Python 3.12 has no 'itertools.batched(strict=...)'.  Dropping 3.12
+    # support collapses this gate and its three QA escapes:  see #1333.
+    if sys.version_info >= (3, 13):  # noqa: UP036
+        batch = itertools.batched(tokens, 2, strict=False)
+    else:  # pragma: NO COVER
+        batch = itertools.batched(tokens, 2)  # noqa: B911
+
+    for two_or_one in batch:
+        yield two_or_one[0]
+
+        if len(two_or_one) == 2:
+            yield resolve(two_or_one[1])
 
 
 _find_room_configs = functools.partial(
@@ -443,22 +466,13 @@ class InstallationConfig:
 
         The marker pattern may appear zero or more times.
         """
-
-        def resolved_tokens(value):
-            tokens = config_secrets.SECRET_RE.split(value)
-
-            if sys.version_info >= (3, 13):  # noqa: UP036
-                batch = itertools.batched(tokens, 2, strict=False)
-            else:  # pragma: NO COVER
-                batch = itertools.batched(tokens, 2)  # noqa: B911
-
-            for two_or_one in batch:
-                yield two_or_one[0]
-
-                if len(two_or_one) == 2:
-                    yield self._resolve_secret(two_or_one[1])
-
-        return "".join(resolved_tokens(value))
+        return "".join(
+            _resolved_tokens(
+                value,
+                config_secrets.SECRET_RE,
+                self._resolve_secret,
+            )
+        )
 
     #
     # Map values similar to 'os.environ'.
@@ -489,7 +503,7 @@ class InstallationConfig:
 
             if from_dotenv is not None:
                 result.append(ES(EST.DOT_ENV, from_dotenv))
-            else:  # pragma: NO COVER
+            else:
                 pass
 
         from_osenv = os.getenv(key)
@@ -540,23 +554,14 @@ class InstallationConfig:
 
         The marker pattern may appear zero or more times.
         """
-
-        def resolved_tokens(value):
-            tokens = ENVIRONMENT_RE.split(value)
-
-            if sys.version_info >= (3, 13):  # noqa: UP036
-                batch = itertools.batched(tokens, 2, strict=False)
-            else:  # pragma: NO COVER
-                batch = itertools.batched(tokens, 2)  # noqa: B911
-
-            for two_or_one in batch:
-                yield two_or_one[0]
-
-                if len(two_or_one) == 2:
-                    yield self._resolve_environment_var(two_or_one[1])
-
         if isinstance(value, str):
-            return "".join(resolved_tokens(value))
+            return "".join(
+                _resolved_tokens(
+                    value,
+                    ENVIRONMENT_RE,
+                    self._resolve_environment_var,
+                )
+            )
         else:
             return value
 
@@ -962,7 +967,7 @@ class InstallationConfig:
 
             return cls(**config_dict)
 
-        except config_exc.FromYamlException:  # pragma: NO COVER
+        except config_exc.FromYamlException:
             raise
 
         except Exception as exc:

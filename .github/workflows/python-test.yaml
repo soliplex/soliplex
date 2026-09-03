@@ -48,9 +48,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --group dev
 
-      # '-n auto' parallelizes via pytest-xdist (one worker per core); CI
-      # runners have few cores, so 'auto' is portable here (locally, '-n 8'
-      # on a 16-core box is faster -- see README "Running tests").
+      # '-n auto' parallelizes via pytest-xdist (one worker per core).
+      # 'auto' is the portable choice here because a hosted runner's core
+      # count is not known ahead of time; on a machine whose core count you
+      # do know, prefer an explicit '-n' -- see DEVELOPMENT.md, "Running
+      # tests in parallel".
       - name: Run unit tests with coverage
         run: |
           set -o pipefail
