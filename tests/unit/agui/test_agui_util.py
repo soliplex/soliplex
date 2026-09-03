@@ -14,11 +14,11 @@ def test__make_uuid_str(u4):
     u4.assert_called_once_with()
 
 
-@mock.patch("datetime.timezone")
+@mock.patch("datetime.UTC")
 @mock.patch("datetime.datetime")
-def test__timestamp(dt, tz):
+def test__timestamp(dt, utc):
     found = agui_util._timestamp()
 
     assert found is dt.now.return_value
 
-    dt.now.assert_called_once_with(tz.utc)
+    dt.now.assert_called_once_with(utc)

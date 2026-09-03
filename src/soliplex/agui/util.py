@@ -7,4 +7,4 @@ def _make_uuid_str() -> str:
 
 
 def _timestamp() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)  # noqa UP07
+    return datetime.datetime.now(datetime.UTC)

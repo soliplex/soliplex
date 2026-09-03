@@ -6,7 +6,7 @@ This guide provides a complete checklist for setting up Soliplex from scratch.
 
 ### Software Prerequisites
 
-- [ ] **Python 3.12+** - Required for backend server
+- [ ] **Python 3.13+** - Required for backend server
 - [ ] **pip** - Python package installer (usually included with Python)
 - [ ] **Git** - For cloning the repository
 - [ ] **Docker & Docker Compose** (Optional) - For containerized deployment
@@ -42,9 +42,6 @@ This guide provides a complete checklist for setting up Soliplex from scratch.
 Follow these steps in order for a successful setup.
 
 ### Step 1: Install Python 3.13
-
-**Note**: If you aren't running on a platform which mandates using
-an already-installed Python 3.12, prefer using Python >= 3.13.
 
 #### Windows
 

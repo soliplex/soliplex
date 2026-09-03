@@ -29,11 +29,7 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.12", "3.13", "3.14"]
-        include:
-            # Only run coverage on Python >= 3.13.
-            - python-version: "3.12"
-              pytest-args: "--no-cov"
+        python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
 
@@ -56,7 +52,7 @@ jobs:
       - name: Run unit tests with coverage
         run: |
           set -o pipefail
-          uv run py.test -s -n auto ${{ matrix.pytest-args }} 2>&1 \
+          uv run py.test -s -n auto 2>&1 \
             | tee unit-tests.log
 
       # Functional tests run serially: they share on-disk state (e.g. the

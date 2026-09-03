@@ -36,14 +36,14 @@ ROOM_POLICY_DEFAULTS = {
 }
 
 
-@mock.patch("datetime.timezone")
+@mock.patch("datetime.UTC")
 @mock.patch("datetime.datetime")
-def test__timestamp(dt, tz):
+def test__timestamp(dt, utc):
     found = authz_schema._timestamp()
 
     assert found is dt.now.return_value
 
-    dt.now.assert_called_once_with(tz.utc)
+    dt.now.assert_called_once_with(utc)
 
 
 def test_adminuser_ctor(the_session):

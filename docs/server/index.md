@@ -5,7 +5,7 @@ to OpenAI and provides RAG functionality.
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.13+
 
 - Access to LLM:
 
