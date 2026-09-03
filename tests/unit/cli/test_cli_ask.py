@@ -188,6 +188,11 @@ def test_ask_reports_missing_result(
     assert run[-1].outcome == loggers.AUDIT_OUTCOME_ERROR
 
 
+class Boom(RuntimeError):
+    def __init__(self):
+        super().__init__("stream boom")
+
+
 def test_ask_audits_run_exception(
     no_cli_logging,
     cli_runner,
@@ -196,7 +201,7 @@ def test_ask_audits_run_exception(
     monkeypatch,
 ):
     def _boom(**kwargs):
-        raise RuntimeError("stream boom")  # noqa: TRY003
+        raise Boom()
 
     monkeypatch.setattr(cli_ask.agui_persistence, "drive_agui_turn", _boom)
 
