@@ -167,23 +167,27 @@ def no_sleep():
 
 @pytest.mark.anyio
 async def test_faux_tool_emits_state_delta_for_user_prompt(no_sleep):
-    ctx = SimpleNamespace(deps=SimpleNamespace(state={}))
+    agui_state = {}
+    ctx = SimpleNamespace(deps=SimpleNamespace(state=agui_state))
     user_prompt = ai_messages.UserPromptPart(content="hi")
 
     result = await examples.faux_tool(ctx, user_prompt=user_prompt)
 
     assert result.return_value == "something random"
     assert len(result.metadata) == 1
+    assert agui_state["faux"] == "hi"
 
 
 @pytest.mark.anyio
 async def test_faux_tool_without_user_prompt_has_no_metadata(no_sleep):
-    ctx = SimpleNamespace(deps=SimpleNamespace(state={}))
+    agui_state = {}
+    ctx = SimpleNamespace(deps=SimpleNamespace(state=agui_state))
 
     result = await examples.faux_tool(ctx)
 
     assert result.return_value == "something random"
     assert result.metadata is None
+    assert agui_state == {}
 
 
 @pytest.fixture

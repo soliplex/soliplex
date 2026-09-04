@@ -98,6 +98,7 @@ async def faux_tool(
         metadata = [
             agui_core.StateDeltaEvent(delta=list(patch)),
         ]
+        agui_state.update(new_state)
     else:
         metadata = None
 
