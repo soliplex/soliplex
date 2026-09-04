@@ -200,7 +200,7 @@ class FilesystemSkillConfig:
 @dataclasses.dataclass(kw_only=True)
 class _HaikuRAGCapabilityConfig(
     config_rag._RAGConfigBase,
-    config_rag._RAGDatabaseBase,
+    config_rag._RAGDatabasesBase,
 ):
     capability_factory: typing.ClassVar[typing.Callable]
     capability_name: typing.ClassVar[str]
@@ -220,15 +220,6 @@ class _HaikuRAGCapabilityConfig(
     ):
         try:
             config_dict.pop("kind", None)
-
-            rldb_override_path = config_dict.pop(
-                "rag_lancedb_override_path",
-                None,
-            )
-            if rldb_override_path is not None:
-                config_dict["rag_lancedb_override_path"] = pathlib.Path(
-                    rldb_override_path
-                )
 
             config_rag.adjust_yaml_rag_databases(
                 installation_config,
@@ -267,16 +258,11 @@ class _HaikuRAGCapabilityConfig(
             "kind": self.kind,
             "defer_loading": self.defer_loading,
         }
-        if self.rag_databases:
-            result["rag_databases"] = [
-                entry.as_yaml for entry in self.rag_databases
-            ]
-        elif self.rag_lancedb_stem is not None:
-            result["rag_lancedb_stem"] = self.rag_lancedb_stem
-        else:
-            result["rag_lancedb_override_path"] = str(
-                self.rag_lancedb_override_path
-            )
+        # Always the list: the singular options are input sugar,
+        # normalized into 'rag_databases' before this can be read.
+        result["rag_databases"] = [
+            entry.as_yaml for entry in self.rag_databases
+        ]
         return result
 
     @property

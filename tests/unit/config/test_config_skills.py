@@ -143,10 +143,17 @@ def test_haiku_rag_capability_config(
 
     assert config.source is config_skills.SkillKind.NATIVE
     assert config.extra_parameters == {"database_names": ["rag"]}
-    assert config.rag_lancedb_override_path == db_path
+
+    # The singular option is sugar: it lands in 'rag_databases', named
+    # for the path it placed, and 'as_yaml' emits only the list.
+    (entry,) = config.rag_databases
+    assert entry.name == "rag"
+    assert entry.rag_lancedb_override_path == db_path
     assert config.as_yaml == {
         "kind": config.kind,
-        "rag_lancedb_override_path": str(db_path),
+        "rag_databases": [
+            {"name": "rag", "rag_lancedb_override_path": str(db_path)},
+        ],
         "defer_loading": False,
     }
 
@@ -162,10 +169,10 @@ def test_haiku_rag_capability_config_with_stem(
         _installation_config=installation_config,
     )
 
-    assert config.rag_lancedb_path == db_path
+    assert config.rag_lancedb_databases == {"example": db_path}
     assert config.as_yaml == {
         "kind": config.kind,
-        "rag_lancedb_stem": "example",
+        "rag_databases": [{"name": "example", "rag_lancedb_stem": "example"}],
         "defer_loading": False,
     }
 
@@ -352,7 +359,7 @@ def test_haiku_rag_capability_config_as_yaml_round_trips(
     )
 
     assert reloaded == original
-    assert reloaded.rag_lancedb_path == original.rag_lancedb_path
+    assert reloaded.rag_databases == original.rag_databases
 
 
 def test_haiku_rag_capability_config_wraps_yaml_errors(
@@ -655,7 +662,9 @@ def test_room_skills_config_combines_capabilities(
     hrsc_yaml, bws_yaml = config.as_yaml["skill_configs"]
     assert hrsc_yaml == {
         "kind": config_skills.HR_RAG_SkillConfig.kind,
-        "rag_lancedb_override_path": str(db_path),
+        "rag_databases": [
+            {"name": "rag", "rag_lancedb_override_path": str(db_path)},
+        ],
         "defer_loading": False,
     }
     assert bws_yaml == {

@@ -272,9 +272,12 @@ configuring the RAG database and RAG client:
     suffix, of the LanceDB directory.
 
   - `rag_databases`: a list of mappings, to search several databases at
-    once.  Each entry carries a `name`, plus exactly one of
-    `rag_lancedb_stem` or `rag_lancedb_override_path`, resolved the same
-    way as above.  Names must be unique within the list.
+    once.  Each entry carries exactly one of `rag_lancedb_stem` or
+    `rag_lancedb_override_path`, resolved the same way as above, plus an
+    optional `name`.  An entry naming none is named for whichever option
+    placed it, so `rag_lancedb_stem: "papers"` and
+    `rag_lancedb_override_path: "../wiki.lancedb"` are `papers` and
+    `wiki`.  Names must be unique within the list.
 
     ```yaml
     skills:
@@ -292,6 +295,12 @@ configuring the RAG database and RAG client:
     came from, what the room's search, document and chunk endpoints
     return as `database`, and what audit records name.  The location
     stays in the configuration.
+
+    `rag_lancedb_stem` and `rag_lancedb_override_path` written directly
+    on the skill or tool are shorthand for a one-entry `rag_databases`,
+    kept for configurations written before the list existed.  They are
+    read into that list as the config loads, so a config written either
+    way behaves the same from there on, and is exported as the list.
 
     All the databases in a list must have been written with the same
     embedding model, since one query is embedded once for all of them.

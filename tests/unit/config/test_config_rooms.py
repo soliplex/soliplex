@@ -74,6 +74,20 @@ skills:
         - "{test_skills.SKILL_NAME}"
 """
 
+
+def _replace_w_entries(config, **changes):
+    """Replace a DB-bearing config, carrying changes into 'rag_databases'
+
+    An entry holds its own '_config_path' / '_installation_config', which
+    'dataclasses.replace' on the owning config leaves alone.
+    """
+    changes["rag_databases"] = [
+        dataclasses.replace(entry, **changes) for entry in config.rag_databases
+    ]
+
+    return dataclasses.replace(config, **changes)
+
+
 LANCE_DB_OVERRIDE_PATH = pathlib.Path("/tmp/rag.lancedb")
 # 'str(WindowsPath("/tmp/rag.lancedb"))' is '\tmp\rag.lancedb', and a
 # double-quoted YAML scalar expands '\t' / '\r' as escapes -- so the path
@@ -121,7 +135,7 @@ W_HR_TOOLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
     "tool_configs": {
         "hr_tool": mock.create_autospec(
             config_tools.ToolConfig,
-            rag_lancedb_path=LANCE_DB_OVERRIDE_PATH,
+            rag_lancedb_databases={"rag": LANCE_DB_OVERRIDE_PATH},
             rag_databases=[],
             rag_db_audit_path=f"rag={LANCE_DB_OVERRIDE_PATH}",
             haiku_rag_config=HR_CONFIG,
@@ -348,7 +362,7 @@ def test_roomconfig_from_yaml(
         if "skills" in config_yaml:
             replaced_skill_configs = {}
             for key, skill_config in expected.skills._skill_configs.items():
-                replaced_skill_configs[key] = dataclasses.replace(
+                replaced_skill_configs[key] = _replace_w_entries(
                     skill_config,
                     _installation_config=installation_config_w_skill,
                     _config_path=yaml_file,
@@ -976,7 +990,14 @@ async def test_roomconfig_list_haiku_rag_client_kws(
             replaced_skill_configs[key] = dataclasses.replace(
                 skill_config,
                 _installation_config=installation_config_w_skill,
-                rag_lancedb_override_path=db_path,
+                rag_databases=[
+                    dataclasses.replace(
+                        entry,
+                        rag_lancedb_override_path=db_path,
+                        _installation_config=installation_config_w_skill,
+                    )
+                    for entry in skill_config.rag_databases
+                ],
                 _haiku_rag_config=HR_CONFIG,
             )
 
@@ -989,9 +1010,9 @@ async def test_roomconfig_list_haiku_rag_client_kws(
     tool_configs = room_config_kwargs.get("tool_configs")
     if tool_configs is not None:
         for value in tool_configs.values():
-            rldbp = getattr(value, "rag_lancedb_path", None)
-            if rldbp is not None:
-                value.rag_lancedb_path = db_path
+            databases = getattr(value, "rag_lancedb_databases", None)
+            if databases is not None:
+                value.rag_lancedb_databases = {"rag": db_path}
                 value.rag_db_audit_path = f"rag={db_path}"
 
     room_config = config_rooms.RoomConfig(

@@ -117,28 +117,6 @@ class RagDbEntryRequiresName(TypeError):
         )
 
 
-class RagDbNamesSeveralDatabases(ValueError):
-    """Raised on a valid config, so it names the accessor, not the file"""
-
-    def __init__(self, _config_path):
-        self._config_path = _config_path
-        super().__init__(
-            f"The config from {_config_path} names several databases in "
-            f"'rag_databases', which have no single path"
-        )
-
-
-class RagDbNamesNoDatabase(ValueError):
-    """Raised on a valid config, so it names the accessor, not the file"""
-
-    def __init__(self, _config_path):
-        self._config_path = _config_path
-        super().__init__(
-            f"The config from {_config_path} names no database of its own, "
-            f"so its databases are the ones its haiku.rag config places"
-        )
-
-
 class RagDbNestedDatabases(TypeError):
     def __init__(self, _config_path):
         self._config_path = _config_path
@@ -168,6 +146,17 @@ class SingleRAGDatabaseProtocol(typing.Protocol):
     @abc.abstractmethod
     def rag_lancedb_path(self) -> pathlib.Path:
         """Compute the path for the room's RAG rag_lancedb_path database"""
+        ...
+
+
+@typing.runtime_checkable
+class RAGDatabasesProtocol(typing.Protocol):
+    """Expose the databases a config covers, keyed by name"""
+
+    @property
+    @abc.abstractmethod
+    def rag_lancedb_databases(self) -> dict[str, pathlib.Path | str]:
+        """Every database this config covers, keyed by name"""
         ...
 
 
@@ -223,7 +212,7 @@ class _RAGConfigBase:
     ) -> hr_config.AppConfig:
         """Name this config's databases in 'lancedb.databases'
 
-        'names_own_databases' comes from '_RAGDatabaseBase', which
+        'names_own_databases' comes from '_RAGDatabasesBase', which
         DB-bearing configs mix in alongside this class.  A config naming
         none defers to the haiku.rag config, which is returned untouched.
         Copies rather than mutates: the installation's own config object is
@@ -256,15 +245,20 @@ class _RAGConfigBase:
 
 
 @dataclasses.dataclass(kw_only=True)
-class _RAGDatabaseBase:
-    """Base class for configs which expose a 'rag_lancedb_path' property"""
+class _RAGDatabasesBase:
+    """Base class for configs which expose a 'rag_databases' list
 
-    # One of these two options must be specified, unless 'rag_databases'
-    # names several databases instead.
-    rag_lancedb_stem: str = None
-    rag_lancedb_override_path: str = None
+    Every database a config names lands in that list, whichever way the
+    YAML spelled it: the two singular options are backward-compatible
+    sugar for a one-entry list, normalized away here so nothing
+    downstream has to know which spelling was used.
+    """
 
     rag_databases: list[RAGDatabaseEntry] = _utils._default_list_field()
+
+    # Sugar for a single unnamed database, folded into 'rag_databases'.
+    rag_lancedb_stem: dataclasses.InitVar[str] = None
+    rag_lancedb_override_path: dataclasses.InitVar[str] = None
 
     # Normally set via subclass 'from_yaml'
     _installation_config: config_installation.InstallationConfig = (
@@ -272,9 +266,15 @@ class _RAGDatabaseBase:
     )
     _config_path: pathlib.Path = None
 
-    def __post_init__(self):
+    def __post_init__(
+        self,
+        rag_lancedb_stem: str | None,
+        rag_lancedb_override_path: str | None,
+    ):
+        names_one = bool(rag_lancedb_stem or rag_lancedb_override_path)
+
         if self.rag_databases:
-            if self.rag_lancedb_stem or self.rag_lancedb_override_path:
+            if names_one:
                 raise RagDbSingleAndMultiConflict(self._config_path)
 
             seen = set()
@@ -290,73 +290,27 @@ class _RAGDatabaseBase:
 
             return
 
-        if self.rag_lancedb_stem and self.rag_lancedb_override_path:
-            raise RagDbStemAndOverrideConflict(self._config_path)
-
-    @property
-    def rag_lancedb_path(self) -> pathlib.Path:
-        """Compute the path for the database"""
-        if self.rag_databases:
-            raise RagDbNamesSeveralDatabases(self._config_path)
-
-        if not (self.rag_lancedb_stem or self.rag_lancedb_override_path):
-            raise RagDbNamesNoDatabase(self._config_path)
-
-        if self.rag_lancedb_override_path is not None:
-            # Expanded before joining: a '~' resolved against the room
-            # directory is a literal directory name, never a home.
-            rsop = pathlib.Path(self.rag_lancedb_override_path).expanduser()
-
-            if self._config_path is not None:
-                rsop = (self._config_path.parent / rsop).resolve()
-            else:
-                rsop = rsop.resolve()
-
-            if not rsop.is_dir():
-                raise RagDbFileNotFound(rsop, self._config_path)
-
-            return rsop
-        else:
-            db_rag_dir = pathlib.Path(
-                self._installation_config.get_environment(
-                    "RAG_LANCE_DB_PATH",
+        if names_one:
+            # The entry names itself after whichever option placed it,
+            # and raises on the pair being spelled out together.
+            self.rag_databases.append(
+                RAGDatabaseEntry(
+                    rag_lancedb_stem=rag_lancedb_stem,
+                    rag_lancedb_override_path=rag_lancedb_override_path,
+                    _installation_config=self._installation_config,
+                    _config_path=self._config_path,
                 )
             )
-            rspdb = (db_rag_dir / f"{self.rag_lancedb_stem}.lancedb").resolve()
-
-            if not rspdb.is_dir():
-                raise RagDbFileNotFound(rspdb, self._config_path)
-
-            return rspdb
-
-    @property
-    def database_name(self) -> str:
-        """The name this database answers to, marked when it is missing.
-
-        A config written with a stem or an override path names no database,
-        so the file's stem is its name.
-        """
-        try:
-            return self.rag_lancedb_path.stem
-        except RagDbFileNotFound as exc:
-            return f"MISSING: {exc.rag_db_filename.stem}"
 
     @property
     def names_own_databases(self) -> bool:
         """Whether this config places databases, before resolving any"""
-        return bool(
-            self.rag_databases
-            or self.rag_lancedb_stem
-            or self.rag_lancedb_override_path
-        )
+        return bool(self.rag_databases)
 
     @property
     def _declared_names(self) -> list[str]:
         """The names this config writes down, before any path resolves"""
-        if self.rag_databases:
-            return [entry.name for entry in self.rag_databases]
-
-        return [self.rag_lancedb_stem or str(self.rag_lancedb_override_path)]
+        return [entry.name for entry in self.rag_databases]
 
     @property
     def _declared_databases(self) -> dict[str, pathlib.Path]:
@@ -366,13 +320,9 @@ class _RAGDatabaseBase:
         Read by 'haiku_rag_config' while it builds, so this must never
         consult the built config.
         """
-        if self.rag_databases:
-            return {
-                entry.name: entry.rag_lancedb_path
-                for entry in self.rag_databases
-            }
-
-        return {self.database_name: self.rag_lancedb_path}
+        return {
+            entry.name: entry.rag_lancedb_path for entry in self.rag_databases
+        }
 
     @property
     def rag_lancedb_databases(self) -> dict[str, pathlib.Path | str]:
@@ -390,9 +340,6 @@ class _RAGDatabaseBase:
     def rag_database_names(self) -> list[str]:
         if self.rag_databases:
             return [entry.database_name for entry in self.rag_databases]
-
-        if self.names_own_databases:
-            return [self.database_name]
 
         return list(_configured_databases(self.haiku_rag_config))
 
@@ -434,35 +381,99 @@ def adjust_yaml_rag_databases(
 
 
 @dataclasses.dataclass(kw_only=True)
-class RAGDatabaseEntry(_RAGDatabaseBase):
-    """One named database in a config's 'rag_databases'
+class RAGDatabaseEntry:
+    """One named database, whether or not a config spells out its name
 
     The name is haiku.rag's identity for the database: it travels in search
-    results, documents and citations, where a location must not.
+    results, documents and citations, where a location must not.  An entry
+    written without one takes the name from whichever option placed it, so
+    every database has a name before any path resolves.
     """
 
     name: str = None
 
+    # Exactly one of these two options places the database.
+    rag_lancedb_stem: str = None
+    rag_lancedb_override_path: str = None
+
+    # Normally set via 'from_yaml'
+    _installation_config: config_installation.InstallationConfig = (
+        _utils._no_repr_no_compare_none()
+    )
+    _config_path: pathlib.Path = None
+
+    def __post_init__(self):
+        if self.rag_lancedb_override_path is not None:
+            # However it arrived -- YAML string, sugar on the owning
+            # config, or a caller's own Path -- an entry holds a Path, so
+            # two spellings of one database compare equal.
+            self.rag_lancedb_override_path = pathlib.Path(
+                self.rag_lancedb_override_path
+            )
+
+        if self.rag_lancedb_stem and self.rag_lancedb_override_path:
+            raise RagDbStemAndOverrideConflict(self._config_path)
+
+        if not (self.rag_lancedb_stem or self.rag_lancedb_override_path):
+            raise RagDbEntryRequiresDatabase(self._config_path)
+
+        if self.name is None:
+            self.name = self._placed_name
+        elif not self.name.strip():
+            # Spelled out, but empty: a typo, not a request to derive one.
+            raise RagDbEntryRequiresName(self._config_path)
+
+    @property
+    def _placed_name(self) -> str:
+        """Name the database after whichever option placed it
+
+        Reads what the config wrote down rather than the resolved path: a
+        database that is missing still answers to a name.
+        """
+        if self.rag_lancedb_stem:
+            return self.rag_lancedb_stem
+
+        return pathlib.Path(self.rag_lancedb_override_path).stem
+
+    @property
+    def rag_lancedb_path(self) -> pathlib.Path:
+        """Compute the path for the database"""
+        if self.rag_lancedb_override_path is not None:
+            # Expanded before joining: a '~' resolved against the room
+            # directory is a literal directory name, never a home.
+            rsop = pathlib.Path(self.rag_lancedb_override_path).expanduser()
+
+            if self._config_path is not None:
+                rsop = (self._config_path.parent / rsop).resolve()
+            else:
+                rsop = rsop.resolve()
+
+            if not rsop.is_dir():
+                raise RagDbFileNotFound(rsop, self._config_path)
+
+            return rsop
+
+        db_rag_dir = pathlib.Path(
+            self._installation_config.get_environment(
+                "RAG_LANCE_DB_PATH",
+            )
+        )
+        rspdb = (db_rag_dir / f"{self.rag_lancedb_stem}.lancedb").resolve()
+
+        if not rspdb.is_dir():
+            raise RagDbFileNotFound(rspdb, self._config_path)
+
+        return rspdb
+
     @property
     def database_name(self) -> str:
+        """The name this database answers to, marked when it is missing"""
         try:
             _ = self.rag_lancedb_path  # property raises
         except RagDbFileNotFound:
             return f"MISSING: {self.name}"
 
         return self.name
-
-    def __post_init__(self):
-        if not self.name or not self.name.strip():
-            raise RagDbEntryRequiresName(self._config_path)
-
-        if self.rag_databases:
-            raise RagDbNestedDatabases(self._config_path)
-
-        super().__post_init__()
-
-        if not (self.rag_lancedb_stem or self.rag_lancedb_override_path):
-            raise RagDbEntryRequiresDatabase(self._config_path)
 
     @classmethod
     def from_yaml(
@@ -473,12 +484,11 @@ class RAGDatabaseEntry(_RAGDatabaseBase):
     ) -> RAGDatabaseEntry:
         config_dict = dict(config_dict)
 
-        rldb_override_path = config_dict.pop("rag_lancedb_override_path", None)
-
-        if rldb_override_path is not None:
-            config_dict["rag_lancedb_override_path"] = pathlib.Path(
-                rldb_override_path
-            )
+        # An entry places one database, so it cannot nest a list of them.
+        # Checked here rather than in '__post_init__': the field is gone,
+        # and a bare TypeError names the keyword, not the mistake.
+        if "rag_databases" in config_dict:
+            raise RagDbNestedDatabases(config_path)
 
         config_dict["_installation_config"] = installation_config
         config_dict["_config_path"] = config_path

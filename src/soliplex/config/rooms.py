@@ -283,8 +283,8 @@ class RoomConfig:
         - Tool configs defined in the room
 
         For each candidate: if it derives from `config.rag._RAGConfigBase`
-        (has `haiku_rag_config`/`rag_lancedb_path` attributes), return
-        the corresponding kwargs dict.
+        (has `haiku_rag_config`/`rag_lancedb_databases` attributes),
+        return the corresponding kwargs dict.
         """
         candidates = (
             [("agent", self.agent_config)]
@@ -306,7 +306,7 @@ class RoomConfig:
             if not isinstance(cfg, config_rag.RAGConfigProtocol):
                 continue
 
-            if not isinstance(cfg, config_rag.SingleRAGDatabaseProtocol):
+            if not isinstance(cfg, config_rag.RAGDatabasesProtocol):
                 continue
 
             # Every database a config names travels in

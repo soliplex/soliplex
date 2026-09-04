@@ -2,6 +2,7 @@ import copy
 import dataclasses
 import functools
 import inspect
+import pathlib
 from unittest import mock
 from urllib import parse as url_parse
 
@@ -910,8 +911,9 @@ def test_sdtc_ctor(installation_config, temp_dir):
     assert sdt_config._installation_config is installation_config
     assert sdt_config._config_path == config_path
 
-    found = sdt_config.rag_lancedb_path
-    assert found.resolve() == from_stem.resolve()
+    assert sdt_config.rag_lancedb_databases == {
+        "stem": from_stem.resolve(),
+    }
 
     expected_ep = {
         "database_names": ["stem"],
@@ -1007,12 +1009,21 @@ def test_sdtc_as_yaml(temp_dir, installation_config, w_kw):
 
     expected = {"tool_name": config_tools.SDTC_TOOL_NAME}
 
+    # Either singular option is sugar for a one-entry 'rag_databases',
+    # named for whatever placed it, and only the list is emitted.
     if "rag_lancedb_override_path" in w_kw:
-        expected["rag_lancedb_override_path"] = w_kw[
-            "rag_lancedb_override_path"
+        override = w_kw["rag_lancedb_override_path"]
+        expected["rag_databases"] = [
+            {
+                "name": pathlib.Path(override).stem,
+                "rag_lancedb_override_path": override,
+            },
         ]
     else:
-        expected["rag_lancedb_stem"] = w_kw["rag_lancedb_stem"]
+        stem = w_kw["rag_lancedb_stem"]
+        expected["rag_databases"] = [
+            {"name": stem, "rag_lancedb_stem": stem},
+        ]
 
     if "search_documents_limit" in w_kw:
         expected["search_documents_limit"] = w_kw["search_documents_limit"]
