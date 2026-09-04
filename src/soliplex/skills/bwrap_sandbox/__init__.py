@@ -64,6 +64,23 @@ async def skill_list_environments(
         return candidates
 
 
+def format_execute_result(result: bs_models.ExecuteResult) -> str:
+    """Render an execution's result as the text the agent sees.
+
+    A non-zero status is called out in the text because the agent reads
+    only this string; the status itself reaches the audit record from the
+    result the tool keeps hold of.
+    """
+    output = result.output
+    if result.truncated:
+        output += "\n\n... (output truncated)"
+
+    if result.exit_code is not None and result.exit_code != 0:
+        return f"Command failed (exit code {result.exit_code}):\n{output}"
+
+    return str(output)
+
+
 class UnknownEnvironment(pydantic_ai.ModelRetry):
     def __init__(self, name, choices):
         self.name = name
@@ -85,6 +102,11 @@ class NoEnvironmentsConfigured(pydantic_ai.ToolFailed):
             "and this room has none configured. "
             "Tell the user the sandbox skill is not configured."
         )
+
+
+# 'check_environment_name' rejections refuse the call rather than
+# failing the sandbox, so they audit as 'denied'.
+ENVIRONMENT_DENIALS = (UnknownEnvironment, NoEnvironmentsConfigured)
 
 
 async def check_environment_name(
@@ -306,7 +328,7 @@ async def skill_run(
     workdir: pathlib.Path | None = None,
     timeout: float | None = None,  # seconds
     extra_volumes: bs_models.VolumeMap = None,
-) -> str:
+) -> bs_models.ExecuteResult:
     """Execute a shell command in the working directory.
 
     Args:
@@ -334,14 +356,7 @@ async def skill_run(
             environment_name=environment_name,
         ) from exc
 
-    output = result.output
-    if result.truncated:
-        output += "\n\n... (output truncated)"
-
-    if result.exit_code is not None and result.exit_code != 0:
-        return f"Command failed (exit code {result.exit_code}):\n{output}"
-
-    return str(output)
+    return result
 
 
 RUN_PYTHON_DESCRIPTION = f"""\
@@ -389,7 +404,7 @@ async def skill_run_python(
     workdir: pathlib.Path | None = None,
     timeout: float | None = None,  # seconds
     extra_volumes: bs_models.VolumeMap = None,
-) -> str:
+) -> bs_models.ExecuteResult:
     """Execute a python script in the working directory.
 
     Args:
@@ -414,14 +429,7 @@ async def skill_run_python(
             environment_name=environment_name,
         ) from exc
 
-    output = result.output
-    if result.truncated:
-        output += "\n\n... (output truncated)"
-
-    if result.exit_code is not None and result.exit_code != 0:
-        return f"Command failed (exit code {result.exit_code}):\n{output}"
-
-    return str(output)
+    return result
 
 
 class InvalidSubdir(ValueError):
@@ -628,30 +636,41 @@ def create_sandbox_toolset(
         ctx: pydantic_ai.RunContext,
         volume: VolumeName,
     ) -> list[str]:
-        if installation_config is None:
-            return []
+        deps = ctx.deps
 
-        else:
-            deps = ctx.deps
-            room_id = deps.room_id
-            thread_id = deps.thread_id
+        with sandbox_audit.audit_sandbox_list(deps, volume=volume) as access:
+            if installation_config is None:
+                found = []
 
-            return await skill_list_volume_files(
-                volume=volume,
-                room_upload_path=(
-                    _check_subdirs(rooms_upload_path, [room_id])
-                    if (rooms_upload_path is not None and room_id is not None)
-                    else None
-                ),
-                thread_upload_path=(
-                    _check_subdirs(threads_upload_path, [thread_id])
-                    if (
-                        threads_upload_path is not None
-                        and thread_id is not None
-                    )
-                    else None
-                ),
-            )
+            else:
+                room_id = deps.room_id
+                thread_id = deps.thread_id
+
+                found = await skill_list_volume_files(
+                    volume=volume,
+                    room_upload_path=(
+                        _check_subdirs(rooms_upload_path, [room_id])
+                        if (
+                            rooms_upload_path is not None
+                            and room_id is not None
+                        )
+                        else None
+                    ),
+                    thread_upload_path=(
+                        _check_subdirs(threads_upload_path, [thread_id])
+                        if (
+                            threads_upload_path is not None
+                            and thread_id is not None
+                        )
+                        else None
+                    ),
+                )
+
+            # The count, never the names: the record says a disclosure
+            # happened and how big it was.
+            access.record_count(len(found))
+
+            return found
 
     @toolset.tool(description=RUN_DESCRIPTION)
     async def run(
@@ -660,33 +679,38 @@ def create_sandbox_toolset(
         environment_name: str | None = None,
         timeout: float | None = None,  # seconds
     ) -> str:
-        await check_environment_name(
-            bwrap_sandbox=bwrap_sandbox,
-            environment_name=environment_name,
-            allowed_environments=allowed_environments,
-        )
-
         deps = ctx.deps
-        workdir = get_workdir(
-            workdirs_path,
-            deps.room_id,
-            deps.thread_id,
-            deps.run_id,
-        )
-
-        extra_volumes = get_extra_volumes(
-            rooms_upload_path,
-            threads_upload_path,
-            deps.room_id,
-            deps.thread_id,
-        )
 
         with sandbox_audit.audit_sandbox_exec(
             deps,
             action=loggers.AUDIT_SANDBOX_ACTION_RUN,
             environment=environment_name,
-            workdir=workdir,
+            denied_exceptions=ENVIRONMENT_DENIALS,
         ) as access:
+            # Inside the audit context, and ahead of 'get_workdir': a
+            # refused call leaves a record, and creates no working
+            # directory to name in it.
+            await check_environment_name(
+                bwrap_sandbox=bwrap_sandbox,
+                environment_name=environment_name,
+                allowed_environments=allowed_environments,
+            )
+
+            workdir = get_workdir(
+                workdirs_path,
+                deps.room_id,
+                deps.thread_id,
+                deps.run_id,
+            )
+            access.record_workdir(workdir)
+
+            extra_volumes = get_extra_volumes(
+                rooms_upload_path,
+                threads_upload_path,
+                deps.room_id,
+                deps.thread_id,
+            )
+
             ref = write_transcript(
                 transcripts_path,
                 deps.room_id,
@@ -702,7 +726,7 @@ def create_sandbox_toolset(
             if ref is not None:
                 access.record_ref(ref)
 
-            return await skill_run(
+            result = await skill_run(
                 bwrap_sandbox=bwrap_sandbox,
                 command=command,
                 environment_name=environment_name,
@@ -710,6 +734,9 @@ def create_sandbox_toolset(
                 timeout=timeout,
                 extra_volumes=extra_volumes,
             )
+            access.record_exit_code(result.exit_code)
+
+            return format_execute_result(result)
 
     @toolset.tool(description=RUN_PYTHON_DESCRIPTION)
     async def run_python(
@@ -718,33 +745,38 @@ def create_sandbox_toolset(
         environment_name: str | None = None,
         timeout: float | None = None,  # seconds
     ) -> str:
-        await check_environment_name(
-            bwrap_sandbox=bwrap_sandbox,
-            environment_name=environment_name,
-            allowed_environments=allowed_environments,
-        )
-
         deps = ctx.deps
-        workdir = get_workdir(
-            workdirs_path,
-            deps.room_id,
-            deps.thread_id,
-            deps.run_id,
-        )
-
-        extra_volumes = get_extra_volumes(
-            rooms_upload_path,
-            threads_upload_path,
-            deps.room_id,
-            deps.thread_id,
-        )
 
         with sandbox_audit.audit_sandbox_exec(
             deps,
             action=loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
             environment=environment_name,
-            workdir=workdir,
+            denied_exceptions=ENVIRONMENT_DENIALS,
         ) as access:
+            # Inside the audit context, and ahead of 'get_workdir': a
+            # refused call leaves a record, and creates no working
+            # directory to name in it.
+            await check_environment_name(
+                bwrap_sandbox=bwrap_sandbox,
+                environment_name=environment_name,
+                allowed_environments=allowed_environments,
+            )
+
+            workdir = get_workdir(
+                workdirs_path,
+                deps.room_id,
+                deps.thread_id,
+                deps.run_id,
+            )
+            access.record_workdir(workdir)
+
+            extra_volumes = get_extra_volumes(
+                rooms_upload_path,
+                threads_upload_path,
+                deps.room_id,
+                deps.thread_id,
+            )
+
             ref = write_transcript(
                 transcripts_path,
                 deps.room_id,
@@ -756,7 +788,7 @@ def create_sandbox_toolset(
             if ref is not None:
                 access.record_ref(ref)
 
-            return await skill_run_python(
+            result = await skill_run_python(
                 bwrap_sandbox=bwrap_sandbox,
                 script=script,
                 environment_name=environment_name,
@@ -764,6 +796,9 @@ def create_sandbox_toolset(
                 timeout=timeout,
                 extra_volumes=extra_volumes,
             )
+            access.record_exit_code(result.exit_code)
+
+            return format_execute_result(result)
 
     return toolset
 

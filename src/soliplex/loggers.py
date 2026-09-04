@@ -163,6 +163,15 @@ AUDIT_SANDBOX_EXEC = "sandbox exec"
 AUDIT_SANDBOX_ACTION_RUN = "run"
 AUDIT_SANDBOX_ACTION_RUN_PYTHON = "run-python"
 
+# sandbox-exec 'reason' values for a non-zero exit: the sandbox cut the
+# execution off, or the code itself ended badly.
+AUDIT_SANDBOX_REASON_TIMEOUT = "timeout"
+AUDIT_SANDBOX_REASON_EXIT_CODE = "exit-code"
+
+# sandbox volume-list audit events (disclosure): the sandbox skill tells
+# the agent which uploaded files a volume holds.
+AUDIT_SANDBOX_VOLUME_LIST = "sandbox volume list"
+
 # room-upload audit events: an admin (privileged) adds shared reference
 # material to a room, changing what the room's agent and members can access.
 AUDIT_ROOM_UPLOAD_ADDED = "room upload added"
@@ -612,16 +621,25 @@ class RAGAccessAuditLog(AuditLogWrapper):
 
 
 class SandboxExecAuditLog(AuditLogWrapper):
-    """Record sandbox executions that may change run-workdir data.
+    """Record the sandbox skill's executions and volume listings.
 
     Each ``run`` / ``run_python`` invocation is one data-change event: the
     room agent's sandbox skill executes code against the run's writable
     working directory. The command and script bodies are deliberately not
     recorded inline (size / content leakage); the record captures the
     'action' (which tool ran), the 'workdir' whose data the execution may
-    have changed, the 'environment' it ran in, and 'refs' -- the host paths
-    of the saved command / script transcripts (empty when transcripts are
-    not configured).
+    have changed, the 'environment' it ran in, 'refs' -- the host paths of
+    the saved command / script transcripts (empty when transcripts are not
+    configured) -- and the 'exit_code' the execution ended with.
+
+    An execution refused for naming an unavailable environment is recorded
+    as 'denied': nothing ran, so it carries no exit code, and its 'workdir'
+    is None because none was created.
+
+    ``list_volume_files`` discloses the names of a volume's uploaded files
+    to the agent, so it is recorded too, as its own event carrying the
+    'volume' and the 'count' of files disclosed. The names themselves stay
+    out of the record, for the same reason the bodies do.
     """
 
     def __init__(self, claims: dict[str, typing.Any], **extra):
@@ -636,6 +654,8 @@ class SandboxExecAuditLog(AuditLogWrapper):
         workdir: str | None,
         environment: str | None,
         refs: typing.Any,
+        *,
+        exit_code: int | None = None,
     ):
         self._succeeded(
             AUDIT_SANDBOX_EXEC,
@@ -643,6 +663,7 @@ class SandboxExecAuditLog(AuditLogWrapper):
             workdir=workdir,
             environment=environment,
             refs=refs,
+            exit_code=exit_code,
         )
 
     def execute_failed(
@@ -652,6 +673,8 @@ class SandboxExecAuditLog(AuditLogWrapper):
         environment: str | None,
         refs: typing.Any,
         reason: str,
+        *,
+        exit_code: int | None = None,
     ):
         self._failed(
             AUDIT_SANDBOX_EXEC,
@@ -659,6 +682,38 @@ class SandboxExecAuditLog(AuditLogWrapper):
             workdir=workdir,
             environment=environment,
             refs=refs,
+            reason=reason,
+            exit_code=exit_code,
+        )
+
+    def execute_denied(
+        self,
+        action: str,
+        workdir: str | None,
+        environment: str | None,
+        refs: typing.Any,
+        reason: str,
+    ):
+        self._denied(
+            AUDIT_SANDBOX_EXEC,
+            action=action,
+            workdir=workdir,
+            environment=environment,
+            refs=refs,
+            reason=reason,
+        )
+
+    def volume_listed(self, volume: str, count: int):
+        self._succeeded(
+            AUDIT_SANDBOX_VOLUME_LIST,
+            volume=volume,
+            count=count,
+        )
+
+    def volume_list_failed(self, volume: str, reason: str):
+        self._failed(
+            AUDIT_SANDBOX_VOLUME_LIST,
+            volume=volume,
             reason=reason,
         )
 

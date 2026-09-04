@@ -819,11 +819,17 @@ def test_sandboxexecauditlog_ctor(w_claims):
     assert found.extra["claims"] == w_claims
 
 
-def test_sandbox_executed(audit_records):
+@pytest.mark.parametrize("w_exit_code", [None, 0])
+def test_sandbox_executed(audit_records, w_exit_code):
+    """A clean exit, and an execution that never reported one"""
     wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
 
     wrapper.executed(
-        loggers.AUDIT_SANDBOX_ACTION_RUN, "/work/run", "bare", ["/t/abc.txt"]
+        loggers.AUDIT_SANDBOX_ACTION_RUN,
+        "/work/run",
+        "bare",
+        ["/t/abc.txt"],
+        exit_code=w_exit_code,
     )
 
     _assert_audit_record(
@@ -838,11 +844,21 @@ def test_sandbox_executed(audit_records):
             "workdir": "/work/run",
             "environment": "bare",
             "refs": ["/t/abc.txt"],
+            "exit_code": w_exit_code,
         },
     )
 
 
-def test_sandbox_execute_failed(audit_records):
+@pytest.mark.parametrize(
+    "w_reason, w_exit_code",
+    [
+        (loggers.AUDIT_SANDBOX_REASON_EXIT_CODE, 42),
+        (loggers.AUDIT_SANDBOX_REASON_TIMEOUT, -1),
+        ("RuntimeError", None),
+    ],
+)
+def test_sandbox_execute_failed(audit_records, w_reason, w_exit_code):
+    """A bad exit, a timeout, and a raising body all fail the same way"""
     wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
 
     wrapper.execute_failed(
@@ -850,7 +866,8 @@ def test_sandbox_execute_failed(audit_records):
         None,
         None,
         ["/t/abc.py"],
-        "RuntimeError",
+        w_reason,
+        exit_code=w_exit_code,
     )
 
     _assert_audit_record(
@@ -865,7 +882,75 @@ def test_sandbox_execute_failed(audit_records):
             "workdir": None,
             "environment": None,
             "refs": ["/t/abc.py"],
-            "reason": "RuntimeError",
+            "reason": w_reason,
+            "exit_code": w_exit_code,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "w_reason", ["UnknownEnvironment", "NoEnvironmentsConfigured"]
+)
+def test_sandbox_execute_denied(audit_records, w_reason):
+    """A refused call names no workdir: none was created"""
+    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
+
+    wrapper.execute_denied(
+        loggers.AUDIT_SANDBOX_ACTION_RUN,
+        None,
+        "nonesuch",
+        [],
+        w_reason,
+    )
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SANDBOX_EXEC,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_DENIED,
+        scope=SCOPE_SANDBOX_EXEC,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_SANDBOX_ACTION_RUN,
+            "workdir": None,
+            "environment": "nonesuch",
+            "refs": [],
+            "reason": w_reason,
+        },
+    )
+
+
+@pytest.mark.parametrize("w_count", [0, 3])
+def test_sandbox_volume_listed(audit_records, w_count):
+    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
+
+    wrapper.volume_listed("thread", w_count)
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SANDBOX_VOLUME_LIST,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_SANDBOX_EXEC,
+        fields={"claims": CLAIMS, "volume": "thread", "count": w_count},
+    )
+
+
+def test_sandbox_volume_list_failed(audit_records):
+    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
+
+    wrapper.volume_list_failed("room", "SandboxPathEscape")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SANDBOX_VOLUME_LIST,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_SANDBOX_EXEC,
+        fields={
+            "claims": CLAIMS,
+            "volume": "room",
+            "reason": "SandboxPathEscape",
         },
     )
 
