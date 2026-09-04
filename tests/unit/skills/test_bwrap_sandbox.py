@@ -45,6 +45,19 @@ ALL_ENVIRONMENTS = [ONE_ENVIRONMENT, ANOTHER_ENVIRONMENT]
 # 'FileNotFoundError' subclass rather than a 'RuntimeError'. Each must come
 # back as an error string the model can act on: one escaping the tool aborts
 # the whole agent run (soliplex#1306).
+EXEC_OUTPUT = "test output"
+
+
+def _execute_result(exit_code=0, output=EXEC_OUTPUT, truncated=False):
+    """What 'skill_run' / 'skill_run_python' now hand back to a tool"""
+    return mock.create_autospec(
+        bs_models.ExecuteResult,
+        output=output,
+        exit_code=exit_code,
+        truncated=truncated,
+    )
+
+
 EXECUTION_ERROR_CASES = [
     (
         bs_config.EnvironmentNotFound(pathlib.Path("/environments/pandas")),
@@ -296,9 +309,30 @@ async def test_skill_list_volume_files_wo_configured_path(volume):
     assert found == []
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("w_exit_code", [0, None, 42])
+@pytest.mark.parametrize("w_exit_code", [0, None, 42, -1])
 @pytest.mark.parametrize("w_truncated", [False, True])
+def test_format_execute_result(w_exit_code, w_truncated):
+    """The text the agent sees calls out a non-zero status"""
+    result = mock.create_autospec(
+        bs_models.ExecuteResult,
+        output="test output",
+        exit_code=w_exit_code,
+        truncated=w_truncated,
+    )
+    expected = "test output"
+
+    if w_truncated:
+        expected += "\n\n... (output truncated)"
+
+    if w_exit_code not in [None, 0]:
+        expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
+
+    found = skills_bwrap_sandbox.format_execute_result(result)
+
+    assert found == expected
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "w_command, exp_cmd_args",
     [
@@ -306,34 +340,19 @@ async def test_skill_list_volume_files_wo_configured_path(volume):
         (["/bin/true"], ["/bin/true"]),
     ],
 )
-async def test_skill_run_w_exit_code_truncation(
+async def test_skill_run(
     ctx_w_deps,
     bwrap_sandbox,
     w_command,
     exp_cmd_args,
-    w_truncated,
-    w_exit_code,
 ):
-    bwrap_sandbox.execute.return_value = mock.create_autospec(
-        bs_models.ExecuteResult,
-        output="test output",
-        exit_code=w_exit_code,
-        truncated=w_truncated,
-    )
-    if w_truncated:
-        expected = "test output\n\n... (output truncated)"
-    else:
-        expected = "test output"
-
-    if w_exit_code not in [None, 0]:
-        expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
-
+    """The result travels up whole, so the caller can audit its status"""
     found = await skills_bwrap_sandbox.skill_run(
         bwrap_sandbox=bwrap_sandbox,
         command=w_command,
     )
 
-    assert found == expected
+    assert found is bwrap_sandbox.execute.return_value
 
     bwrap_sandbox.execute.assert_awaited_once_with(
         command=exp_cmd_args,
@@ -397,21 +416,13 @@ async def test_skill_run_w_extra_args(
     exp_cmd_args,
     w_kw,
 ):
-    bwrap_sandbox.execute.return_value = mock.create_autospec(
-        bs_models.ExecuteResult,
-        output="test output",
-        exit_code=None,
-        truncated=False,
-    )
-    expected = "test output"
-
     found = await skills_bwrap_sandbox.skill_run(
         bwrap_sandbox=bwrap_sandbox,
         command=w_command,
         **w_kw,
     )
 
-    assert found == expected
+    assert found is bwrap_sandbox.execute.return_value
 
     exp_kw = {
         "environment_name": None,
@@ -427,34 +438,14 @@ async def test_skill_run_w_extra_args(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("w_exit_code", [0, None, 42])
-@pytest.mark.parametrize("w_truncated", [False, True])
-async def test_skill_run_python_w_exit_code_truncation(
-    ctx_w_deps,
-    bwrap_sandbox,
-    w_truncated,
-    w_exit_code,
-):
-    bwrap_sandbox.execute_python.return_value = mock.create_autospec(
-        bs_models.ExecuteResult,
-        output="test output",
-        exit_code=w_exit_code,
-        truncated=w_truncated,
-    )
-    if w_truncated:
-        expected = "test output\n\n... (output truncated)"
-    else:
-        expected = "test output"
-
-    if w_exit_code not in [None, 0]:
-        expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
-
+async def test_skill_run_python(ctx_w_deps, bwrap_sandbox):
+    """The result travels up whole, so the caller can audit its status"""
     found = await skills_bwrap_sandbox.skill_run_python(
         bwrap_sandbox=bwrap_sandbox,
         script="print('hello')",
     )
 
-    assert found == expected
+    assert found is bwrap_sandbox.execute_python.return_value
 
     bwrap_sandbox.execute_python.assert_awaited_once_with(
         script="print('hello')",
@@ -531,21 +522,13 @@ async def test_skill_run_python_w_extra_args(
     bwrap_sandbox,
     w_kw,
 ):
-    bwrap_sandbox.execute_python.return_value = mock.create_autospec(
-        bs_models.ExecuteResult,
-        output="test output",
-        exit_code=None,
-        truncated=False,
-    )
-    expected = "test output"
-
     found = await skills_bwrap_sandbox.skill_run_python(
         bwrap_sandbox=bwrap_sandbox,
         script="print('hello')",
         **w_kw,
     )
 
-    assert found == expected
+    assert found is bwrap_sandbox.execute_python.return_value
 
     exp_kw = {
         "environment_name": None,
@@ -901,7 +884,11 @@ async def test_create_sandbox_toolset_list_volume_files(
     rooms_upload_path,
     threads_upload_path,
     w_iconfig,
+    audit_records,
 ):
+    disclosed = ["/sandbox/volumes/foo/one.csv", "/sandbox/volumes/foo/b.txt"]
+    skill_list_volume_files.return_value = disclosed
+
     if w_iconfig:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset(
             installation_config=i_config,
@@ -914,7 +901,7 @@ async def test_create_sandbox_toolset_list_volume_files(
     found = await tool.function(ctx=ctx_w_deps, volume="foo")
 
     if w_iconfig:
-        assert found is skill_list_volume_files.return_value
+        assert found == disclosed
         skill_list_volume_files.assert_called_once_with(
             volume="foo",
             room_upload_path=rooms_upload_path / str(ROOM_ID),
@@ -923,6 +910,16 @@ async def test_create_sandbox_toolset_list_volume_files(
     else:
         assert found == []
 
+    record = audit_records[-1]
+    assert record.getMessage() == loggers.AUDIT_SANDBOX_VOLUME_LIST
+    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.volume == "foo"
+    assert record.count == (len(disclosed) if w_iconfig else 0)
+    assert record.claims == {"preferred_username": USERNAME}
+    assert record.room_id == ROOM_ID
+    # The names disclosed stay out of the record.
+    assert not any(name in str(record.__dict__) for name in disclosed)
+
 
 @pytest.mark.anyio
 @mock.patch("soliplex.skills.bwrap_sandbox.skill_list_volume_files")
@@ -930,7 +927,9 @@ async def test_create_sandbox_toolset_list_volume_files_wo_upload_paths(
     skill_list_volume_files,
     s_config,
     ctx_w_deps,
+    audit_records,
 ):
+    skill_list_volume_files.return_value = []
     i_config = mock.create_autospec(
         config_installation.InstallationConfig,
         sandbox_config=s_config,
@@ -944,12 +943,18 @@ async def test_create_sandbox_toolset_list_volume_files_wo_upload_paths(
 
     found = await tool.function(ctx=ctx_w_deps, volume="foo")
 
-    assert found is skill_list_volume_files.return_value
+    assert found == []
     skill_list_volume_files.assert_called_once_with(
         volume="foo",
         room_upload_path=None,
         thread_upload_path=None,
     )
+
+    record = audit_records[-1]
+    assert record.getMessage() == loggers.AUDIT_SANDBOX_VOLUME_LIST
+    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.volume == "foo"
+    assert record.count == 0
 
 
 @pytest.mark.anyio
@@ -984,6 +989,8 @@ async def test_create_sandbox_toolset_run(
     bs_klass.return_value.config.list_environments.return_value = (
         ALL_ENVIRONMENTS
     )
+    skill_run.return_value = _execute_result(exit_code=0)
+
     if w_iconfig:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset(
             installation_config=i_config,
@@ -1000,7 +1007,7 @@ async def test_create_sandbox_toolset_run(
         **w_kw,
     )
 
-    assert found is skill_run.return_value
+    assert found == EXEC_OUTPUT
 
     exp_kw = {
         "environment_name": None,
@@ -1018,6 +1025,7 @@ async def test_create_sandbox_toolset_run(
     record = audit_records[-1]
     assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
     assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.exit_code == 0
     assert record.workdir == str(gw.return_value)
     assert record.environment == w_kw.get("environment_name")
     assert record.claims == {"preferred_username": USERNAME}
@@ -1098,6 +1106,8 @@ async def test_create_sandbox_toolset_run_python(
     bs_klass.return_value.config.list_environments.return_value = (
         ALL_ENVIRONMENTS
     )
+    skill_run_python.return_value = _execute_result(exit_code=0)
+
     if w_iconfig:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset(
             installation_config=i_config,
@@ -1114,7 +1124,7 @@ async def test_create_sandbox_toolset_run_python(
         **w_kw,
     )
 
-    assert found is skill_run_python.return_value
+    assert found == EXEC_OUTPUT
 
     exp_kw = {
         "environment_name": None,
@@ -1132,6 +1142,7 @@ async def test_create_sandbox_toolset_run_python(
     record = audit_records[-1]
     assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON
     assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.exit_code == 0
     assert record.workdir == str(gw.return_value)
     assert record.environment == w_kw.get("environment_name")
     assert record.claims == {"preferred_username": USERNAME}
@@ -1204,7 +1215,15 @@ async def test_create_sandbox_toolset_run_w_disallowed_environment(
     assert exc_info.value.choices == ["one"]
 
     skill_run.assert_not_called()
-    assert audit_records == []
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
+    assert record.outcome == loggers.AUDIT_OUTCOME_DENIED
+    assert record.reason == "UnknownEnvironment"
+    assert record.environment == "another"
+    # Refused ahead of 'get_workdir': no directory was created to name.
+    assert record.workdir is None
+    assert record.refs == []
 
 
 @pytest.mark.anyio
@@ -1236,7 +1255,15 @@ async def test_create_sandbox_toolset_run_python_w_disallowed_environment(
     assert exc_info.value.choices == ["one"]
 
     skill_run_python.assert_not_called()
-    assert audit_records == []
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON
+    assert record.outcome == loggers.AUDIT_OUTCOME_DENIED
+    assert record.reason == "UnknownEnvironment"
+    assert record.environment == "another"
+    # Refused ahead of 'get_workdir': no directory was created to name.
+    assert record.workdir is None
+    assert record.refs == []
 
 
 @pytest.mark.parametrize("w_iconfig", [False, True])
@@ -1312,6 +1339,115 @@ def test_create_bwrap_sandbox_capability_defer_loading(
     )
 
     assert capability.defer_loading is w_defer_loading
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_exit_code, exp_reason",
+    [
+        (42, loggers.AUDIT_SANDBOX_REASON_EXIT_CODE),
+        (-1, loggers.AUDIT_SANDBOX_REASON_TIMEOUT),
+    ],
+)
+@pytest.mark.parametrize(
+    "w_tool, w_helper, w_action, w_arg",
+    [
+        (
+            "run",
+            "skill_run",
+            loggers.AUDIT_SANDBOX_ACTION_RUN,
+            {"command": ["/bin/true"]},
+        ),
+        (
+            "run_python",
+            "skill_run_python",
+            loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
+            {"script": "print('hello')"},
+        ),
+    ],
+)
+@mock.patch("soliplex.skills.bwrap_sandbox.get_extra_volumes")
+@mock.patch("soliplex.skills.bwrap_sandbox.get_workdir")
+@mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
+async def test_create_sandbox_toolset_audits_failing_exit_code(
+    bs_klass,
+    gw,
+    gev,
+    ctx_w_deps,
+    i_config,
+    audit_records,
+    w_tool,
+    w_helper,
+    w_action,
+    w_arg,
+    w_exit_code,
+    exp_reason,
+):
+    """A bad exit fails the record, though the tool still returns text"""
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+        installation_config=i_config,
+    )
+    tool = toolset.tools[w_tool]
+    result = _execute_result(exit_code=w_exit_code)
+
+    with mock.patch.object(
+        skills_bwrap_sandbox, w_helper, return_value=result
+    ):
+        found = await tool.function(ctx=ctx_w_deps, **w_arg)
+
+    assert found == (
+        f"Command failed (exit code {w_exit_code}):\n{EXEC_OUTPUT}"
+    )
+
+    record = audit_records[-1]
+    assert record.action == w_action
+    assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
+    assert record.reason == exp_reason
+    assert record.exit_code == w_exit_code
+    assert record.workdir == str(gw.return_value)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_tool, w_action, w_arg",
+    [
+        (
+            "run",
+            loggers.AUDIT_SANDBOX_ACTION_RUN,
+            {"command": ["/bin/true"]},
+        ),
+        (
+            "run_python",
+            loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
+            {"script": "print('hello')"},
+        ),
+    ],
+)
+@mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
+async def test_create_sandbox_toolset_audits_no_environments(
+    bs_klass,
+    ctx_w_deps,
+    audit_records,
+    w_tool,
+    w_action,
+    w_arg,
+):
+    """A room with nothing configured denies the same way it refuses"""
+    bs_klass.return_value.config.list_environments.return_value = []
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset()
+    tool = toolset.tools[w_tool]
+
+    with pytest.raises(skills_bwrap_sandbox.NoEnvironmentsConfigured):
+        await tool.function(
+            ctx=ctx_w_deps, environment_name="another", **w_arg
+        )
+
+    record = audit_records[-1]
+    assert record.action == w_action
+    assert record.outcome == loggers.AUDIT_OUTCOME_DENIED
+    assert record.reason == "NoEnvironmentsConfigured"
+    assert record.environment == "another"
+    assert record.workdir is None
 
 
 @pytest.mark.anyio
