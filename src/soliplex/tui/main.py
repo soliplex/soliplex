@@ -1015,6 +1015,11 @@ class RoomView(t_screen.Screen):
                 event = agui_parser.agui_event_from_json(event_info)
                 esp(event)
 
+            if esp.invalid_state_deltas:  # see #1260
+                esp.state = {
+                    "error": "'STATE_DELTA' without final 'STATE_SNAPSHOT'",
+                }
+
             self.run_agent_input = esp.as_run_agent_input
 
             for message in esp.messages:
@@ -1166,6 +1171,11 @@ class RoomView(t_screen.Screen):
                     )
 
                 self.app.call_from_thread(response.update, response_content)
+
+        if esp.invalid_state_deltas:  # see #1260
+            esp.state = {
+                "error": "'STATE_DELTA' without final 'STATE_SNAPSHOT'",
+            }
 
         new_run_agent_input = esp.as_run_agent_input
         self.run_agent_input.messages[:] = new_run_agent_input.messages[:]
