@@ -8,28 +8,45 @@ storage:
   auto_vacuum: true
   vacuum_retention_seconds: 86400
 
-# This section is for configuring LanceDB in various "remote" modes.
-# Leave it commented out to use local filesystem databases.
+# Every database is named here, and its location is a local path or a
+# URI.  Leave the section out to use the default local database.  The
+# name is what results and citations carry, and what a room reports as
+# 'database'; the location stays here.
 #lancedb:
+#  databases:
+#    papers: /path/to/papers.lancedb
+
 # Configure LanceDB Cloud
-# uri: ''
-# api_key: ''
-# region: ''
+#lancedb:
+#  databases:
+#    papers: db://your-database-name
+#  api_key: ''
+#  region: ''
 
 # Configure Amazon S3
 # Use AWS credentials or IAM roles
-# uri: s3://my-bucket/my-table
+#lancedb:
+#  databases:
+#    papers: s3://my-bucket/papers.lancedb
+#  storage_options:
+#    region: us-east-1
 
 # Configure Azure Blob Storage
 # Use Azure credentials
-# uri: az://my-bucket/my-table
+#lancedb:
+#  databases:
+#    papers: az://my-bucket/papers.lancedb
 
 # Google Cloud Storage
 # Use GCP credentials
-# uri: gs://my-bucket/my-table
+#lancedb:
+#  databases:
+#    papers: gs://my-bucket/papers.lancedb
 
 # Configure Hadoop file system
-# uri: hdfs://namenode:port/path/to/table
+#lancedb:
+#  databases:
+#    papers: hdfs://namenode:port/path/to/papers.lancedb
 
 embeddings:
   model:

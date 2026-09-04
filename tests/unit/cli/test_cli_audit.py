@@ -64,13 +64,60 @@ _FILE_DBURI = "sqlite+aiosqlite:///x.db"
 
 
 class _OkRagCfg:
+    haiku_rag_config = None
+    rag_databases = ()
     rag_lancedb_path = None
 
 
 class _ErrRagCfg:
+    haiku_rag_config = None
+    rag_databases = ()
+
     @property
     def rag_lancedb_path(self):
         raise RAGError()
+
+
+class _NoDbRagCfg:
+    """Exposes a haiku-rag config but names no database at all"""
+
+    haiku_rag_config = None
+
+
+class _DeferringRagCfg(_ErrRagCfg):
+    """Leaves placement to its haiku.rag config, so has no path to probe"""
+
+    names_own_databases = False
+
+
+TESTING_RAG_UNBUILDABLE = (
+    "lancedb.uri is not a thing; write lancedb.databases: {NAME: <location>}"
+)
+
+
+class _UnbuildableRagCfg(_ErrRagCfg):
+    """A config whose haiku.rag configuration will not load
+
+    Its database also fails to resolve, and only one of the two is the
+    diagnosis an operator can act on.
+    """
+
+    @property
+    def haiku_rag_config(self):
+        raise ValueError(TESTING_RAG_UNBUILDABLE)
+
+
+class _MultiRagCfg:
+    """Names two databases, the second of which cannot be resolved"""
+
+    class _Papers(_OkRagCfg):
+        name = "papers"
+
+    class _Wiki(_ErrRagCfg):
+        name = "wiki"
+
+    haiku_rag_config = None
+    rag_databases = (_Papers(), _Wiki())
 
 
 @pytest.fixture
@@ -715,6 +762,75 @@ def test__invalid_room_rag_dbs(
     assert iter_candidates.call_args_list == [
         mock.call(rc) for rc in room_configs.values()
     ]
+
+
+@mock.patch("soliplex.cli.audit._iter_room_rag_candidates")
+def test__invalid_room_rag_dbs_w_rag_databases(
+    iter_candidates,
+    the_installation,
+):
+    """Each named database is probed and reported under its own name"""
+    room_cfg = mock.Mock()
+    room_cfg.id = "r1"
+    the_installation._config.room_configs = {"r1": room_cfg}
+    iter_candidates.side_effect = [[("skill:rag", _MultiRagCfg())]]
+
+    found = cli_audit._invalid_room_rag_dbs(the_installation)
+
+    assert found == {"rag": {"r1": {"skill:rag#wiki": TESTING_RAG_ERROR}}}
+
+
+@mock.patch("soliplex.cli.audit._iter_room_rag_candidates")
+def test__invalid_room_rag_dbs_wo_database(
+    iter_candidates,
+    the_installation,
+):
+    """A config naming no database is reported, not raised at the caller"""
+    room_cfg = mock.Mock()
+    room_cfg.id = "r1"
+    the_installation._config.room_configs = {"r1": room_cfg}
+    iter_candidates.side_effect = [[("skill:rag", _NoDbRagCfg())]]
+
+    found = cli_audit._invalid_room_rag_dbs(the_installation)
+
+    assert "rag_lancedb_path" in found["rag"]["r1"]["skill:rag"]
+
+
+@mock.patch("soliplex.cli.audit._iter_room_rag_candidates")
+def test__invalid_room_rag_dbs_w_deferred_database(
+    iter_candidates,
+    the_installation,
+):
+    """A config placing no database of its own has no path to probe"""
+    room_cfg = mock.Mock()
+    room_cfg.id = "r1"
+    the_installation._config.room_configs = {"r1": room_cfg}
+    iter_candidates.side_effect = [[("skill:rag", _DeferringRagCfg())]]
+
+    assert cli_audit._invalid_room_rag_dbs(the_installation) == {}
+
+
+@mock.patch("soliplex.cli.audit._iter_room_rag_candidates")
+def test__invalid_room_rag_dbs_w_unbuildable_config(
+    iter_candidates,
+    the_installation,
+):
+    """A config that will not build reports that, not its unresolved path
+
+    Its path fails to resolve as well, but naming the missing file sends
+    the operator to create it, which is not the fix.
+    """
+    room_cfg = mock.Mock()
+    room_cfg.id = "r1"
+    the_installation._config.room_configs = {"r1": room_cfg}
+    iter_candidates.side_effect = [[("skill:rag", _UnbuildableRagCfg())]]
+
+    found = cli_audit._invalid_room_rag_dbs(the_installation)
+
+    (reported,) = found["rag"]["r1"].values()
+    assert reported == TESTING_RAG_UNBUILDABLE
+    assert TESTING_RAG_ERROR not in reported
+    assert list(found["rag"]["r1"]) == ["skill:rag"]
 
 
 # _audit_rooms_section: ui only

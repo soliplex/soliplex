@@ -283,8 +283,8 @@ class RoomConfig:
         - Tool configs defined in the room
 
         For each candidate: if it derives from `config.rag._RAGConfigBase`
-        (has `haiku_rag_config`/`rag_lancedb_path` attributes), return
-        the corresponding kwargs dict.
+        (has `haiku_rag_config`/`rag_lancedb_databases` attributes),
+        return the corresponding kwargs dict.
         """
         candidates = (
             [("agent", self.agent_config)]
@@ -303,29 +303,24 @@ class RoomConfig:
         )
 
         for source, cfg in candidates:
-            if isinstance(cfg, config_rag.RAGConfigProtocol):
-                haiku_rag_config = cfg.haiku_rag_config
+            if not isinstance(cfg, config_rag.RAGConfigProtocol):
+                continue
 
-                if isinstance(cfg, config_rag.SingleRAGDatabaseProtocol):
-                    rag_lancedb_paths = [cfg.rag_lancedb_path]
-                elif isinstance(
-                    cfg, config_rag.MultipleRAGDatabasesProtocol
-                ):  # pragma: NO COVER
-                    rag_lancedb_paths = cfg.rag_lancedb_paths
-                else:  # pragma: NO COVER
-                    rag_lancedb_path = ()
+            if not isinstance(cfg, config_rag.RAGDatabasesProtocol):
+                continue
 
-                for rag_lancedb_path in rag_lancedb_paths:
-                    hrc_kw = {
-                        "db_path": rag_lancedb_path,
-                        "config": haiku_rag_config,
-                        "read_only": True,
-                    }
+            # Every database a config names travels in
+            # 'config.lancedb.databases', so the client needs no path.
+            hrc_kw = {
+                "config": cfg.haiku_rag_config,
+                "read_only": True,
+            }
 
-                    if include_source:
-                        hrc_kw["source"] = source
+            if include_source:
+                hrc_kw["source"] = source
+                hrc_kw["audit_db_path"] = cfg.rag_db_audit_path
 
-                    yield hrc_kw
+            yield hrc_kw
 
 
 RoomConfigMap = dict[str, RoomConfig]

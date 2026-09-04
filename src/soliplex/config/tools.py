@@ -331,7 +331,7 @@ _, SDTC_TOOL_KIND = SDTC_TOOL_NAME.rsplit(".", 1)
 class SearchDocumentsToolConfig(
     ToolConfig,
     config_rag._RAGConfigBase,
-    config_rag._RAGDatabaseBase,
+    config_rag._RAGDatabasesBase,
 ):
     kind: str = SDTC_TOOL_KIND
     tool_name: str = SDTC_TOOL_NAME
@@ -352,6 +352,12 @@ class SearchDocumentsToolConfig(
             cls._adjust_yaml_agui_feature_names(config_dict)
             cls._adjust_yaml_ai_tool_params(config_dict, config_path)
 
+            config_rag.adjust_yaml_rag_databases(
+                installation_config,
+                config_path,
+                config_dict,
+            )
+
             instance = cls(**config_dict)
         except Exception as exc:
             raise config_exc.FromYamlException(
@@ -366,12 +372,11 @@ class SearchDocumentsToolConfig(
     def as_yaml(self) -> dict:
         result = super().as_yaml
 
-        if self.rag_lancedb_stem is not None:
-            result["rag_lancedb_stem"] = self.rag_lancedb_stem
-        else:
-            result["rag_lancedb_override_path"] = (
-                self.rag_lancedb_override_path
-            )
+        # Always the list: the singular options are input sugar,
+        # normalized into 'rag_databases' before this can be read.
+        result["rag_databases"] = [
+            entry.as_yaml for entry in self.rag_databases
+        ]
 
         result["search_documents_limit"] = self.search_documents_limit
 
@@ -383,7 +388,7 @@ class SearchDocumentsToolConfig(
         }
         return (
             super().get_extra_parameters()
-            | config_rag._RAGDatabaseBase.get_extra_parameters(self)
+            | config_rag._RAGDatabasesBase.get_extra_parameters(self)
             | local
         )
 

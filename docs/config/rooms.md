@@ -259,7 +259,9 @@ one of kind `haiku.rag.skills.rag` and one of kind
 `haiku.rag.skills.analysis`.  Both of these configurations have options for
 configuring the RAG database and RAG client:
 
-- One of the following (exactly one must be provided):
+- At most one of the following.  A configuration providing none of them
+  reads the databases its `haiku.rag.yaml` places in `lancedb.databases`,
+  which is how a room reads a database that is not a local directory.
 
   - `rag_lancedb_stem`: a string, the "base name" (without path or
     `.lancedb` suffix) of the LanceDB file containing the RAG document
@@ -268,6 +270,50 @@ configuring the RAG database and RAG client:
 
   - `rag_lancedb_override_path`: a string, a pathname, including the
     suffix, of the LanceDB directory.
+
+  - `rag_databases`: a list of mappings, to search several databases at
+    once.  Each entry carries exactly one of `rag_lancedb_stem` or
+    `rag_lancedb_override_path`, resolved the same way as above, plus an
+    optional `name`.  An entry naming none is named for whichever option
+    placed it, so `rag_lancedb_stem: "papers"` and
+    `rag_lancedb_override_path: "../wiki.lancedb"` are `papers` and
+    `wiki`.  Names must be unique within the list.
+
+    ```yaml
+    skills:
+      skill_configs:
+        - kind: "haiku.rag.skills.rag"
+          rag_databases:
+            - name: "papers"
+              rag_lancedb_stem: "papers"
+            - name: "wiki"
+              rag_lancedb_override_path: "../wiki.lancedb"
+    ```
+
+    The name is how a database identifies itself outside the
+    configuration: it is what the agent sees as the collection a result
+    came from, what the room's search, document and chunk endpoints
+    return as `database`, and what audit records name.  The location
+    stays in the configuration.
+
+    `rag_lancedb_stem` and `rag_lancedb_override_path` written directly
+    on the skill or tool are shorthand for a one-entry `rag_databases`,
+    kept for configurations written before the list existed.  They are
+    read into that list as the config loads, so a config written either
+    way behaves the same from there on, and is exported as the list.
+
+    All the databases in a list must have been written with the same
+    embedding model, since one query is embedded once for all of them.
+
+  Naming a database here while the `haiku.rag` configuration read by the
+  room already places one in `lancedb.databases` is two placements for
+  one room, and the room fails when it is used.  The configuration may
+  be the room's own `haiku.rag.yaml` or the installation's, since the
+  room reads the two merged.  Name every database in one place: move the
+  room's own into `lancedb.databases`, or drop whichever side is the
+  duplicate.  A configuration carrying the older `lancedb.uri` fails to
+  load instead, with the replacement spelled out.  `soliplex-cli audit`
+  reports either ahead of time.
 
 - `haiku_rag_config`: a path to the `haiku.rag.yaml` file used to configure
   the RAG client.  If not absolute, this path is resolved relative to
@@ -321,8 +367,11 @@ any additional options.
 
 ## Location of RAG database files
 
-Rooms using the `haiku_chat` agent kind need to be able to find the
-LanceDB database containing the chunks and embeddings extracted by
-Haiku-RAG.  At present, there should be a single database per room,
-named by convention `<stem>.lancedb`, and stored in the `db/rag/`
-subdirectory of the project root.
+Rooms need to be able to find the LanceDB database containing the chunks
+and embeddings extracted by Haiku-RAG.  A database is named by convention
+`<stem>.lancedb`, and stored in the `db/rag/` subdirectory of the project
+root.
+
+A room's RAG skill or tool reads one such database, or several named ones
+through `rag_databases` (see above), in which case a search covers them
+all and each result reports the database it came from.

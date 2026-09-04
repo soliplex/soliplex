@@ -198,7 +198,7 @@ async def get_room_documents(
     ):
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
-        db_path = str(hr_client_kw["db_path"])
+        db_path = hr_client_kw.pop("audit_db_path")
 
         async with hr_client.HaikuRAG(**hr_client_kw) as rag:
             results = await rag.list_documents()
@@ -208,6 +208,7 @@ async def get_room_documents(
         for document in results:
             document_set[document.id] = models.RAGDocument(
                 source=source,
+                database=document.source,
                 id=document.id,
                 uri=document.uri,
                 title=document.title,
@@ -220,6 +221,26 @@ async def get_room_documents(
         room_id=room_id,
         document_set=document_set,
     )
+
+
+async def _find_chunk(rag, chunk_id: str):
+    """Return a chunk and the name of the database holding it
+
+    Chunk IDs repeat between copies of a database, so a client covering
+    several is asked one at a time, and the first covered database holding
+    the ID wins.  A client covering one database reports the name that
+    database was configured under, None where the configuration named none.
+    """
+    if not rag.covers_multiple:
+        return await rag.get_chunk_by_id(chunk_id), rag.source
+
+    for database in rag.source_names:
+        chunk = await rag.get_chunk_by_id(chunk_id, source=database)
+
+        if chunk:
+            return chunk, database
+
+    return None, None
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/chunk/{chunk_id}")
@@ -276,13 +297,14 @@ async def get_chunk_visualization(
     ):
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
-        db_path = str(hr_client_kw["db_path"])
+        db_path = hr_client_kw.pop("audit_db_path")
 
         async with hr_client.HaikuRAG(**hr_client_kw) as rag:
-            chunk = await rag.chunk_repository.get_by_id(chunk_id)
+            chunk, database = await _find_chunk(rag, chunk_id)
 
             if chunk:
-                images = await rag.visualize_chunk(
+                owner = await rag.reader_for(database)
+                images = await owner.visualize_chunk(
                     chunk, refs=doc_item_refs, expand=expand
                 )
                 break  # first hit wins
@@ -321,6 +343,7 @@ async def get_chunk_visualization(
 
     return models.ChunkVisualization(
         source=source,
+        database=database,
         chunk_id=chunk_id,
         document_uri=chunk.document_uri,
         images_base_64=base64_images,
@@ -365,7 +388,7 @@ async def get_search(
     ):
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
-        db_path = str(hr_client_kw["db_path"])
+        db_path = hr_client_kw.pop("audit_db_path")
 
         async with hr_client.HaikuRAG(**hr_client_kw) as rag:
             hits = await rag.search(
@@ -379,6 +402,7 @@ async def get_search(
             aggregate_hits.append(
                 models.SearchHit(
                     source=source,
+                    database=hit.source,
                     content=hit.content,
                     score=hit.score,
                     chunk_id=hit.chunk_id,
@@ -386,7 +410,8 @@ async def get_search(
                     document_uri=hit.document_uri,
                     document_title=hit.document_title,
                     document_meta=hit.document_meta,
-                    headings=hit.headings,
+                    # A chunk with no heading metadata has no headings.
+                    headings=hit.headings or [],
                     page_numbers=hit.page_numbers,
                     labels=hit.labels,
                 )

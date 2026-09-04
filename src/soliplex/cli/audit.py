@@ -408,6 +408,24 @@ def _iter_room_rag_candidates(room_config):
             yield f"tool:{tool_config.tool_name}", tool_config
 
 
+def _rag_db_probes(source, cfg):
+    """Yield ``(label, cfg)`` for each database a config names.
+
+    A probe checks a path this config places, so a config deferring
+    placement to its haiku.rag config yields nothing: opening it for the
+    document count is what checks it.  A candidate is only known to expose
+    ``haiku_rag_config``, so one that cannot place a database at all yields
+    itself and reports its own error from inside the caller's ``try``.
+    """
+    rag_databases = getattr(cfg, "rag_databases", None)
+
+    if rag_databases:
+        for entry in rag_databases:
+            yield f"{source}#{entry.name}", entry
+    elif getattr(cfg, "names_own_databases", True):
+        yield source, cfg
+
+
 def _invalid_room_agui_features(
     the_installation: installation.Installation,
 ) -> dict:
@@ -438,9 +456,18 @@ def _invalid_room_rag_dbs(
 
         for source, cfg in _iter_room_rag_candidates(room_config):
             try:
-                _ = cfg.rag_lancedb_path  # property raises
+                _ = cfg.haiku_rag_config  # property raises
             except Exception as exc:
+                # A config that will not build says why; what it
+                # names is unanswerable until that is fixed.
                 per_room[source] = str(exc)
+                continue
+
+            for label, probe in _rag_db_probes(source, cfg):
+                try:
+                    _ = probe.rag_lancedb_path  # property raises
+                except Exception as exc:
+                    per_room[label] = str(exc)
 
         if per_room:
             rag_errors[room_config.id] = per_room
@@ -505,12 +532,24 @@ def _audit_rooms_section(
             tc_print()
             tc_print("   Haiku Rag DBs")
             for source, cfg in candidates:
-                exc = per_room_rag.get(source)
-                if exc is not None:
-                    tc_print(f"   - {source:20}: ERROR: {exc}")
+                # A config that will not build is recorded under its own
+                # source, which the per-database labels never match.
+                if source in per_room_rag:
+                    failed = (source, per_room_rag[source])
+                else:
+                    failed = next(
+                        (
+                            (label, per_room_rag[label])
+                            for label, _ in _rag_db_probes(source, cfg)
+                            if label in per_room_rag
+                        ),
+                        None,
+                    )
+                if failed is not None:
+                    failed_label, exc = failed
+                    tc_print(f"   - {failed_label:20}: ERROR: {exc}")
                 else:
                     rag = hr_client.HaikuRAG(
-                        db_path=cfg.rag_lancedb_path,
                         config=cfg.haiku_rag_config,
                         read_only=True,
                     )
@@ -522,7 +561,7 @@ def _audit_rooms_section(
                         room_rag_errors[source] = count_error
                     tc_print(
                         f"   - {source:20}: "
-                        f"{str(cfg.rag_lancedb_path):30} {count_display}"
+                        f"{cfg.rag_db_audit_path:30} {count_display}"
                     )
                 tc_print()
         tc_line()

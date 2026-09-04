@@ -31,11 +31,10 @@ async def search_documents(
     with rag_audit.audit_tool_access(
         ctx.deps,
         audit_method="search",
-        db_path=str(tool_config.rag_lancedb_path),
+        db_path=tool_config.rag_db_audit_path,
         selector=query,
     ) as access:
         async with hr_client.HaikuRAG(
-            db_path=tool_config.rag_lancedb_path,
             config=hr_config,
             read_only=True,
         ) as rag:

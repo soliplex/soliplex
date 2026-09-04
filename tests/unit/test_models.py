@@ -492,7 +492,7 @@ def test_skill_from_config_w_hrrsc(hr_rag_skill_config):
     assert found.state_type_schema == hr_rag.RAGState.model_json_schema()
     assert found.state_namespace == hr_rag.STATE_NAMESPACE
     assert found.extra_parameters == {
-        "database_names": [hr_rag_skill_config.rag_lancedb_path.stem],
+        "database_names": hr_rag_skill_config.rag_database_names,
     }
 
 
