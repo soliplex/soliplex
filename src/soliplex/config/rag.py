@@ -409,7 +409,7 @@ class _RAGDatabaseBase:
 
 
 def adjust_yaml_rag_databases(
-    installation_config: InstallationConfig,  # noqa F821 cycle
+    installation_config: config_installation.InstallationConfig,
     config_path: pathlib.Path,
     config_dict: dict,
 ) -> None:
@@ -446,7 +446,7 @@ class RAGDatabaseEntry(_RAGDatabaseBase):
     @property
     def database_name(self) -> str:
         try:
-            self.rag_lancedb_path  # noqa B018
+            _ = self.rag_lancedb_path  # property raises
         except RagDbFileNotFound:
             return f"MISSING: {self.name}"
 
@@ -467,7 +467,7 @@ class RAGDatabaseEntry(_RAGDatabaseBase):
     @classmethod
     def from_yaml(
         cls,
-        installation_config: InstallationConfig,  # noqa F821 cycle
+        installation_config: config_installation.InstallationConfig,
         config_path: pathlib.Path,
         config_dict: dict,
     ) -> RAGDatabaseEntry:

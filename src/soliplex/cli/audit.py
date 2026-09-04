@@ -456,7 +456,7 @@ def _invalid_room_rag_dbs(
 
         for source, cfg in _iter_room_rag_candidates(room_config):
             try:
-                cfg.haiku_rag_config  # noqa B018
+                _ = cfg.haiku_rag_config  # property raises
             except Exception as exc:
                 # A config that will not build says why; what it
                 # names is unanswerable until that is fixed.
