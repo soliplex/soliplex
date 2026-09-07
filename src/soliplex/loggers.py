@@ -26,6 +26,8 @@ AGUI_POST_RECENT_USER_FEEDBACK = "post recent room user feedback"
 AGUI_POST_REVIEW_RECENT_FEEDBACK = "post review recent agui feedback"
 AGUI_POST_RESOLVE_RECENT_FEEDBACK = "post resolve recent agui feedback"
 
+CONTEXT_TOKENIZE_UNAVAILABLE = "provider did not answer /tokenize"
+CONTEXT_TOKENIZE_UNREADABLE = "provider /tokenize body was not JSON"
 CONTEXT_WINDOW_UNAVAILABLE = "provider did not answer /v1/models"
 CONTEXT_WINDOW_UNREADABLE = "provider /v1/models body was not JSON"
 

@@ -16,6 +16,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
+from soliplex import context_segments
 from soliplex import context_window
 from soliplex import installation
 from soliplex import loggers
@@ -270,11 +271,66 @@ async def get_room_agui_thread_id(
     )
 
 
+async def _breakdown(
+    *,
+    user_name,
+    room_id,
+    thread_id,
+    run_id,
+    measured_tokens,
+    base_url,
+    model_name,
+    api_key,
+    the_threads,
+    the_logger,
+):
+    """Attribute 'measured_tokens' to the parts of the measured run.
+
+    Counts the run's own stored messages, so the breakdown and the total
+    describe the same request. Everything not attributable to one of
+    them is reported as overhead rather than reconstructed.
+
+    Returns an empty mapping whenever the pieces cannot be counted --
+    no stored input, or a provider with no tokenizer endpoint. A client
+    shows no breakdown then, which is the honest answer.
+    """
+    try:
+        run = await the_threads.get_run(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+    except agui.AGUI_Exception:
+        return {}
+
+    run_input = await _get_run_input(run)
+
+    if run_input is None:
+        return {}
+
+    pieces = context_segments.collect_texts(run_input.messages)
+
+    counts = await context_window.count_tokens(
+        base_url=base_url,
+        model_name=model_name,
+        texts=context_segments.texts_of(pieces),
+        api_key=api_key,
+        the_logger=the_logger,
+    )
+
+    if counts is None:
+        return {}
+
+    return context_segments.totals_by_kind(pieces, counts, measured_tokens)
+
+
 @util.logfire_span("GET /v1/rooms/{room_id}/agui/{thread_id}/context")
 @router.get("/v1/rooms/{room_id}/agui/{thread_id}/context")
 async def get_room_agui_thread_id_context(
     room_id: str,
     thread_id: pydantic.UUID4,
+    detail: bool = False,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
@@ -337,11 +393,28 @@ async def get_room_agui_thread_id_context(
             the_logger=the_logger,
         )
 
+    tokens_by_kind = {}
+
+    if detail and measured_tokens is not None and base_url is not None:
+        tokens_by_kind = await _breakdown(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=measured_at_run_id,
+            measured_tokens=measured_tokens,
+            base_url=base_url,
+            model_name=model_name,
+            api_key=provider_kw.get("api_key"),
+            the_threads=the_threads,
+            the_logger=the_logger,
+        )
+
     return models.AGUI_ThreadContext(
         max_model_len=max_model_len,
         model_name=model_name,
         measured_tokens=measured_tokens,
         measured_at_run_id=measured_at_run_id,
+        tokens_by_kind=tokens_by_kind,
     )
 
 
