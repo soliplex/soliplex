@@ -63,3 +63,33 @@ services:
       - ./db:/app/db
       - ./sandbox/workdirs:/app/sandbox/workdirs
       - ./uploads:/app/uploads
+
+  # Document conversion for RAG ingestion.
+  #
+  #   docker compose up -d docling_serve
+  #
+  # Only needed to BUILD a RAG database, never to serve one. The server
+  # depends on 'haiku.rag-slim', which queries an existing LanceDB but
+  # cannot ingest documents; ingestion needs docling, which drags in
+  # torch, transformers and the whole CUDA stack -- some 88 packages.
+  # Running it as a container keeps all of that out of the venv the
+  # server actually ships.
+  #
+  # Port 5001 is what 'example/haiku.rag.yaml' already points its
+  # 'providers.docling_serve.base_url' at, so no config change is needed.
+  # Once it is up:
+  #
+  #   haiku-rag --config example/haiku.rag.yaml \
+  #     add-src --db db/rag/rag.lancedb docs/
+  #
+  # The CPU image is deliberate: the example corpus is Markdown, so there
+  # is no OCR to accelerate, and it avoids requiring the NVIDIA container
+  # toolkit. Swap to 'docling-serve' (no '-cpu') plus a 'gpus: all'
+  # deploy block if you start ingesting scanned PDFs at volume.
+  docling_serve:
+    image: ghcr.io/docling-project/docling-serve-cpu:latest
+    ports:
+      - "5001:5001"
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "true"
+    restart: unless-stopped

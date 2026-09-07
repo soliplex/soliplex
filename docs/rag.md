@@ -18,13 +18,27 @@ against an existing LanceDB database.
 However, this dependency is not sufficient to perform the ingestion /
 indexing of documents.  For that purpose, either:
 
-- Install the main `haiku-rag` project
-  (<https://pypi.org/project/haiku.rag/>)
-  which will pull in all the dependencies required to ingest and index
-  documents.
+- Run `docling-serve` as a container, which this repository's
+  `docker-compose.yaml` provides. **Recommended:** it keeps the ingestion
+  dependencies out of the environment the server runs in.
 
-- Pull the `docling-serve` Docker image, and run its server, with
-  your `haiku.rag.yaml` file configured to use it.
+  ```bash
+  docker compose up -d docling_serve
+  ```
+
+  It listens on port 5001, which is where `example/haiku.rag.yaml`
+  already points `providers.docling_serve.base_url`, so no configuration
+  change is needed.
+
+- Or install the main `haiku-rag` project
+  (<https://pypi.org/project/haiku.rag/>), which pulls in every
+  dependency needed to ingest and index documents.
+
+  Be aware of what that costs: it resolves to roughly 88 additional
+  packages, including `torch`, `transformers`, `opencv` and the full
+  NVIDIA CUDA stack, and it upgrades `click` out from under the CLI.
+  It also leaves both `haiku.rag` and `haiku.rag-slim` installed, each
+  providing the same import package.
 
 See the `haiku.rag` documentation to determine:
 
