@@ -209,3 +209,158 @@ async def test_get_max_model_len_answers_from_cache(cached, the_logger):
 
     assert found == cached
     client.get.assert_not_awaited()
+
+
+class TestTokenizeUrl:
+    @pytest.mark.parametrize(
+        "base_url, expected",
+        [
+            # vLLM mounts its tokenizer router at the root, so the
+            # OpenAI-compatible suffix has to come off.
+            ("http://vllm:8000/v1", "http://vllm:8000/tokenize"),
+            ("http://vllm:8000", "http://vllm:8000/tokenize"),
+            ("http://vllm:8000/", "http://vllm:8000/tokenize"),
+            ("http://host/api/v1", "http://host/api/tokenize"),
+        ],
+    )
+    def test_strips_the_openai_suffix(self, base_url, expected):
+        assert context_window._tokenize_url(base_url) == expected
+
+
+def _tokenizer_returning(counts=None, exc=None, payload=None):
+    client = mock.AsyncMock()
+    client.__aenter__.return_value = client
+
+    if exc is not None:
+        client.post = mock.AsyncMock(side_effect=exc)
+    else:
+        responses = []
+
+        for body in (
+            payload
+            if payload is not None
+            else [
+                {"count": c, "max_model_len": 8192, "tokens": []}
+                for c in counts
+            ]
+        ):
+            response = mock.Mock(spec_set=["json", "raise_for_status"])
+            response.json = mock.Mock(return_value=body)
+            response.raise_for_status = mock.Mock()
+            responses.append(response)
+
+        client.post = mock.AsyncMock(side_effect=responses)
+
+    return mock.patch.object(
+        context_window.httpx,
+        "AsyncClient",
+        return_value=client,
+    ), client
+
+
+@pytest.mark.anyio
+async def test_count_tokens_without_texts_asks_nothing(the_logger):
+    patcher, client = _tokenizer_returning(counts=[])
+
+    with patcher:
+        found = await context_window.count_tokens(
+            base_url=BASE_URL,
+            model_name=MODEL_NAME,
+            texts=[],
+            the_logger=the_logger,
+        )
+
+    assert found == []
+    client.post.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_count_tokens_counts_each_piece(the_logger):
+    patcher, client = _tokenizer_returning(counts=[3, 11])
+
+    with patcher:
+        found = await context_window.count_tokens(
+            base_url=BASE_URL,
+            model_name=MODEL_NAME,
+            texts=["hi", "a longer piece"],
+            api_key="sekrit",
+            the_logger=the_logger,
+        )
+
+    assert found == [3, 11]
+    assert client.post.await_count == 2
+    client.post.assert_any_await(
+        "http://vllm.example.com:8000/tokenize",
+        headers={"Authorization": "Bearer sekrit"},
+        json={
+            "model": MODEL_NAME,
+            "prompt": "hi",
+            # Fragments of a request, not requests: the per-message
+            # scaffolding is recovered as a residual instead.
+            "add_special_tokens": False,
+        },
+    )
+
+
+@pytest.mark.anyio
+async def test_count_tokens_without_an_api_key(the_logger):
+    patcher, client = _tokenizer_returning(counts=[1])
+
+    with patcher:
+        await context_window.count_tokens(
+            base_url=BASE_URL,
+            model_name=MODEL_NAME,
+            texts=["hi"],
+            the_logger=the_logger,
+        )
+
+    assert client.post.await_args.kwargs["headers"] == {}
+
+
+@pytest.mark.anyio
+async def test_count_tokens_without_a_tokenizer_endpoint(the_logger):
+    """Every provider but vLLM 404s here, and that is not an error."""
+    patcher, _client = _tokenizer_returning(exc=httpx.ConnectError("nope"))
+
+    with patcher:
+        found = await context_window.count_tokens(
+            base_url=BASE_URL,
+            model_name=MODEL_NAME,
+            texts=["hi"],
+            the_logger=the_logger,
+        )
+
+    assert found is None
+    the_logger.warning.assert_called_once_with(
+        loggers.CONTEXT_TOKENIZE_UNAVAILABLE,
+        base_url=BASE_URL,
+        model_name=MODEL_NAME,
+        reason="nope",
+    )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param([], id="not-a-mapping"),
+        pytest.param({"max_model_len": 8192}, id="no-count"),
+    ],
+)
+@pytest.mark.anyio
+async def test_count_tokens_unreadable_body(body, the_logger):
+    patcher, _client = _tokenizer_returning(payload=[body])
+
+    with patcher:
+        found = await context_window.count_tokens(
+            base_url=BASE_URL,
+            model_name=MODEL_NAME,
+            texts=["hi"],
+            the_logger=the_logger,
+        )
+
+    assert found is None
+    the_logger.warning.assert_called_once_with(
+        loggers.CONTEXT_TOKENIZE_UNREADABLE,
+        base_url=BASE_URL,
+        model_name=MODEL_NAME,
+    )

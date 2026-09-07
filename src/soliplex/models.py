@@ -796,6 +796,14 @@ class AGUI_ThreadContext(pydantic.BaseModel):
     measured_tokens: int | None = None
     measured_at_run_id: str | None = None
 
+    # Requested with '?detail=true'. Empty when the provider has no
+    # tokenizer endpoint -- which is every provider but vLLM -- because
+    # a breakdown nothing measured would be invention. The keys are the
+    # segment kinds a client groups by; 'overhead' is the residual
+    # against 'measured_tokens', so it accounts for the instructions,
+    # tool and MCP schemas and chat template without enumerating them.
+    tokens_by_kind: dict[str, int] = pydantic.Field(default_factory=dict)
+
 
 class AGUI_Run(pydantic.BaseModel):
     thread_id: pydantic.UUID4 = KW_ONLY
