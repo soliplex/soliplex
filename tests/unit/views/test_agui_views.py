@@ -634,7 +634,10 @@ async def test_get_room_agui_thread_id_only(
         (UNKNOWN_RUN, raises_httpexc(code=404, match="Unknown run")),
     ],
 )
-@pytest.mark.parametrize("w_usage", [None, (1, 2, 3, 4)])
+@pytest.mark.parametrize(
+    "w_usage",
+    [None, (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")],
+)
 @pytest.mark.parametrize("w_events", [[], AGUI_EVENTS])
 @pytest.mark.parametrize("w_parent", [False, True])
 @pytest.mark.parametrize("w_run_meta", [False, True])
@@ -684,13 +687,19 @@ async def test_get_room_agui_thread_id_run_id(
         test_run.parent_run_id = None
 
     if w_usage is not None:
+        w_usage_values = w_usage
         w_usage = mock.create_autospec(
             agui.RunUsage,
             input_tokens=w_usage[0],
             output_tokens=w_usage[1],
             requests=w_usage[2],
             tool_calls=w_usage[3],
+            final_input_tokens=w_usage[4],
+            resolved_model_name=w_usage[5],
         )
+        # 'AGUI_Run.from_run' feeds 'as_tuple()' straight into the pydantic
+        # model, so it has to yield real values, not child mocks.
+        w_usage.as_tuple.return_value = agui.RunUsageStats(*w_usage_values)
 
     test_run.awaitable_attrs.run_usage = _awaitable("run_usage", w_usage)
 
