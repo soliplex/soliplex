@@ -2361,3 +2361,136 @@ async def test_post_agui_resolve_recent_feedback(
     the_logger.debug.assert_called_once_with(
         loggers.AGUI_POST_RESOLVE_RECENT_FEEDBACK,
     )
+
+
+@pytest.mark.parametrize(
+    "measured, w_tokens, w_run_id",
+    [
+        pytest.param(None, None, None, id="never-measured"),
+        pytest.param(
+            (1800, TEST_RUN_ID_STR), 1800, TEST_RUN_ID_STR, id="measured"
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "base_url, model_name, w_probed, w_window",
+    [
+        pytest.param(
+            "http://vllm:8000/v1",
+            "qwen",
+            True,
+            8192,
+            id="vllm",
+        ),
+        pytest.param(
+            "http://ollama:11434/v1",
+            "gpt-oss",
+            True,
+            None,
+            id="no-window",
+        ),
+        pytest.param(None, "gpt-4o", False, None, id="no-base-url"),
+        pytest.param("http://vllm:8000/v1", None, False, None, id="no-model"),
+    ],
+)
+@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
+@mock.patch("soliplex.views.agui._check_user_in_room")
+@pytest.mark.anyio
+async def test_get_room_agui_thread_id_context(
+    cuir,
+    get_max_model_len,
+    base_url,
+    model_name,
+    w_probed,
+    w_window,
+    measured,
+    w_tokens,
+    w_run_id,
+):
+    the_threads = mock.create_autospec(agui.ThreadStorage)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    provider_kw = {"api_key": "sekrit"}
+
+    if base_url is not None:
+        provider_kw["base_url"] = base_url
+
+    cuir.return_value = mock.Mock(
+        agent_config=mock.Mock(
+            llm_model_name=model_name,
+            llm_provider_kw=provider_kw,
+        ),
+    )
+    the_threads.get_latest_measured_context = mock.AsyncMock(
+        return_value=measured,
+    )
+    get_max_model_len.return_value = w_window
+
+    found = await agui_views.get_room_agui_thread_id_context(
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_UUID,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert found.measured_tokens == w_tokens
+    assert found.measured_at_run_id == w_run_id
+    assert found.model_name == model_name
+    assert found.max_model_len == w_window
+
+    if w_probed:
+        get_max_model_len.assert_awaited_once_with(
+            base_url=base_url,
+            model_name=model_name,
+            api_key="sekrit",
+            the_logger=the_logger,
+        )
+    else:
+        get_max_model_len.assert_not_awaited()
+
+    the_threads.get_latest_measured_context.assert_awaited_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+    )
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_GET_ROOM_THREAD_CONTEXT,
+    )
+
+
+@mock.patch("soliplex.views.agui._check_user_in_room")
+@pytest.mark.anyio
+async def test_get_room_agui_thread_id_context_unknown_thread(cuir):
+    """A thread the user does not own is a 404, not an empty reading."""
+    the_threads = mock.create_autospec(agui.ThreadStorage)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    cuir.return_value = mock.Mock(
+        agent_config=mock.Mock(
+            llm_model_name="qwen",
+            llm_provider_kw={},
+        ),
+    )
+    the_threads.get_latest_measured_context = mock.AsyncMock(
+        side_effect=agui.UnknownThread(USER_NAME, TEST_THREAD_ID_STR),
+    )
+
+    with pytest.raises(fastapi.HTTPException) as exc_info:
+        await agui_views.get_room_agui_thread_id_context(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    assert exc_info.value.status_code == 404

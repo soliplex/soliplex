@@ -293,6 +293,24 @@ class ThreadStorage(abc.ABC):
         """
 
     @abc.abstractmethod
+    async def get_latest_measured_context(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+    ) -> tuple[int, str] | None:
+        """Return the thread's newest measured context size and its run.
+
+        The measurement is 'RunUsage.final_input_tokens' -- the input
+        size of a run's *last* model request, which is what says how
+        full the window was. Runs that never reached the model carry
+        none, and are skipped rather than reported as zero.
+
+        None when no run in the thread has been measured.
+        """
+
+    @abc.abstractmethod
     async def get_room_last_activity(
         self,
         *,
