@@ -757,6 +757,11 @@ class AGUI_RunUsage(pydantic.BaseModel):
     requests: int
     tool_calls: int
 
+    # 'input_tokens' sums every request in the run; this is the last one
+    # alone, which is what says how full the context window was.
+    final_input_tokens: int | None = None
+    resolved_model_name: str | None = None
+
     @classmethod
     def from_tuple(cls, ru_tuple: agui.RunUsageStats):
         return cls(
@@ -764,6 +769,8 @@ class AGUI_RunUsage(pydantic.BaseModel):
             output_tokens=ru_tuple.output_tokens,
             requests=ru_tuple.requests,
             tool_calls=ru_tuple.tool_calls,
+            final_input_tokens=ru_tuple.final_input_tokens,
+            resolved_model_name=ru_tuple.resolved_model_name,
         )
 
 

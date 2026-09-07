@@ -427,6 +427,8 @@ class RunUsage(Base):
     'output_tokens', int, required
     'requests', int, required
     'tool_calls', int, required
+    'final_input_tokens', int, optional
+    'resolved_model_name', str, optional
     """
 
     __tablename__ = "run_usage"
@@ -447,12 +449,19 @@ class RunUsage(Base):
     requests: Mapped[int] = mapped_column()
     tool_calls: Mapped[int] = mapped_column()
 
+    # Nullable: rows predate these columns, and a run that never reached
+    # the model has no final request to measure.
+    final_input_tokens: Mapped[int | None] = mapped_column(default=None)
+    resolved_model_name: Mapped[str | None] = mapped_column(default=None)
+
     def as_tuple(self) -> agui.RunUsageStats:
         return agui.RunUsageStats(
             self.input_tokens,
             self.output_tokens,
             self.requests,
             self.tool_calls,
+            self.final_input_tokens,
+            self.resolved_model_name,
         )
 
 

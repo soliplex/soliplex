@@ -102,7 +102,12 @@ RunUsageStats = collections.namedtuple(
         "output_tokens",
         "requests",
         "tool_calls",
+        "final_input_tokens",
+        "resolved_model_name",
     ],
+    # Rows written before these columns existed deserialize with them
+    # unset, so both stay optional at the tuple boundary too.
+    defaults=(None, None),
 )
 
 
@@ -120,6 +125,22 @@ class RunUsage(abc.ABC):
 
     tool_calls: int
     """LLM tool_calls made"""
+
+    final_input_tokens: int | None
+    """Input tokens of the run's *last* model request.
+
+    'input_tokens' is cumulative across every request in the run, so a
+    multi-step tool loop reports several times the context actually sent.
+    This is the single measurement that answers how full the window was
+    when the run ended, which is what a client's context indicator needs.
+    None when the run produced no model response.
+    """
+
+    resolved_model_name: str | None
+    """Model id the provider reported, which may differ from the configured
+    name (an alias, or a name carrying a version suffix). Clients pick a
+    tokenizer from it in preference to the configured string.
+    """
 
     @abc.abstractmethod
     def as_tuple(self) -> RunUsageStats:
