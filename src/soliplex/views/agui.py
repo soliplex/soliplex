@@ -16,6 +16,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
+from soliplex import context_window
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -524,6 +525,81 @@ async def post_room_agui_thread_id_meta(
         ) from None
 
     return fastapi.Response(status_code=205)
+
+
+@util.logfire_span("GET /v1/rooms/{room_id}/agui/{thread_id}/context")
+@router.get("/v1/rooms/{room_id}/agui/{thread_id}/context")
+async def get_room_agui_thread_id_context(
+    room_id: str,
+    thread_id: pydantic.UUID4,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui.ThreadStorage = depend_the_threads,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.AGUI_ThreadContext:
+    """Report how full the thread's context window is.
+
+    Two independent numbers, either of which may be absent:
+
+    The measurement is the input size of the newest run's *final* model
+    request, taken from what the provider itself reported. Nothing is
+    estimated, so it already counts the instructions, tool and MCP
+    schemas, chat template, images and evidence compaction that a client
+    cannot see. It is absent until a run here has reached the model.
+
+    The window comes from the provider's model listing. It is absent
+    when the provider does not report one, and a client must then show a
+    count rather than a percentage: a guessed denominator that is too
+    large reads as emptier than reality.
+    """
+    thread_id = str(thread_id)
+    the_logger.debug(loggers.AGUI_GET_ROOM_THREAD_CONTEXT)
+
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    room_config = await _check_user_in_room(
+        room_id=room_id,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=the_user_claims,
+        the_logger=the_logger,
+    )
+
+    try:
+        measured = await the_threads.get_latest_measured_context(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+        )
+    except agui.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
+    measured_tokens, measured_at_run_id = measured or (None, None)
+
+    agent_config = room_config.agent_config
+    model_name = agent_config.llm_model_name
+    provider_kw = agent_config.llm_provider_kw
+    base_url = provider_kw.get("base_url")
+
+    if base_url is None or model_name is None:
+        max_model_len = None
+    else:
+        max_model_len = await context_window.get_max_model_len(
+            base_url=base_url,
+            model_name=model_name,
+            api_key=provider_kw.get("api_key"),
+            the_logger=the_logger,
+        )
+
+    return models.AGUI_ThreadContext(
+        max_model_len=max_model_len,
+        model_name=model_name,
+        measured_tokens=measured_tokens,
+        measured_at_run_id=measured_at_run_id,
+    )
 
 
 @util.logfire_span("DELETE /v1/rooms/{room_id}/agui/{thread_id}")

@@ -141,6 +141,33 @@ class ThreadStorage(agui.ThreadStorage):
 
         return result
 
+    async def get_latest_measured_context(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+    ) -> tuple[int, str] | None:
+        """Return the thread's newest measured context size and its run."""
+        async with self.session as session:
+            query = (
+                sqla_sql.select(
+                    agui_schema.RunUsage.final_input_tokens,
+                    agui_schema.Run.run_id,
+                )
+                .join(agui_schema.RunUsage.run)
+                .join(agui_schema.Run.thread)
+                .where(agui_schema.Thread.user_name == user_name)
+                .where(agui_schema.Thread.room_id == room_id)
+                .where(agui_schema.Thread.thread_id == thread_id)
+                .where(agui_schema.RunUsage.final_input_tokens.is_not(None))
+                .order_by(agui_schema.RunUsage.created.desc())
+                .limit(1)
+            )
+            row = (await session.execute(query)).first()
+
+        return tuple(row) if row is not None else None
+
     async def get_room_last_activity(
         self,
         *,

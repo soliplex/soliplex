@@ -774,6 +774,29 @@ class AGUI_RunUsage(pydantic.BaseModel):
         )
 
 
+class AGUI_ThreadContext(pydantic.BaseModel):
+    """How full a thread's context window is, as far as anything knows.
+
+    Every field is optional, and a null is an answer rather than an
+    error. 'max_model_len' is null when the provider does not report a
+    window -- the OpenAI API and Ollama's compatibility surface do not --
+    and a client with no denominator must show no percentage instead of
+    guessing one.
+
+    'measured_tokens' is the input size of the newest measured run's
+    *final* model request, so it already counts everything a client
+    cannot see: the system prompt, capability instructions, tool and MCP
+    schemas, the chat template, images, and any evidence compaction the
+    backend applied. It is null until a run in this thread has reached
+    the model.
+    """
+
+    max_model_len: int | None = None
+    model_name: str | None = None
+    measured_tokens: int | None = None
+    measured_at_run_id: str | None = None
+
+
 class AGUI_Run(pydantic.BaseModel):
     thread_id: pydantic.UUID4 = KW_ONLY
     run_id: pydantic.UUID4 = KW_ONLY
