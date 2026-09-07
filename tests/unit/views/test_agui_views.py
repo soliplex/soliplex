@@ -16,6 +16,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
 from soliplex.views import agui as agui_views
@@ -2679,3 +2680,35 @@ async def test_context_detail_without_a_tokenizer(
     found = await _get_context(the_threads)
 
     assert found.tokens_by_kind == {}
+
+
+@mock.patch("soliplex.views.agui.context_window.count_tokens")
+@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
+@mock.patch("soliplex.views.agui._check_user_in_room")
+@pytest.mark.anyio
+async def test_context_for_a_factory_agent(
+    cuir, get_max_model_len, count_tokens
+):
+    """A factory agent declares no model, so no window can be asked for.
+
+    It chooses one when the run starts. The real config class is used
+    here rather than a mock, because the bug this covers was exactly
+    that a hand-built stand-in carried attributes the real one lacks.
+    """
+    agent_config = config_agents.FactoryAgentConfig(
+        id="joker",
+        factory_name="soliplex.example.factory",
+    )
+    cuir.return_value = mock.Mock(agent_config=agent_config)
+    the_threads = _measured_threads()
+
+    found = await _get_context(the_threads)
+
+    assert found.max_model_len is None
+    assert found.model_name is None
+    # The measurement stands: it was taken from whatever the factory
+    # served, and it is what the gauge would have shown.
+    assert found.measured_tokens == 1000
+    assert found.tokens_by_kind == {}
+    get_max_model_len.assert_not_awaited()
+    count_tokens.assert_not_awaited()

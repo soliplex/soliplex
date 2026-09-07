@@ -378,9 +378,13 @@ async def get_room_agui_thread_id_context(
 
     measured_tokens, measured_at_run_id = measured or (None, None)
 
+    # A factory agent declares neither: it chooses its model when the
+    # run starts, so nothing can be asked about a window ahead of one.
+    # The measurement still stands -- it was taken from whatever the
+    # factory served -- and a reading with no window hides the gauge.
     agent_config = room_config.agent_config
-    model_name = agent_config.llm_model_name
-    provider_kw = agent_config.llm_provider_kw
+    model_name = getattr(agent_config, "llm_model_name", None)
+    provider_kw = getattr(agent_config, "llm_provider_kw", None) or {}
     base_url = provider_kw.get("base_url")
 
     if base_url is None or model_name is None:
