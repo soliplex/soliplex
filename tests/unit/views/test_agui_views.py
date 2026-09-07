@@ -2494,3 +2494,23 @@ async def test_get_room_agui_thread_id_context_unknown_thread(cuir):
         )
 
     assert exc_info.value.status_code == 404
+
+
+def test_context_route_precedes_the_run_id_route():
+    """A literal segment must be declared before the capture it resembles.
+
+    FastAPI matches routes in declaration order, so a '{run_id}' route
+    registered first swallows '.../context' and rejects it as a
+    malformed UUID. Calling the handler directly cannot catch that --
+    only the order can.
+    """
+    paths = [
+        route.path
+        for route in agui_views.router.routes
+        if "methods" in dir(route) and "GET" in route.methods
+    ]
+
+    context = paths.index("/v1/rooms/{room_id}/agui/{thread_id}/context")
+    run_id = paths.index("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
+
+    assert context < run_id
