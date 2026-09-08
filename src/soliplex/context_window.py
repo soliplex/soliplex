@@ -18,11 +18,17 @@ import httpx
 
 from soliplex import loggers
 
-#: Answers keyed by '(base_url, model_name)'. Whether a provider reports
-#: a window is a property of the deployment, so once seen it is stable
-#: for the life of the process. Transport failures are never cached: an
-#: unreachable provider is a passing condition, not an answer.
-_MAX_MODEL_LEN: dict[tuple[str, str], int | None] = {}
+#: Windows keyed by '(base_url, model_name)'.
+#:
+#: Only *positive* answers are kept. A window that exists does not
+#: change under a running deployment, so remembering it saves a request
+#: per reading. An absent one is not equally stable: a provider can be
+#: unreachable, or reachable but not yet serving the model -- Ollama
+#: reports no size for a model it has evicted. Caching that absence
+#: would hide the gauge for the life of the process even once the
+#: provider started answering, and the only way back would be a
+#: restart.
+_MAX_MODEL_LEN: dict[tuple[str, str], int] = {}
 
 #: Short by design. This sits in a request the user is waiting on, and a
 #: missing window degrades to a hidden gauge rather than an error.
@@ -97,6 +103,8 @@ async def get_max_model_len(
         # is user-supplied.
         the_logger.warning(
             loggers.CONTEXT_WINDOW_UNAVAILABLE,
+            base_url,
+            exc,
             base_url=base_url,
             model_name=model_name,
             reason=str(exc),
@@ -107,13 +115,16 @@ async def get_max_model_len(
         # itself, so only its type is safe to record.
         the_logger.warning(
             loggers.CONTEXT_WINDOW_UNREADABLE,
+            base_url,
             base_url=base_url,
             model_name=model_name,
         )
         return None
 
     found = _find_max_model_len(payload, model_name)
-    _MAX_MODEL_LEN[key] = found
+
+    if found is not None:
+        _MAX_MODEL_LEN[key] = found
 
     return found
 
@@ -180,6 +191,8 @@ async def count_tokens(
     except httpx.HTTPError as exc:
         the_logger.warning(
             loggers.CONTEXT_TOKENIZE_UNAVAILABLE,
+            url,
+            exc,
             base_url=base_url,
             model_name=model_name,
             reason=str(exc),
@@ -190,6 +203,7 @@ async def count_tokens(
         # that it could not be read is safe to record.
         the_logger.warning(
             loggers.CONTEXT_TOKENIZE_UNREADABLE,
+            url,
             base_url=base_url,
             model_name=model_name,
         )

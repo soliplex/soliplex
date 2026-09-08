@@ -26,10 +26,14 @@ AGUI_POST_RECENT_USER_FEEDBACK = "post recent room user feedback"
 AGUI_POST_REVIEW_RECENT_FEEDBACK = "post review recent agui feedback"
 AGUI_POST_RESOLVE_RECENT_FEEDBACK = "post resolve recent agui feedback"
 
-CONTEXT_TOKENIZE_UNAVAILABLE = "provider did not answer /tokenize"
-CONTEXT_TOKENIZE_UNREADABLE = "provider /tokenize body was not JSON"
-CONTEXT_WINDOW_UNAVAILABLE = "provider did not answer /v1/models"
-CONTEXT_WINDOW_UNREADABLE = "provider /v1/models body was not JSON"
+# Structured attributes go to the record's 'extra', which the console
+# handler does not render, so these carry the host in the message text
+# itself: an operator reading a terminal has to be told what to go and
+# check. A base URL is configuration, not user input.
+CONTEXT_TOKENIZE_UNAVAILABLE = "no /tokenize from provider at %s (%s)"
+CONTEXT_TOKENIZE_UNREADABLE = "unreadable /tokenize body from provider at %s"
+CONTEXT_WINDOW_UNAVAILABLE = "no /v1/models from provider at %s (%s)"
+CONTEXT_WINDOW_UNREADABLE = "unreadable /v1/models body from provider at %s"
 
 UPLOADS_GET_ROOM = "uploads get room"
 UPLOADS_GET_ROOM_FILE = "uploads get room file"
