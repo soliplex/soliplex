@@ -261,9 +261,14 @@ def test__rcb_deferred_databases_several(stem_environ, temp_dir):
         ),
     )
 
+    # A location haiku.rag reads as a local path comes back as a
+    # 'pathlib.Path', so the separator in the audit line is the host's
+    # own; a URI is passed through as the string it is.
+    papers = pathlib.Path("/data/papers.lancedb")
+
     assert config.rag_database_names == ["medic", "papers"]
     assert config.rag_db_audit_path == (
-        "medic=s3://bucket/medic.lancedb, papers=/data/papers.lancedb"
+        f"medic=s3://bucket/medic.lancedb, papers={papers}"
     )
 
 
@@ -675,7 +680,14 @@ def test__rde_yaml_roundtrip(installation_config, temp_dir, stem, override):
     assert entry._config_path == config_path
     assert entry._installation_config is installation_config
 
+    expected_yaml = dict(entry_yaml)
+
     if override is not None:
         assert entry.rag_lancedb_override_path == pathlib.Path(override)
+        # 'as_yaml' renders the parsed 'pathlib.Path' back out, so the
+        # separator it round-trips through is the host's own.
+        expected_yaml["rag_lancedb_override_path"] = str(
+            pathlib.Path(override)
+        )
 
-    assert entry.as_yaml == entry_yaml
+    assert entry.as_yaml == expected_yaml

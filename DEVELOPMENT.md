@@ -235,6 +235,32 @@ Coverage is unaffected by `-n`: pytest-cov collects each worker's data and
 merges it, so a parallel run enforces the same 100% threshold as a serial
 one.
 
+### Running the unit tests off Linux
+
+Linux is the supported platform, and the whole unit suite runs there. It
+also runs green on Windows and macOS, with a handful of tests skipped: a
+few exercise behaviour the standard library only offers on a POSIX host
+-- an `O_NOFOLLOW` open, a FIFO, a symlink, `PosixPath.resolve` rejecting
+an embedded NUL.
+
+`tests/_platform.py` holds the probes. A test that needs one of those
+calls the matching `requires_*` helper, which warns (an
+`UnsupportedPlatformWarning`, listed in pytest's warnings summary) and
+skips when the host cannot oblige. The probes answer for the host rather
+than for `os.name` where they can: a Windows box with Developer Mode
+turned on creates symlinks, and runs the symlink tests.
+
+Because those skips leave the code they cover unmeasured, the 100% gate
+cannot be met off POSIX. `tests/conftest.py` relaxes `--cov-fail-under`
+to 0 there -- warning that it has done so -- and leaves POSIX hosts, CI
+included, on the full gate. Coverage numbers from a Windows or macOS run
+therefore prove nothing; re-check them on Linux.
+
+Anything genuinely platform-specific belongs behind a probe, not behind
+a loosened assertion: assertions on rendered paths should build their
+expectation with `pathlib` (`str(pathlib.Path(...))`) so they hold on
+either separator, rather than being weakened to match both.
+
 ## Configuration system
 
 - Configuration is YAML-based and hierarchical, parsed under
