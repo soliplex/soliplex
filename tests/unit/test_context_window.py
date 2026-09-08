@@ -164,12 +164,17 @@ async def test_get_max_model_len_unreachable_provider(the_logger):
 
     assert found is None
     assert (BASE_URL, MODEL_NAME) not in context_window._MAX_MODEL_LEN
-    the_logger.warning.assert_called_once_with(
-        loggers.CONTEXT_WINDOW_UNAVAILABLE,
-        base_url=BASE_URL,
-        model_name=MODEL_NAME,
-        reason="nope",
-    )
+    # The host is in the message, not only in the structured fields:
+    # the console handler renders one and not the other.
+    message, *positional = the_logger.warning.call_args.args
+    assert message == loggers.CONTEXT_WINDOW_UNAVAILABLE
+    assert positional[0] == BASE_URL
+    assert the_logger.warning.call_args.kwargs == {
+        "base_url": BASE_URL,
+        "model_name": MODEL_NAME,
+        "reason": "nope",
+    }
+    assert BASE_URL in message % tuple(positional)
 
 
 @pytest.mark.anyio
@@ -186,18 +191,15 @@ async def test_get_max_model_len_unreadable_body(the_logger):
 
     assert found is None
     assert (BASE_URL, MODEL_NAME) not in context_window._MAX_MODEL_LEN
-    the_logger.warning.assert_called_once_with(
-        loggers.CONTEXT_WINDOW_UNREADABLE,
-        base_url=BASE_URL,
-        model_name=MODEL_NAME,
-    )
+    message, *positional = the_logger.warning.call_args.args
+    assert message == loggers.CONTEXT_WINDOW_UNREADABLE
+    assert BASE_URL in message % tuple(positional)
 
 
-@pytest.mark.parametrize("cached", [8192, None])
 @pytest.mark.anyio
-async def test_get_max_model_len_answers_from_cache(cached, the_logger):
-    """Whether a deployment reports a window does not change under it."""
-    context_window._MAX_MODEL_LEN[(BASE_URL, MODEL_NAME)] = cached
+async def test_get_max_model_len_answers_from_cache(the_logger):
+    """A window that exists does not change under a running deployment."""
+    context_window._MAX_MODEL_LEN[(BASE_URL, MODEL_NAME)] = 8192
     patcher, client = _client_returning({"data": [_card(max_model_len=1)]})
 
     with patcher:
@@ -207,8 +209,44 @@ async def test_get_max_model_len_answers_from_cache(cached, the_logger):
             the_logger=the_logger,
         )
 
-    assert found == cached
+    assert found == 8192
     client.get.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_get_max_model_len_retries_after_an_absent_window(the_logger):
+    """An absent window is not an answer, so it is asked for again.
+
+    A provider can be reachable but not yet serving the model -- Ollama
+    reports no size for one it has evicted. Remembering that absence
+    would hide the gauge for the life of the process even once the
+    provider began answering.
+    """
+    patcher, _client = _client_returning({"data": [_card()]})
+
+    with patcher:
+        assert (
+            await context_window.get_max_model_len(
+                base_url=BASE_URL,
+                model_name=MODEL_NAME,
+                the_logger=the_logger,
+            )
+            is None
+        )
+
+    assert (BASE_URL, MODEL_NAME) not in context_window._MAX_MODEL_LEN
+
+    patcher, _client = _client_returning({"data": [_card(max_model_len=4096)]})
+
+    with patcher:
+        assert (
+            await context_window.get_max_model_len(
+                base_url=BASE_URL,
+                model_name=MODEL_NAME,
+                the_logger=the_logger,
+            )
+            == 4096
+        )
 
 
 class TestTokenizeUrl:
@@ -331,12 +369,11 @@ async def test_count_tokens_without_a_tokenizer_endpoint(the_logger):
         )
 
     assert found is None
-    the_logger.warning.assert_called_once_with(
-        loggers.CONTEXT_TOKENIZE_UNAVAILABLE,
-        base_url=BASE_URL,
-        model_name=MODEL_NAME,
-        reason="nope",
-    )
+    message, *positional = the_logger.warning.call_args.args
+    assert message == loggers.CONTEXT_TOKENIZE_UNAVAILABLE
+    # The tokenizer lives at the root, so the message names that URL
+    # rather than the '/v1' base the provider is configured with.
+    assert "/tokenize" in message % tuple(positional)
 
 
 @pytest.mark.parametrize(
@@ -359,8 +396,6 @@ async def test_count_tokens_unreadable_body(body, the_logger):
         )
 
     assert found is None
-    the_logger.warning.assert_called_once_with(
-        loggers.CONTEXT_TOKENIZE_UNREADABLE,
-        base_url=BASE_URL,
-        model_name=MODEL_NAME,
-    )
+    message, *positional = the_logger.warning.call_args.args
+    assert message == loggers.CONTEXT_TOKENIZE_UNREADABLE
+    assert "/tokenize" in message % tuple(positional)
