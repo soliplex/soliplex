@@ -148,8 +148,21 @@ class ThreadStorage(agui.ThreadStorage):
         room_id: str,
         thread_id: str,
     ) -> tuple[int, str] | None:
-        """Return the thread's newest measured context size and its run."""
+        """Return the thread's newest measured context size and its run.
+
+        Raises 'UnknownThread' when the thread does not exist or is not
+        this user's, so a caller can tell "nothing measured yet" from
+        "no such thread". Filtering the join on the user alone cannot:
+        both answer with no row.
+        """
         async with self.session as session:
+            await self._find_user_thread(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                session=session,
+            )
+
             query = (
                 sqla_sql.select(
                     agui_schema.RunUsage.final_input_tokens,

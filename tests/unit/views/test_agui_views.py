@@ -2531,11 +2531,10 @@ def _context_room(base_url="http://vllm:8000/v1", model_name="qwen"):
     )
 
 
-async def _get_context(the_threads, *, detail=True):
+async def _get_context(the_threads):
     return await agui_views.get_room_agui_thread_id_context(
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_UUID,
-        detail=detail,
         the_installation=mock.create_autospec(installation.Installation),
         the_threads=the_threads,
         the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
@@ -2552,143 +2551,10 @@ def _measured_threads(measured=(1000, TEST_RUN_ID_STR)):
     return the_threads
 
 
-@mock.patch("soliplex.views.agui.context_window.count_tokens")
-@mock.patch("soliplex.views.agui._get_run_input")
 @mock.patch("soliplex.views.agui.context_window.get_max_model_len")
 @mock.patch("soliplex.views.agui._check_user_in_room")
 @pytest.mark.anyio
-async def test_context_detail_attributes_the_measurement(
-    cuir, get_max_model_len, get_run_input, count_tokens
-):
-    cuir.return_value = _context_room()
-    get_max_model_len.return_value = 8192
-    the_threads = _measured_threads()
-    the_threads.get_run = mock.AsyncMock(return_value=mock.Mock())
-    get_run_input.return_value = mock.Mock(
-        messages=[
-            mock.Mock(
-                spec_set=["role", "content", "tool_calls"],
-                role="user",
-                content="hello",
-                tool_calls=None,
-            ),
-        ],
-    )
-    count_tokens.return_value = [40]
-
-    found = await _get_context(the_threads)
-
-    # The residual is the instructions, tool schemas and chat template
-    # that nothing enumerated.
-    assert found.tokens_by_kind == {"userText": 40, "overhead": 960}
-
-
-@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
-@mock.patch("soliplex.views.agui._check_user_in_room")
-@pytest.mark.anyio
-async def test_context_without_detail_asks_for_no_breakdown(
-    cuir, get_max_model_len
-):
-    cuir.return_value = _context_room()
-    get_max_model_len.return_value = 8192
-    the_threads = _measured_threads()
-
-    found = await _get_context(the_threads, detail=False)
-
-    assert found.tokens_by_kind == {}
-    the_threads.get_run.assert_not_called()
-
-
-@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
-@mock.patch("soliplex.views.agui._check_user_in_room")
-@pytest.mark.anyio
-async def test_context_detail_without_a_measurement(cuir, get_max_model_len):
-    """Nothing measured means nothing to attribute."""
-    cuir.return_value = _context_room()
-    get_max_model_len.return_value = 8192
-    the_threads = _measured_threads(measured=None)
-
-    found = await _get_context(the_threads)
-
-    assert found.tokens_by_kind == {}
-
-
-@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
-@mock.patch("soliplex.views.agui._check_user_in_room")
-@pytest.mark.anyio
-async def test_context_detail_without_a_provider(cuir, get_max_model_len):
-    cuir.return_value = _context_room(base_url=None)
-    get_max_model_len.return_value = None
-
-    found = await _get_context(_measured_threads())
-
-    assert found.tokens_by_kind == {}
-
-
-@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
-@mock.patch("soliplex.views.agui._check_user_in_room")
-@pytest.mark.anyio
-async def test_context_detail_with_an_unknown_run(cuir, get_max_model_len):
-    """A run recorded then deleted leaves the total standing alone."""
-    cuir.return_value = _context_room()
-    get_max_model_len.return_value = 8192
-    the_threads = _measured_threads()
-    the_threads.get_run = mock.AsyncMock(
-        side_effect=agui.UnknownRun(TEST_RUN_ID_STR),
-    )
-
-    found = await _get_context(the_threads)
-
-    assert found.tokens_by_kind == {}
-    assert found.measured_tokens == 1000
-
-
-@mock.patch("soliplex.views.agui._get_run_input")
-@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
-@mock.patch("soliplex.views.agui._check_user_in_room")
-@pytest.mark.anyio
-async def test_context_detail_without_stored_input(
-    cuir, get_max_model_len, get_run_input
-):
-    cuir.return_value = _context_room()
-    get_max_model_len.return_value = 8192
-    the_threads = _measured_threads()
-    the_threads.get_run = mock.AsyncMock(return_value=mock.Mock())
-    get_run_input.return_value = None
-
-    found = await _get_context(the_threads)
-
-    assert found.tokens_by_kind == {}
-
-
-@mock.patch("soliplex.views.agui.context_window.count_tokens")
-@mock.patch("soliplex.views.agui._get_run_input")
-@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
-@mock.patch("soliplex.views.agui._check_user_in_room")
-@pytest.mark.anyio
-async def test_context_detail_without_a_tokenizer(
-    cuir, get_max_model_len, get_run_input, count_tokens
-):
-    """No tokenizer endpoint means no breakdown, never a guessed one."""
-    cuir.return_value = _context_room()
-    get_max_model_len.return_value = 8192
-    the_threads = _measured_threads()
-    the_threads.get_run = mock.AsyncMock(return_value=mock.Mock())
-    get_run_input.return_value = mock.Mock(messages=[])
-    count_tokens.return_value = None
-
-    found = await _get_context(the_threads)
-
-    assert found.tokens_by_kind == {}
-
-
-@mock.patch("soliplex.views.agui.context_window.count_tokens")
-@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
-@mock.patch("soliplex.views.agui._check_user_in_room")
-@pytest.mark.anyio
-async def test_context_for_a_factory_agent(
-    cuir, get_max_model_len, count_tokens
-):
+async def test_context_for_a_factory_agent(cuir, get_max_model_len):
     """A factory agent declares no model, so no window can be asked for.
 
     It chooses one when the run starts. The real config class is used
@@ -2709,6 +2575,4 @@ async def test_context_for_a_factory_agent(
     # The measurement stands: it was taken from whatever the factory
     # served, and it is what the gauge would have shown.
     assert found.measured_tokens == 1000
-    assert found.tokens_by_kind == {}
     get_max_model_len.assert_not_awaited()
-    count_tokens.assert_not_awaited()

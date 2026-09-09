@@ -1138,16 +1138,21 @@ async def _measure_run(
 
 
 @pytest.mark.asyncio
-async def test_get_latest_measured_context_no_runs(the_async_session):
+async def test_get_latest_measured_context_unknown_thread(the_async_session):
+    """A thread that does not exist is an error, not an empty reading.
+
+    The two are different answers and a caller has to tell them apart:
+    a thread with nothing measured yet is a normal 200, while a thread
+    nobody owns is a 404.
+    """
     ts = agui_persistence.ThreadStorage(the_async_session)
 
-    found = await ts.get_latest_measured_context(
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=agui_constants.THREAD_UUID,
-    )
-
-    assert found is None
+    with pytest.raises(agui.UnknownThread):
+        await ts.get_latest_measured_context(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=agui_constants.THREAD_UUID,
+        )
 
 
 @pytest.mark.asyncio
@@ -1227,7 +1232,7 @@ async def test_get_latest_measured_context_takes_the_newest(
 
 @pytest.mark.asyncio
 async def test_get_latest_measured_context_user_scoping(the_async_session):
-    """One user's measurement never answers for another's thread."""
+    """One user's thread is not visible to another user at all."""
     ts = agui_persistence.ThreadStorage(the_async_session)
     thread = await ts.new_thread(
         user_name=USER_NAME,
@@ -1244,13 +1249,12 @@ async def test_get_latest_measured_context_user_scoping(the_async_session):
         final_input_tokens=1200,
     )
 
-    found = await ts.get_latest_measured_context(
-        user_name=OTHER_USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-    )
-
-    assert found is None
+    with pytest.raises(agui.UnknownThread):
+        await ts.get_latest_measured_context(
+            user_name=OTHER_USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+        )
 
 
 @pytest.mark.asyncio
@@ -1272,13 +1276,12 @@ async def test_get_latest_measured_context_room_scoping(the_async_session):
         final_input_tokens=1200,
     )
 
-    found = await ts.get_latest_measured_context(
-        user_name=USER_NAME,
-        room_id=ROOM_ID_2,
-        thread_id=thread_id,
-    )
-
-    assert found is None
+    with pytest.raises(agui.ThreadRoomMismatch):
+        await ts.get_latest_measured_context(
+            user_name=USER_NAME,
+            room_id=ROOM_ID_2,
+            thread_id=thread_id,
+        )
 
 
 @pytest.mark.asyncio
