@@ -15,6 +15,8 @@ from soliplex.config import rooms as config_rooms
 from soliplex.views import sandbox_workdirs as workdir_views
 from tests import _platform
 
+pytestmark = _platform.requires_posix_sandbox
+
 USER_NAME = "phreddy"
 EMAIL = "phreddy@example.com"
 
@@ -109,7 +111,6 @@ async def test_get_workdirs_room_thread_run_only(
         for filename in w_filenames:
             file_path = run_path / filename
             if w_link == "symlink":
-                _platform.requires_symlinks()
                 file_path.symlink_to(link_target)
             elif w_link == "hardlink":
                 file_path.hardlink_to(link_target)
@@ -226,11 +227,6 @@ def test__open_no_symlinks(
     w_link,
     expectation,
 ):
-    # Every case reaches '_open_no_symlinks', whose whole point is the
-    # POSIX-only 'O_NOFOLLOW'; the symlink and FIFO cases need more
-    # still. There is nothing to assert on a host without them.
-    _platform.requires_o_nofollow()
-
     workdir_path = sandbox_path / "workdir"
     file_path = workdir_path / TEST_FILENAME
 
@@ -241,14 +237,12 @@ def test__open_no_symlinks(
 
         if w_filename:
             if w_link == "symlink":
-                _platform.requires_symlinks()
                 file_path.symlink_to(link_target)
             elif w_link == "hardlink":
                 file_path.hardlink_to(link_target)
             elif w_link == "dir":
                 file_path.mkdir()
             elif w_link == "fifo":
-                _platform.requires_mkfifo()
                 os.mkfifo(file_path)
             else:
                 file_path.write_text(f"filename: {TEST_FILENAME}")

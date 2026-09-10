@@ -238,26 +238,40 @@ one.
 ### Running the unit tests off Linux
 
 Linux is the supported platform, and the whole unit suite runs there. It
-also runs green on Windows and macOS, with a handful of tests skipped: a
-few exercise behaviour the standard library only offers on a POSIX host
--- an `O_NOFOLLOW` open, a FIFO, a symlink, `PosixPath.resolve` rejecting
-an embedded NUL.
+also runs green on Windows and macOS, with two modules skipped: the ones
+covering the bubblewrap sandbox. `bwrap` is Linux-only, and so is
+everything its tests build to exercise it -- an `O_NOFOLLOW` open, a
+FIFO, a symlink, `PosixPath.resolve` rejecting an embedded NUL -- so
+there is nothing left for them to assert on a host without it.
 
-`tests/_platform.py` holds the probes. A test that needs one of those
-calls the matching `requires_*` helper, which warns (an
-`UnsupportedPlatformWarning`, listed in pytest's warnings summary) and
-skips when the host cannot oblige. The probes answer for the host rather
-than for `os.name` where they can: a Windows box with Developer Mode
-turned on creates symlinks, and runs the symlink tests.
+`tests/_platform.py` holds the gate. The two modules covering the
+sandbox -- `test_bwrap_sandbox.py` under `tests/unit/skills/`, and
+`test_sandbox_workdirs.py` under `tests/unit/views/` -- each set
+`pytestmark = _platform.requires_posix_sandbox`, which skips the module
+where `os.name` is not `"posix"`.
 
-Because those skips leave the code they cover unmeasured, the 100% gate
-cannot be met off POSIX. `tests/conftest.py` relaxes `--cov-fail-under`
-to 0 there -- warning that it has done so -- and leaves POSIX hosts, CI
-included, on the full gate. Coverage numbers from a Windows or macOS run
-therefore prove nothing; re-check them on Linux.
+Those skips leave the code they cover unmeasured, which would make the
+100% gate unmeetable. Rather than relax the gate, `tests/conftest.py`
+narrows what it is measured against: a `pytest_configure` hook adds
+`POSIX_ONLY_COVERAGE_OMIT` -- the two skipped test modules, and
+`soliplex.skills.bwrap_sandbox` and `soliplex.views.sandbox_workdirs`
+with them -- to the coverage report's `omit`, and warns (an
+`UnsupportedPlatformWarning`, listed in pytest's warnings summary) that
+it has. Everything else is still held to 100%, so a Windows or macOS run
+does catch a coverage regression; only the sandbox needs re-checking on
+Linux.
 
-Anything genuinely platform-specific belongs behind a probe, not behind
-a loosened assertion: assertions on rendered paths should build their
+Two notes on the hook, for anyone changing it. It omits at *report*
+time, not run time: measurement has already started by the time
+`pytest_configure` runs, and leaving the data file complete means a
+later `coverage report` can still be pointed at it. And it reaches the
+`Coverage` objects through pytest-cov's registered plugin, via
+`config.pluginmanager.get_plugin("_cov")`, because pytest-cov reports
+with a second, `combining_cov` instance -- neither is reachable through
+`config.option`.
+
+Anything genuinely platform-specific belongs behind a gate, not behind a
+loosened assertion: assertions on rendered paths should build their
 expectation with `pathlib` (`str(pathlib.Path(...))`) so they hold on
 either separator, rather than being weakened to match both.
 

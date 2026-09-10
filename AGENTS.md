@@ -128,19 +128,22 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
   `-n`-less step
 - Coverage and xdist compose (pytest-cov merges the workers' data), so
   `-n` does not weaken the 100% gate
-- **The suite runs on Windows and macOS too**, with a few tests skipped.
-  A test needing something only a POSIX host offers (an `O_NOFOLLOW`
-  open, a FIFO, a symlink, `PosixPath.resolve` rejecting an embedded
-  NUL) calls the matching `requires_*` helper from `tests/_platform.py`,
-  which warns and skips where the host cannot oblige. The probes ask the
-  host, not `os.name`, where they can -- Windows with Developer Mode on
-  makes symlinks, and runs those tests. Add a probe there rather than
-  loosening an assertion; an assertion on a rendered path should build
-  its expectation with `pathlib` so it holds on either separator
-- Those skips leave the code they cover unmeasured, so the 100% gate is
-  unmeetable off POSIX. `tests/conftest.py` drops `--cov-fail-under` to
-  0 there (warning that it has), and leaves POSIX hosts and CI on the
-  full gate -- coverage from a non-Linux run proves nothing
+- **The suite runs on Windows and macOS too.** The one exception is
+  the bubblewrap sandbox, which is Linux-only, and so are the symlinks,
+  FIFOs and `O_NOFOLLOW` opens its tests set up. The two modules
+  covering it (`test_bwrap_sandbox.py` under `tests/unit/skills/`, and
+  `test_sandbox_workdirs.py` under `tests/unit/views/`) therefore carry
+  `pytestmark = _platform.requires_posix_sandbox` and skip whole off
+  POSIX
+- The 100% gate still applies off POSIX. `tests/conftest.py` drops the
+  two skipped modules, and the two they cover, from the coverage
+  *report* (`tests/_platform.py: POSIX_ONLY_COVERAGE_OMIT`), warning
+  that it has -- so everything the host can measure is still held to
+  100%, and only the sandbox needs re-checking on Linux
+- Prefer either of those to loosening an assertion. An assertion on a
+  rendered path should build its expectation with `pathlib` so it holds
+  on either separator; a test that needs a POSIX-only primitive and is
+  *not* about the sandbox needs a new gate rather than a weaker check
 
 ## Repository Structure
 

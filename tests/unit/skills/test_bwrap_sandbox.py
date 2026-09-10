@@ -17,6 +17,8 @@ from soliplex.config import installation as config_installation
 from soliplex.skills import bwrap_sandbox as skills_bwrap_sandbox
 from tests import _platform
 
+pytestmark = _platform.requires_posix_sandbox
+
 ROOM_ID = "test_room"
 THREAD_ID = uuid.uuid4()
 THREAD_ID_STR = str(THREAD_ID)
@@ -565,13 +567,6 @@ invalid_subdir = pytest.raises(skills_bwrap_sandbox.InvalidSubdir)
     ],
 )
 def test__check_is_subdir(temp_dir, subpath, expectation):
-    if "\x00" in subpath:
-        # '_check_is_subdir' leans on 'resolve' raising 'ValueError' for
-        # an embedded NUL, which is 'PosixPath' behaviour.
-        # 'WindowsPath.resolve' hands back a name whose parent is the
-        # expected one, so there is nothing to assert here.
-        _platform.requires_posix_paths()
-
     with expectation:
         skills_bwrap_sandbox._check_is_subdir(temp_dir / subpath, temp_dir)
 

@@ -11,50 +11,79 @@ session-scoped fixture cannot request them (pytest raises
 'tests/unit/cli/conftest.py' does.
 """
 
-import os
-
 import pytest
 
+from tests import _platform
 from tests._dburi import sqlite_dburi
-from tests._platform import UnsupportedPlatformWarning
 
-COVERAGE_NOT_ENFORCED = (
-    "coverage is not gated on a non-POSIX host: the tests covering the "
-    "POSIX-only sandbox paths skip here, so '--cov-fail-under' has been "
-    "relaxed to 0 for this run. The 100% gate is enforced on Linux (and "
-    "in CI); re-check coverage there before relying on it."
+COVERAGE_NOT_REPORTED = (
+    "coverage is not reported for the POSIX-only sandbox on this host: "
+    "the tests covering it skip here (see 'tests/_platform.py'), so "
+    "these are omitted from the report rather than dropping the 100% "
+    "gate for everything else -- re-check them on Linux: {omitted}"
 )
 
 
-def pytest_configure(config):
-    """Relax the coverage gate where platform skips make it unmeetable
+def _cov_config_objects(config):
+    """The 'CoverageConfig' objects the report at the end will consult
 
-    'addopts' applies '--cov-fail-under=100' to every run. On a host
-    which cannot express the POSIX preconditions a few tests need (see
-    'tests/_platform.py'), those tests skip, and the lines they cover
-    go unmeasured -- so the gate fails however the tests themselves
-    fared. Drop the threshold there, loudly, and leave POSIX hosts
-    (CI included) alone.
+    pytest-cov measures with one 'Coverage' and reports with another:
+    'CovController.finish' swaps in the 'combining_cov' it built at
+    start-up. Both are already constructed by the time 'pytest_configure'
+    runs, and neither is reachable through 'config.option', so hand back
+    whichever of them this run has.
     """
-    if os.name == "posix":
-        return
-
-    # pytest-cov reads its threshold from the namespace it captured in
-    # 'pytest_load_initial_conftests' ('known_args_namespace'), not from
-    # 'config.option', so reach the registered plugin's own copy.
     cov_plugin = config.pluginmanager.get_plugin("_cov")
 
-    if cov_plugin is None:  # '--no-cov', or coverage not installed
-        return
+    if cov_plugin is None:  # coverage not installed
+        return []
 
-    if not getattr(cov_plugin.options, "cov_fail_under", None):
-        return
+    if cov_plugin.cov_controller is None:  # '--no-cov'
+        return []
 
-    cov_plugin.options.cov_fail_under = 0
-    config.issue_config_time_warning(
-        UnsupportedPlatformWarning(COVERAGE_NOT_ENFORCED),
-        stacklevel=2,
+    controller = cov_plugin.cov_controller
+
+    covs = (
+        getattr(controller, "cov", None),
+        getattr(controller, "combining_cov", None),
     )
+    return [cov.config for cov in covs if cov is not None]
+
+
+def pytest_configure(config):
+    """Stop reporting coverage of what the platform skips off POSIX
+
+    'addopts' applies '--cov-fail-under=100' to every run. The tests of
+    the bubblewrap sandbox skip on a host which cannot express their
+    preconditions, leaving the code they cover unmeasured -- so the gate
+    would fail however the tests themselves fared.
+
+    Omit those modules, and the test modules that skipped, from the
+    report instead: the 100% gate then still means 100% of everything
+    this host can measure. The omission is a 'report' one rather than a
+    'run' one because measurement has already begun by now; it also
+    keeps the data file complete, so a later 'coverage report' can still
+    be pointed at it.
+    """
+    if _platform.HAVE_POSIX_SANDBOX:
+        return
+
+    omit = list(_platform.POSIX_ONLY_COVERAGE_OMIT)
+    cov_configs = _cov_config_objects(config)
+
+    for cov_config in cov_configs:
+        cov_config.report_omit = [*(cov_config.report_omit or []), *omit]
+
+    # Every xdist worker runs this hook too, but only the controller
+    # prints a report -- warn where the caveat can be read next to the
+    # numbers it applies to.
+    if cov_configs and not hasattr(config, "workerinput"):
+        config.issue_config_time_warning(
+            _platform.UnsupportedPlatformWarning(
+                COVERAGE_NOT_REPORTED.format(omitted=", ".join(omit)),
+            ),
+            stacklevel=2,
+        )
 
 
 @pytest.fixture
