@@ -31,8 +31,6 @@ AGUI_POST_RESOLVE_RECENT_FEEDBACK = "post resolve recent agui feedback"
 # itself: an operator reading a terminal has to be told what to go and
 # check. A base URL is configuration, not user input.
 CONTEXT_TOKENIZE_UNREADABLE = "unreadable /tokenize body from provider at %s"
-CONTEXT_WINDOW_UNAVAILABLE = "no /v1/models from provider at %s (%s)"
-CONTEXT_WINDOW_UNREADABLE = "unreadable /v1/models body from provider at %s"
 
 UPLOADS_GET_ROOM = "uploads get room"
 UPLOADS_GET_ROOM_FILE = "uploads get room file"

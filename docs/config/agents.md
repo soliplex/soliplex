@@ -112,6 +112,21 @@ agent:
 - `retries` (an integer, default `3`):  number of retries for LLM calls
   on recoverable errors.
 
+- `context_window` (an integer, default None):  the model's context
+  window, in tokens.  Pydantic AI already knows the window of hosted
+  models it recognises, so this is only needed for a model it cannot
+  look up — one served locally by Ollama, or by any OpenAI-compatible
+  provider behind a `provider_base_url`.  Set it to what the runner is
+  actually configured to serve rather than what the model nominally
+  supports; Ollama, for instance, defaults every model to a far smaller
+  window than the model advertises.  When set, it overrides whatever
+  Pydantic AI would have resolved.  Without a window, from either
+  source, the API reports none and a client shows no context usage.
+
+  ```yaml
+  context_window: 32768
+  ```
+
 - `agui_feature_names` (a list of strings, default empty):  AG-UI feature
   names this agent contributes to the room's aggregate feature set.  Each
   name must be registered in the AG-UI feature registry; see
