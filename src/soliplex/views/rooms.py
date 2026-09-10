@@ -303,9 +303,11 @@ async def get_chunk_visualization(
             chunk, database = await _find_chunk(rag, chunk_id)
 
             if chunk:
-                owner = await rag.reader_for(database)
-                images = await owner.visualize_chunk(
-                    chunk, refs=doc_item_refs, expand=expand
+                images = await rag.visualize_chunk(
+                    chunk,
+                    refs=doc_item_refs,
+                    expand=expand,
+                    source=database,
                 )
                 break  # first hit wins
 

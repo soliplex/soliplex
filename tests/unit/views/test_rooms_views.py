@@ -561,7 +561,6 @@ async def test_get_chunk_visualization(
             for rag in rags:
                 rag.covers_multiple = False
                 rag.source = None  # an unnamed single database
-                rag.reader_for.return_value = rag
                 rag.get_chunk_by_id.return_value = None
                 rag.visualize_chunk.return_value = None
 
@@ -716,6 +715,7 @@ async def test_get_chunk_visualization(
                 chunk,
                 refs=None,
                 expand=False,
+                source=None,
             )
             for rag in rags:
                 if rag is not rag_w_chunk:
@@ -775,7 +775,6 @@ async def test_get_chunk_visualization_refs_and_expand(
     )
     rag.covers_multiple = False
     rag.source = None  # an unnamed single database
-    rag.reader_for.return_value = rag
     rag.get_chunk_by_id.return_value = chunk
     rag.visualize_chunk.return_value = PAGES_PNG
 
@@ -812,6 +811,7 @@ async def test_get_chunk_visualization_refs_and_expand(
         chunk,
         refs=expected_refs,
         expand=expand,
+        source=None,
     )
 
 
@@ -862,9 +862,7 @@ async def test_get_chunk_visualization_federated(
         ("papers", "wiki"),
         {"wiki": chunk},
     )
-    owner = mock.AsyncMock()
-    owner.visualize_chunk.return_value = PAGES_PNG
-    rag.reader_for.return_value = owner
+    rag.visualize_chunk.return_value = PAGES_PNG
 
     hr_inst = mock.AsyncMock()
     hr_inst.__aenter__.return_value = rag
@@ -893,13 +891,12 @@ async def test_get_chunk_visualization_federated(
         mock.call(CHUNK_ID, source="papers"),
         mock.call(CHUNK_ID, source="wiki"),
     ]
-    rag.reader_for.assert_awaited_once_with("wiki")
-    owner.visualize_chunk.assert_awaited_once_with(
+    rag.visualize_chunk.assert_awaited_once_with(
         chunk,
         refs=None,
         expand=False,
+        source="wiki",
     )
-    rag.visualize_chunk.assert_not_called()
 
     record = _sole_rag_record(audit_records)
     assert record.db_path == "papers=/db/papers, wiki=/db/wiki"
@@ -930,7 +927,6 @@ async def test_get_chunk_visualization_one_named_database(
     rag = mock.AsyncMock()
     rag.covers_multiple = False
     rag.source = "papers"
-    rag.reader_for.return_value = rag
     rag.get_chunk_by_id.return_value = chunk
     rag.visualize_chunk.return_value = PAGES_PNG
 
@@ -966,7 +962,12 @@ async def test_get_chunk_visualization_one_named_database(
 
     assert found.database == "papers"
     rag.get_chunk_by_id.assert_awaited_once_with(CHUNK_ID)
-    rag.reader_for.assert_awaited_once_with("papers")
+    rag.visualize_chunk.assert_awaited_once_with(
+        chunk,
+        refs=None,
+        expand=False,
+        source="papers",
+    )
 
 
 @pytest.mark.anyio
@@ -1002,7 +1003,7 @@ async def test_get_chunk_visualization_federated_wo_chunk(
 
     assert exc.value.status_code == 404
     assert exc.value.detail == f"{loggers.ROOM_UNKNOWN_CHUNK_ID}: {CHUNK_ID}"
-    rag.reader_for.assert_not_called()
+    rag.visualize_chunk.assert_not_called()
 
     record = _sole_rag_record(audit_records)
     assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
