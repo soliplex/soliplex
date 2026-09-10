@@ -223,22 +223,31 @@ async def get_room_documents(
     )
 
 
-async def _find_chunk(rag, chunk_id: str):
+async def _find_chunk(rag, chunk_id: str, database: str | None = None):
     """Return a chunk and the name of the database holding it
 
-    Chunk IDs repeat between copies of a database, so a client covering
-    several is asked one at a time, and the first covered database holding
-    the ID wins.  A client covering one database reports the name that
-    database was configured under, None where the configuration named none.
+    Chunk IDs repeat between copies of a database, so 'database' names the
+    one to ask.  Without it a client covering several is asked one at a
+    time and the first holding the ID wins; a client covering one reports
+    the name that database was configured under, None where the
+    configuration named none.
     """
+    if database is not None:
+        if database not in rag.source_names:
+            return None, None
+
+        chunk = await rag.get_chunk_by_id(chunk_id, source=database)
+
+        return (chunk, database) if chunk else (None, None)
+
     if not rag.covers_multiple:
         return await rag.get_chunk_by_id(chunk_id), rag.source
 
-    for database in rag.source_names:
-        chunk = await rag.get_chunk_by_id(chunk_id, source=database)
+    for covered in rag.source_names:
+        chunk = await rag.get_chunk_by_id(chunk_id, source=covered)
 
         if chunk:
-            return chunk, database
+            return chunk, covered
 
     return None, None
 
@@ -250,6 +259,7 @@ async def get_chunk_visualization(
     chunk_id: str,
     refs: str | None = None,
     expand: bool = False,
+    database: str | None = None,
     the_installation: installation.Installation = depend_the_installation,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
@@ -261,7 +271,8 @@ async def get_chunk_visualization(
     ``doc_item_refs`` (the exact items the model saw); when given, the
     highlight matches the cited content instead of re-expanding. ``expand``
     (default true) re-expands the chunk's section when no refs are supplied;
-    ``expand=false`` highlights only the chunk itself.
+    ``expand=false`` highlights only the chunk itself. ``database`` names the
+    haiku.rag database the chunk came from, as a citation reports it.
     """
     the_logger.debug(loggers.ROOM_GET_CHUNK_VISUALIZATION)
 
@@ -300,14 +311,14 @@ async def get_chunk_visualization(
         db_path = hr_client_kw.pop("audit_db_path")
 
         async with hr_client.HaikuRAG(**hr_client_kw) as rag:
-            chunk, database = await _find_chunk(rag, chunk_id)
+            chunk, chunk_database = await _find_chunk(rag, chunk_id, database)
 
             if chunk:
                 images = await rag.visualize_chunk(
                     chunk,
                     refs=doc_item_refs,
                     expand=expand,
-                    source=database,
+                    source=chunk_database,
                 )
                 break  # first hit wins
 
@@ -345,7 +356,7 @@ async def get_chunk_visualization(
 
     return models.ChunkVisualization(
         source=source,
-        database=database,
+        database=chunk_database,
         chunk_id=chunk_id,
         document_uri=chunk.document_uri,
         images_base_64=base64_images,

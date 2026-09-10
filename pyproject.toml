@@ -110,11 +110,9 @@ show_missing = true
 [tool.ruff]
 line-length = 79
 exclude = [
-    # ruff 0.16 formats Python in Markdown fences.  Skill instructions and
-    # docs are prose whose wording is measured, so ruff stays off them.
-    "*.md",
+    "*.md",  # ruff 0.16 formats Python in Markdown fences
 ]
-force-exclude = true  # hold the exclusion for explicitly named files too
+force-exclude = true
 target-version = "py313"
 
 [tool.ruff.lint]

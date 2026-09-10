@@ -1013,6 +1013,120 @@ async def test_get_chunk_visualization_federated_wo_chunk(
 
 @pytest.mark.anyio
 @mock.patch("haiku.rag.client.HaikuRAG")
+@mock.patch("base64.b64encode")
+async def test_get_chunk_visualization_named_database(
+    b64enc,
+    hr_klass,
+    audit_records,
+):
+    """A named database answers, where the scan would take the wrong copy"""
+    ROOM_ID = "foo"
+    CHUNK_ID = "test-chunk-123"
+    DOCUMENT_URI = f"https://example.com/chunks/{CHUNK_ID}"
+    PAGES_PNG = [mock.Mock(spec_set=["blob", "save"], blob="facedace8765")]
+    b64enc.return_value.decode.return_value = "facedace8765"
+
+    chunk = hr_chunk.Chunk(
+        chunk_id=CHUNK_ID,
+        document_uri=DOCUMENT_URI,
+        content="waaa",
+    )
+    # Both copies hold the ID, so 'papers' is what the scan would find.
+    rag, room_config = _federated_room_config(
+        ("papers", "wiki"),
+        {"papers": chunk, "wiki": chunk},
+    )
+    rag.visualize_chunk.return_value = PAGES_PNG
+
+    hr_inst = mock.AsyncMock()
+    hr_inst.__aenter__.return_value = rag
+    hr_klass.side_effect = [hr_inst]
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_room_config.return_value = room_config
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    found = await rooms_views.get_chunk_visualization(
+        room_id=ROOM_ID,
+        chunk_id=CHUNK_ID,
+        database="wiki",
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert found.database == "wiki"
+    rag.get_chunk_by_id.assert_awaited_once_with(CHUNK_ID, source="wiki")
+    rag.visualize_chunk.assert_awaited_once_with(
+        chunk,
+        refs=None,
+        expand=False,
+        source="wiki",
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "database, asked",
+    [("zines", False), ("papers", True)],
+    ids=["uncovered", "covered-without-the-chunk"],
+)
+@mock.patch("haiku.rag.client.HaikuRAG")
+async def test_get_chunk_visualization_named_database_wo_chunk(
+    hr_klass,
+    database,
+    asked,
+    audit_records,
+):
+    """A named database without the chunk is a 404, and no other is asked"""
+    ROOM_ID = "foo"
+    CHUNK_ID = "test-chunk-123"
+
+    chunk = hr_chunk.Chunk(
+        chunk_id=CHUNK_ID,
+        document_uri=f"https://example.com/chunks/{CHUNK_ID}",
+        content="waaa",
+    )
+    rag, room_config = _federated_room_config(
+        ("papers", "wiki"),
+        {"wiki": chunk},
+    )
+
+    hr_inst = mock.AsyncMock()
+    hr_inst.__aenter__.return_value = rag
+    hr_klass.side_effect = [hr_inst]
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_room_config.return_value = room_config
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await rooms_views.get_chunk_visualization(
+            room_id=ROOM_ID,
+            chunk_id=CHUNK_ID,
+            database=database,
+            the_installation=the_installation,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == f"{loggers.ROOM_UNKNOWN_CHUNK_ID}: {CHUNK_ID}"
+
+    if asked:
+        rag.get_chunk_by_id.assert_awaited_once_with(CHUNK_ID, source=database)
+    else:
+        rag.get_chunk_by_id.assert_not_called()
+
+    rag.visualize_chunk.assert_not_called()
+
+
+@pytest.mark.anyio
+@mock.patch("haiku.rag.client.HaikuRAG")
 async def test_get_search_wo_title_uri_or_headings(hr_klass, audit_records):
     """A document with no title, URI or headings is a hit like any other"""
     ROOM_ID = "foo"
