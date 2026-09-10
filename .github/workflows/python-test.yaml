@@ -24,12 +24,26 @@ on:
 jobs:
   test-soliplex:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # A Windows runner is the slower machine, and pays a heavier
+    # per-worker start-up cost under xdist, so give it more headroom
+    # than the Linux runners need.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 30 || 15 }}
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.13", "3.14"]
+        # Linux is the supported platform and carries the full version
+        # matrix. Windows is checked for portability, on one version:
+        # a break there is a break in the tests, not in the Python.
+        exclude:
+          - os: windows-latest
+            python-version: "3.14"
+    defaults:
+      run:
+        # The steps below are bash ('set -o pipefail', 'tee', the
+        # summary heredoc); a Windows runner would otherwise use 'pwsh'.
+        shell: bash
     steps:
       - uses: actions/checkout@v6
 
@@ -58,7 +72,14 @@ jobs:
       # Functional tests run serially: they share on-disk state (e.g. the
       # 'sandbox/workdirs' tree, keyed by a constant room id) and
       # module-scoped app fixtures, so xdist workers race each other.
+      #
+      # Linux only: Windows is in the matrix to check the portability of
+      # the unit suite, and one of these modules
+      # ('test_sandbox_workdirs.py') builds the POSIX-only bubblewrap
+      # workdir tree that the matching unit tests skip off POSIX (see
+      # 'tests/_platform.py').
       - name: Run functional tests
+        if: runner.os != 'Windows'
         run: |
           set -o pipefail
           uv run py.test -s --no-cov -m "not needs_llm" tests/functional/ 2>&1 \
@@ -70,7 +91,7 @@ jobs:
         if: failure()
         run: |
           {
-            echo "## Python ${{ matrix.python-version }} failed"
+            echo "## ${{ matrix.os }}, Python ${{ matrix.python-version }} failed"
             echo
             for log in unit-tests.log functional-tests.log; do
               [ -f "$log" ] || continue

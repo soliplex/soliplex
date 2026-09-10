@@ -270,6 +270,14 @@ later `coverage report` can still be pointed at it. And it reaches the
 with a second, `combining_cov` instance -- neither is reachable through
 `config.option`.
 
+CI checks this rather than taking it on trust:
+`.github/workflows/python-test.yaml` runs the unit suite on
+`windows-latest` alongside the Linux matrix. Windows runs Python 3.13
+only -- a break there is a break in the tests, not in the interpreter --
+and skips the functional step, which stays Linux-only. The coverage gate
+applies to the Windows job in full, narrowed as above, so it does fail
+on a real coverage regression.
+
 Anything genuinely platform-specific belongs behind a gate, not behind a
 loosened assertion: assertions on rendered paths should build their
 expectation with `pathlib` (`str(pathlib.Path(...))`) so they hold on

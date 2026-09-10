@@ -140,10 +140,15 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
   *report* (`tests/_platform.py: POSIX_ONLY_COVERAGE_OMIT`), warning
   that it has -- so everything the host can measure is still held to
   100%, and only the sandbox needs re-checking on Linux
-- Prefer either of those to loosening an assertion. An assertion on a
+- CI checks that: `.github/workflows/python-test.yaml` runs the unit
+  suite on `windows-latest` as well, on Python 3.13 only, with the
+  functional step skipped there. The 100% gate applies to that job like
+  any other
+- Never loosen an assertion to make a platform pass. An assertion on a
   rendered path should build its expectation with `pathlib` so it holds
   on either separator; a test that needs a POSIX-only primitive and is
-  *not* about the sandbox needs a new gate rather than a weaker check
+  *not* about the sandbox needs a gate of its own rather than a weaker
+  check
 
 ## Repository Structure
 
