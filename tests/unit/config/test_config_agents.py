@@ -160,6 +160,18 @@ id: "{AGENT_ID}"
 model_name: "{MODEL_NAME}"
 multimodal: true
 """
+W_CONTEXT_WINDOW_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    provider_type="ollama",
+    context_window=32768,
+)
+W_CONTEXT_WINDOW_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+provider_type: "ollama"
+context_window: 32768
+"""
 
 
 W_PROMPT_FILE_AGENT_CONFIG_KW = dict(
@@ -598,6 +610,10 @@ def test_agentconfig_ctor(installation_config, kw):
         (
             W_MULTIMODAL_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_MULTIMODAL_AGENT_CONFIG_KW.copy()),
+        ),
+        (
+            W_CONTEXT_WINDOW_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(W_CONTEXT_WINDOW_AGENT_CONFIG_KW.copy()),
         ),
         (
             W_PROMPT_FILE_AGENT_CONFIG_YAML,
@@ -1104,6 +1120,7 @@ def test_agentconfig_capabilities(w_kwargs, expected):
         (W_RETRIES_AGENT_CONFIG_KW.copy(), {}),
         (W_PROMPT_FILE_AGENT_CONFIG_KW.copy(), {}),
         (W_MULTIMODAL_AGENT_CONFIG_KW.copy(), {}),
+        (W_CONTEXT_WINDOW_AGENT_CONFIG_KW.copy(), {}),
         (W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW.copy(), {}),
         (
             W_CAPABILITIES_AGENT_CONFIG_KW.copy(),
@@ -1130,6 +1147,7 @@ def test_agentconfig_as_yaml(
         "system_prompt": system_prompt,
         "model_name": agent_config_kw.get("model_name"),
         "model_settings": agent_config_kw.get("model_settings"),
+        "context_window": agent_config_kw.get("context_window"),
         "retries": agent_config_kw.get("retries", 3),
         "multimodal": agent_config_kw.get("multimodal", False),
         "provider_type": agent_config_kw.get("provider_type", "ollama"),
@@ -1523,6 +1541,7 @@ def test_extract_agent_configs(
         assert found == expected
 
 
+@pytest.mark.parametrize("w_context_window", [None, 32768])
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
 @pytest.mark.parametrize(
     "provider_type, llm_provider_kw",
@@ -1547,6 +1566,7 @@ def test_get_model_from_config(
     provider_type,
     llm_provider_kw,
     w_model_settings,
+    w_context_window,
 ):
     exp_model_name = f"interpolated-{MODEL}"
 
@@ -1557,24 +1577,41 @@ def test_get_model_from_config(
     agent_config.llm_model_name = exp_model_name
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
     agent_config.model_settings = w_model_settings
+    agent_config.context_window = w_context_window
     agent_config.provider_type = provider_type
-    agent_config.llm_provider_kw = llm_provider_kw
+    # A copy, so the assertions below compare against what was
+    # configured rather than against anything the code did to it.
+    agent_config.llm_provider_kw = dict(llm_provider_kw)
 
     model = config_agents.get_model_from_config(agent_config=agent_config)
 
+    # Only what the configuration says is passed as a profile: a
+    # declared window is an override, an undeclared one leaves the
+    # field for Pydantic AI to fill.
+    window_profile = (
+        {"context_window": w_context_window}
+        if w_context_window is not None
+        else {}
+    )
+
+    def expected_profile_kw(openai_compat):
+        profile = (
+            config_agents._OPENAI_COMPAT_PROFILE | window_profile
+            if openai_compat
+            else window_profile
+        )
+        return {"profile": profile} if profile else {}
+
     if provider_type == config_agents.LLMProviderType.GOOGLE:
         assert model is google_model_klass.return_value
+        expected_kw = expected_profile_kw(openai_compat=False)
         if w_model_settings:
-            google_model_klass.assert_called_once_with(
-                model_name=exp_model_name,
-                settings=w_model_settings,
-                provider=google_provider_klass.return_value,
-            )
-        else:
-            google_model_klass.assert_called_once_with(
-                model_name=exp_model_name,
-                provider=google_provider_klass.return_value,
-            )
+            expected_kw["settings"] = w_model_settings
+        google_model_klass.assert_called_once_with(
+            model_name=exp_model_name,
+            provider=google_provider_klass.return_value,
+            **expected_kw,
+        )
         google_provider_klass.assert_called_once_with(**llm_provider_kw)
 
         oai_model_klass.assert_not_called()
@@ -1583,11 +1620,11 @@ def test_get_model_from_config(
 
     elif provider_type == config_agents.LLMProviderType.OPENAI:
         assert model is oai_model_klass.return_value
-        expected_kw = {}
+        expected_kw = expected_profile_kw(
+            openai_compat=bool(llm_provider_kw.get("base_url")),
+        )
         if w_model_settings:
             expected_kw["settings"] = w_model_settings
-        if llm_provider_kw.get("base_url"):
-            expected_kw["profile"] = config_agents._OPENAI_COMPAT_PROFILE
         oai_model_klass.assert_called_once_with(
             model_name=exp_model_name,
             provider=oai_provider_klass.return_value,
@@ -1601,7 +1638,7 @@ def test_get_model_from_config(
 
     else:
         assert model is oai_model_klass.return_value
-        expected_kw = {"profile": config_agents._OPENAI_COMPAT_PROFILE}
+        expected_kw = expected_profile_kw(openai_compat=True)
         if w_model_settings:
             expected_kw["settings"] = w_model_settings
         oai_model_klass.assert_called_once_with(
@@ -1609,7 +1646,13 @@ def test_get_model_from_config(
             provider=oll_provider_klass.return_value,
             **expected_kw,
         )
-        oll_provider_klass.assert_called_once_with(**llm_provider_kw)
+        # Ollama wants a key it never checks. It is supplied to the
+        # provider, not written into the configuration.
+        oll_provider_klass.assert_called_once_with(
+            **llm_provider_kw,
+            api_key="dummy",
+        )
+        assert agent_config.llm_provider_kw == llm_provider_kw
 
         oai_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()

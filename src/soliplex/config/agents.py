@@ -179,6 +179,12 @@ class AgentConfig:
 
     model_settings: ai_settings.ModelSettings = None
 
+    # The model's context window, in tokens. Pydantic AI already knows
+    # it for hosted models; a local or OpenAI-compatible provider does
+    # not report one, so a room served that way declares it here or
+    # shows no context usage.
+    context_window: int = None
+
     # Declares whether this agent's model accepts image input. Gates whether
     # RAG/analysis capabilities attach picture chunks to search results as
     # images (the capabilities run on this agent's model, not haiku.rag's).
@@ -341,6 +347,7 @@ class AgentConfig:
             "retries": self.retries,
             "system_prompt": prompt,
             "model_settings": self.model_settings,
+            "context_window": self.context_window,
             "multimodal": self.multimodal,
             "provider_type": str(self.provider_type),
             "provider_base_url": self.provider_base_url,
@@ -484,6 +491,21 @@ _OPENAI_COMPAT_PROFILE = {
 }
 
 
+def _profile_kw(agent_config: AgentConfig, *, openai_compat: bool) -> dict:
+    """Return the 'profile=' keyword for the model, or nothing.
+
+    A partial profile is merged over Pydantic AI's own, so only what the
+    configuration actually says is passed. 'context_window' left unset
+    lets Pydantic AI fill it for a model it knows; set, it overrides.
+    """
+    profile = dict(_OPENAI_COMPAT_PROFILE) if openai_compat else {}
+
+    if agent_config.context_window is not None:
+        profile["context_window"] = agent_config.context_window
+
+    return {"profile": profile} if profile else {}
+
+
 def get_model_from_config(
     *,
     agent_config: AgentConfig,
@@ -503,29 +525,29 @@ def get_model_from_config(
         return google_models.GoogleModel(
             model_name=model_name,
             provider=provider,
+            **_profile_kw(agent_config, openai_compat=False),
             **model_settings_kw,
         )
 
     elif agent_config.provider_type == LLMProviderType.OLLAMA:
-        provider_kw["api_key"] = "dummy"
-        provider = ollama_providers.OllamaProvider(**provider_kw)
+        provider = ollama_providers.OllamaProvider(
+            **(provider_kw | {"api_key": "dummy"}),
+        )
         return openai_models.OpenAIChatModel(
             model_name=model_name,
             provider=provider,
-            profile=_OPENAI_COMPAT_PROFILE,
+            **_profile_kw(agent_config, openai_compat=True),
             **model_settings_kw,
         )
 
     else:
-        profile_kw = (
-            {"profile": _OPENAI_COMPAT_PROFILE}
-            if provider_kw.get("base_url")
-            else {}
-        )
         provider = openai_providers.OpenAIProvider(**provider_kw)
         return openai_models.OpenAIChatModel(
             model_name=model_name,
             provider=provider,
-            **profile_kw,
+            **_profile_kw(
+                agent_config,
+                openai_compat=bool(provider_kw.get("base_url")),
+            ),
             **model_settings_kw,
         )

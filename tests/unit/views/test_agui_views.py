@@ -2364,6 +2364,16 @@ async def test_post_agui_resolve_recent_feedback(
     )
 
 
+def _agent_config(**kw):
+    """A real agent config, so the window is what Pydantic AI resolves.
+
+    Nothing here is stubbed on purpose: the window comes from the
+    model's profile, and a stand-in that answered any attribute is what
+    hid the factory-agent bug this endpoint already had once.
+    """
+    return config_agents.AgentConfig(id="room-test", **kw)
+
+
 @pytest.mark.parametrize(
     "measured, w_tokens, w_run_id",
     [
@@ -2374,35 +2384,69 @@ async def test_post_agui_resolve_recent_feedback(
     ],
 )
 @pytest.mark.parametrize(
-    "base_url, model_name, w_probed, w_window",
+    "agent_kw, w_window",
     [
+        # A local model declares its window, and that is the answer.
         pytest.param(
-            "http://vllm:8000/v1",
-            "qwen",
-            True,
-            8192,
-            id="vllm",
+            dict(
+                model_name="gpt-oss:latest",
+                provider_type="ollama",
+                provider_base_url="http://ollama:11434",
+                context_window=32768,
+            ),
+            32768,
+            id="declared",
         ),
+        # A local model that declares nothing has no window: Ollama
+        # does not report one, and inventing one is the failure this
+        # endpoint exists to avoid.
         pytest.param(
-            "http://ollama:11434/v1",
-            "gpt-oss",
-            True,
+            dict(
+                model_name="gpt-oss:latest",
+                provider_type="ollama",
+                provider_base_url="http://ollama:11434",
+            ),
             None,
-            id="no-window",
+            id="local-undeclared",
         ),
-        pytest.param(None, "gpt-4o", False, None, id="no-base-url"),
-        pytest.param("http://vllm:8000/v1", None, False, None, id="no-model"),
+        # Nor does an OpenAI-compatible provider behind a base URL.
+        pytest.param(
+            dict(
+                model_name="qwen",
+                provider_type="openai",
+                provider_base_url="http://vllm:8000",
+            ),
+            None,
+            id="compat-undeclared",
+        ),
+        # A hosted model Pydantic AI knows needs nothing declared.
+        pytest.param(
+            dict(
+                model_name="gpt-4o",
+                provider_type="openai",
+                provider_base_url="https://api.openai.com",
+            ),
+            128000,
+            id="hosted-known",
+        ),
+        # A declaration wins over what Pydantic AI knows.
+        pytest.param(
+            dict(
+                model_name="gpt-4o",
+                provider_type="openai",
+                provider_base_url="https://api.openai.com",
+                context_window=8192,
+            ),
+            8192,
+            id="hosted-overridden",
+        ),
     ],
 )
-@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
 @mock.patch("soliplex.views.agui._check_user_in_room")
 @pytest.mark.anyio
 async def test_get_room_agui_thread_id_context(
     cuir,
-    get_max_model_len,
-    base_url,
-    model_name,
-    w_probed,
+    agent_kw,
     w_window,
     measured,
     w_tokens,
@@ -2413,21 +2457,11 @@ async def test_get_room_agui_thread_id_context(
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
-    provider_kw = {"api_key": "sekrit"}
-
-    if base_url is not None:
-        provider_kw["base_url"] = base_url
-
-    cuir.return_value = mock.Mock(
-        agent_config=mock.Mock(
-            llm_model_name=model_name,
-            llm_provider_kw=provider_kw,
-        ),
-    )
+    agent_config = _agent_config(**agent_kw)
+    cuir.return_value = mock.Mock(agent_config=agent_config)
     the_threads.get_latest_measured_context = mock.AsyncMock(
         return_value=measured,
     )
-    get_max_model_len.return_value = w_window
 
     found = await agui_views.get_room_agui_thread_id_context(
         room_id=TEST_ROOM_ID,
@@ -2441,18 +2475,8 @@ async def test_get_room_agui_thread_id_context(
 
     assert found.measured_tokens == w_tokens
     assert found.measured_at_run_id == w_run_id
-    assert found.model_name == model_name
+    assert found.model_name == agent_kw["model_name"]
     assert found.max_model_len == w_window
-
-    if w_probed:
-        get_max_model_len.assert_awaited_once_with(
-            base_url=base_url,
-            model_name=model_name,
-            api_key="sekrit",
-            the_logger=the_logger,
-        )
-    else:
-        get_max_model_len.assert_not_awaited()
 
     the_threads.get_latest_measured_context.assert_awaited_once_with(
         user_name=USER_NAME,
@@ -2474,9 +2498,10 @@ async def test_get_room_agui_thread_id_context_unknown_thread(cuir):
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     cuir.return_value = mock.Mock(
-        agent_config=mock.Mock(
-            llm_model_name="qwen",
-            llm_provider_kw={},
+        agent_config=_agent_config(
+            model_name="qwen",
+            provider_type="ollama",
+            provider_base_url="http://ollama:11434",
         ),
     )
     the_threads.get_latest_measured_context = mock.AsyncMock(
@@ -2517,20 +2542,6 @@ def test_context_route_precedes_the_run_id_route():
     assert context < run_id
 
 
-def _context_room(base_url="http://vllm:8000/v1", model_name="qwen"):
-    provider_kw = {"api_key": "sekrit"}
-
-    if base_url is not None:
-        provider_kw["base_url"] = base_url
-
-    return mock.Mock(
-        agent_config=mock.Mock(
-            llm_model_name=model_name,
-            llm_provider_kw=provider_kw,
-        ),
-    )
-
-
 async def _get_context(the_threads):
     return await agui_views.get_room_agui_thread_id_context(
         room_id=TEST_ROOM_ID,
@@ -2551,10 +2562,9 @@ def _measured_threads(measured=(1000, TEST_RUN_ID_STR)):
     return the_threads
 
 
-@mock.patch("soliplex.views.agui.context_window.get_max_model_len")
 @mock.patch("soliplex.views.agui._check_user_in_room")
 @pytest.mark.anyio
-async def test_context_for_a_factory_agent(cuir, get_max_model_len):
+async def test_context_for_a_factory_agent(cuir):
     """A factory agent declares no model, so no window can be asked for.
 
     It chooses one when the run starts. The real config class is used
@@ -2575,4 +2585,3 @@ async def test_context_for_a_factory_agent(cuir, get_max_model_len):
     # The measurement stands: it was taken from whatever the factory
     # served, and it is what the gauge would have shown.
     assert found.measured_tokens == 1000
-    get_max_model_len.assert_not_awaited()
