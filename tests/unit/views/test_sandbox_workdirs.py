@@ -13,6 +13,9 @@ from soliplex import loggers
 from soliplex import models
 from soliplex.config import rooms as config_rooms
 from soliplex.views import sandbox_workdirs as workdir_views
+from tests import _platform
+
+pytestmark = _platform.requires_posix_sandbox
 
 USER_NAME = "phreddy"
 EMAIL = "phreddy@example.com"

@@ -1016,7 +1016,9 @@ def test_sdtc_as_yaml(temp_dir, installation_config, w_kw):
         expected["rag_databases"] = [
             {
                 "name": pathlib.Path(override).stem,
-                "rag_lancedb_override_path": override,
+                # 'as_yaml' renders the parsed 'pathlib.Path', so the
+                # separator is the host's own.
+                "rag_lancedb_override_path": str(pathlib.Path(override)),
             },
         ]
     else:

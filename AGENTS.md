@@ -128,6 +128,27 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
   `-n`-less step
 - Coverage and xdist compose (pytest-cov merges the workers' data), so
   `-n` does not weaken the 100% gate
+- **The suite runs on Windows and macOS too.** The one exception is
+  the bubblewrap sandbox, which is Linux-only, and so are the symlinks,
+  FIFOs and `O_NOFOLLOW` opens its tests set up. The two modules
+  covering it (`test_bwrap_sandbox.py` under `tests/unit/skills/`, and
+  `test_sandbox_workdirs.py` under `tests/unit/views/`) therefore carry
+  `pytestmark = _platform.requires_posix_sandbox` and skip whole off
+  POSIX
+- The 100% gate still applies off POSIX. `tests/conftest.py` drops the
+  two skipped modules, and the two they cover, from the coverage
+  *report* (`tests/_platform.py: POSIX_ONLY_COVERAGE_OMIT`), warning
+  that it has -- so everything the host can measure is still held to
+  100%, and only the sandbox needs re-checking on Linux
+- CI checks that: `.github/workflows/python-test.yaml` runs the unit
+  suite on `windows-latest` as well, on Python 3.13 only, with the
+  functional step skipped there. The 100% gate applies to that job like
+  any other
+- Never loosen an assertion to make a platform pass. An assertion on a
+  rendered path should build its expectation with `pathlib` so it holds
+  on either separator; a test that needs a POSIX-only primitive and is
+  *not* about the sandbox needs a gate of its own rather than a weaker
+  check
 
 ## Repository Structure
 

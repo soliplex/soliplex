@@ -235,6 +235,54 @@ Coverage is unaffected by `-n`: pytest-cov collects each worker's data and
 merges it, so a parallel run enforces the same 100% threshold as a serial
 one.
 
+### Running the unit tests off Linux
+
+Linux is the supported platform, and the whole unit suite runs there. It
+also runs green on Windows and macOS, with two modules skipped: the ones
+covering the bubblewrap sandbox. `bwrap` is Linux-only, and so is
+everything its tests build to exercise it -- an `O_NOFOLLOW` open, a
+FIFO, a symlink, `PosixPath.resolve` rejecting an embedded NUL -- so
+there is nothing left for them to assert on a host without it.
+
+`tests/_platform.py` holds the gate. The two modules covering the
+sandbox -- `test_bwrap_sandbox.py` under `tests/unit/skills/`, and
+`test_sandbox_workdirs.py` under `tests/unit/views/` -- each set
+`pytestmark = _platform.requires_posix_sandbox`, which skips the module
+where `os.name` is not `"posix"`.
+
+Those skips leave the code they cover unmeasured, which would make the
+100% gate unmeetable. Rather than relax the gate, `tests/conftest.py`
+narrows what it is measured against: a `pytest_configure` hook adds
+`POSIX_ONLY_COVERAGE_OMIT` -- the two skipped test modules, and
+`soliplex.skills.bwrap_sandbox` and `soliplex.views.sandbox_workdirs`
+with them -- to the coverage report's `omit`, and warns (an
+`UnsupportedPlatformWarning`, listed in pytest's warnings summary) that
+it has. Everything else is still held to 100%, so a Windows or macOS run
+does catch a coverage regression; only the sandbox needs re-checking on
+Linux.
+
+Two notes on the hook, for anyone changing it. It omits at *report*
+time, not run time: measurement has already started by the time
+`pytest_configure` runs, and leaving the data file complete means a
+later `coverage report` can still be pointed at it. And it reaches the
+`Coverage` objects through pytest-cov's registered plugin, via
+`config.pluginmanager.get_plugin("_cov")`, because pytest-cov reports
+with a second, `combining_cov` instance -- neither is reachable through
+`config.option`.
+
+CI checks this rather than taking it on trust:
+`.github/workflows/python-test.yaml` runs the unit suite on
+`windows-latest` alongside the Linux matrix. Windows runs Python 3.13
+only -- a break there is a break in the tests, not in the interpreter --
+and skips the functional step, which stays Linux-only. The coverage gate
+applies to the Windows job in full, narrowed as above, so it does fail
+on a real coverage regression.
+
+Anything genuinely platform-specific belongs behind a gate, not behind a
+loosened assertion: assertions on rendered paths should build their
+expectation with `pathlib` (`str(pathlib.Path(...))`) so they hold on
+either separator, rather than being weakened to match both.
+
 ## Configuration system
 
 - Configuration is YAML-based and hierarchical, parsed under
