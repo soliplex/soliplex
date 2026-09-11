@@ -1111,6 +1111,179 @@ def test_as_utc_already_aware_unchanged():
     assert agui_persistence._as_utc(T_NEW) is T_NEW
 
 
+async def _measure_run(
+    ts,
+    session,
+    *,
+    thread_id,
+    run_id,
+    final_input_tokens,
+    room_id=ROOM_ID,
+    user_name=USER_NAME,
+):
+    """Record usage against an existing run."""
+    await ts.save_run_usage(
+        user_name=user_name,
+        room_id=room_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        input_tokens=9999,
+        output_tokens=1,
+        requests=1,
+        tool_calls=0,
+        final_input_tokens=final_input_tokens,
+        resolved_model_name="qwen",
+    )
+    await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_get_latest_measured_context_unknown_thread(the_async_session):
+    """A thread that does not exist is an error, not an empty reading.
+
+    The two are different answers and a caller has to tell them apart:
+    a thread with nothing measured yet is a normal 200, while a thread
+    nobody owns is a 404.
+    """
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    with pytest.raises(agui.UnknownThread):
+        await ts.get_latest_measured_context(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=agui_constants.THREAD_UUID,
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_latest_measured_context_unmeasured_run(the_async_session):
+    """A run that never reached the model is skipped, not reported as 0."""
+    ts = agui_persistence.ThreadStorage(the_async_session)
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (run,) = await thread.list_runs()
+    await _measure_run(
+        ts,
+        the_async_session,
+        thread_id=thread_id,
+        run_id=run.run_id,
+        final_input_tokens=None,
+    )
+
+    found = await ts.get_latest_measured_context(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    assert found is None
+
+
+@pytest.mark.asyncio
+async def test_get_latest_measured_context_takes_the_newest(
+    the_async_session,
+):
+    """A thread's reading is its most recent run's, not its first."""
+    ts = agui_persistence.ThreadStorage(the_async_session)
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (first,) = await thread.list_runs()
+    await _measure_run(
+        ts,
+        the_async_session,
+        thread_id=thread_id,
+        run_id=first.run_id,
+        final_input_tokens=1200,
+    )
+
+    later = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+    # Read before committing: the commit expires the instance, and a
+    # later attribute access would want IO outside the greenlet.
+    later_run_id = later.run_id
+    await the_async_session.commit()
+    await _measure_run(
+        ts,
+        the_async_session,
+        thread_id=thread_id,
+        run_id=later_run_id,
+        final_input_tokens=3400,
+    )
+
+    found = await ts.get_latest_measured_context(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    assert found == (3400, later_run_id)
+
+
+@pytest.mark.asyncio
+async def test_get_latest_measured_context_user_scoping(the_async_session):
+    """One user's thread is not visible to another user at all."""
+    ts = agui_persistence.ThreadStorage(the_async_session)
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (run,) = await thread.list_runs()
+    await _measure_run(
+        ts,
+        the_async_session,
+        thread_id=thread_id,
+        run_id=run.run_id,
+        final_input_tokens=1200,
+    )
+
+    with pytest.raises(agui.UnknownThread):
+        await ts.get_latest_measured_context(
+            user_name=OTHER_USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_latest_measured_context_room_scoping(the_async_session):
+    """A thread id alone does not identify a thread across rooms."""
+    ts = agui_persistence.ThreadStorage(the_async_session)
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    thread_id = await thread.awaitable_attrs.thread_id
+    (run,) = await thread.list_runs()
+    await _measure_run(
+        ts,
+        the_async_session,
+        thread_id=thread_id,
+        run_id=run.run_id,
+        final_input_tokens=1200,
+    )
+
+    with pytest.raises(agui.ThreadRoomMismatch):
+        await ts.get_latest_measured_context(
+            user_name=USER_NAME,
+            room_id=ROOM_ID_2,
+            thread_id=thread_id,
+        )
+
+
 @pytest.mark.asyncio
 async def test_get_room_last_activity_empty(the_async_session):
     ts = agui_persistence.ThreadStorage(the_async_session)
@@ -1514,8 +1687,12 @@ async def test_capture_usage_after_stream(
         tool_calls=4,
     )
     if w_usage:
-        result = mock.Mock(spec_set=["usage"])
+        final = mock.Mock(spec_set=["usage", "model_name"])
+        final.usage = mock.Mock(spec_set=["input_tokens"], input_tokens=99)
+        final.model_name = "gpt-4o-2024-11-20"
+        result = mock.Mock(spec_set=["usage", "all_messages"])
         result.usage = usage
+        result.all_messages = mock.Mock(return_value=[final])
     else:
         result = object()
 
@@ -1542,6 +1719,8 @@ async def test_capture_usage_after_stream(
             output_tokens=2,
             requests=3,
             tool_calls=4,
+            final_input_tokens=99,
+            resolved_model_name="gpt-4o-2024-11-20",
         )
         t_storage.assert_called_once_with(w_session)
         fake_async_session.cls.assert_called_once_with(bind=sqla_engine)
@@ -1614,3 +1793,44 @@ async def test_finish_run_helper(t_storage, fake_async_session):
 
     t_storage.assert_called_once_with(w_session)
     fake_async_session.cls.assert_called_once_with(bind=sqla_engine)
+
+
+@pytest.mark.parametrize(
+    "messages, expected",
+    [
+        pytest.param([], (None, None), id="no-messages"),
+        pytest.param(
+            [mock.Mock(spec_set=["usage"], usage=None)],
+            (None, None),
+            id="request-without-usage",
+        ),
+    ],
+)
+def test_final_request_usage_without_a_model_response(messages, expected):
+    """A run that never reached the model has no window measurement."""
+    result = mock.Mock(spec_set=["all_messages"])
+    result.all_messages = mock.Mock(return_value=messages)
+
+    assert agui_persistence._final_request_usage(result) == expected
+
+
+def test_final_request_usage_takes_the_last_response():
+    """'input_tokens' on the run is cumulative; the last request is not.
+
+    A tool loop makes several requests, and only the final one describes
+    the context the model actually received at the end.
+    """
+    first = mock.Mock(spec_set=["usage", "model_name"])
+    first.usage = mock.Mock(spec_set=["input_tokens"], input_tokens=10)
+    first.model_name = "gpt-4o-mini"
+
+    last = mock.Mock(spec_set=["usage", "model_name"])
+    last.usage = mock.Mock(spec_set=["input_tokens"], input_tokens=800)
+    last.model_name = "gpt-4o-2024-11-20"
+
+    result = mock.Mock(spec_set=["all_messages"])
+    result.all_messages = mock.Mock(return_value=[first, last])
+
+    found = agui_persistence._final_request_usage(result)
+
+    assert found == (800, "gpt-4o-2024-11-20")

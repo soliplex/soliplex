@@ -11,6 +11,7 @@ SOLIPLEX_LOGGER_NAME = "soliplex"
 AGUI_GET_ROOM = "get room agui"
 AGUI_GET_ROOM_THREAD = "get room agui thread"
 AGUI_GET_ROOM_THREAD_RUN = "get room agui thread run"
+AGUI_GET_ROOM_THREAD_CONTEXT = "get room agui thread context"
 AGUI_POST_ROOM = "post room agui"
 AGUI_POST_ROOM_THREAD = "post room agui thread"
 AGUI_POST_ROOM_THREAD_META = "post room agui thread meta"
@@ -24,6 +25,12 @@ AGUI_POST_RECENT_ROOM_FEEDBACK = "post recent room agui feedback"
 AGUI_POST_RECENT_USER_FEEDBACK = "post recent room user feedback"
 AGUI_POST_REVIEW_RECENT_FEEDBACK = "post review recent agui feedback"
 AGUI_POST_RESOLVE_RECENT_FEEDBACK = "post resolve recent agui feedback"
+
+# Structured attributes go to the record's 'extra', which the console
+# handler does not render, so these carry the host in the message text
+# itself: an operator reading a terminal has to be told what to go and
+# check. A base URL is configuration, not user input.
+CONTEXT_TOKENIZE_UNREADABLE = "unreadable /tokenize body from provider at %s"
 
 UPLOADS_GET_ROOM = "uploads get room"
 UPLOADS_GET_ROOM_FILE = "uploads get room file"

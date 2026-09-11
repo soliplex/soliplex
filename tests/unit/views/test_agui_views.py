@@ -16,6 +16,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
 from soliplex.views import agui as agui_views
@@ -634,7 +635,10 @@ async def test_get_room_agui_thread_id_only(
         (UNKNOWN_RUN, raises_httpexc(code=404, match="Unknown run")),
     ],
 )
-@pytest.mark.parametrize("w_usage", [None, (1, 2, 3, 4)])
+@pytest.mark.parametrize(
+    "w_usage",
+    [None, (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")],
+)
 @pytest.mark.parametrize("w_events", [[], AGUI_EVENTS])
 @pytest.mark.parametrize("w_parent", [False, True])
 @pytest.mark.parametrize("w_run_meta", [False, True])
@@ -684,13 +688,19 @@ async def test_get_room_agui_thread_id_run_id(
         test_run.parent_run_id = None
 
     if w_usage is not None:
+        w_usage_values = w_usage
         w_usage = mock.create_autospec(
             agui.RunUsage,
             input_tokens=w_usage[0],
             output_tokens=w_usage[1],
             requests=w_usage[2],
             tool_calls=w_usage[3],
+            final_input_tokens=w_usage[4],
+            resolved_model_name=w_usage[5],
         )
+        # 'AGUI_Run.from_run' feeds 'as_tuple()' straight into the pydantic
+        # model, so it has to yield real values, not child mocks.
+        w_usage.as_tuple.return_value = agui.RunUsageStats(*w_usage_values)
 
     test_run.awaitable_attrs.run_usage = _awaitable("run_usage", w_usage)
 
@@ -2352,3 +2362,226 @@ async def test_post_agui_resolve_recent_feedback(
     the_logger.debug.assert_called_once_with(
         loggers.AGUI_POST_RESOLVE_RECENT_FEEDBACK,
     )
+
+
+def _agent_config(**kw):
+    """A real agent config, so the window is what Pydantic AI resolves.
+
+    Nothing here is stubbed on purpose: the window comes from the
+    model's profile, and a stand-in that answered any attribute is what
+    hid the factory-agent bug this endpoint already had once.
+    """
+    return config_agents.AgentConfig(id="room-test", **kw)
+
+
+@pytest.mark.parametrize(
+    "measured, w_tokens, w_run_id",
+    [
+        pytest.param(None, None, None, id="never-measured"),
+        pytest.param(
+            (1800, TEST_RUN_ID_STR), 1800, TEST_RUN_ID_STR, id="measured"
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "agent_kw, w_window",
+    [
+        # A local model declares its window, and that is the answer.
+        pytest.param(
+            dict(
+                model_name="gpt-oss:latest",
+                provider_type="ollama",
+                provider_base_url="http://ollama:11434",
+                context_window=32768,
+            ),
+            32768,
+            id="declared",
+        ),
+        # A local model that declares nothing has no window: Ollama
+        # does not report one, and inventing one is the failure this
+        # endpoint exists to avoid.
+        pytest.param(
+            dict(
+                model_name="gpt-oss:latest",
+                provider_type="ollama",
+                provider_base_url="http://ollama:11434",
+            ),
+            None,
+            id="local-undeclared",
+        ),
+        # Nor does an OpenAI-compatible provider behind a base URL.
+        pytest.param(
+            dict(
+                model_name="qwen",
+                provider_type="openai",
+                provider_base_url="http://vllm:8000",
+            ),
+            None,
+            id="compat-undeclared",
+        ),
+        # A hosted model Pydantic AI knows needs nothing declared.
+        pytest.param(
+            dict(
+                model_name="gpt-4o",
+                provider_type="openai",
+                provider_base_url="https://api.openai.com",
+            ),
+            128000,
+            id="hosted-known",
+        ),
+        # A declaration wins over what Pydantic AI knows.
+        pytest.param(
+            dict(
+                model_name="gpt-4o",
+                provider_type="openai",
+                provider_base_url="https://api.openai.com",
+                context_window=8192,
+            ),
+            8192,
+            id="hosted-overridden",
+        ),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+@pytest.mark.anyio
+async def test_get_room_agui_thread_id_context(
+    cuir,
+    agent_kw,
+    w_window,
+    measured,
+    w_tokens,
+    w_run_id,
+):
+    the_threads = mock.create_autospec(agui.ThreadStorage)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    agent_config = _agent_config(**agent_kw)
+    cuir.return_value = mock.Mock(agent_config=agent_config)
+    the_threads.get_latest_measured_context = mock.AsyncMock(
+        return_value=measured,
+    )
+
+    found = await agui_views.get_room_agui_thread_id_context(
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_UUID,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert found.measured_tokens == w_tokens
+    assert found.measured_at_run_id == w_run_id
+    assert found.model_name == agent_kw["model_name"]
+    assert found.max_model_len == w_window
+
+    the_threads.get_latest_measured_context.assert_awaited_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+    )
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_GET_ROOM_THREAD_CONTEXT,
+    )
+
+
+@mock.patch("soliplex.views.agui._check_user_in_room")
+@pytest.mark.anyio
+async def test_get_room_agui_thread_id_context_unknown_thread(cuir):
+    """A thread the user does not own is a 404, not an empty reading."""
+    the_threads = mock.create_autospec(agui.ThreadStorage)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    cuir.return_value = mock.Mock(
+        agent_config=_agent_config(
+            model_name="qwen",
+            provider_type="ollama",
+            provider_base_url="http://ollama:11434",
+        ),
+    )
+    the_threads.get_latest_measured_context = mock.AsyncMock(
+        side_effect=agui.UnknownThread(USER_NAME, TEST_THREAD_ID_STR),
+    )
+
+    with pytest.raises(fastapi.HTTPException) as exc_info:
+        await agui_views.get_room_agui_thread_id_context(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+def test_context_route_precedes_the_run_id_route():
+    """A literal segment must be declared before the capture it resembles.
+
+    FastAPI matches routes in declaration order, so a '{run_id}' route
+    registered first swallows '.../context' and rejects it as a
+    malformed UUID. Calling the handler directly cannot catch that --
+    only the order can.
+    """
+    paths = [
+        route.path
+        for route in agui_views.router.routes
+        if "methods" in dir(route) and "GET" in route.methods
+    ]
+
+    context = paths.index("/v1/rooms/{room_id}/agui/{thread_id}/context")
+    run_id = paths.index("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
+
+    assert context < run_id
+
+
+async def _get_context(the_threads):
+    return await agui_views.get_room_agui_thread_id_context(
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_UUID,
+        the_installation=mock.create_autospec(installation.Installation),
+        the_threads=the_threads,
+        the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=mock.create_autospec(loggers.LogWrapper),
+    )
+
+
+def _measured_threads(measured=(1000, TEST_RUN_ID_STR)):
+    the_threads = mock.create_autospec(agui.ThreadStorage)
+    the_threads.get_latest_measured_context = mock.AsyncMock(
+        return_value=measured,
+    )
+    return the_threads
+
+
+@mock.patch("soliplex.views.agui._check_user_in_room")
+@pytest.mark.anyio
+async def test_context_for_a_factory_agent(cuir):
+    """A factory agent declares no model, so no window can be asked for.
+
+    It chooses one when the run starts. The real config class is used
+    here rather than a mock, because the bug this covers was exactly
+    that a hand-built stand-in carried attributes the real one lacks.
+    """
+    agent_config = config_agents.FactoryAgentConfig(
+        id="joker",
+        factory_name="soliplex.example.factory",
+    )
+    cuir.return_value = mock.Mock(agent_config=agent_config)
+    the_threads = _measured_threads()
+
+    found = await _get_context(the_threads)
+
+    assert found.max_model_len is None
+    assert found.model_name is None
+    # The measurement stands: it was taken from whatever the factory
+    # served, and it is what the gauge would have shown.
+    assert found.measured_tokens == 1000

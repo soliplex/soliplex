@@ -141,6 +141,46 @@ class ThreadStorage(agui.ThreadStorage):
 
         return result
 
+    async def get_latest_measured_context(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+    ) -> tuple[int, str] | None:
+        """Return the thread's newest measured context size and its run.
+
+        Raises 'UnknownThread' when the thread does not exist or is not
+        this user's, so a caller can tell "nothing measured yet" from
+        "no such thread". Filtering the join on the user alone cannot:
+        both answer with no row.
+        """
+        async with self.session as session:
+            await self._find_user_thread(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                session=session,
+            )
+
+            query = (
+                sqla_sql.select(
+                    agui_schema.RunUsage.final_input_tokens,
+                    agui_schema.Run.run_id,
+                )
+                .join(agui_schema.RunUsage.run)
+                .join(agui_schema.Run.thread)
+                .where(agui_schema.Thread.user_name == user_name)
+                .where(agui_schema.Thread.room_id == room_id)
+                .where(agui_schema.Thread.thread_id == thread_id)
+                .where(agui_schema.RunUsage.final_input_tokens.is_not(None))
+                .order_by(agui_schema.RunUsage.created.desc())
+                .limit(1)
+            )
+            row = (await session.execute(query)).first()
+
+        return tuple(row) if row is not None else None
+
     async def get_room_last_activity(
         self,
         *,
@@ -552,6 +592,8 @@ class ThreadStorage(agui.ThreadStorage):
         output_tokens: int,
         requests: int,
         tool_calls: int,
+        final_input_tokens: int | None = None,
+        resolved_model_name: str | None = None,
     ):
         """Save the run usage statistics"""
         async with self.session as session:
@@ -569,6 +611,8 @@ class ThreadStorage(agui.ThreadStorage):
                     output_tokens=output_tokens,
                     requests=requests,
                     tool_calls=tool_calls,
+                    final_input_tokens=final_input_tokens,
+                    resolved_model_name=resolved_model_name,
                 )
             )
 
@@ -868,6 +912,36 @@ class ThreadStorage(agui.ThreadStorage):
 # --------------------------------------------------------------------------
 
 
+def _final_request_usage(result):
+    """Usage and model name of the run's last model response.
+
+    'RunUsage.input_tokens' accumulates across every request a run makes, so
+    it answers "what did this run cost", not "how full was the window". The
+    last response's own 'RequestUsage' answers the second question, and its
+    'model_name' is what the provider actually served -- a better tokenizer
+    key than the configured name, which may be an alias.
+
+    Returns '(None, None)' for a run that never reached the model.
+    """
+    all_messages = getattr(result, "all_messages", None)
+
+    if all_messages is None:  # pragma: NO COVER - defensive
+        return None, None
+
+    for message in reversed(all_messages()):
+        message_usage = getattr(message, "usage", None)
+
+        if message_usage is None:
+            continue
+
+        return (
+            getattr(message_usage, "input_tokens", None),
+            getattr(message, "model_name", None),
+        )
+
+    return None, None
+
+
 async def capture_usage_after_stream(
     result,
     *,
@@ -881,6 +955,7 @@ async def capture_usage_after_stream(
     usage = getattr(result, "usage", None)
 
     if usage is not None:
+        final_input_tokens, resolved_model_name = _final_request_usage(result)
         async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
             the_threads = ThreadStorage(session)
 
@@ -894,6 +969,8 @@ async def capture_usage_after_stream(
                     output_tokens=usage.output_tokens,
                     requests=usage.requests,
                     tool_calls=usage.tool_calls,
+                    final_input_tokens=final_input_tokens,
+                    resolved_model_name=resolved_model_name,
                 )
 
 

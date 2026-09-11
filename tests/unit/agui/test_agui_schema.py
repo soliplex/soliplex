@@ -117,13 +117,46 @@ async def test_runusage_as_tuple(the_session):
         output_tokens=2,
         requests=3,
         tool_calls=4,
+        final_input_tokens=5,
+        resolved_model_name="gpt-4o-2024-11-20",
     )
     the_session.add(usage)
     the_session.commit()
 
     found = usage.as_tuple()
 
-    assert found == (1, 2, 3, 4)
+    assert found == (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")
+
+
+@pytest.mark.anyio
+async def test_runusage_as_tuple_wo_final_request(the_session):
+    """A row written before the final-request columns existed."""
+    thread = agui_schema.Thread(
+        room_id=ROOM_ID,
+        user_name=USER_NAME,
+        thread_id=agui_constants.THREAD_UUID,
+    )
+    the_session.add(thread)
+    the_session.commit()
+
+    run = agui_schema.Run(
+        thread=thread,
+        run_id=agui_constants.RUN_UUID,
+    )
+    the_session.add(run)
+    the_session.commit()
+
+    usage = agui_schema.RunUsage(
+        run=run,
+        input_tokens=1,
+        output_tokens=2,
+        requests=3,
+        tool_calls=4,
+    )
+    the_session.add(usage)
+    the_session.commit()
+
+    assert usage.as_tuple() == (1, 2, 3, 4, None, None)
 
 
 @pytest.mark.parametrize(
