@@ -525,6 +525,7 @@ async def test_get_chunk_visualization(
         kws | {"audit_db_path": str(kws["db_path"])} for kws in w_hrc_kws
     ]
     sources = [kws["source"] for kws in w_hrc_kws]
+    databases = [kws["db_path"].rsplit("/", 1)[-1] for kws in w_hrc_kws]
     hr_insts = {source: mock.AsyncMock() for source in sources}
     hr_entereds = {
         key: value.__aenter__.return_value for key, value in hr_insts.items()
@@ -558,9 +559,8 @@ async def test_get_chunk_visualization(
 
     if ROOM_ID in room_configs:
         if w_hrc_kws:
-            for rag in rags:
-                rag.covers_multiple = False
-                rag.source = None  # an unnamed single database
+            for rag, database in zip(rags, databases, strict=True):
+                rag.source_names = (database,)
                 rag.get_chunk_by_id.return_value = None
                 rag.visualize_chunk.return_value = None
 
@@ -696,8 +696,10 @@ async def test_get_chunk_visualization(
             )
 
             chunk_source = sources[w_chunk_index]
+            chunk_database = databases[w_chunk_index]
             assert found == models.ChunkVisualization(
                 source=rag_sources[chunk_source],
+                database=chunk_database,
                 chunk_id=CHUNK_ID,
                 document_uri=DOCUMENT_URI,
                 images_base_64=PAGES_B64,
@@ -715,7 +717,7 @@ async def test_get_chunk_visualization(
                 chunk,
                 refs=None,
                 expand=False,
-                source=None,
+                source=chunk_database,
             )
             for rag in rags:
                 if rag is not rag_w_chunk:
@@ -773,8 +775,7 @@ async def test_get_chunk_visualization_refs_and_expand(
         document_uri=DOCUMENT_URI,
         content="waaa",
     )
-    rag.covers_multiple = False
-    rag.source = None  # an unnamed single database
+    rag.source_names = ("agent",)
     rag.get_chunk_by_id.return_value = chunk
     rag.visualize_chunk.return_value = PAGES_PNG
 
@@ -806,19 +807,18 @@ async def test_get_chunk_visualization_refs_and_expand(
     )
 
     assert found.chunk_id == CHUNK_ID
-    assert found.database is None
+    assert found.database == "agent"
     rag.visualize_chunk.assert_awaited_once_with(
         chunk,
         refs=expected_refs,
         expand=expand,
-        source=None,
+        source="agent",
     )
 
 
 def _federated_room_config(covered_names, chunks_by_name):
     """A room whose sole RAG config covers several named databases"""
     rag = mock.AsyncMock()
-    rag.covers_multiple = True
     rag.source_names = covered_names
     rag.get_chunk_by_id.side_effect = lambda chunk_id, source=None: (
         chunks_by_name.get(source)
@@ -925,8 +925,7 @@ async def test_get_chunk_visualization_one_named_database(
     # A one-entry 'rag_databases' opens as a single-database client that
     # keeps the configured name.
     rag = mock.AsyncMock()
-    rag.covers_multiple = False
-    rag.source = "papers"
+    rag.source_names = ("papers",)
     rag.get_chunk_by_id.return_value = chunk
     rag.visualize_chunk.return_value = PAGES_PNG
 
@@ -961,7 +960,7 @@ async def test_get_chunk_visualization_one_named_database(
     )
 
     assert found.database == "papers"
-    rag.get_chunk_by_id.assert_awaited_once_with(CHUNK_ID)
+    rag.get_chunk_by_id.assert_awaited_once_with(CHUNK_ID, source="papers")
     rag.visualize_chunk.assert_awaited_once_with(
         chunk,
         refs=None,

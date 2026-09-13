@@ -227,23 +227,13 @@ async def _find_chunk(rag, chunk_id: str, database: str | None = None):
     """Return a chunk and the name of the database holding it
 
     Chunk IDs repeat between copies of a database, so 'database' names the
-    one to ask.  Without it a client covering several is asked one at a
-    time and the first holding the ID wins; a client covering one reports
-    the name that database was configured under, None where the
-    configuration named none.
+    one to ask; without it the covered databases are asked in turn and the
+    first holding the ID wins.
     """
-    if database is not None:
-        if database not in rag.source_names:
-            return None, None
-
-        chunk = await rag.get_chunk_by_id(chunk_id, source=database)
-
-        return (chunk, database) if chunk else (None, None)
-
-    if not rag.covers_multiple:
-        return await rag.get_chunk_by_id(chunk_id), rag.source
-
     for covered in rag.source_names:
+        if database is not None and covered != database:
+            continue
+
         chunk = await rag.get_chunk_by_id(chunk_id, source=covered)
 
         if chunk:
