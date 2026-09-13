@@ -190,7 +190,10 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
 async def test_get_installation_providers(w_admin_access):
     PROVIDER_INFO = {
         config_agents.LLMProviderType.OLLAMA: {
-            OLLAMA_BASE_URL: set([TEST_MODEL_ONE, TEST_MODEL_TWO]),
+            OLLAMA_BASE_URL: {
+                TEST_MODEL_ONE: installation.ProviderRole.CHAT,
+                TEST_MODEL_TWO: installation.ProviderRole.EMBEDDING,
+            },
         }
     }
 

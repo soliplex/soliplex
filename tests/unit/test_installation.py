@@ -372,10 +372,8 @@ def test_installation_agent_provider_info(
 
         if provider_type is not None:
             type_urls = expected.setdefault(agent.provider_type, {})
-            url_models = type_urls.setdefault(
-                agent.llm_provider_base_url, set()
-            )
-            url_models.add(agent.llm_model_name)
+            url_models = type_urls.setdefault(agent.llm_provider_base_url, {})
+            url_models[agent.llm_model_name] = installation.ProviderRole.CHAT
 
     if standalone_agents["agent_configs"]:
         for agent in standalone_agents["agent_configs"]:
@@ -401,7 +399,13 @@ def test_installation_agent_provider_info(
     assert found == expected
 
 
-HR_CONFIG_SECTIONS = ["embeddings", "qa", "reranking"]
+HR_SECTION_ROLES = {
+    "embeddings": installation.ProviderRole.EMBEDDING,
+    "qa": installation.ProviderRole.CHAT,
+    "analysis": installation.ProviderRole.CHAT,
+    "reranking": installation.ProviderRole.RERANKING,
+}
+HR_CONFIG_SECTIONS = list(HR_SECTION_ROLES)
 TEST_MODEL_PROVIDER = "test-model-provider"
 TEST_MODEL_BASE_URL = "https://provider.example.com:11434"
 TEST_MODEL_NAME = "test-model-name"
@@ -421,6 +425,7 @@ def hr_config_w_providers(request):
         which=request.param,
         embeddings=None,
         qa=None,
+        analysis=None,
         reranking=None,
     )
     model = FauxHRModel()
@@ -444,12 +449,83 @@ def test_installation_haiku_rag_provider_info(hr_config_w_providers):
 
     if hr_config_w_providers.which is not None:
         expected[TEST_MODEL_PROVIDER] = {
-            TEST_MODEL_BASE_URL: set([TEST_MODEL_NAME]),
+            TEST_MODEL_BASE_URL: {
+                TEST_MODEL_NAME: HR_SECTION_ROLES[hr_config_w_providers.which],
+            },
         }
 
     found = the_installation.haiku_rag_provider_info
 
     assert found == expected
+
+
+def test__add_provider_model_records_role():
+    url_models = {}
+
+    installation._add_provider_model(
+        url_models,
+        TEST_MODEL_BASE_URL,
+        TEST_MODEL_NAME,
+        installation.ProviderRole.CHAT,
+    )
+
+    assert url_models == {TEST_MODEL_NAME: installation.ProviderRole.CHAT}
+
+
+def test__add_provider_model_allows_repeated_role():
+    url_models = {TEST_MODEL_NAME: installation.ProviderRole.CHAT}
+
+    installation._add_provider_model(
+        url_models,
+        TEST_MODEL_BASE_URL,
+        TEST_MODEL_NAME,
+        installation.ProviderRole.CHAT,
+    )
+
+    assert url_models == {TEST_MODEL_NAME: installation.ProviderRole.CHAT}
+
+
+def test__add_provider_model_rejects_conflicting_role():
+    url_models = {TEST_MODEL_NAME: installation.ProviderRole.CHAT}
+
+    with pytest.raises(installation.ConflictingProviderRole) as exc_info:
+        installation._add_provider_model(
+            url_models,
+            TEST_MODEL_BASE_URL,
+            TEST_MODEL_NAME,
+            installation.ProviderRole.EMBEDDING,
+        )
+
+    found = exc_info.value
+    assert found.model_name == TEST_MODEL_NAME
+    assert found.base_url == TEST_MODEL_BASE_URL
+    assert found.existing == installation.ProviderRole.CHAT
+    assert found.conflicting == installation.ProviderRole.EMBEDDING
+    assert TEST_MODEL_NAME in str(found)
+
+
+def test_installation_haiku_rag_provider_info_w_conflicting_roles():
+    # One name serving as both the QA model and the embeddings model of
+    # a single server cannot be probed two ways; say so rather than
+    # silently letting one role win.
+    model = FauxHRModel()
+    hr_config = mock.Mock(
+        spec_set=HR_CONFIG_SECTIONS,
+        embeddings=mock.Mock(spec_set=["model"], model=model),
+        qa=mock.Mock(spec_set=["model"], model=model),
+        analysis=None,
+        reranking=None,
+    )
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig,
+        haiku_rag_config=hr_config,
+    )
+    the_installation = installation.Installation(i_config)
+
+    with pytest.raises(installation.ConflictingProviderRole) as exc_info:
+        _ = the_installation.haiku_rag_provider_info
+
+    assert exc_info.value.model_name == TEST_MODEL_NAME
 
 
 def test_installation_all_provider_info_w_already():
@@ -491,10 +567,8 @@ def test_installation_all_provider_info_wo_already(
 
         if provider_type is not None:
             type_urls = expected.setdefault(agent.provider_type, {})
-            url_models = type_urls.setdefault(
-                agent.llm_provider_base_url, set()
-            )
-            url_models.add(agent.llm_model_name)
+            url_models = type_urls.setdefault(agent.llm_provider_base_url, {})
+            url_models[agent.llm_model_name] = installation.ProviderRole.CHAT
 
     if standalone_agents["agent_configs"]:
         for agent in standalone_agents["agent_configs"]:
@@ -515,12 +589,53 @@ def test_installation_all_provider_info_wo_already(
 
     if hr_config_w_providers.which is not None:
         expected[TEST_MODEL_PROVIDER] = {
-            TEST_MODEL_BASE_URL: set([TEST_MODEL_NAME]),
+            TEST_MODEL_BASE_URL: {
+                TEST_MODEL_NAME: HR_SECTION_ROLES[hr_config_w_providers.which],
+            },
         }
 
     found = the_installation.all_provider_info
 
     assert found == expected
+
+
+def test_installation_all_provider_info_folds_models_wo_base_url():
+    # An Ollama agent that names no base URL is served by OLLAMA_BASE_URL,
+    # so its model folds onto that URL's entry, keeping its role.
+    agent = mock.create_autospec(
+        config_agents.AgentConfig,
+        id="no-url-agent",
+        provider_type=config_agents.LLMProviderType.OLLAMA,
+        llm_provider_base_url=None,
+        llm_model_name="no-url-model",
+    )
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig,
+        agent_configs=[agent],
+        room_configs={},
+        completion_configs={},
+        haiku_rag_config=mock.Mock(
+            spec_set=HR_CONFIG_SECTIONS,
+            embeddings=None,
+            qa=None,
+            analysis=None,
+            reranking=None,
+        ),
+    )
+    i_config.get_environment.side_effect = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+    }.get
+    the_installation = installation.Installation(i_config)
+
+    found = the_installation.all_provider_info
+
+    assert found == {
+        config_agents.LLMProviderType.OLLAMA: {
+            OLLAMA_BASE_URL: {
+                "no-url-model": installation.ProviderRole.CHAT,
+            },
+        },
+    }
 
 
 def test_installation_rooms_upload_path():

@@ -47,11 +47,14 @@ class REST_API:
     def chat_completion(self, model_name: str, prompt: str = "ping"):
         """Send a minimal chat-completion request and return the response.
 
-        Posts to the OpenAI-compatible ``/v1/chat/completions`` endpoint --
-        the same path the application uses to talk to Ollama -- so a
-        successful call confirms the model actually responds, not merely
-        that it is installed. Raises ``requests.RequestException`` on a
-        network error or non-2xx response.
+        Posts to the OpenAI-compatible ``/v1/chat/completions`` endpoint,
+        the same path the application uses to talk to Ollama.
+
+        A successful call confirms the model actually responds, not merely
+        that it is installed.
+
+        Raises ``requests.RequestException`` on a network error or
+        non-2xx response.
         """
         url = f"{self.ollama_base_url}/v1/chat/completions"
         data = {
@@ -59,6 +62,29 @@ class REST_API:
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 1,
             "stream": False,
+        }
+
+        response = requests.post(url, json=data)
+        response.raise_for_status()
+
+        return response.json()
+
+    def embeddings(self, model_name: str, text: str = "ping"):
+        """Send a minimal embeddings request and return the response.
+
+        Posts to the OpenAI-compatible ``/v1/embeddings`` endpoint,
+        the same path ``haiku.rag`` uses to request embeddings.
+
+        A successful call confirms the model actually responds, not merely
+        that it is installed.
+
+        Raises ``requests.RequestException`` on a network error or
+        non-2xx response.
+        """
+        url = f"{self.ollama_base_url}/v1/embeddings"
+        data = {
+            "model": model_name,
+            "input": text,
         }
 
         response = requests.post(url, json=data)

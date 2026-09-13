@@ -24,6 +24,10 @@ TESTING_QUIZ_ERROR = "testing quiz error"
 TESTING_SKILL_ERROR = "testing skill error"
 TESTING_AUTHZ_DB_ERROR = "testing authz db error"
 
+CHAT_ROLE = installation.ProviderRole.CHAT
+EMBEDDING_ROLE = installation.ProviderRole.EMBEDDING
+RERANKING_ROLE = installation.ProviderRole.RERANKING
+
 no_error_none = contextlib.nullcontext()
 
 
@@ -1572,13 +1576,20 @@ def test__invalid_logging(
         ({}, {}, {}),
         # URL present but no models referenced -> skipped, no errors.
         (
-            {"ollama": {"http://a.example.com": set()}},
+            {"ollama": {"http://a.example.com": {}}},
             {},
             {},
         ),
         # All required models are available -> no errors.
         (
-            {"ollama": {"http://a.example.com": {"llama3", "mistral"}}},
+            {
+                "ollama": {
+                    "http://a.example.com": {
+                        "llama3": CHAT_ROLE,
+                        "mistral": CHAT_ROLE,
+                    },
+                },
+            },
             {
                 "http://a.example.com": {
                     "models": [{"name": "llama3"}, {"name": "mistral"}],
@@ -1590,7 +1601,11 @@ def test__invalid_logging(
         (
             {
                 "ollama": {
-                    "http://a.example.com": {"llama3", "mistral", "phi3"},
+                    "http://a.example.com": {
+                        "llama3": CHAT_ROLE,
+                        "mistral": CHAT_ROLE,
+                        "phi3": CHAT_ROLE,
+                    },
                 },
             },
             {
@@ -1606,7 +1621,11 @@ def test__invalid_logging(
         ),
         # Server returns an empty 'models' list -> everything is missing.
         (
-            {"ollama": {"http://a.example.com": {"llama3"}}},
+            {
+                "ollama": {
+                    "http://a.example.com": {"llama3": CHAT_ROLE},
+                },
+            },
             {"http://a.example.com": {"models": []}},
             {
                 "ollama": {
@@ -1618,8 +1637,8 @@ def test__invalid_logging(
         (
             {
                 "ollama": {
-                    "http://a.example.com": {"llama3"},
-                    "http://b.example.com": {"mistral"},
+                    "http://a.example.com": {"llama3": CHAT_ROLE},
+                    "http://b.example.com": {"mistral": CHAT_ROLE},
                 },
             },
             {
@@ -1674,7 +1693,9 @@ def test__missing_ollama_models_reports_unreachable_server(
     the_installation,
 ):
     the_installation._all_provider_info = {
-        "ollama": {"http://a.example.com": {"llama3"}}
+        "ollama": {
+            "http://a.example.com": {"llama3": CHAT_ROLE},
+        }
     }
 
     instance = mock.Mock()
@@ -1694,11 +1715,9 @@ def test__missing_ollama_models_reports_unreachable_server(
 
 def test__unresponsive_ollama_models_all_respond():
     rest_api = mock.Mock()
+    models = {"llama3": CHAT_ROLE, "mistral": CHAT_ROLE}
 
-    found = cli_audit._unresponsive_ollama_models(
-        rest_api,
-        ["llama3", "mistral"],
-    )
+    found = cli_audit._unresponsive_ollama_models(rest_api, models)
 
     assert found == {}
     assert rest_api.chat_completion.call_args_list == [
@@ -1713,13 +1732,49 @@ def test__unresponsive_ollama_models_records_failures():
         None,
         requests.ConnectionError("boom"),
     ]
+    models = {"llama3": CHAT_ROLE, "mistral": CHAT_ROLE}
 
-    found = cli_audit._unresponsive_ollama_models(
-        rest_api,
-        ["llama3", "mistral"],
-    )
+    found = cli_audit._unresponsive_ollama_models(rest_api, models)
 
     assert found == {"mistral": "('boom',)"}
+
+
+def test__unresponsive_ollama_models_probes_embedding_model():
+    # Regression, soliplex#1356: an embedding model answers 400 to a
+    # chat completion, so probing it as a chat model reports a healthy
+    # model as unresponsive.
+    rest_api = mock.Mock()
+    models = {"embed-me": EMBEDDING_ROLE}
+
+    found = cli_audit._unresponsive_ollama_models(rest_api, models)
+
+    assert found == {}
+    rest_api.embeddings.assert_called_once_with("embed-me")
+    rest_api.chat_completion.assert_not_called()
+
+
+def test__unresponsive_ollama_models_records_embedding_failure():
+    rest_api = mock.Mock()
+    rest_api.embeddings.side_effect = requests.ConnectionError("boom")
+    models = {"embed-me": EMBEDDING_ROLE}
+
+    found = cli_audit._unresponsive_ollama_models(rest_api, models)
+
+    assert found == {"embed-me": "('boom',)"}
+
+
+def test__unresponsive_ollama_models_skips_rerank_model():
+    # Ollama serves no rerank endpoint, so there is nothing to probe:
+    # a rerank model must not be reported broken for failing one it
+    # never claimed.
+    rest_api = mock.Mock()
+    models = {"rerank-me": RERANKING_ROLE}
+
+    found = cli_audit._unresponsive_ollama_models(rest_api, models)
+
+    assert found == {}
+    rest_api.chat_completion.assert_not_called()
+    rest_api.embeddings.assert_not_called()
 
 
 @mock.patch("soliplex.cli.audit.ollama.REST_API")
@@ -1728,7 +1783,13 @@ def test__missing_ollama_models_checks_responsiveness_when_requested(
     the_installation,
 ):
     the_installation._all_provider_info = {
-        "ollama": {"http://a.example.com": {"llama3", "mistral", "phi3"}},
+        "ollama": {
+            "http://a.example.com": {
+                "llama3": CHAT_ROLE,
+                "mistral": CHAT_ROLE,
+                "phi3": CHAT_ROLE,
+            },
+        },
     }
 
     instance = mock.Mock()
@@ -1770,7 +1831,9 @@ def test__missing_ollama_models_responsive_all_ok(
     the_installation,
 ):
     the_installation._all_provider_info = {
-        "ollama": {"http://a.example.com": {"llama3"}},
+        "ollama": {
+            "http://a.example.com": {"llama3": CHAT_ROLE},
+        },
     }
 
     instance = mock.Mock()
@@ -1794,7 +1857,9 @@ def test__missing_ollama_models_skips_responsiveness_by_default(
     the_installation,
 ):
     the_installation._all_provider_info = {
-        "ollama": {"http://a.example.com": {"llama3"}},
+        "ollama": {
+            "http://a.example.com": {"llama3": CHAT_ROLE},
+        },
     }
 
     instance = mock.Mock()

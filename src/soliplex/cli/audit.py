@@ -1226,21 +1226,39 @@ def audit_logfire(
     _emit_errors(errors, quiet)
 
 
-def _unresponsive_ollama_models(rest_api, model_names) -> dict:
+_OLLAMA_PROBE_BY_ROLE = {
+    installation.ProviderRole.CHAT: "chat_completion",
+    installation.ProviderRole.EMBEDDING: "embeddings",
+    installation.ProviderRole.RERANKING: None,  # no Ollama endpoint
+}
+
+
+def _unresponsive_ollama_models(rest_api, models) -> dict:
     """Return ``{model_name: error}`` for models that fail to respond.
 
-    Sends a minimal chat-completion request to each name in
-    ``model_names`` (which should already be present on the server) and
-    records those that raise a network error or non-2xx response. The
+    ``models`` maps each name (already present on the server) to the
+    ``ProviderRole`` the installation gives it, and thus the endpoint used:
+
+    - a chat model answers on ``/v1/chat/completions``
+    - an embedding model answers on ``/v1/embeddings``.
+
+    Probing either on the other's endpoint would report a healthy model
+    as broken.
+
+    Records the models raising a network error or non-2xx response; the
     result is empty when every model responds.
     """
     unresponsive: dict[str, str] = {}
 
-    for model_name in model_names:
-        try:
-            rest_api.chat_completion(model_name)
-        except requests.RequestException as exc:
-            unresponsive[model_name] = str(exc.args)
+    for model_name, role in sorted(models.items()):
+        probe_name = _OLLAMA_PROBE_BY_ROLE.get(role)
+
+        if probe_name is not None:
+            # reranking, etc. cannot be probed on Ollama
+            try:
+                getattr(rest_api, probe_name)(model_name)
+            except requests.RequestException as exc:
+                unresponsive[model_name] = str(exc.args)
 
     return unresponsive
 
@@ -1257,7 +1275,8 @@ def _missing_ollama_models(
     [str, ...]}`` (the server is reachable but missing one or more
     models the installation references), and -- when ``check_responsive``
     is set -- ``{"unresponsive_models": {name: error}}`` (a model is
-    installed but failed to answer a minimal chat-completion request).
+    installed but failed to answer a minimal request on the endpoint
+    suiting its configured role).
     """
     ollama_url_models = the_installation.all_provider_info.get("ollama", {})
     per_url: dict[str, dict] = {}
@@ -1275,17 +1294,19 @@ def _missing_ollama_models(
             continue
 
         available = {entry["name"] for entry in response.get("models", ())}
-        missing = sorted(required - available)
+        missing = sorted(required.keys() - available)
 
         url_info: dict = {}
         if missing:
             url_info["missing_models"] = missing
 
         if check_responsive:
-            unresponsive = _unresponsive_ollama_models(
-                rest_api,
-                sorted(required & available),
-            )
+            installed = {
+                model_name: role
+                for model_name, role in required.items()
+                if model_name in available
+            }
+            unresponsive = _unresponsive_ollama_models(rest_api, installed)
             if unresponsive:
                 url_info["unresponsive_models"] = unresponsive
 
@@ -1361,7 +1382,8 @@ def audit_ollama(
         "--check-responsive",
         help=(
             "Also confirm each installed model answers a minimal "
-            "chat-completion request (slower; contacts each model)"
+            "request on the endpoint suiting its role (slower; "
+            "contacts each model)"
         ),
     ),
 ):  # pragma NO COVER command
