@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import enum
 import pathlib
 import sqlite3
 from logging import config as logging_config
@@ -31,10 +32,53 @@ from soliplex.config import rooms as config_rooms
 from soliplex.config import routing as config_routing
 from soliplex.config import secrets as config_secrets
 
+
+class ProviderRole(enum.StrEnum):
+    """How the installation uses a model.
+
+    - A chat model answers a completion request.
+    - An embedding model an embeddings request
+    - A reranking model has no well-defined provider-agnostic endpoint.
+    """
+
+    CHAT = "chat"
+    EMBEDDING = "embedding"
+    RERANKING = "reranking"
+
+
+class ConflictingProviderRole(ValueError):
+    """A model name is configured for two roles on one provider URL."""
+
+    def __init__(self, model_name, base_url, existing, conflicting):
+        self.model_name = model_name
+        self.base_url = base_url
+        self.existing = existing
+        self.conflicting = conflicting
+        super().__init__(
+            f"{model_name!r} on {base_url!r} is configured as both "
+            f"{str(existing)!r} and {str(conflicting)!r}"
+        )
+
+
 ProviderURL = str | None
-ProviderModelNames = set[str]
+ProviderModelNames = dict[str, ProviderRole]
 ProviderTypeInfo = dict[ProviderURL, ProviderModelNames]
 ProviderInfoMap = dict[config_agents.LLMProviderType, ProviderTypeInfo]
+
+
+def _add_provider_model(url_models, base_url, model_name, role):
+    """Record 'model_name' as filling 'role' in 'url_models'.
+
+    Raises 'ConflictingProviderRole' if the name is already recorded
+    under a different role: one model cannot be both the chat model and
+    the embedding model of a single server.
+    """
+    existing = url_models.get(model_name)
+
+    if existing is not None and existing != role:
+        raise ConflictingProviderRole(model_name, base_url, existing, role)
+
+    url_models[model_name] = role
 
 
 NO_AUTH_MODE_USER_TOKEN = {
@@ -177,8 +221,13 @@ class Installation:
             if provider_type is not None:
                 type_info = found.setdefault(provider_type, {})
                 base_url = agent_config.llm_provider_base_url
-                url_models = type_info.setdefault(base_url, set())
-                url_models.add(agent_config.llm_model_name)
+                url_models = type_info.setdefault(base_url, {})
+                _add_provider_model(
+                    url_models,
+                    base_url,
+                    agent_config.llm_model_name,
+                    ProviderRole.CHAT,
+                )
 
         return found
 
@@ -187,13 +236,25 @@ class Installation:
         hr = self.haiku_rag_config
         found: ProviderInfoMap = {}
 
-        for section in (hr.embeddings, hr.qa, hr.reranking):
+        sections = (
+            (hr.embeddings, ProviderRole.EMBEDDING),
+            (hr.qa, ProviderRole.CHAT),
+            (hr.analysis, ProviderRole.CHAT),
+            (hr.reranking, ProviderRole.RERANKING),
+        )
+
+        for section, role in sections:
             if section and section.model:
                 provider_type = section.model.provider
                 type_info = found.setdefault(provider_type, {})
                 base_url = section.model.base_url
-                url_models = type_info.setdefault(base_url, set())
-                url_models.add(section.model.name)
+                url_models = type_info.setdefault(base_url, {})
+                _add_provider_model(
+                    url_models,
+                    base_url,
+                    section.model.name,
+                    role,
+                )
 
         return found
 
@@ -208,16 +269,30 @@ class Installation:
                 ac_info = found.setdefault(provider_type, {})
 
                 for hr_url, hr_models in hr_info.items():
-                    ac_models = ac_info.get(hr_url, set())
-                    ac_info[hr_url] = ac_models | hr_models
+                    ac_models = ac_info.setdefault(hr_url, {})
+
+                    for model_name, role in hr_models.items():
+                        _add_provider_model(
+                            ac_models,
+                            hr_url,
+                            model_name,
+                            role,
+                        )
 
             ollama_url_info = found.get(config_agents.LLMProviderType.OLLAMA)
 
             if ollama_url_info is not None:
-                no_url_models = ollama_url_info.pop(None, set())
+                no_url_models = ollama_url_info.pop(None, {})
                 base_url = self.get_environment("OLLAMA_BASE_URL")
-                base_url_models = ollama_url_info.get(base_url, set())
-                ollama_url_info[base_url] = base_url_models | no_url_models
+                base_url_models = ollama_url_info.setdefault(base_url, {})
+
+                for model_name, role in no_url_models.items():
+                    _add_provider_model(
+                        base_url_models,
+                        base_url,
+                        model_name,
+                        role,
+                    )
 
             self._all_provider_info = found
 

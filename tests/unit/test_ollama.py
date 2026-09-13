@@ -392,6 +392,49 @@ def test_ollama_rest_api_chat_completion(
     )
 
 
+@pytest.mark.parametrize("w_text", [None, "embed this"])
+@pytest.mark.parametrize(
+    "status_code, expectation",
+    [
+        (None, contextlib.nullcontext()),
+        (400, pytest.raises(requests.exceptions.HTTPError)),
+    ],
+)
+@mock.patch("soliplex.ollama.requests.post")
+def test_ollama_rest_api_embeddings(
+    r_post,
+    rest_api,
+    status_code,
+    expectation,
+    w_text,
+):
+    kwargs = {}
+    exp_text = "ping"
+    if w_text is not None:
+        kwargs["text"] = exp_text = w_text
+
+    exp_data = {
+        "model": TEST_MODEL_NAME,
+        "input": exp_text,
+    }
+
+    if status_code is not None:
+        r_post.side_effect = requests.HTTPError(status_code)
+
+    with expectation as expected:
+        found = rest_api.embeddings(TEST_MODEL_NAME, **kwargs)
+
+    if status_code is not None:
+        assert expected.value.args == (status_code,)
+    else:
+        assert found is r_post.return_value.json.return_value
+
+    r_post.assert_called_once_with(
+        f"{TEST_OLLAMA_URL}/v1/embeddings",
+        json=exp_data,
+    )
+
+
 # pull_model tests
 
 
