@@ -169,13 +169,7 @@ class _InterpolationFinding:
     location: str | None = None
 
     def __str__(self) -> str:
-        where = self.location or self.config_key
-        owner = self.config_id or self.config_type
-
-        return (
-            f"{owner}: {where}: {self.code} "
-            f"({self.marker_kind.name.lower()}:{self.marker_name})"
-        )
+        return _interpolation_finding_line(self.as_json)
 
     @property
     def as_json(self) -> dict:
@@ -195,29 +189,38 @@ class _InterpolationFinding:
         }
 
 
+def _interpolation_finding_line(as_json: dict) -> str:
+    """Return the one-line display form of a finding mapping."""
+    where = as_json["location"] or as_json["config_key"]
+    owner = as_json["config_id"] or as_json["config_type"]
+
+    return (
+        f"{owner}: {where}: {as_json['code']} "
+        f"({as_json['marker_kind']}:{as_json['marker_name']})"
+    )
+
+
 def _iter_markers(text: str):
     """Yield '(kind, name)' for each marker found in 'text'."""
-    marker_kind = config_interp.MarkerKind
 
     for match in config_interp.SECRET_RE.finditer(text):
-        yield marker_kind.SECRET, match.group("secret_name")
+        yield config_interp.MarkerKind.SECRET, match.group("secret_name")
 
     for match in config_interp.ENVIRONMENT_RE.finditer(text):
-        yield marker_kind.ENVIRONMENT, match.group("env_name")
+        yield config_interp.MarkerKind.ENVIRONMENT, match.group("env_name")
 
 
 def _whole_marker(text: str):
     """Return '(kind, name)' when 'text' is exactly one marker, else None."""
-    marker_kind = config_interp.MarkerKind
     match = config_interp.SECRET_RE.fullmatch(text)
 
     if match is not None:
-        return marker_kind.SECRET, match.group("secret_name")
+        return config_interp.MarkerKind.SECRET, match.group("secret_name")
 
     match = config_interp.ENVIRONMENT_RE.fullmatch(text)
 
     if match is not None:
-        return marker_kind.ENVIRONMENT, match.group("env_name")
+        return config_interp.MarkerKind.ENVIRONMENT, match.group("env_name")
 
     return None
 
@@ -268,11 +271,9 @@ def _annotated_field_findings(config, field_name, spec, declarations):
     which requires a marker raises at runtime instead, and needs no
     finding here.
     """
-    arity = config_interp.MarkerArity
-    codes = _InterpolationFindingCode
     findings = []
-    embedded = spec.arity is arity.EMBEDDED
-    tolerates_literal = spec.arity is arity.WHOLE_OPTIONAL
+    embedded = spec.arity is config_interp.MarkerArity.EMBEDDED
+    tolerates_literal = spec.arity is config_interp.MarkerArity.WHOLE_OPTIONAL
 
     for location, text in _iter_field_strings(
         field_name, getattr(config, field_name)
@@ -293,7 +294,7 @@ def _annotated_field_findings(config, field_name, spec, declarations):
                             config,
                             field_name,
                             spec,
-                            codes.IGNORED_MARKER,
+                            _InterpolationFindingCode.IGNORED_MARKER,
                             marker,
                             location,
                         )
@@ -304,11 +305,11 @@ def _annotated_field_findings(config, field_name, spec, declarations):
             kind, name = marker
 
             if not kind & spec.kinds:
-                code = codes.WRONG_KIND
+                code = _InterpolationFindingCode.WRONG_KIND
             elif declarations.declares(kind, name):
                 continue
             else:
-                code = codes.UNDECLARED_NAME
+                code = _InterpolationFindingCode.UNDECLARED_NAME
 
             findings.append(
                 _make_interpolation_finding(
@@ -348,12 +349,29 @@ def _unannotated_field_findings(config, field_name):
     return findings
 
 
+def _holds_declared_default(config, field_name) -> bool:
+    """True when the field still holds the default its class declares."""
+    field = type(config).__dataclass_fields__[field_name]
+
+    return (
+        field.default is not dataclasses.MISSING
+        and getattr(config, field_name) == field.default
+    )
+
+
 def _field_interpolation_findings(config, field_name, declarations):
     """Return findings for one field of one config.
 
     Report an unannotated field's markers unconditionally.  Whether a
     class is checked that way at all is decided by
     '_config_interpolation_findings', which holds the opt-in rule.
+
+    Drop an undeclared-name finding for a field still holding the default
+    its class declares: six 'LogfireConfig' fields default to an
+    'env:LOGFIRE_*' marker, which Logfire itself falls back on when the
+    installation declares no such name.  A marker the operator wrote is
+    reported as usual, and a stock default which names the wrong kind
+    stays a finding either way.
     """
     spec = config_interp.spec_for(config, field_name)
 
@@ -365,6 +383,14 @@ def _field_interpolation_findings(config, field_name, declarations):
         findings = _annotated_field_findings(
             config, field_name, spec, declarations
         )
+
+        if _holds_declared_default(config, field_name):
+            findings = [
+                finding
+                for finding in findings
+                if finding.code
+                is not _InterpolationFindingCode.UNDECLARED_NAME
+            ]
 
     return findings
 
@@ -398,6 +424,177 @@ def _config_interpolation_findings(config, declarations):
             )
 
     return findings
+
+
+def _iter_installation_interpolation_configs(installation_config):
+    """Yield the configs whose markers belong to 'installation.yaml'.
+
+    'logfire_config:' and the OIDC stanzas live in the same file, but are
+    reported by their own sections.
+    """
+    yield installation_config
+    yield from installation_config.agent_configs
+
+
+def _iter_room_interpolation_configs(room_config):
+    """Yield the configs whose markers belong to a room's YAML."""
+    yield room_config
+
+    if room_config.agent_config is not None:
+        yield room_config.agent_config
+
+    yield from room_config.tool_configs.values()
+    yield from room_config.mcp_client_toolset_configs.values()
+
+    for quiz_config in room_config.quizzes:
+        yield quiz_config
+
+        if quiz_config.judge_agent is not None:
+            yield quiz_config.judge_agent
+
+
+def _iter_completion_interpolation_configs(completion_config):
+    """Yield the configs whose markers belong to a completion's YAML."""
+    yield completion_config
+
+    if completion_config.agent_config is not None:
+        yield completion_config.agent_config
+
+    yield from completion_config.tool_configs.values()
+    yield from completion_config.mcp_client_toolset_configs.values()
+
+
+def _interpolation_findings(configs, declarations) -> list[dict]:
+    """Return the findings for 'configs', as report mappings."""
+    return [
+        finding.as_json
+        for config in configs
+        for finding in _config_interpolation_findings(config, declarations)
+    ]
+
+
+def _installation_declarations(
+    the_installation: installation.Installation,
+) -> _InterpolationDeclarations:
+    """Return the names the installation declares.
+
+    Read the declarations, never the values: a secret source may spawn a
+    subprocess, which would tie the audit to the host it runs on.
+    """
+    return _InterpolationDeclarations.from_installation_config(
+        the_installation._config
+    )
+
+
+def _invalid_installation_interpolations(
+    the_installation: installation.Installation,
+) -> dict:
+    installation_config = the_installation._config
+    findings = _interpolation_findings(
+        _iter_installation_interpolation_configs(installation_config),
+        _installation_declarations(the_installation),
+    )
+
+    if findings:
+        return {"installation_interpolation": findings}
+
+    return {}
+
+
+def _invalid_logfire_interpolations(
+    the_installation: installation.Installation,
+) -> dict:
+    logfire_config = the_installation._config.logfire_config
+    findings = []
+
+    if logfire_config is not None:
+        findings = _interpolation_findings(
+            [logfire_config],
+            _installation_declarations(the_installation),
+        )
+
+    if findings:
+        return {"logfire_interpolation": findings}
+
+    return {}
+
+
+def _invalid_oidc_interpolations(
+    the_installation: installation.Installation,
+) -> dict:
+    findings = _interpolation_findings(
+        the_installation.oidc_auth_system_configs,
+        _installation_declarations(the_installation),
+    )
+
+    if findings:
+        return {"oidc_interpolation": findings}
+
+    return {}
+
+
+def _invalid_room_interpolations(
+    the_installation: installation.Installation,
+) -> dict:
+    # Deliberately bypass auth check done by 'get_room_configs' here.
+    available_rooms = the_installation._config.room_configs
+    declarations = _installation_declarations(the_installation)
+    findings = []
+
+    for room_config in available_rooms.values():
+        findings.extend(
+            _interpolation_findings(
+                _iter_room_interpolation_configs(room_config),
+                declarations,
+            )
+        )
+
+    if findings:
+        return {"rooms_interpolation": findings}
+
+    return {}
+
+
+def _invalid_completion_interpolations(
+    the_installation: installation.Installation,
+) -> dict:
+    # Deliberately bypass auth check done by 'get_room_configs' here.
+    available_completions = the_installation._config.completion_configs
+    declarations = _installation_declarations(the_installation)
+    findings = []
+
+    for completion_config in available_completions.values():
+        findings.extend(
+            _interpolation_findings(
+                _iter_completion_interpolation_configs(completion_config),
+                declarations,
+            )
+        )
+
+    if findings:
+        return {"completions_interpolation": findings}
+
+    return {}
+
+
+def _print_interpolation_findings(
+    tc_print,
+    errors: dict,
+) -> None:  # pragma NO COVER UI ONLY
+    """Print a block naming each finding, or nothing when there are none."""
+    for findings in errors.values():
+        tc_print()
+        tc_print("Interpolation")
+
+        for finding in findings:
+            tc_print(f"- {_interpolation_finding_line(finding)}")
+
+            config_path = finding["config_path"]
+
+            if config_path is not None:
+                tc_print(f"    {config_path}")
+
+        tc_print()
 
 
 class _AuditGroup(typer_core.TyperGroup):
@@ -499,7 +696,13 @@ def _audit_installation_section(
         tc_print(f"ERROR: {exc}")
     else:
         tc_print("OK")
-    return errors
+
+    interpolation_errors = _invalid_installation_interpolations(
+        the_installation,
+    )
+    _print_interpolation_findings(tc_print, interpolation_errors)
+
+    return errors | interpolation_errors
 
 
 @app.command("installation")
@@ -667,7 +870,10 @@ def _audit_oidc_section(
             tc_print(f"  ERROR: {exc}")
         tc_line()
 
-    return errors
+    interpolation_errors = _invalid_oidc_interpolations(the_installation)
+    _print_interpolation_findings(tc_print, interpolation_errors)
+
+    return errors | interpolation_errors
 
 
 @app.command("oidc")
@@ -888,7 +1094,10 @@ def _audit_rooms_section(
                 tc_print()
         tc_line()
 
-    return errors
+    interpolation_errors = _invalid_room_interpolations(the_installation)
+    _print_interpolation_findings(tc_print, interpolation_errors)
+
+    return errors | interpolation_errors
 
 
 @app.command("rooms")
@@ -1234,7 +1443,10 @@ def _audit_completions_section(
             tc_print("  OK")
         tc_line()
 
-    return errors
+    interpolation_errors = _invalid_completion_interpolations(the_installation)
+    _print_interpolation_findings(tc_print, interpolation_errors)
+
+    return errors | interpolation_errors
 
 
 @app.command("completions")
@@ -1534,7 +1746,11 @@ def _audit_logfire_section(
         tc_print("OK")
     else:
         tc_print("OK (defaults)")
-    return {}
+
+    errors = _invalid_logfire_interpolations(the_installation)
+    _print_interpolation_findings(tc_print, errors)
+
+    return errors
 
 
 @app.command("logfire")

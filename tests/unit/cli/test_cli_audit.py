@@ -275,6 +275,77 @@ class _DerivedInterpCfg(_InterpCfg):
     extra: str = ""
 
 
+@dataclasses.dataclass(kw_only=True)
+class _DefaultMarkerCfg:
+    """Hold markers as declared defaults, as 'LogfireConfig' does."""
+
+    required: str = config_interp.secret_whole_field()
+    env_default: str = config_interp.env_whole_or_literal_field(
+        default="env:MISSING_ENV",
+    )
+    wrong_kind_default: str = config_interp.env_whole_or_literal_field(
+        default="secret:MISSING",
+    )
+
+
+@dataclasses.dataclass(kw_only=True)
+class _InterpQuizCfg:
+    """Stand-in for 'QuizConfig': holds a judge agent."""
+
+    id: str = "the-quiz"
+    judge_agent: object = None
+
+
+@dataclasses.dataclass(kw_only=True)
+class _InterpRoomCfg:
+    """Stand-in for 'RoomConfig': holds the configs a room owns."""
+
+    id: str = "the-room"
+    agent_config: object = None
+    tool_configs: dict = dataclasses.field(default_factory=dict)
+    mcp_client_toolset_configs: dict = dataclasses.field(default_factory=dict)
+    quizzes: list = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _InterpCompletionCfg:
+    """Stand-in for 'CompletionConfig': holds the configs it owns."""
+
+    id: str = "the-completion"
+    agent_config: object = None
+    tool_configs: dict = dataclasses.field(default_factory=dict)
+    mcp_client_toolset_configs: dict = dataclasses.field(default_factory=dict)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _InterpInstallationCfg(_InterpCfg):
+    """Stand-in for 'InstallationConfig': declares names, holds roots.
+
+    Redeclare no interpolation, so the unannotated sweep stays off and
+    the stanza mappings below are not read as configuration values.
+    """
+
+    secrets_map: dict = dataclasses.field(default_factory=dict)
+    environment: dict = dataclasses.field(default_factory=dict)
+    agent_configs: list = dataclasses.field(default_factory=list)
+    logfire_config: object = None
+    oidc_auth_system_configs: list = dataclasses.field(default_factory=list)
+    room_configs: dict = dataclasses.field(default_factory=dict)
+    completion_configs: dict = dataclasses.field(default_factory=dict)
+
+
+def _the_installation(**overrides) -> installation.Installation:
+    """Return an installation over a stand-in config declaring the names."""
+    i_config = _InterpInstallationCfg(
+        id="the-installation",
+        secrets_map={"KNOWN_SECRET": object()},
+        environment={"KNOWN_ENV": "a value"},
+        **overrides,
+    )
+
+    return installation.Installation(_config=i_config)
+
+
 def _finding(**overrides):
     """Return a finding, overriding any of its default fields."""
     kw = {
@@ -598,6 +669,271 @@ def test__config_interpolation_findings(w_class, exp_findings):
     found = cli_audit._config_interpolation_findings(config, _DECLARED)
 
     assert found == exp_findings
+
+
+@pytest.mark.parametrize(
+    "w_field_name, w_value, exp_holds",
+    [
+        # No default at all.
+        ("required", "secret:KNOWN_SECRET", False),
+        ("env_default", "env:MISSING_ENV", True),
+        ("env_default", "env:OTHER_MISSING", False),
+    ],
+)
+def test__holds_declared_default(w_field_name, w_value, exp_holds):
+    config = _DefaultMarkerCfg(
+        **{"required": "secret:KNOWN_SECRET", w_field_name: w_value}
+    )
+
+    found = cli_audit._holds_declared_default(config, w_field_name)
+
+    assert found is exp_holds
+
+
+@pytest.mark.parametrize(
+    "w_field_name, w_value, exp_findings",
+    [
+        # A stock placeholder default is the framework's, not a typo.
+        ("env_default", "env:MISSING_ENV", []),
+        # An operator's own marker is reported as usual.
+        (
+            "env_default",
+            "env:OTHER_MISSING",
+            [{"marker_kind": _ENVIRONMENT, "marker_name": "OTHER_MISSING"}],
+        ),
+        # A default naming the wrong kind stays a finding.
+        (
+            "wrong_kind_default",
+            "secret:MISSING",
+            [{"code": _WRONG_KIND}],
+        ),
+    ],
+)
+def test__field_interpolation_findings_w_declared_default(
+    w_field_name,
+    w_value,
+    exp_findings,
+):
+    config = _DefaultMarkerCfg(
+        **{"required": "secret:KNOWN_SECRET", w_field_name: w_value}
+    )
+
+    found = cli_audit._field_interpolation_findings(
+        config, w_field_name, _DECLARED
+    )
+
+    assert found == [
+        _finding(
+            **{
+                "config_type": f"{__name__}._DefaultMarkerCfg",
+                "field_name": w_field_name,
+                "config_key": w_field_name,
+                **exp,
+            }
+        )
+        for exp in exp_findings
+    ]
+
+
+def test__iter_installation_interpolation_configs():
+    agent_config = _InterpCfg(id="the-agent")
+    installation_config = _InterpInstallationCfg(
+        id="the-installation",
+        agent_configs=[agent_config],
+    )
+
+    found = list(
+        cli_audit._iter_installation_interpolation_configs(installation_config)
+    )
+
+    assert found == [installation_config, agent_config]
+
+
+@pytest.mark.parametrize(
+    "w_agent, w_judge, exp_ids",
+    [
+        (False, False, ["the-room", "the-tool", "the-toolset", "the-quiz"]),
+        (
+            True,
+            True,
+            [
+                "the-room",
+                "the-agent",
+                "the-tool",
+                "the-toolset",
+                "the-quiz",
+                "the-judge",
+            ],
+        ),
+    ],
+)
+def test__iter_room_interpolation_configs(w_agent, w_judge, exp_ids):
+    judge_agent = _InterpCfg(id="the-judge")
+    room_config = _InterpRoomCfg(
+        agent_config=_InterpCfg(id="the-agent") if w_agent else None,
+        tool_configs={"tool": _InterpCfg(id="the-tool")},
+        mcp_client_toolset_configs={"ts": _InterpCfg(id="the-toolset")},
+        quizzes=[_InterpQuizCfg(judge_agent=judge_agent if w_judge else None)],
+    )
+
+    found = list(cli_audit._iter_room_interpolation_configs(room_config))
+
+    assert [config.id for config in found] == exp_ids
+
+
+@pytest.mark.parametrize(
+    "w_agent, exp_ids",
+    [
+        (False, ["the-completion", "the-tool", "the-toolset"]),
+        (True, ["the-completion", "the-agent", "the-tool", "the-toolset"]),
+    ],
+)
+def test__iter_completion_interpolation_configs(w_agent, exp_ids):
+    completion_config = _InterpCompletionCfg(
+        agent_config=_InterpCfg(id="the-agent") if w_agent else None,
+        tool_configs={"tool": _InterpCfg(id="the-tool")},
+        mcp_client_toolset_configs={"ts": _InterpCfg(id="the-toolset")},
+    )
+
+    found = list(
+        cli_audit._iter_completion_interpolation_configs(completion_config)
+    )
+
+    assert [config.id for config in found] == exp_ids
+
+
+def test__interpolation_findings():
+    configs = [
+        _InterpCfg(id="first", secret_whole="secret:MISSING"),
+        _InterpCfg(id="second", secret_whole="secret:KNOWN_SECRET"),
+        _InterpCfg(id="third", env_embedded="env:MISSING_ENV"),
+    ]
+
+    found = cli_audit._interpolation_findings(configs, _DECLARED)
+
+    assert found == [
+        _finding(config_id="first").as_json,
+        _finding(
+            config_id="third",
+            field_name="env_embedded",
+            config_key="env_embedded",
+            marker_kind=_ENVIRONMENT,
+            marker_name="MISSING_ENV",
+        ).as_json,
+    ]
+
+
+def test__installation_declarations(the_installation):
+    the_installation._config.secrets_map = {"A_SECRET": object()}
+    the_installation._config.environment = {"AN_ENV": "a value"}
+
+    found = cli_audit._installation_declarations(the_installation)
+
+    assert found.secrets == frozenset({"A_SECRET"})
+    assert found.environment == frozenset({"AN_ENV"})
+
+
+@pytest.mark.parametrize("w_finding", [False, True])
+def test__invalid_installation_interpolations(w_finding):
+    marker = "secret:MISSING" if w_finding else "secret:KNOWN_SECRET"
+    agent_config = _InterpCfg(id="the-agent", secret_whole=marker)
+    the_installation = _the_installation(agent_configs=[agent_config])
+
+    found = cli_audit._invalid_installation_interpolations(the_installation)
+
+    if w_finding:
+        assert found == {
+            "installation_interpolation": [
+                _finding(config_id="the-agent").as_json,
+            ],
+        }
+    else:
+        assert found == {}
+
+
+@pytest.mark.parametrize(
+    "w_config, w_finding", [(False, False), (True, False), (True, True)]
+)
+def test__invalid_logfire_interpolations(w_config, w_finding):
+    marker = "secret:MISSING" if w_finding else "secret:KNOWN_SECRET"
+    logfire_config = _InterpCfg(id="the-logfire", secret_whole=marker)
+    the_installation = _the_installation(
+        logfire_config=logfire_config if w_config else None,
+    )
+
+    found = cli_audit._invalid_logfire_interpolations(the_installation)
+
+    if w_finding:
+        assert found == {
+            "logfire_interpolation": [
+                _finding(config_id="the-logfire").as_json,
+            ],
+        }
+    else:
+        assert found == {}
+
+
+@pytest.mark.parametrize("w_finding", [False, True])
+def test__invalid_oidc_interpolations(w_finding):
+    marker = "secret:MISSING" if w_finding else "secret:KNOWN_SECRET"
+    oidc_config = _InterpCfg(id="the-oidc", secret_whole=marker)
+    the_installation = _the_installation(
+        oidc_auth_system_configs=[oidc_config],
+    )
+
+    found = cli_audit._invalid_oidc_interpolations(the_installation)
+
+    if w_finding:
+        assert found == {
+            "oidc_interpolation": [_finding(config_id="the-oidc").as_json],
+        }
+    else:
+        assert found == {}
+
+
+@pytest.mark.parametrize("w_finding", [False, True])
+def test__invalid_room_interpolations(w_finding):
+    marker = "secret:MISSING" if w_finding else "secret:KNOWN_SECRET"
+    room_config = _InterpRoomCfg(
+        agent_config=_InterpCfg(id="the-agent", secret_whole=marker),
+    )
+    the_installation = _the_installation(
+        room_configs={"the-room": room_config},
+    )
+
+    found = cli_audit._invalid_room_interpolations(the_installation)
+
+    if w_finding:
+        assert found == {
+            "rooms_interpolation": [_finding(config_id="the-agent").as_json],
+        }
+    else:
+        assert found == {}
+
+
+@pytest.mark.parametrize("w_finding", [False, True])
+def test__invalid_completion_interpolations(w_finding):
+    marker = "secret:MISSING" if w_finding else "secret:KNOWN_SECRET"
+    completion_config = _InterpCompletionCfg(
+        agent_config=_InterpCfg(id="the-agent", secret_whole=marker),
+    )
+    the_installation = _the_installation(
+        completion_configs={"the-completion": completion_config},
+    )
+
+    found = cli_audit._invalid_completion_interpolations(the_installation)
+
+    if w_finding:
+        assert found == {
+            "completions_interpolation": [
+                _finding(config_id="the-agent").as_json,
+            ],
+        }
+    else:
+        assert found == {}
+
+
+# _print_interpolation_findings: ui only
 
 
 @pytest.mark.parametrize(
