@@ -7,11 +7,13 @@ import typing
 
 from . import _utils
 from . import exceptions as config_exc
+from . import interpolation
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from . import installation as config_installation
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
+_secret_whole_or_literal_field = interpolation.secret_whole_or_literal_field
 
 
 # ============================================================================
@@ -30,7 +32,9 @@ class OIDCAuthSystemConfig:
     token_validation_pem: str
     client_id: str
     scope: str = None
-    client_secret: str = ""  # "env:{JOSCE_CLIENT_SECRET}"
+    # A 'secret:' reference is resolved; any other value is used as a
+    # literal.  'env:' markers are not honored here.
+    client_secret: str = _secret_whole_or_literal_field(default="")
     oidc_client_pem_path: pathlib.Path = None
 
     # Set in 'from_yaml' below

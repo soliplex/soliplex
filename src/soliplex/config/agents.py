@@ -20,11 +20,15 @@ from pydantic_ai.providers import openai as openai_providers
 
 from . import _utils
 from . import exceptions
+from . import interpolation
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from . import installation as config_installation
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
+_env_embedded_field = interpolation.env_embedded_field
+_no_interpolation_field = interpolation.no_interpolation_field
+_secret_whole_field = interpolation.secret_whole_field
 _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
 
@@ -166,16 +170,19 @@ class AgentConfig:
     #
     id: str  # set as 'room-{room_id}' or 'completion-{completion_id}'
     kind: typing.ClassVar[str] = "default"
-    model_name: str = None
+    model_name: str = _env_embedded_field(default=None)
     retries: int = 3
 
     system_prompt: dataclasses.InitVar[str] = None
-    _system_prompt_text: str = None
+    _system_prompt_text: str = _no_interpolation_field(default=None)
     _system_prompt_path: pathlib.Path = None
 
     provider_type: LLMProviderType = LLMProviderType.OLLAMA
-    provider_base_url: str = None  # installation config provides default
-    provider_key: str = None  # secret containing API key
+    # installation config provides the default base URL
+    provider_base_url: str = _env_embedded_field(default=None)
+
+    # names a secret holding the API key
+    provider_key: str = _secret_whole_field(default=None)
 
     model_settings: ai_settings.ModelSettings = None
 

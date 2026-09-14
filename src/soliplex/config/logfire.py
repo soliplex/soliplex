@@ -8,11 +8,14 @@ import logfire
 
 from . import _utils
 from . import exceptions as config_exc
+from . import interpolation
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from . import installation as config_installation
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
+_env_whole_or_literal_field = interpolation.env_whole_or_literal_field
+_secret_whole_field = interpolation.secret_whole_field
 
 
 # ============================================================================
@@ -103,17 +106,29 @@ class LogfireInstrumentFastAPI:
 @dataclasses.dataclass(kw_only=True)
 class LogfireConfig:
     send_to_logfire: bool | None = None
-    token: str  # "secret:LOGFIRE_TOKEN" or similar
-    service_name: str = "env:LOGFIRE_SERVICE_NAME"
-    service_version: str = "env:LOGFIRE_SERVICE_VERSION"
-    environment: str = "env:LOGFIRE_ENVIRONMENT"
-    config_dir: pathlib.Path | str = "env:LOGFIRE_CONFIG_DIR"
-    data_dir: pathlib.Path | str = "env:LOGFIRE_DATA_DIR"
-    min_level: int | logfire.LevelName = "env:LOGFIRE_MIN_LEVEL"
+    token: str = _secret_whole_field()
+    service_name: str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_SERVICE_NAME",
+    )
+    service_version: str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_SERVICE_VERSION",
+    )
+    environment: str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_ENVIRONMENT",
+    )
+    config_dir: pathlib.Path | str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_CONFIG_DIR",
+    )
+    data_dir: pathlib.Path | str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_DATA_DIR",
+    )
+    min_level: int | logfire.LevelName = _env_whole_or_literal_field(
+        default="env:LOGFIRE_MIN_LEVEL",
+    )
     inspect_arguments: bool = None
     add_baggage_to_attributes: bool = True
     distributed_tracing: bool = None
-    base_url: str = None
+    base_url: str = _env_whole_or_literal_field(default=None)
     scrubbing_patterns: list[str] = None
 
     instrument_pydantic_ai: LogfireInstrumentPydanticAI = None

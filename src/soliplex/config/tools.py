@@ -13,6 +13,7 @@ from pydantic_ai import tools as ai_tools
 
 from . import _utils
 from . import exceptions as config_exc
+from . import interpolation
 from . import rag as config_rag
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
@@ -440,11 +441,19 @@ class Stdio_MCP_ClientToolsetConfig:
     """Configure an MCP client toolset which runs as a subprocess"""
 
     kind: typing.ClassVar[str] = "stdio"
-    command: str
-    args: list[str] = _utils._default_list_field()
+    command: str = interpolation.both_embedded_field()
+    args: list[str] = interpolation.both_embedded_field(
+        shape=interpolation.ValueShape.SEQUENCE,
+        default_factory=list,
+    )
 
-    env: dict[str, str] = _utils._default_dict_field()
-    allowed_tools: list[str] = None
+    env: dict[str, str] = interpolation.both_embedded_field(
+        shape=interpolation.ValueShape.MAPPING,
+        default_factory=dict,
+    )
+    allowed_tools: list[str] = interpolation.no_interpolation_field(
+        default=None,
+    )
 
     # set in 'from_yaml' class factory
     _installation_config: config_installation.InstallationConfig = (
@@ -508,11 +517,19 @@ class Stdio_MCP_ClientToolsetConfig:
 class _Remote_MCP_ClientToolsetConfig:
     """Base config for remote MCP client toolsets (HTTP and SSE)"""
 
-    url: str
-    headers: dict[str, typing.Any] = _utils._default_dict_field()
+    url: str = interpolation.both_embedded_field()
+    headers: dict[str, typing.Any] = interpolation.both_embedded_field(
+        shape=interpolation.ValueShape.MAPPING,
+        default_factory=dict,
+    )
 
-    query_params: dict[str, str] = _utils._default_dict_field()
-    allowed_tools: list[str] = None
+    query_params: dict[str, str] = interpolation.both_embedded_field(
+        shape=interpolation.ValueShape.MAPPING,
+        default_factory=dict,
+    )
+    allowed_tools: list[str] = interpolation.no_interpolation_field(
+        default=None,
+    )
 
     # set in 'from_yaml' class factory
     _installation_config: config_installation.InstallationConfig = (

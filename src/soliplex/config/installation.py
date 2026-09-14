@@ -22,6 +22,7 @@ from . import agui as config_agui
 from . import authsystem as config_authsystem
 from . import completions as config_completions
 from . import exceptions as config_exc
+from . import interpolation as config_interpolation
 from . import logfire as config_logfire
 from . import meta as config_meta
 from . import middleware as config_middleware
@@ -44,6 +45,7 @@ ENVIRONMENT_PATTERN = rf"{ENVIRONMENT_PREFIX}(?P<env_name>\w+)"
 ENVIRONMENT_RE = re.compile(ENVIRONMENT_PATTERN)
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
+_both_embedded_field = config_interpolation.both_embedded_field
 _no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
 _default_list_field = _utils._default_list_field
 _default_dict_field = _utils._default_dict_field
@@ -795,8 +797,16 @@ class InstallationConfig:
     #
     # Thread persistence DB-URI
     #
-    _thread_persistence_dburi_sync: str = None
-    _thread_persistence_dburi_async: str = None
+    _thread_persistence_dburi_sync: str = _both_embedded_field(
+        default=None,
+        public_name="thread_persistence_dburi.sync",
+        accessor="thread_persistence_dburi_sync",
+    )
+    _thread_persistence_dburi_async: str = _both_embedded_field(
+        default=None,
+        public_name="thread_persistence_dburi.async",
+        accessor="thread_persistence_dburi_async",
+    )
 
     @property
     def thread_persistence_dburi_sync(self):
@@ -815,8 +825,16 @@ class InstallationConfig:
     #
     # Room authorization DB-URI
     #
-    _authorization_dburi_sync: str = None
-    _authorization_dburi_async: str = None
+    _authorization_dburi_sync: str = _both_embedded_field(
+        default=None,
+        public_name="authorization_dburi.sync",
+        accessor="authorization_dburi_sync",
+    )
+    _authorization_dburi_async: str = _both_embedded_field(
+        default=None,
+        public_name="authorization_dburi.async",
+        accessor="authorization_dburi_async",
+    )
 
     @property
     def authorization_dburi_sync(self):
