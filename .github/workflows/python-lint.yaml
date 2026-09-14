@@ -68,6 +68,17 @@ jobs:
           uv run python scripts/lint_textio.py --verbose 2>&1 \
             | tee -a lint-textio.log
 
+      # A field's interpolation contract is declared on the field; this
+      # rejects a property which resolves markers by hand, leaving the
+      # field invisible to 'soliplex-cli audit'.
+      - name: Check ad-hoc interpolation
+        run: |
+          set -o pipefail
+          uv run python scripts/lint_interpolation.py --self-test 2>&1 \
+            | tee lint-interpolation.log
+          uv run python scripts/lint_interpolation.py --verbose 2>&1 \
+            | tee -a lint-interpolation.log
+
       # Slack notification lives in 'ci-failure-notify.yaml', which only
       # links to this run (see #1203), so record what failed here.
       - name: Summarize failures
@@ -76,7 +87,8 @@ jobs:
           {
             echo "## Linting failed"
             echo
-            for log in ruff-format.log ruff-check.log lint-textio.log; do
+            for log in ruff-format.log ruff-check.log lint-textio.log \
+                       lint-interpolation.log; do
               [ -f "$log" ] || continue
               echo "<details><summary>$log</summary>"
               echo

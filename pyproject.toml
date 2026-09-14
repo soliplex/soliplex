@@ -101,6 +101,7 @@ markers = [
 [tool.coverage.run]
 omit = [
     "scripts/lint_textio.py",   # runs its own '--self-test' during lint
+    "scripts/lint_interpolation.py",  # ditto
     "src/soliplex/tui/*",       # the TUI is deliberately untested
 ]
 
