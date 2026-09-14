@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import pathlib
 from unittest import mock
 
@@ -15,6 +16,7 @@ from soliplex import models
 from soliplex import secrets
 from soliplex.cli import audit as cli_audit
 from soliplex.config import installation as config_installation
+from soliplex.config import interpolation as config_interp
 from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rag as config_rag
 
@@ -208,6 +210,394 @@ def test__get_installation(
             installation_path,
             auditing=True,
         )
+
+
+# ---------------------------------------------------------------------------
+# Interpolation findings
+# ---------------------------------------------------------------------------
+
+_SECRET = config_interp.MarkerKind.SECRET
+_ENVIRONMENT = config_interp.MarkerKind.ENVIRONMENT
+_BOTH = config_interp.MarkerKind.BOTH
+_EMBEDDED = config_interp.MarkerArity.EMBEDDED
+_SEQUENCE = config_interp.ValueShape.SEQUENCE
+_MAPPING = config_interp.ValueShape.MAPPING
+
+_UNDECLARED = cli_audit._InterpolationFindingCode.UNDECLARED_NAME
+_IGNORED = cli_audit._InterpolationFindingCode.IGNORED_MARKER
+_WRONG_KIND = cli_audit._InterpolationFindingCode.WRONG_KIND
+
+_INTERP_CFG_NAME = f"{__name__}._InterpCfg"
+_DERIVED_CFG_NAME = f"{__name__}._DerivedInterpCfg"
+
+_DECLARED = cli_audit._InterpolationDeclarations(
+    secrets=frozenset({"KNOWN_SECRET"}),
+    environment=frozenset({"KNOWN_ENV"}),
+)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _InterpCfg:
+    """Opt in to the checks by declaring interpolations of its own."""
+
+    id: str | None = None
+    _config_path: pathlib.Path | None = None
+
+    secret_whole: str = config_interp.secret_whole_field(default="")
+    secret_or_literal: str = config_interp.secret_whole_or_literal_field(
+        default=""
+    )
+    env_embedded: str = config_interp.env_embedded_field(default="")
+    dburi: str = config_interp.both_embedded_field(
+        default="",
+        public_name="public_dburi",
+    )
+    prose: str = config_interp.no_interpolation_field(default="")
+    unannotated: str = ""
+    args: list = config_interp.interpolated_field(
+        kinds=_BOTH,
+        arity=_EMBEDDED,
+        shape=_SEQUENCE,
+        default_factory=list,
+    )
+    env: dict = config_interp.interpolated_field(
+        kinds=_BOTH,
+        arity=_EMBEDDED,
+        shape=_MAPPING,
+        default_factory=dict,
+    )
+
+
+@dataclasses.dataclass(kw_only=True)
+class _DerivedInterpCfg(_InterpCfg):
+    """Declare no interpolation of its own: stay opted out."""
+
+    extra: str = ""
+
+
+def _finding(**overrides):
+    """Return a finding, overriding any of its default fields."""
+    kw = {
+        "code": _UNDECLARED,
+        "config_type": _INTERP_CFG_NAME,
+        "config_id": None,
+        "config_path": None,
+        "field_name": "secret_whole",
+        "config_key": "secret_whole",
+        "marker_kind": _SECRET,
+        "marker_name": "MISSING",
+    }
+    kw.update(overrides)
+
+    return cli_audit._InterpolationFinding(**kw)
+
+
+def test__interpolation_declarations_from_installation_config():
+    installation_config = mock.Mock(
+        secrets_map={"A_SECRET": object()},
+        environment={"AN_ENV": "a value"},
+    )
+    klass = cli_audit._InterpolationDeclarations
+
+    found = klass.from_installation_config(installation_config)
+
+    assert found.secrets == frozenset({"A_SECRET"})
+    assert found.environment == frozenset({"AN_ENV"})
+    assert found.names_by_kind == {
+        config_interp.MarkerKind.ENVIRONMENT: frozenset({"AN_ENV"}),
+        config_interp.MarkerKind.SECRET: frozenset({"A_SECRET"}),
+    }
+
+
+@pytest.mark.parametrize(
+    "w_kind, w_name, exp_declared",
+    [
+        (_SECRET, "KNOWN_SECRET", True),
+        (_SECRET, "KNOWN_ENV", False),
+        (_ENVIRONMENT, "KNOWN_ENV", True),
+        (_ENVIRONMENT, "KNOWN_SECRET", False),
+    ],
+)
+def test__interpolation_declarations_declares(w_kind, w_name, exp_declared):
+    found = _DECLARED.declares(w_kind, w_name)
+
+    assert found is exp_declared
+
+
+@pytest.mark.parametrize(
+    "w_overrides, exp_str",
+    [
+        (
+            {},
+            f"{_INTERP_CFG_NAME}: secret_whole: "
+            "undeclared_name (secret:MISSING)",
+        ),
+        (
+            {"config_id": "the-room", "location": "args[0]"},
+            "the-room: args[0]: undeclared_name (secret:MISSING)",
+        ),
+    ],
+)
+def test__interpolation_finding___str__(w_overrides, exp_str):
+    finding = _finding(**w_overrides)
+
+    found = str(finding)
+
+    assert found == exp_str
+
+
+@pytest.mark.parametrize(
+    "w_config_path, exp_config_path",
+    [
+        (None, None),
+        (pathlib.Path("/tmp/installation.yaml"), "/tmp/installation.yaml"),
+    ],
+)
+def test__interpolation_finding_as_json(w_config_path, exp_config_path):
+    finding = _finding(
+        config_id="the-room",
+        config_path=w_config_path,
+        location="args[0]",
+    )
+
+    found = finding.as_json
+
+    assert found == {
+        "code": "undeclared_name",
+        "config_type": _INTERP_CFG_NAME,
+        "config_id": "the-room",
+        "config_path": exp_config_path,
+        "field_name": "secret_whole",
+        "config_key": "secret_whole",
+        "marker_kind": "secret",
+        "marker_name": "MISSING",
+        "location": "args[0]",
+    }
+
+
+@pytest.mark.parametrize(
+    "w_text, exp_markers",
+    [
+        ("no markers here", []),
+        ("secret:ONE", [(_SECRET, "ONE")]),
+        ("env:ONE", [(_ENVIRONMENT, "ONE")]),
+        (
+            "postgresql://u:secret:PW@h/env:DB",
+            [(_SECRET, "PW"), (_ENVIRONMENT, "DB")],
+        ),
+        ("secret:ONE and secret:TWO", [(_SECRET, "ONE"), (_SECRET, "TWO")]),
+    ],
+)
+def test__iter_markers(w_text, exp_markers):
+    found = list(cli_audit._iter_markers(w_text))
+
+    assert found == exp_markers
+
+
+@pytest.mark.parametrize(
+    "w_text, exp_marker",
+    [
+        ("secret:ONE", (_SECRET, "ONE")),
+        ("env:ONE", (_ENVIRONMENT, "ONE")),
+        ("prefix secret:ONE", None),
+        ("prefix env:ONE", None),
+        ("no markers here", None),
+    ],
+)
+def test__whole_marker(w_text, exp_marker):
+    found = cli_audit._whole_marker(w_text)
+
+    assert found == exp_marker
+
+
+@pytest.mark.parametrize(
+    "w_value, exp_strings",
+    [
+        ("a scalar", [(None, "a scalar")]),
+        ({"key": "a value", "n": 42}, [("field['key']", "a value")]),
+        (
+            ["first", 42, "third"],
+            [("field[0]", "first"), ("field[2]", "third")],
+        ),
+        (("first",), [("field[0]", "first")]),
+        (pathlib.Path("/tmp/x"), []),
+    ],
+)
+def test__iter_field_strings(w_value, exp_strings):
+    found = list(cli_audit._iter_field_strings("field", w_value))
+
+    assert found == exp_strings
+
+
+@pytest.mark.parametrize(
+    "w_field_name, w_value, exp_findings",
+    [
+        # A declared-literal field is never reported.
+        ("prose", "secret:MISSING", []),
+        # A field declaring nothing reports only a whole-value marker: an
+        # installation holds prose in which marker-like text is ordinary.
+        ("unannotated", "plain text", []),
+        ("unannotated", "see secret:MISSING inside", []),
+        (
+            "unannotated",
+            "secret:MISSING",
+            [
+                {
+                    "code": _IGNORED,
+                    "field_name": "unannotated",
+                    "config_key": "unannotated",
+                }
+            ],
+        ),
+        # A non-string value holds no markers.
+        ("_config_path", pathlib.Path("/tmp/x"), []),
+        # Whole-required: resolved when declared, reported when not.
+        ("secret_whole", "secret:KNOWN_SECRET", []),
+        ("secret_whole", "secret:MISSING", [{}]),
+        (
+            "secret_whole",
+            "env:KNOWN_ENV",
+            [
+                {
+                    "code": _WRONG_KIND,
+                    "marker_kind": _ENVIRONMENT,
+                    "marker_name": "KNOWN_ENV",
+                },
+            ],
+        ),
+        # Whole-required embedding a marker raises at runtime, so the
+        # check stays silent here.
+        ("secret_whole", "prefix secret:MISSING", []),
+        # Whole-optional embedding a marker passes it through verbatim.
+        ("secret_or_literal", "a plain literal", []),
+        (
+            "secret_or_literal",
+            "prefix secret:MISSING suffix",
+            [
+                {
+                    "code": _IGNORED,
+                    "field_name": "secret_or_literal",
+                    "config_key": "secret_or_literal",
+                }
+            ],
+        ),
+        # Embedded: each marker in the value is checked.
+        ("env_embedded", "http://env:KNOWN_ENV/v1", []),
+        (
+            "env_embedded",
+            "http://env:MISSING_ENV/v1",
+            [
+                {
+                    "field_name": "env_embedded",
+                    "config_key": "env_embedded",
+                    "marker_kind": _ENVIRONMENT,
+                    "marker_name": "MISSING_ENV",
+                }
+            ],
+        ),
+        (
+            "env_embedded",
+            "secret:KNOWN_SECRET",
+            [
+                {
+                    "code": _WRONG_KIND,
+                    "field_name": "env_embedded",
+                    "config_key": "env_embedded",
+                    "marker_name": "KNOWN_SECRET",
+                }
+            ],
+        ),
+        # 'BOTH' admits either kind; the finding names the public key.
+        (
+            "dburi",
+            "postgresql://u:secret:MISSING@h/env:MISSING_ENV",
+            [
+                {"field_name": "dburi", "config_key": "public_dburi"},
+                {
+                    "field_name": "dburi",
+                    "config_key": "public_dburi",
+                    "marker_kind": _ENVIRONMENT,
+                    "marker_name": "MISSING_ENV",
+                },
+            ],
+        ),
+        # A sequence and a mapping name the element holding the marker.
+        (
+            "args",
+            ["secret:MISSING", 42, "--flag"],
+            [
+                {
+                    "field_name": "args",
+                    "config_key": "args",
+                    "location": "args[0]",
+                }
+            ],
+        ),
+        (
+            "env",
+            {"TOKEN": "secret:MISSING", "RETRIES": 3},
+            [
+                {
+                    "field_name": "env",
+                    "config_key": "env",
+                    "location": "env['TOKEN']",
+                }
+            ],
+        ),
+    ],
+)
+def test__field_interpolation_findings(w_field_name, w_value, exp_findings):
+    config = _InterpCfg(**{w_field_name: w_value})
+
+    found = cli_audit._field_interpolation_findings(
+        config, w_field_name, _DECLARED
+    )
+
+    assert found == [
+        _finding(
+            **{
+                "field_name": w_field_name,
+                "config_key": w_field_name,
+                **exp,
+            }
+        )
+        for exp in exp_findings
+    ]
+
+
+@pytest.mark.parametrize(
+    "w_class, exp_findings",
+    [
+        (
+            _InterpCfg,
+            [
+                _finding(),
+                _finding(
+                    code=_IGNORED,
+                    field_name="unannotated",
+                    config_key="unannotated",
+                ),
+            ],
+        ),
+        (
+            _DerivedInterpCfg,
+            [
+                _finding(
+                    config_type=_DERIVED_CFG_NAME,
+                ),
+            ],
+        ),
+    ],
+)
+def test__config_interpolation_findings(w_class, exp_findings):
+    config = w_class(
+        secret_whole="secret:MISSING",
+        unannotated="secret:MISSING",
+    )
+
+    found = cli_audit._config_interpolation_findings(config, _DECLARED)
+
+    assert found == exp_findings
 
 
 @pytest.mark.parametrize(
