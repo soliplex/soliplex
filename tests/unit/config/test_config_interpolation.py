@@ -560,6 +560,21 @@ def test_resolve_field_wo_installation_config():
     assert found == "secret:NAME"
 
 
+def test_resolve_field_whole_required_wo_installation_config():
+    # A whole-required marker can never be a literal, so handing it back
+    # unresolved would silently demote the field to whole-optional.
+    config = _FauxOwned(secret_whole="secret:NAME")
+
+    with pytest.raises(
+        config_interpolation.WholeFieldNeedsInstallationConfig
+    ) as exc_info:
+        config_interpolation.resolve_field(config, "secret_whole")
+
+    found = exc_info.value
+    assert found.klass is _FauxOwned
+    assert found.field_name == "secret_whole"
+
+
 def test_resolve_field_w_explicit_installation_config():
     i_config = _faux_installation_config()
     config = _FauxSelfOwned(both_embedded="secret:NAME")

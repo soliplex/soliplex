@@ -106,6 +106,17 @@ class FieldDeclaresNoInterpolation(ValueError):
         )
 
 
+class WholeFieldNeedsInstallationConfig(ValueError):
+    def __init__(self, klass, field_name):
+        self.klass = klass
+        self.field_name = field_name
+        super().__init__(
+            "Cannot resolve whole-required field "
+            f"'{klass.__name__}.{field_name}' "
+            "without an installation config"
+        )
+
+
 class NoSuchField(AttributeError):
     """A field name does not name a field of the given dataclass."""
 
@@ -453,6 +464,12 @@ def resolve_field(
         installation_config = getattr(config, "_installation_config", None)
 
     if installation_config is None:
+        if spec.arity is MarkerArity.WHOLE_REQUIRED:
+            raise WholeFieldNeedsInstallationConfig(
+                _as_class(config),
+                field_name,
+            )
+
         return value
 
     resolver = _RESOLVERS[(spec.kinds, spec.arity)]
