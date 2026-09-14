@@ -2796,7 +2796,11 @@ INSTALLATION_STATE_ATTRS = (
         W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_YAML,
         W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
         W_TP_DBURI_INSTALLATION_CONFIG_YAML,
+        # markers must survive the dump unresolved: 'as_yaml' reads the raw
+        # field, never the interpolating property
+        W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
         W_RA_DBURI_INSTALLATION_CONFIG_YAML,
+        W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
     ],
 )
 def test_installationconfig_as_yaml_round_trips(

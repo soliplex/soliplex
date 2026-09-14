@@ -78,6 +78,16 @@ provider_base_url: "{OTHER_PROVIDER_BASE_URL}"
 provider_key: "secret:OTHER_PROVIDER_KEY"
 """
 
+# Every interpolating field carries a marker, so a dump which resolved one
+# would break the round trip.
+W_MARKERS_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "env:CHAT_MODEL_NAME"
+provider_type: "openai"
+provider_base_url: "{PROVIDER_BASE_URL_VIA_ENV}"
+provider_key: "secret:OTHER_PROVIDER_KEY"
+"""
+
 AGENT_RETRIES = 7
 W_RETRIES_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
@@ -1168,6 +1178,7 @@ def _round_trip_agent_config(installation_config, config_path, config_dict):
         BARE_AGENT_CONFIG_YAML,
         W_KIND_AGENT_CONFIG_YAML,
         W_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_MARKERS_AGENT_CONFIG_YAML,
         W_RETRIES_AGENT_CONFIG_YAML,
         W_MODEL_SETTINGS_AGENT_CONFIG_YAML,
         W_MULTIMODAL_AGENT_CONFIG_YAML,
