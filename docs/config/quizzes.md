@@ -9,6 +9,18 @@ Quizzes use the evaluation dataset entries (see the
   is a mapping defining quizzes which can be run in the room
   (see `rooms/README.md`).
 
+## Judge Agent
+
+- A quiz may carry a `judge_agent` key, whose value is an agent
+  configuration: the agent which grades free-form answers.  Omit it and
+  Soliplex supplies one, with an `id` of `quiz-<quiz_id>-judge` and a
+  `model_name` of `gpt-oss:20b`.
+
+- Because it is an ordinary agent configuration, its `model_name`,
+  `provider_base_url`, and `provider_key` honor the installation's
+  interpolation markers, exactly as they do elsewhere.  See
+  [Installation](installation.md#installation-secret-environment-interpolation).
+
 ## API
 
 ### `GET /api/v1/rooms`

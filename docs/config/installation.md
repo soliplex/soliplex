@@ -70,31 +70,54 @@ installation configuration.  Two marker styles are used:
   [environment](environment.md) value.
 
 Which markers a given field honors depends on the field, as enumerated
-below.
+below.  So does *how much* of the value is examined: some fields substitute
+markers found anywhere in the value, while others require the whole value to
+be a single marker.
+
+Several of the fields below belong to an *agent configuration*, which appears
+in three places:
+
+- the `agent_configs:` stanza of the main installation configuration
+- the `agent:` stanza of a room or a completion configuration
+- the `judge_agent:` stanza of a quiz configuration (see
+  [Quizzes](quizzes.md))
 
 ### Fields which interpolate only secrets
 
-The entire value may be given as a `secret:` reference, resolved from the
-installation secrets:
+The entire value must be a single `secret:` reference, resolved from the
+installation secrets.  A marker embedded in a longer string is **not**
+substituted:
 
-- `provider_key`, in the `agent_configs:` stanza of the main installation
-  configuration, or in the `agent_config:` stanza of a completion, room,
-  or skill configuration.
+- `provider_key`, in any agent configuration.  A value which is not a
+  `secret:` reference is rejected.
+- `token`, in the `logfire:` configuration (see [Logfire](logfire.md)).  A
+  value which is not a `secret:` reference is rejected.
 - `client_secret`, in an OIDC provider configuration (see
-  [OIDC providers](oidc_providers.md)).
-- `token`, in the `logfire:` configuration (see [Logfire](logfire.md)).
+  [OIDC providers](oidc_providers.md)).  Unlike the two above, any other
+  value -- including an `env:` marker, and including a `secret:` name which
+  cannot be resolved -- is used literally rather than rejected.
 
 ### Fields which interpolate only environment variables
+
+Two groups, differing in how much of the value is examined.
 
 The value may embed one or more `env:` markers, resolved from the
 installation environment:
 
-- `model_name`, in the `agent_configs:` stanza of the main installation
-  configuration, or in the `agent_config:` stanza of a completion, room,
-  or skill configuration.
-- `provider_base_url`, in the `agent_configs:` stanza of the main
-  installation configuration, or in the `agent_config:` stanza of a
-  completion, room, or skill configuration.
+- `model_name`, in any agent configuration.
+- `provider_base_url`, in any agent configuration.
+
+The entire value must be a single `env:` marker; any other value is used
+literally.  In the `logfire:` configuration (see [Logfire](logfire.md)):
+
+- `service_name`, `service_version`, and `environment`
+- `config_dir`, `data_dir`, and `min_level`
+- `base_url`
+
+All but `base_url` *default* to an `env:` marker naming the corresponding
+`LOGFIRE_*` entry, so they are interpolated even when the `logfire:` stanza
+does not mention them.  For all seven, a name which the installation does not
+declare resolves to no value, rather than being reported as an error.
 
 ### Fields which interpolate both secrets and environment variables
 
