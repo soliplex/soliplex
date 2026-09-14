@@ -7,13 +7,13 @@ import typing
 
 from . import _utils
 from . import exceptions as config_exc
-from . import interpolation
+from . import interpolation as config_interp
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from . import installation as config_installation
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
-_secret_whole_or_literal_field = interpolation.secret_whole_or_literal_field
+_secret_whole_or_literal_field = config_interp.secret_whole_or_literal_field
 
 
 # ============================================================================
@@ -107,12 +107,7 @@ class OIDCAuthSystemConfig:
                 cafile=self.oidc_client_pem_path
             )
 
-        try:
-            client_secret = self._installation_config.get_secret(
-                self.client_secret
-            )
-        except Exception:
-            client_secret = self.client_secret
+        client_secret = config_interp.resolve_field(self, "client_secret")
 
         return {
             "name": self.id,

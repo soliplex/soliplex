@@ -13,7 +13,7 @@ from pydantic_ai import tools as ai_tools
 
 from . import _utils
 from . import exceptions as config_exc
-from . import interpolation
+from . import interpolation as config_interp
 from . import rag as config_rag
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
@@ -441,17 +441,17 @@ class Stdio_MCP_ClientToolsetConfig:
     """Configure an MCP client toolset which runs as a subprocess"""
 
     kind: typing.ClassVar[str] = "stdio"
-    command: str = interpolation.both_embedded_field()
-    args: list[str] = interpolation.both_embedded_field(
-        shape=interpolation.ValueShape.SEQUENCE,
+    command: str = config_interp.both_embedded_field()
+    args: list[str] = config_interp.both_embedded_field(
+        shape=config_interp.ValueShape.SEQUENCE,
         default_factory=list,
     )
 
-    env: dict[str, str] = interpolation.both_embedded_field(
-        shape=interpolation.ValueShape.MAPPING,
+    env: dict[str, str] = config_interp.both_embedded_field(
+        shape=config_interp.ValueShape.MAPPING,
         default_factory=dict,
     )
-    allowed_tools: list[str] = interpolation.no_interpolation_field(
+    allowed_tools: list[str] = config_interp.no_interpolation_field(
         default=None,
     )
 
@@ -502,13 +502,10 @@ class Stdio_MCP_ClientToolsetConfig:
 
     @property
     def tool_kwargs(self) -> dict:
-        interpolate = self._installation_config.interpolate
         return {
-            "command": interpolate(self.command),
-            "args": [interpolate(arg) for arg in self.args],
-            "env": {
-                key: interpolate(value) for (key, value) in self.env.items()
-            },
+            "command": config_interp.resolve_field(self, "command"),
+            "args": config_interp.resolve_field(self, "args"),
+            "env": config_interp.resolve_field(self, "env"),
             "allowed_tools": self.allowed_tools,
         }
 
@@ -517,17 +514,17 @@ class Stdio_MCP_ClientToolsetConfig:
 class _Remote_MCP_ClientToolsetConfig:
     """Base config for remote MCP client toolsets (HTTP and SSE)"""
 
-    url: str = interpolation.both_embedded_field()
-    headers: dict[str, typing.Any] = interpolation.both_embedded_field(
-        shape=interpolation.ValueShape.MAPPING,
+    url: str = config_interp.both_embedded_field()
+    headers: dict[str, typing.Any] = config_interp.both_embedded_field(
+        shape=config_interp.ValueShape.MAPPING,
         default_factory=dict,
     )
 
-    query_params: dict[str, str] = interpolation.both_embedded_field(
-        shape=interpolation.ValueShape.MAPPING,
+    query_params: dict[str, str] = config_interp.both_embedded_field(
+        shape=config_interp.ValueShape.MAPPING,
         default_factory=dict,
     )
-    allowed_tools: list[str] = interpolation.no_interpolation_field(
+    allowed_tools: list[str] = config_interp.no_interpolation_field(
         default=None,
     )
 
@@ -578,19 +575,11 @@ class _Remote_MCP_ClientToolsetConfig:
 
     @property
     def tool_kwargs(self) -> dict:
-        interpolate = self._installation_config.interpolate
-
-        url = interpolate(self.url)
-
-        headers = {
-            key: interpolate(value) for (key, value) in self.headers.items()
-        }
+        url = config_interp.resolve_field(self, "url")
+        headers = config_interp.resolve_field(self, "headers")
 
         if self.query_params:
-            qp = {
-                key: interpolate(value)
-                for (key, value) in self.query_params.items()
-            }
+            qp = config_interp.resolve_field(self, "query_params")
             qs = url_parse.urlencode(qp)
             url = f"{url}?{qs}"
 

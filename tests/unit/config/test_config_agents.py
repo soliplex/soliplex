@@ -769,13 +769,9 @@ def test_agentconfig_llm_model_name(
         "CHAT_MODEL_NAME": MODEL_NAME,
     }
 
-    def _interpolate_environment(maybe_key):
-        if maybe_key is not None:
-            return (
-                ic_environ[maybe_key[4:]]
-                if maybe_key.startswith("env:")
-                else maybe_key
-            )
+    def _interpolate_environment(key):
+        # 'resolve_field' passes non-strings through without calling here
+        return ic_environ[key[4:]] if key.startswith("env:") else key
 
     installation_config.interpolate_environment = _interpolate_environment
 
@@ -833,13 +829,9 @@ def test_agentconfig_llm_provider_base_url(
         "PROVIDER_BASE_URL": PROVIDER_BASE_URL,
     }
 
-    def _interpolate_environment(maybe_key):
-        if maybe_key is not None:
-            return (
-                ic_environ[maybe_key[4:]]
-                if maybe_key.startswith("env:")
-                else maybe_key
-            )
+    def _interpolate_environment(key):
+        # 'resolve_field' passes non-strings through without calling here
+        return ic_environ[key[4:]] if key.startswith("env:") else key
 
     installation_config.get_environment = ic_environ.get
     installation_config.interpolate_environment = _interpolate_environment

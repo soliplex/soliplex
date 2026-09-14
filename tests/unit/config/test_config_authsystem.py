@@ -411,27 +411,27 @@ def test_authsystem_server_metadata_url():
 
 
 @pytest.mark.parametrize(
-    "w_config, exp_client_kwargs, exp_secret, bare_secret",
+    "w_config, exp_client_kwargs, exp_secret, w_marker",
     [
-        (BARE_AUTHSYSTEM_CONFIG_KW.copy(), {}, "", True),
+        (BARE_AUTHSYSTEM_CONFIG_KW.copy(), {}, "", False),
         (
             W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW,
             {},
             AUTHSYSTEM_CLIENT_SECRET_LIT,
-            True,
+            False,
         ),
         (
             W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW,
             {},
             AUTHSYSTEM_CLIENT_SECRET_SECRET,
-            False,
+            True,
         ),
-        (W_SCOPE_AUTHSYSTEM_CONFIG_KW, {"scope": AUTHSYSTEM_SCOPE}, "", True),
+        (W_SCOPE_AUTHSYSTEM_CONFIG_KW, {"scope": AUTHSYSTEM_SCOPE}, "", False),
         (
             W_OIDC_CPP_ABS_KW,
             {"verify": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS},
             "",
-            True,
+            False,
         ),
     ],
 )
@@ -441,7 +441,7 @@ def test_authsystem_oauth_client_args(
     w_config,
     exp_client_kwargs,
     exp_secret,
-    bare_secret,
+    w_marker,
 ):
     inst = config_authsystem.OIDCAuthSystemConfig(
         **w_config,
@@ -454,9 +454,6 @@ def test_authsystem_oauth_client_args(
 
     icgs = installation_config.get_secret
 
-    if bare_secret:
-        icgs.side_effect = ValueError("testing")
-
     found = inst.oauth_client_kwargs
 
     assert found["name"] == AUTHSYSTEM_ID
@@ -468,9 +465,28 @@ def test_authsystem_oauth_client_args(
         assert actual_verify.__class__ is ssl.SSLContext
     assert found["client_kwargs"] == exp_client_kwargs
 
-    if bare_secret:
-        assert found["client_secret"] == exp_secret
-    else:
+    if w_marker:
         assert found["client_secret"] is icgs.return_value
+        icgs.assert_called_once_with(exp_secret)
+    else:
+        # not a 'secret:' reference, so it never reaches 'get_secret'
+        assert found["client_secret"] == exp_secret
+        icgs.assert_not_called()
 
-    icgs.assert_called_once_with(exp_secret)
+
+def test_authsystem_oauth_client_args_w_unresolvable_secret(
+    installation_config,
+):
+    """An unresolvable 'secret:' name propagates.
+
+    It was formerly swallowed, handing the raw marker text to the IdP as
+    the client secret.
+    """
+    inst = config_authsystem.OIDCAuthSystemConfig(
+        **W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW,
+    )
+    inst._installation_config = installation_config
+    installation_config.get_secret.side_effect = ValueError("testing")
+
+    with pytest.raises(ValueError, match="testing"):
+        _ = inst.oauth_client_kwargs

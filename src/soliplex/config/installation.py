@@ -21,7 +21,7 @@ from . import agui as config_agui
 from . import authsystem as config_authsystem
 from . import completions as config_completions
 from . import exceptions as config_exc
-from . import interpolation as config_interpolation
+from . import interpolation as config_interp
 from . import logfire as config_logfire
 from . import meta as config_meta
 from . import middleware as config_middleware
@@ -40,15 +40,15 @@ SYNC_MEMORY_ENGINE_URL = "sqlite://"
 ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
 
 # Defined in 'interpolation'; re-exported here for existing importers.
-ENVIRONMENT_PREFIX = config_interpolation.ENVIRONMENT_PREFIX
-ENVIRONMENT_PATTERN = config_interpolation.ENVIRONMENT_PATTERN
-ENVIRONMENT_RE = config_interpolation.ENVIRONMENT_RE
+ENVIRONMENT_PREFIX = config_interp.ENVIRONMENT_PREFIX
+ENVIRONMENT_PATTERN = config_interp.ENVIRONMENT_PATTERN
+ENVIRONMENT_RE = config_interp.ENVIRONMENT_RE
 
-_no_repr_no_compare_none = _utils._no_repr_no_compare_none
-_both_embedded_field = config_interpolation.both_embedded_field
-_no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
-_default_list_field = _utils._default_list_field
+_both_embedded_field = config_interp.both_embedded_field
 _default_dict_field = _utils._default_dict_field
+_default_list_field = _utils._default_list_field
+_no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
+_no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
 
 class MissingEnvVar(ValueError):
@@ -788,11 +788,15 @@ class InstallationConfig:
     #
     # DB-URI secret / environment handling
     #
-    def _interpolate_dburi(self, dburi: str | None, default: str) -> str:
-        if dburi is None:
+    def _interpolate_dburi(self, field_name: str, default: str) -> str:
+        if getattr(self, field_name) is None:
             return default
-
-        return self.interpolate(dburi)
+        else:
+            return config_interp.resolve_field(
+                self,
+                field_name,
+                installation_config=self,
+            )
 
     #
     # Thread persistence DB-URI
@@ -811,14 +815,14 @@ class InstallationConfig:
     @property
     def thread_persistence_dburi_sync(self):
         return self._interpolate_dburi(
-            self._thread_persistence_dburi_sync,
+            "_thread_persistence_dburi_sync",
             SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
     def thread_persistence_dburi_async(self):
         return self._interpolate_dburi(
-            self._thread_persistence_dburi_async,
+            "_thread_persistence_dburi_async",
             ASYNC_MEMORY_ENGINE_URL,
         )
 
@@ -839,14 +843,14 @@ class InstallationConfig:
     @property
     def authorization_dburi_sync(self):
         return self._interpolate_dburi(
-            self._authorization_dburi_sync,
+            "_authorization_dburi_sync",
             SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
     def authorization_dburi_async(self):
         return self._interpolate_dburi(
-            self._authorization_dburi_async,
+            "_authorization_dburi_async",
             ASYNC_MEMORY_ENGINE_URL,
         )
 
