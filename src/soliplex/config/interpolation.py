@@ -97,6 +97,15 @@ class InterpolatedFieldRequiresShape(ValueError):
         super().__init__("Interpolated fields require a shape")
 
 
+class FieldDeclaresNoInterpolation(ValueError):
+    def __init__(self, klass, field_name):
+        self.klass = klass
+        self.field_name = field_name
+        super().__init__(
+            f"No interpolation declared for '{klass.__name__}.{field_name}'"
+        )
+
+
 class NoSuchField(AttributeError):
     """A field name does not name a field of the given dataclass."""
 
@@ -148,19 +157,18 @@ class InterpolationSpec:
             if self.shape is not None:
                 raise LiteralFieldCannotTakeShape(self.shape)
 
-            return
+        else:
+            if self.arity is None:
+                raise InterpolatedFieldRequiresArity(self.kinds)
 
-        if self.arity is None:
-            raise InterpolatedFieldRequiresArity(self.kinds)
+            if self.shape is None:
+                raise InterpolatedFieldRequiresShape(self.kinds)
 
-        if self.shape is None:
-            raise InterpolatedFieldRequiresShape(self.kinds)
-
-        if (
-            self.kinds is MarkerKind.BOTH
-            and self.arity is not MarkerArity.EMBEDDED
-        ):
-            raise WholeFieldsCannotSpecifyBothKinds(self.arity)
+            if (
+                self.kinds is MarkerKind.BOTH
+                and self.arity is not MarkerArity.EMBEDDED
+            ):
+                raise WholeFieldsCannotSpecifyBothKinds(self.arity)
 
     @property
     def config_key(self) -> str | None:
@@ -319,3 +327,136 @@ def iter_own_specs(klass_or_instance):
     for field_name, spec in iter_specs(klass):
         if field_name in own:
             yield field_name, spec
+
+
+def _resolve_secret_embedded(installation_config, value):
+    return installation_config.interpolate_secrets(value)
+
+
+def _resolve_secret_whole_required(installation_config, value):
+    return installation_config.get_secret(value)
+
+
+def _resolve_secret_whole_optional(installation_config, value):
+    if value.startswith(SECRET_PREFIX):
+        return installation_config.get_secret(value)
+    else:
+        return value
+
+
+def _resolve_environment_embedded(installation_config, value):
+    return installation_config.interpolate_environment(value)
+
+
+def _resolve_environment_whole_optional(installation_config, value):
+    if value.startswith(ENVIRONMENT_PREFIX):
+        return installation_config.get_environment(
+            value[len(ENVIRONMENT_PREFIX) :]
+        )
+    else:
+        return value
+
+
+def _resolve_both_embedded(installation_config, value):
+    return installation_config.interpolate(value)
+
+
+_RESOLVERS = {
+    (MarkerKind.SECRET, MarkerArity.EMBEDDED): _resolve_secret_embedded,
+    (MarkerKind.SECRET, MarkerArity.WHOLE_REQUIRED): (
+        _resolve_secret_whole_required
+    ),
+    (MarkerKind.SECRET, MarkerArity.WHOLE_OPTIONAL): (
+        _resolve_secret_whole_optional
+    ),
+    (MarkerKind.ENVIRONMENT, MarkerArity.EMBEDDED): (
+        _resolve_environment_embedded
+    ),
+    (MarkerKind.ENVIRONMENT, MarkerArity.WHOLE_OPTIONAL): (
+        _resolve_environment_whole_optional
+    ),
+    (MarkerKind.BOTH, MarkerArity.EMBEDDED): _resolve_both_embedded,
+}
+
+
+def _resolve_scalar(resolve, installation_config, value):
+    """Resolve one string
+
+    Pass any other value through untouched.
+    """
+
+    if not isinstance(value, str):
+        return value
+
+    return resolve(installation_config, value)
+
+
+def _resolve_sequence(resolve, installation_config, value):
+    """Resolve items in a sequence of strings
+
+    Pass other items through untouched.
+    """
+
+    return [
+        _resolve_scalar(resolve, installation_config, item) for item in value
+    ]
+
+
+def _resolve_mapping(resolve, installation_config, value):
+    """Resolve string values of a mapping
+
+    Pass other values through untouched.
+    """
+
+    return {
+        key: _resolve_scalar(resolve, installation_config, item)
+        for key, item in value.items()
+    }
+
+
+_RESOLVE_BY_SHAPE = {
+    ValueShape.SCALAR: _resolve_scalar,
+    ValueShape.SEQUENCE: _resolve_sequence,
+    ValueShape.MAPPING: _resolve_mapping,
+}
+
+
+def resolve_field(
+    config,
+    field_name,
+    *,
+    installation_config=None,
+):
+    """Return the value of ``field_name``, with its markers resolved.
+
+    Preserve the declared shape: a sequence field yields a list, a mapping
+    field a dict with its keys untouched.  Leave the field itself alone, so
+    the stored value keeps its markers.
+
+    Return the stored value unchanged for a field declaring no markers, and
+    for one whose config carries no installation config.
+
+    Take ``installation_config`` explicitly for a config which is not a
+    child of one -- ``InstallationConfig`` resolves its own fields.
+    """
+    spec = spec_for(config, field_name)
+
+    if spec is None:
+        raise FieldDeclaresNoInterpolation(_as_class(config), field_name)
+
+    value = getattr(config, field_name)
+
+    if spec.kinds is None:
+        return value
+
+    if installation_config is None:
+        installation_config = getattr(config, "_installation_config", None)
+
+    if installation_config is None:
+        return value
+
+    resolver = _RESOLVERS[(spec.kinds, spec.arity)]
+
+    by_shape = _RESOLVE_BY_SHAPE[spec.shape]
+
+    return by_shape(resolver, installation_config, value)
