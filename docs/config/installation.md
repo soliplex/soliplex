@@ -74,6 +74,12 @@ below.  So does *how much* of the value is examined: some fields substitute
 markers found anywhere in the value, while others require the whole value to
 be a single marker.
 
+Which markers a field honors is declared on the field itself, so the
+runtime and `soliplex-cli audit` read the same statement.  A configuration
+class defined outside Soliplex can declare the same contracts, and is then
+audited alongside these: see
+[Environment / Secret Interpolation](interpolation.md).
+
 Several of the fields below belong to an *agent configuration*, which appears
 in three places:
 

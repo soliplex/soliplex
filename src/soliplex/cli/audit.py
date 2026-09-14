@@ -416,7 +416,7 @@ def _config_interpolation_findings(config, declarations):
         )
 
     if any(True for _ in config_interp.iter_own_specs(klass)):
-        own = config_interp._own_field_names(klass)
+        own = config_interp.own_field_names(klass)
 
         for field_name in sorted(own - set(annotated)):
             findings.extend(

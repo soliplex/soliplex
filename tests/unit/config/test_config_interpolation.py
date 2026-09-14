@@ -326,8 +326,11 @@ def test_iter_own_specs_w_class_declaring_nothing():
     assert found == {}
 
 
-def test__own_field_names():
-    found = config_interpolation._own_field_names(_FauxDerived)
+@pytest.mark.parametrize("w_instance", [False, True])
+def test_own_field_names(w_instance):
+    target = _FauxDerived() if w_instance else _FauxDerived
+
+    found = config_interpolation.own_field_names(target)
 
     assert found == {"own_marked", "own_plain"}
 

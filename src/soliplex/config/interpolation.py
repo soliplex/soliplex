@@ -10,6 +10,9 @@ The contract defines for a dataclass field:
 
 This module makes that contract a property of the field itself, carried in
 ``dataclasses.field(metadata=...)``.
+
+See ``docs/config/interpolation.md`` for the contract they form,
+and what declaring it buys.
 """
 
 import dataclasses
@@ -304,11 +307,12 @@ def iter_specs(klass_or_instance):
             yield field.name, spec
 
 
-def _own_field_names(klass) -> set[str]:
-    """Return the names of the fields ``klass`` declares itself
+def own_field_names(klass_or_instance) -> set[str]:
+    """Return the names of the fields the class declares itself
 
     Skip fields defined in base dataclasses and not re-declared.
     """
+    klass = _as_class(klass_or_instance)
     bases = [
         base for base in klass.__mro__[1:] if dataclasses.is_dataclass(base)
     ]
@@ -333,7 +337,7 @@ def iter_own_specs(klass_or_instance):
     one or more of them itself.
     """
     klass = _as_class(klass_or_instance)
-    own = _own_field_names(klass)
+    own = own_field_names(klass)
 
     for field_name, spec in iter_specs(klass):
         if field_name in own:
