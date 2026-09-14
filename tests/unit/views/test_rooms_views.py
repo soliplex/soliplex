@@ -525,6 +525,7 @@ async def test_get_chunk_visualization(
         kws | {"audit_db_path": str(kws["db_path"])} for kws in w_hrc_kws
     ]
     sources = [kws["source"] for kws in w_hrc_kws]
+    databases = [kws["db_path"].rsplit("/", 1)[-1] for kws in w_hrc_kws]
     hr_insts = {source: mock.AsyncMock() for source in sources}
     hr_entereds = {
         key: value.__aenter__.return_value for key, value in hr_insts.items()
@@ -558,10 +559,8 @@ async def test_get_chunk_visualization(
 
     if ROOM_ID in room_configs:
         if w_hrc_kws:
-            for rag in rags:
-                rag.covers_multiple = False
-                rag.source = None  # an unnamed single database
-                rag.reader_for.return_value = rag
+            for rag, database in zip(rags, databases, strict=True):
+                rag.source_names = (database,)
                 rag.get_chunk_by_id.return_value = None
                 rag.visualize_chunk.return_value = None
 
@@ -697,8 +696,10 @@ async def test_get_chunk_visualization(
             )
 
             chunk_source = sources[w_chunk_index]
+            chunk_database = databases[w_chunk_index]
             assert found == models.ChunkVisualization(
                 source=rag_sources[chunk_source],
+                database=chunk_database,
                 chunk_id=CHUNK_ID,
                 document_uri=DOCUMENT_URI,
                 images_base_64=PAGES_B64,
@@ -716,6 +717,7 @@ async def test_get_chunk_visualization(
                 chunk,
                 refs=None,
                 expand=False,
+                source=chunk_database,
             )
             for rag in rags:
                 if rag is not rag_w_chunk:
@@ -773,9 +775,7 @@ async def test_get_chunk_visualization_refs_and_expand(
         document_uri=DOCUMENT_URI,
         content="waaa",
     )
-    rag.covers_multiple = False
-    rag.source = None  # an unnamed single database
-    rag.reader_for.return_value = rag
+    rag.source_names = ("agent",)
     rag.get_chunk_by_id.return_value = chunk
     rag.visualize_chunk.return_value = PAGES_PNG
 
@@ -807,18 +807,18 @@ async def test_get_chunk_visualization_refs_and_expand(
     )
 
     assert found.chunk_id == CHUNK_ID
-    assert found.database is None
+    assert found.database == "agent"
     rag.visualize_chunk.assert_awaited_once_with(
         chunk,
         refs=expected_refs,
         expand=expand,
+        source="agent",
     )
 
 
 def _federated_room_config(covered_names, chunks_by_name):
     """A room whose sole RAG config covers several named databases"""
     rag = mock.AsyncMock()
-    rag.covers_multiple = True
     rag.source_names = covered_names
     rag.get_chunk_by_id.side_effect = lambda chunk_id, source=None: (
         chunks_by_name.get(source)
@@ -862,9 +862,7 @@ async def test_get_chunk_visualization_federated(
         ("papers", "wiki"),
         {"wiki": chunk},
     )
-    owner = mock.AsyncMock()
-    owner.visualize_chunk.return_value = PAGES_PNG
-    rag.reader_for.return_value = owner
+    rag.visualize_chunk.return_value = PAGES_PNG
 
     hr_inst = mock.AsyncMock()
     hr_inst.__aenter__.return_value = rag
@@ -893,13 +891,12 @@ async def test_get_chunk_visualization_federated(
         mock.call(CHUNK_ID, source="papers"),
         mock.call(CHUNK_ID, source="wiki"),
     ]
-    rag.reader_for.assert_awaited_once_with("wiki")
-    owner.visualize_chunk.assert_awaited_once_with(
+    rag.visualize_chunk.assert_awaited_once_with(
         chunk,
         refs=None,
         expand=False,
+        source="wiki",
     )
-    rag.visualize_chunk.assert_not_called()
 
     record = _sole_rag_record(audit_records)
     assert record.db_path == "papers=/db/papers, wiki=/db/wiki"
@@ -928,9 +925,7 @@ async def test_get_chunk_visualization_one_named_database(
     # A one-entry 'rag_databases' opens as a single-database client that
     # keeps the configured name.
     rag = mock.AsyncMock()
-    rag.covers_multiple = False
-    rag.source = "papers"
-    rag.reader_for.return_value = rag
+    rag.source_names = ("papers",)
     rag.get_chunk_by_id.return_value = chunk
     rag.visualize_chunk.return_value = PAGES_PNG
 
@@ -965,8 +960,13 @@ async def test_get_chunk_visualization_one_named_database(
     )
 
     assert found.database == "papers"
-    rag.get_chunk_by_id.assert_awaited_once_with(CHUNK_ID)
-    rag.reader_for.assert_awaited_once_with("papers")
+    rag.get_chunk_by_id.assert_awaited_once_with(CHUNK_ID, source="papers")
+    rag.visualize_chunk.assert_awaited_once_with(
+        chunk,
+        refs=None,
+        expand=False,
+        source="papers",
+    )
 
 
 @pytest.mark.anyio
@@ -1002,12 +1002,126 @@ async def test_get_chunk_visualization_federated_wo_chunk(
 
     assert exc.value.status_code == 404
     assert exc.value.detail == f"{loggers.ROOM_UNKNOWN_CHUNK_ID}: {CHUNK_ID}"
-    rag.reader_for.assert_not_called()
+    rag.visualize_chunk.assert_not_called()
 
     record = _sole_rag_record(audit_records)
     assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
     assert record.db_path is None
     assert record.reason == loggers.ROOM_UNKNOWN_CHUNK_ID
+
+
+@pytest.mark.anyio
+@mock.patch("haiku.rag.client.HaikuRAG")
+@mock.patch("base64.b64encode")
+async def test_get_chunk_visualization_named_database(
+    b64enc,
+    hr_klass,
+    audit_records,
+):
+    """A named database answers, where the scan would take the wrong copy"""
+    ROOM_ID = "foo"
+    CHUNK_ID = "test-chunk-123"
+    DOCUMENT_URI = f"https://example.com/chunks/{CHUNK_ID}"
+    PAGES_PNG = [mock.Mock(spec_set=["blob", "save"], blob="facedace8765")]
+    b64enc.return_value.decode.return_value = "facedace8765"
+
+    chunk = hr_chunk.Chunk(
+        chunk_id=CHUNK_ID,
+        document_uri=DOCUMENT_URI,
+        content="waaa",
+    )
+    # Both copies hold the ID, so 'papers' is what the scan would find.
+    rag, room_config = _federated_room_config(
+        ("papers", "wiki"),
+        {"papers": chunk, "wiki": chunk},
+    )
+    rag.visualize_chunk.return_value = PAGES_PNG
+
+    hr_inst = mock.AsyncMock()
+    hr_inst.__aenter__.return_value = rag
+    hr_klass.side_effect = [hr_inst]
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_room_config.return_value = room_config
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    found = await rooms_views.get_chunk_visualization(
+        room_id=ROOM_ID,
+        chunk_id=CHUNK_ID,
+        database="wiki",
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert found.database == "wiki"
+    rag.get_chunk_by_id.assert_awaited_once_with(CHUNK_ID, source="wiki")
+    rag.visualize_chunk.assert_awaited_once_with(
+        chunk,
+        refs=None,
+        expand=False,
+        source="wiki",
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "database, asked",
+    [("zines", False), ("papers", True)],
+    ids=["uncovered", "covered-without-the-chunk"],
+)
+@mock.patch("haiku.rag.client.HaikuRAG")
+async def test_get_chunk_visualization_named_database_wo_chunk(
+    hr_klass,
+    database,
+    asked,
+    audit_records,
+):
+    """A named database without the chunk is a 404, and no other is asked"""
+    ROOM_ID = "foo"
+    CHUNK_ID = "test-chunk-123"
+
+    chunk = hr_chunk.Chunk(
+        chunk_id=CHUNK_ID,
+        document_uri=f"https://example.com/chunks/{CHUNK_ID}",
+        content="waaa",
+    )
+    rag, room_config = _federated_room_config(
+        ("papers", "wiki"),
+        {"wiki": chunk},
+    )
+
+    hr_inst = mock.AsyncMock()
+    hr_inst.__aenter__.return_value = rag
+    hr_klass.side_effect = [hr_inst]
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_room_config.return_value = room_config
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await rooms_views.get_chunk_visualization(
+            room_id=ROOM_ID,
+            chunk_id=CHUNK_ID,
+            database=database,
+            the_installation=the_installation,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == f"{loggers.ROOM_UNKNOWN_CHUNK_ID}: {CHUNK_ID}"
+
+    if asked:
+        rag.get_chunk_by_id.assert_awaited_once_with(CHUNK_ID, source=database)
+    else:
+        rag.get_chunk_by_id.assert_not_called()
+
+    rag.visualize_chunk.assert_not_called()
 
 
 @pytest.mark.anyio
