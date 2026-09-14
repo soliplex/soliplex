@@ -15,10 +15,19 @@ This module makes that contract a property of the field itself, carried in
 import dataclasses
 import enum
 import functools
+import re
 
 #: Key under which an ``InterpolationSpec`` rides in a field's metadata.
 #: Namespaced, since ``metadata`` is a shared mapping.
 INTERPOLATION_KEY = "soliplex.config.interpolation"
+
+SECRET_PREFIX = "secret:"
+SECRET_PATTERN = rf"{SECRET_PREFIX}(?P<secret_name>\w+)"
+SECRET_RE = re.compile(SECRET_PATTERN)
+
+ENVIRONMENT_PREFIX = "env:"
+ENVIRONMENT_PATTERN = rf"{ENVIRONMENT_PREFIX}(?P<env_name>\w+)"
+ENVIRONMENT_RE = re.compile(ENVIRONMENT_PATTERN)
 
 
 class MarkerKind(enum.Flag):

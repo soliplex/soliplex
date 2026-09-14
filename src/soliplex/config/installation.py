@@ -6,7 +6,6 @@ import functools
 import itertools
 import os
 import pathlib
-import re
 import typing
 
 import dotenv
@@ -40,9 +39,10 @@ FILE_PREFIX = "file:"
 SYNC_MEMORY_ENGINE_URL = "sqlite://"
 ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
 
-ENVIRONMENT_PREFIX = "env:"
-ENVIRONMENT_PATTERN = rf"{ENVIRONMENT_PREFIX}(?P<env_name>\w+)"
-ENVIRONMENT_RE = re.compile(ENVIRONMENT_PATTERN)
+# Defined in 'interpolation'; re-exported here for existing importers.
+ENVIRONMENT_PREFIX = config_interpolation.ENVIRONMENT_PREFIX
+ENVIRONMENT_PATTERN = config_interpolation.ENVIRONMENT_PATTERN
+ENVIRONMENT_RE = config_interpolation.ENVIRONMENT_RE
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _both_embedded_field = config_interpolation.both_embedded_field

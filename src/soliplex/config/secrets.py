@@ -2,22 +2,23 @@ from __future__ import annotations  # forward refs in typing decls
 
 import dataclasses
 import pathlib
-import re
 import typing
 
 from soliplex import secrets
 
 from . import _utils
 from . import exceptions as config_exc
+from . import interpolation
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from . import installation as config_installation
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
-SECRET_PREFIX = "secret:"
-SECRET_PATTERN = rf"{SECRET_PREFIX}(?P<secret_name>\w+)"
-SECRET_RE = re.compile(SECRET_PATTERN)
+# Defined in 'interpolation'; re-exported here for existing importers.
+SECRET_PREFIX = interpolation.SECRET_PREFIX
+SECRET_PATTERN = interpolation.SECRET_PATTERN
+SECRET_RE = interpolation.SECRET_RE
 
 # ============================================================================
 #   Secrets configuration types
