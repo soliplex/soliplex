@@ -20,13 +20,17 @@ from pydantic_ai.providers import openai as openai_providers
 
 from . import _utils
 from . import exceptions
+from . import interpolation as config_interp
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from . import installation as config_installation
 
-_no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
+_env_embedded_field = config_interp.env_embedded_field
+_no_interpolation_field = config_interp.no_interpolation_field
+_no_repr_no_compare_none = _utils._no_repr_no_compare_none
+_secret_whole_field = config_interp.secret_whole_field
 
 HAS_V_NUMBER_SUFFIX = r".*/v\d+"
 has_v_number_suffix = re.compile(HAS_V_NUMBER_SUFFIX)
@@ -166,16 +170,19 @@ class AgentConfig:
     #
     id: str  # set as 'room-{room_id}' or 'completion-{completion_id}'
     kind: typing.ClassVar[str] = "default"
-    model_name: str = None
+    model_name: str = _env_embedded_field(default=None)
     retries: int = 3
 
     system_prompt: dataclasses.InitVar[str] = None
-    _system_prompt_text: str = None
+    _system_prompt_text: str = _no_interpolation_field(default=None)
     _system_prompt_path: pathlib.Path = None
 
     provider_type: LLMProviderType = LLMProviderType.OLLAMA
-    provider_base_url: str = None  # installation config provides default
-    provider_key: str = None  # secret containing API key
+    # installation config provides the default base URL
+    provider_base_url: str = _env_embedded_field(default=None)
+
+    # names a secret holding the API key
+    provider_key: str = _secret_whole_field(default=None)
 
     model_settings: ai_settings.ModelSettings = None
 
@@ -276,13 +283,7 @@ class AgentConfig:
 
     @property
     def llm_model_name(self) -> str | None:
-        model_name = self.model_name
-        i_config = self._installation_config
-
-        if i_config is not None:
-            model_name = i_config.interpolate_environment(model_name)
-
-        return model_name
+        return config_interp.resolve_field(self, "model_name")
 
     @property
     def llm_provider_base_url(self) -> str | None:
@@ -297,7 +298,7 @@ class AgentConfig:
         ):
             return ic.get_environment("OLLAMA_BASE_URL")
         else:
-            return ic.interpolate_environment(self.provider_base_url)
+            return config_interp.resolve_field(self, "provider_base_url")
 
     @property
     def llm_provider_kw(self) -> dict:
@@ -311,8 +312,8 @@ class AgentConfig:
             provider_kw["base_url"] = base_url
 
         if self.provider_key is not None:
-            provider_kw["api_key"] = self._installation_config.get_secret(
-                self.provider_key
+            provider_kw["api_key"] = config_interp.resolve_field(
+                self, "provider_key"
             )
 
         return provider_kw

@@ -86,7 +86,7 @@ configuration).  See the Logfire
   ```yaml
   logfire_config:
       ...
-      data_dir:ib.Path | str = "env:LOGFIRE_DATA_DIR"
+      data_dir: "env:LOGFIRE_DATA_DIR"
   ```
 
 - `min_level` defines the minimum log level reported to Logfire.  See
@@ -98,7 +98,7 @@ configuration).  See the Logfire
   ```yaml
   logfire_config:
       ...
-      min_level: logfire.LevelName = "env:LOGFIRE_MIN_LEVEL"
+      min_level: "env:LOGFIRE_MIN_LEVEL"
   ```
 
 - `base_url` (string or None, None by default) is the URL of the

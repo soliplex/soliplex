@@ -1,5 +1,6 @@
 import copy
 import dataclasses
+import pathlib
 
 import pytest
 import yaml
@@ -640,6 +641,41 @@ def test_logfireconfig_logfire_config_kwargs(
     found = lf_config.logfire_config_kwargs
 
     assert found == expected
+
+
+@pytest.mark.parametrize(
+    "field_name, value",
+    [
+        ("min_level", 5),
+        ("config_dir", "/tmp/logfire-config"),
+        ("data_dir", "/tmp/logfire-data"),
+    ],
+)
+def test_logfireconfig_logfire_config_kwargs_w_non_str(
+    installation_config,
+    field_name,
+    value,
+):
+    """A non-'str' value passes through untouched.
+
+    These fields are typed 'int | LevelName' and 'pathlib.Path | str', and
+    the former resolver called 'startswith' on whatever it was given.
+    """
+    if field_name != "min_level":
+        value = pathlib.Path(value)
+
+    installation_config.get_secret.side_effect = {
+        "secret:LOGFIRE_TOKEN": "resolved-logfire-token",
+    }.get
+    lf_config = config_logfire.LogfireConfig(
+        _installation_config=installation_config,
+        **W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
+        **{field_name: value},
+    )
+
+    found = lf_config.logfire_config_kwargs
+
+    assert found[field_name] is value
 
 
 @pytest.mark.parametrize(

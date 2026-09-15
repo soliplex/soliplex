@@ -9,6 +9,11 @@ E.g., registering a new tool configuration class in the `meta.tool_configs`
 section allows use of that class when configuring a custom tool in a given
 room.
 
+A registered class whose fields carry
+[interpolation contracts](interpolation.md) is audited exactly as
+Soliplex's own configuration classes are; one which declares none is left
+alone.
+
 Most subsections register into a global registry which Soliplex has
 already populated with its own defaults at import time. Registration is
 additive: a `meta` entry adds to those defaults, or replaces one of them

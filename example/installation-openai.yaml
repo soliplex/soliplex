@@ -239,12 +239,18 @@ secrets:
   - "LOGFIRE_TOKEN"
 
   # ----------------------------------------------------------------------
-  # Credentials for the Smithery.AI MCP tool registry
+  # Credentials for the Google Maps MCP tool
   #
-  # (required in order to test the 'example/room/mcp_test' tooling).
+  # (required in order to test the 'example/rooms/mcptest' tooling).
   # ----------------------------------------------------------------------
-  - "SMITHERY_AI_API_KEY"
-  - "SMITHERY_AI_PROFILE"
+  - "GOOGLE_MAPS_API_KEY"
+
+  # ----------------------------------------------------------------------
+  # Credentials for Google Gemini
+  #
+  # (required in order to test the 'example/rooms/gemini_flash' room).
+  # ----------------------------------------------------------------------
+  - "GEMINI_API_KEY"
 
   # ----------------------------------------------------------------------
   # MCP room token generation / validation secret

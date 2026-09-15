@@ -6,7 +6,6 @@ import functools
 import itertools
 import os
 import pathlib
-import re
 import typing
 
 import dotenv
@@ -22,6 +21,7 @@ from . import agui as config_agui
 from . import authsystem as config_authsystem
 from . import completions as config_completions
 from . import exceptions as config_exc
+from . import interpolation as config_interp
 from . import logfire as config_logfire
 from . import meta as config_meta
 from . import middleware as config_middleware
@@ -39,14 +39,16 @@ FILE_PREFIX = "file:"
 SYNC_MEMORY_ENGINE_URL = "sqlite://"
 ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
 
-ENVIRONMENT_PREFIX = "env:"
-ENVIRONMENT_PATTERN = rf"{ENVIRONMENT_PREFIX}(?P<env_name>\w+)"
-ENVIRONMENT_RE = re.compile(ENVIRONMENT_PATTERN)
+# Defined in 'interpolation'; re-exported here for existing importers.
+ENVIRONMENT_PREFIX = config_interp.ENVIRONMENT_PREFIX
+ENVIRONMENT_PATTERN = config_interp.ENVIRONMENT_PATTERN
+ENVIRONMENT_RE = config_interp.ENVIRONMENT_RE
 
-_no_repr_no_compare_none = _utils._no_repr_no_compare_none
-_no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
-_default_list_field = _utils._default_list_field
+_both_embedded_field = config_interp.both_embedded_field
 _default_dict_field = _utils._default_dict_field
+_default_list_field = _utils._default_list_field
+_no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
+_no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
 
 class MissingEnvVar(ValueError):
@@ -786,49 +788,69 @@ class InstallationConfig:
     #
     # DB-URI secret / environment handling
     #
-    def _interpolate_dburi(self, dburi: str | None, default: str) -> str:
-        if dburi is None:
+    def _interpolate_dburi(self, field_name: str, default: str) -> str:
+        if getattr(self, field_name) is None:
             return default
-
-        return self.interpolate(dburi)
+        else:
+            return config_interp.resolve_field(
+                self,
+                field_name,
+                installation_config=self,
+            )
 
     #
     # Thread persistence DB-URI
     #
-    _thread_persistence_dburi_sync: str = None
-    _thread_persistence_dburi_async: str = None
+    _thread_persistence_dburi_sync: str = _both_embedded_field(
+        default=None,
+        public_name="thread_persistence_dburi.sync",
+        accessor="thread_persistence_dburi_sync",
+    )
+    _thread_persistence_dburi_async: str = _both_embedded_field(
+        default=None,
+        public_name="thread_persistence_dburi.async",
+        accessor="thread_persistence_dburi_async",
+    )
 
     @property
     def thread_persistence_dburi_sync(self):
         return self._interpolate_dburi(
-            self._thread_persistence_dburi_sync,
+            "_thread_persistence_dburi_sync",
             SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
     def thread_persistence_dburi_async(self):
         return self._interpolate_dburi(
-            self._thread_persistence_dburi_async,
+            "_thread_persistence_dburi_async",
             ASYNC_MEMORY_ENGINE_URL,
         )
 
     #
     # Room authorization DB-URI
     #
-    _authorization_dburi_sync: str = None
-    _authorization_dburi_async: str = None
+    _authorization_dburi_sync: str = _both_embedded_field(
+        default=None,
+        public_name="authorization_dburi.sync",
+        accessor="authorization_dburi_sync",
+    )
+    _authorization_dburi_async: str = _both_embedded_field(
+        default=None,
+        public_name="authorization_dburi.async",
+        accessor="authorization_dburi_async",
+    )
 
     @property
     def authorization_dburi_sync(self):
         return self._interpolate_dburi(
-            self._authorization_dburi_sync,
+            "_authorization_dburi_sync",
             SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
     def authorization_dburi_async(self):
         return self._interpolate_dburi(
-            self._authorization_dburi_async,
+            "_authorization_dburi_async",
             ASYNC_MEMORY_ENGINE_URL,
         )
 

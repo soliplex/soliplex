@@ -51,6 +51,20 @@ repos:
         language: system
         pass_filenames: false
         files: ^scripts/lint_textio\.py$
+      - id: lint-interpolation
+        name: lint ad-hoc interpolation
+        entry: uv run python scripts/lint_interpolation.py --verbose
+        language: system
+        types: [python]
+        # 'src/soliplex/config/' only: the declarations, and the one
+        # resolver which reads them, both live there.
+        files: ^src/soliplex/config/
+      - id: lint-interpolation-self-test
+        name: lint ad-hoc interpolation (self-test)
+        entry: uv run python scripts/lint_interpolation.py --self-test
+        language: system
+        pass_filenames: false
+        files: ^scripts/lint_interpolation\.py$
 
   - repo: https://github.com/jackdewinter/pymarkdown
     rev: v0.9.36

@@ -1164,7 +1164,15 @@ def test_stdio_mctc_from_yaml(
         assert stdio_mctc == expected
 
 
-@pytest.mark.parametrize("w_env", [{}, {"foo": "bar"}])
+@pytest.mark.parametrize(
+    "w_env",
+    [
+        {},
+        {"foo": "bar"},
+        # a marker must survive the dump unresolved
+        {"FOO_KEY": "secret:FOO_KEY"},
+    ],
+)
 def test_stdio_mctc_as_yaml(w_env):
     stdio_mctc = config_tools.Stdio_MCP_ClientToolsetConfig(
         command="cat",

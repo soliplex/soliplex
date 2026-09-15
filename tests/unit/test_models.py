@@ -102,6 +102,10 @@ INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG = config_authsystem.OIDCAuthSystemConfig(
 )
 INSTALLATION_TP_DBURI_SYNC = "sqlite:////tmp/test-models.sqlite"
 INSTALLATION_TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/test-models.sqlite"
+INSTALLATION_TP_DBURI_SYNC_W_MARKERS = (
+    "sqlite+pysqlcipher://env:DB_USER_NAME@"
+    "secret:DB_PASSWORD//tmp/test-models.sqlite"
+)
 
 LOGGING_CONFIG_FILE = "./logging.yaml"
 LOGGING_HEADERS_MAP = {"request_id": "X-Request-ID"}
@@ -1187,6 +1191,25 @@ def test_installation_from_config_w_tp_dburi(bare_installation_config):
     )
     assert installation_model.thread_persistence_dburi_async == (
         INSTALLATION_TP_DBURI_ASYNC
+    )
+
+
+def test_installation_from_config_w_tp_dburi_keeps_markers_unresolved(
+    bare_installation_config,
+):
+    # 'from_config' reads the raw field, never the interpolating property,
+    # so a resolved secret cannot reach the API model.
+    installation_config = bare_installation_config
+    installation_config._thread_persistence_dburi_sync = (
+        INSTALLATION_TP_DBURI_SYNC_W_MARKERS
+    )
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.thread_persistence_dburi_sync == (
+        INSTALLATION_TP_DBURI_SYNC_W_MARKERS
     )
 
 

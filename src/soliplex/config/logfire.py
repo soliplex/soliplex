@@ -8,11 +8,14 @@ import logfire
 
 from . import _utils
 from . import exceptions as config_exc
+from . import interpolation as config_interp
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from . import installation as config_installation
 
+_env_whole_or_literal_field = config_interp.env_whole_or_literal_field
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
+_secret_whole_field = config_interp.secret_whole_field
 
 
 # ============================================================================
@@ -103,17 +106,29 @@ class LogfireInstrumentFastAPI:
 @dataclasses.dataclass(kw_only=True)
 class LogfireConfig:
     send_to_logfire: bool | None = None
-    token: str  # "secret:LOGFIRE_TOKEN" or similar
-    service_name: str = "env:LOGFIRE_SERVICE_NAME"
-    service_version: str = "env:LOGFIRE_SERVICE_VERSION"
-    environment: str = "env:LOGFIRE_ENVIRONMENT"
-    config_dir: pathlib.Path | str = "env:LOGFIRE_CONFIG_DIR"
-    data_dir: pathlib.Path | str = "env:LOGFIRE_DATA_DIR"
-    min_level: int | logfire.LevelName = "env:LOGFIRE_MIN_LEVEL"
+    token: str = _secret_whole_field()
+    service_name: str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_SERVICE_NAME",
+    )
+    service_version: str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_SERVICE_VERSION",
+    )
+    environment: str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_ENVIRONMENT",
+    )
+    config_dir: pathlib.Path | str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_CONFIG_DIR",
+    )
+    data_dir: pathlib.Path | str = _env_whole_or_literal_field(
+        default="env:LOGFIRE_DATA_DIR",
+    )
+    min_level: int | logfire.LevelName = _env_whole_or_literal_field(
+        default="env:LOGFIRE_MIN_LEVEL",
+    )
     inspect_arguments: bool = None
     add_baggage_to_attributes: bool = True
     distributed_tracing: bool = None
-    base_url: str = None
+    base_url: str = _env_whole_or_literal_field(default=None)
     scrubbing_patterns: list[str] = None
 
     instrument_pydantic_ai: LogfireInstrumentPydanticAI = None
@@ -127,26 +142,18 @@ class LogfireConfig:
 
     @property
     def logfire_config_kwargs(self) -> dict[str, typing.Any]:
-        """Return a mapping to be passed as kwargs to 'logfire.config()'
-
-        Resolve values prefixed with 'env:' using the installation
-        configuration environment.
-        """
-
-        def maybe_getenv(key):
-            if key.startswith("env:"):
-                return self._installation_config.get_environment(key[4:])
-            else:
-                return key
+        """Return a mapping to be passed as kwargs to 'logfire.config()'"""
 
         kwargs = {
-            "token": self._installation_config.get_secret(self.token),
-            "service_name": maybe_getenv(self.service_name),
-            "service_version": maybe_getenv(self.service_version),
-            "environment": maybe_getenv(self.environment),
-            "config_dir": maybe_getenv(self.config_dir),
-            "data_dir": maybe_getenv(self.data_dir),
-            "min_level": maybe_getenv(self.min_level),
+            "token": config_interp.resolve_field(self, "token"),
+            "service_name": config_interp.resolve_field(self, "service_name"),
+            "service_version": config_interp.resolve_field(
+                self, "service_version"
+            ),
+            "environment": config_interp.resolve_field(self, "environment"),
+            "config_dir": config_interp.resolve_field(self, "config_dir"),
+            "data_dir": config_interp.resolve_field(self, "data_dir"),
+            "min_level": config_interp.resolve_field(self, "min_level"),
             "add_baggage_to_attributes": self.add_baggage_to_attributes,
         }
         if self.send_to_logfire is not None:
@@ -160,7 +167,7 @@ class LogfireConfig:
 
         if self.base_url is not None:
             kwargs["advanced"] = {
-                "base_url": maybe_getenv(self.base_url),
+                "base_url": config_interp.resolve_field(self, "base_url"),
             }
 
         if self.scrubbing_patterns is not None:
