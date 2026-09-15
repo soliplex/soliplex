@@ -180,6 +180,10 @@ class DefaultAgent(pydantic.BaseModel):
     provider_type: config_agents.LLMProviderType  # enum, not dataclass
     provider_base_url: str | None
     provider_key: str
+    # The model's context window in tokens, or null when nothing knows
+    # it. Fixed for the life of the process, so a client reads it once
+    # with the room rather than asking per thread.
+    context_window: int | None = None
     agui_feature_names: list[str] = pydantic.Field(default_factory=list)
 
     @classmethod
@@ -193,6 +197,9 @@ class DefaultAgent(pydantic.BaseModel):
             provider_type=agent_config.provider_type,
             provider_base_url=llm_provider_kw.get("base_url"),
             provider_key=agent_config.provider_key or "dummy",
+            context_window=config_agents.get_context_window_from_config(
+                agent_config=agent_config,
+            ),
         )
 
 
@@ -772,29 +779,6 @@ class AGUI_RunUsage(pydantic.BaseModel):
             final_input_tokens=ru_tuple.final_input_tokens,
             resolved_model_name=ru_tuple.resolved_model_name,
         )
-
-
-class AGUI_ThreadContext(pydantic.BaseModel):
-    """How full a thread's context window is, as far as anything knows.
-
-    Every field is optional, and a null is an answer rather than an
-    error. 'max_model_len' is null when the provider does not report a
-    window -- the OpenAI API and Ollama's compatibility surface do not --
-    and a client with no denominator must show no percentage instead of
-    guessing one.
-
-    'measured_tokens' is the input size of the newest measured run's
-    *final* model request, so it already counts everything a client
-    cannot see: the system prompt, capability instructions, tool and MCP
-    schemas, the chat template, images, and any evidence compaction the
-    backend applied. It is null until a run in this thread has reached
-    the model.
-    """
-
-    max_model_len: int | None = None
-    model_name: str | None = None
-    measured_tokens: int | None = None
-    measured_at_run_id: str | None = None
 
 
 class AGUI_Run(pydantic.BaseModel):

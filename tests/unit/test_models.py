@@ -626,6 +626,31 @@ def test_defaultagent_from_config(
     assert agent_model.provider_base_url == exp_base
 
 
+@mock.patch("soliplex.config.agents.get_context_window_from_config")
+def test_defaultagent_from_config_carries_context_window(
+    gcwfc,
+    installation_config,
+):
+    """The window rides with the room, so a client reads it once.
+
+    It is fixed for the life of the process, which is why it is here
+    rather than on a per-thread reading.
+    """
+    gcwfc.return_value = 32768
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        system_prompt=AGENT_PROMPT,
+        _installation_config=installation_config,
+        provider_type=config_agents.LLMProviderType.OLLAMA,
+        provider_base_url=AGENT_BASE_URL,
+    )
+
+    agent_model = models.DefaultAgent.from_config(agent_config)
+
+    assert agent_model.context_window == 32768
+    gcwfc.assert_called_once_with(agent_config=agent_config)
+
+
 def test_aguifeature_from_config(the_agui_feature):
     feature_model = models.AGUI_Feature.from_config(the_agui_feature)
 

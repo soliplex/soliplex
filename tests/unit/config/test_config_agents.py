@@ -1544,6 +1544,76 @@ def test_extract_agent_configs(
         assert found == expected
 
 
+@pytest.mark.parametrize(
+    "agent_kw, expected",
+    [
+        # Declared: the answer, without building a model.
+        pytest.param(
+            dict(
+                model_name="gpt-oss:latest",
+                provider_type="ollama",
+                provider_base_url="http://ollama:11434",
+                context_window=32768,
+            ),
+            32768,
+            id="declared",
+        ),
+        # A hosted model pydantic-ai knows resolves from its profile.
+        pytest.param(
+            dict(
+                model_name="gpt-4o",
+                provider_type="openai",
+                provider_base_url="https://api.openai.com",
+            ),
+            128000,
+            id="resolved",
+        ),
+        # A local model it cannot look up has none.
+        pytest.param(
+            dict(
+                model_name="gpt-oss:latest",
+                provider_type="ollama",
+                provider_base_url="http://ollama:11434",
+            ),
+            None,
+            id="unresolved",
+        ),
+        # An agent template with no model cannot be built, and is not.
+        pytest.param(
+            dict(provider_type="ollama", provider_base_url="http://x:11434"),
+            None,
+            id="no-model",
+        ),
+    ],
+)
+def test_get_context_window_from_config(agent_kw, expected):
+    agent_config = config_agents.AgentConfig(id=AGENT_ID, **agent_kw)
+
+    assert (
+        config_agents.get_context_window_from_config(agent_config=agent_config)
+        == expected
+    )
+
+
+def test_get_context_window_from_config_unbuildable(monkeypatch):
+    """A provider whose key is not set is none, not an error.
+
+    The room is still listable; the missing key fails loudly the moment
+    a run starts, which is the right moment.
+    """
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="gpt-4o",
+        provider_type="openai",
+    )
+
+    assert (
+        config_agents.get_context_window_from_config(agent_config=agent_config)
+        is None
+    )
+
+
 @pytest.mark.parametrize("w_context_window", [None, 32768])
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
 @pytest.mark.parametrize(

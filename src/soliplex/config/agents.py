@@ -9,6 +9,7 @@ import typing
 from collections import abc
 
 from pydantic_ai import capabilities as ai_capabilities
+from pydantic_ai import exceptions as ai_exceptions
 from pydantic_ai import models as ai_models
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
@@ -505,6 +506,35 @@ def _profile_kw(agent_config: AgentConfig, *, openai_compat: bool) -> dict:
         profile["context_window"] = agent_config.context_window
 
     return {"profile": profile} if profile else {}
+
+
+def get_context_window_from_config(
+    *,
+    agent_config: AgentConfig,
+) -> int | None:
+    """Return the model's context window, or None when nothing knows it.
+
+    A declared window is the answer without building anything. Otherwise
+    it is what the model's profile resolves -- pydantic-ai fills it for
+    hosted models it recognises, and leaves it unset for a local one.
+
+    None also covers a configuration the model cannot be built from: an
+    agent template with no model name, or a provider whose key is not
+    set. Both fail loudly the moment a run starts; listing the room is
+    not that moment.
+    """
+    if agent_config.context_window is not None:
+        return agent_config.context_window
+
+    if agent_config.llm_model_name is None:
+        return None
+
+    try:
+        model = get_model_from_config(agent_config=agent_config)
+    except ai_exceptions.UserError:
+        return None
+
+    return model.context_window
 
 
 def get_model_from_config(
