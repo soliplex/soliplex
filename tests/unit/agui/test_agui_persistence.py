@@ -462,8 +462,13 @@ async def test_threadstorage_thread_run_cru(the_async_session, unit_of_work):
 
     before_id = await before.awaitable_attrs.run_id
 
-    usage = await before.awaitable_attrs.run_usage
-    assert usage is None
+    before_usage = await ts.get_run_usage(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+    )
+    assert before_usage is None
 
     await ts.save_run_usage(
         user_name=USER_NAME,
@@ -476,14 +481,12 @@ async def test_threadstorage_thread_run_cru(the_async_session, unit_of_work):
         tool_calls=4,
     )
 
-    after = await ts.get_run(
+    after_usage = await ts.get_run_usage(
         user_name=USER_NAME,
         room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=before_id,
     )
-
-    after_usage = await after.awaitable_attrs.run_usage
 
     assert after_usage.input_tokens == 1
     assert after_usage.output_tokens == 2

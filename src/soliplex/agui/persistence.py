@@ -576,6 +576,26 @@ class ThreadStorage(agui.ThreadStorage):
                 )
             )
 
+    async def get_run_usage(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> agui_schema.RunUsage | None:
+        """Get the run usage, if stored"""
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            return await run.awaitable_attrs.run_usage
+
     async def save_run_feedback(
         self,
         *,

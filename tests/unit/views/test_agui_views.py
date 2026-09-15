@@ -2392,27 +2392,52 @@ async def test_post_agui_resolve_recent_feedback(
     )
 
 
-@pytest.mark.parametrize(
-    "tsgr_side_effect, expectation",
-    [
-        (None, no_error(None)),
-        (UNKNOWN_THREAD, raises_httpexc(code=404, match="Unknown thread")),
-        (THREAD_ROOM_MISMATCH, raises_httpexc(code=400, match="Thread room")),
-        (UNKNOWN_RUN, raises_httpexc(code=404, match="Unknown run")),
-    ],
+# A measured run, as the stored row holds it and as the endpoint
+# reports it. Spelling the model out by field rather than round-
+# tripping 'from_tuple' pins which tuple slot each name comes from.
+MEASURED_USAGE_STATS = (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")
+MEASURED_USAGE = models.AGUI_RunUsage(
+    input_tokens=1,
+    output_tokens=2,
+    requests=3,
+    tool_calls=4,
+    final_input_tokens=5,
+    resolved_model_name="gpt-4o-2024-11-20",
 )
+
+
 @pytest.mark.parametrize(
-    "w_usage",
-    [None, (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")],
+    "w_usage, tsgru_side_effect, expectation",
+    [
+        (MEASURED_USAGE_STATS, None, no_error(MEASURED_USAGE)),
+        (None, None, no_error(None)),
+        (
+            None,
+            UNKNOWN_THREAD,
+            raises_httpexc(code=404, match="Unknown thread"),
+        ),
+        (
+            None,
+            THREAD_ROOM_MISMATCH,
+            raises_httpexc(code=400, match="Thread room"),
+        ),
+        (None, UNKNOWN_RUN, raises_httpexc(code=404, match="Unknown run")),
+    ],
+    ids=[
+        "measured",
+        "unmeasured",
+        "unknown-thread",
+        "thread-room-mismatch",
+        "unknown-run",
+    ],
 )
 @mock.patch("soliplex.views.agui._check_user_in_room")
 @pytest.mark.anyio
 async def test_get_room_agui_thread_id_run_id_usage(
     cuir,
     the_threads,
-    test_run,
     w_usage,
-    tsgr_side_effect,
+    tsgru_side_effect,
     expectation,
 ):
     """The usage alone, for a client that just drove the run.
@@ -2426,14 +2451,10 @@ async def test_get_room_agui_thread_id_run_id_usage(
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
-    test_run.awaitable_attrs.run_usage = _awaitable(
-        "run_usage", _run_usage(w_usage)
-    )
-
-    if tsgr_side_effect is not None:
-        the_threads.get_run.side_effect = tsgr_side_effect
+    if tsgru_side_effect is not None:
+        the_threads.get_run_usage.side_effect = tsgru_side_effect
     else:
-        the_threads.get_run.return_value = test_run
+        the_threads.get_run_usage.return_value = _run_usage(w_usage)
 
     with expectation as expected:
         found = await agui_views.get_room_agui_thread_id_run_id_usage(
@@ -2447,18 +2468,10 @@ async def test_get_room_agui_thread_id_run_id_usage(
             the_logger=the_logger,
         )
 
-    if expected is None:
-        if w_usage is None:
-            assert found is None
-        else:
-            assert found == models.AGUI_RunUsage.from_tuple(
-                agui.RunUsageStats(*w_usage)
-            )
-            assert found.final_input_tokens == 5
-    else:  # silence resource warnings
-        await test_run.awaitable_attrs.run_usage
+    if tsgru_side_effect is None:
+        assert found == expected
 
-    the_threads.get_run.assert_called_once_with(
+    the_threads.get_run_usage.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,

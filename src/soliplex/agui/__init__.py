@@ -511,6 +511,17 @@ class ThreadStorage(abc.ABC):
         """Save the run usage statistics"""
 
     @abc.abstractmethod
+    async def get_run_usage(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> RunUsage | None:
+        """Get the run usage, if stored"""
+
+    @abc.abstractmethod
     async def save_run_feedback(
         self,
         *,

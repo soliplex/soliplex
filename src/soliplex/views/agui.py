@@ -1032,7 +1032,7 @@ async def get_room_agui_thread_id_run_id_usage(
     )
 
     try:
-        run = await the_threads.get_run(
+        usage = await the_threads.get_run_usage(
             user_name=user_name,
             room_id=room_id,
             thread_id=thread_id,
@@ -1044,8 +1044,6 @@ async def get_room_agui_thread_id_run_id_usage(
             status_code=exc.status_code,
             detail=exc.args,
         ) from None
-
-    usage = await run.awaitable_attrs.run_usage
 
     return models.AGUI_RunUsage.from_tuple(usage.as_tuple()) if usage else None
 
