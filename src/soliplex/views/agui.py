@@ -252,12 +252,13 @@ async def get_room_agui_thread_id(
 
     for a_run in await thread.list_runs():
         await a_run.awaitable_attrs.thread
+        usage = await a_run.awaitable_attrs.run_usage
         a_thread_runs[a_run.run_id] = models.AGUI_Run.from_run(
             a_run=a_run,
             a_run_input=await _get_run_input(a_run),
             a_run_meta=await a_run.awaitable_attrs.run_metadata,
             a_run_events=None,
-            a_run_usage=None,
+            a_run_usage=usage.as_tuple() if usage else None,
         )
 
     return models.AGUI_Thread.from_thread(
@@ -995,6 +996,56 @@ async def post_room_agui_thread_id_run_id_meta(
         ) from None
 
     return fastapi.Response(status_code=205)
+
+
+@util.logfire_span("GET /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/usage")
+@router.get("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/usage")
+async def get_room_agui_thread_id_run_id_usage(
+    room_id: str,
+    thread_id: pydantic.UUID4,
+    run_id: pydantic.UUID4,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui.ThreadStorage = depend_the_threads,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.AGUI_RunUsage | None:
+    """Return a run's usage without the rest of the run.
+
+    The same record the run detail carries, for a client that has just
+    driven the run and wants its final input size without re-fetching
+    every event. Null when the run recorded no usage -- it never
+    reached the model -- which a client should fall back across rather
+    than treat as an error.
+    """
+    thread_id = str(thread_id)
+    run_id = str(run_id)
+    the_logger.debug(loggers.AGUI_GET_ROOM_THREAD_RUN_USAGE)
+
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
+        room_id=room_id,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=the_user_claims,
+        the_logger=the_logger,
+    )
+
+    try:
+        usage = await the_threads.get_run_usage(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+    except agui.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
+    return models.AGUI_RunUsage.from_tuple(usage.as_tuple()) if usage else None
 
 
 @util.logfire_span(

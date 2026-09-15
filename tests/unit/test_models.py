@@ -626,6 +626,31 @@ def test_defaultagent_from_config(
     assert agent_model.provider_base_url == exp_base
 
 
+@mock.patch("soliplex.config.agents.get_context_window_from_config")
+def test_defaultagent_from_config_carries_context_window(
+    gcwfc,
+    installation_config,
+):
+    """The window rides with the room, so a client reads it once.
+
+    It is fixed for the life of the process, which is why it is here
+    rather than on a per-thread reading.
+    """
+    gcwfc.return_value = 32768
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        system_prompt=AGENT_PROMPT,
+        _installation_config=installation_config,
+        provider_type=config_agents.LLMProviderType.OLLAMA,
+        provider_base_url=AGENT_BASE_URL,
+    )
+
+    agent_model = models.DefaultAgent.from_config(agent_config)
+
+    assert agent_model.context_window == 32768
+    gcwfc.assert_called_once_with(agent_config=agent_config)
+
+
 def test_aguifeature_from_config(the_agui_feature):
     feature_model = models.AGUI_Feature.from_config(the_agui_feature)
 
@@ -1521,3 +1546,36 @@ def test_roomstats_rejects_naive_last_activity():
 
     with pytest.raises(pydantic.ValidationError):
         models.RoomStats(room_id="test-room", last_activity=naive)
+
+
+def test_agui_run_usage_from_tuple_carries_final_request():
+    """'input_tokens' is cumulative; 'final_input_tokens' is the window."""
+    stats = agui.RunUsageStats(
+        input_tokens=5000,
+        output_tokens=200,
+        requests=4,
+        tool_calls=3,
+        final_input_tokens=1800,
+        resolved_model_name="gpt-4o-2024-11-20",
+    )
+
+    found = models.AGUI_RunUsage.from_tuple(stats)
+
+    assert found.input_tokens == 5000
+    assert found.final_input_tokens == 1800
+    assert found.resolved_model_name == "gpt-4o-2024-11-20"
+
+
+def test_agui_run_usage_from_tuple_wo_final_request():
+    """Rows recorded before the final-request columns existed."""
+    stats = agui.RunUsageStats(
+        input_tokens=1,
+        output_tokens=2,
+        requests=3,
+        tool_calls=4,
+    )
+
+    found = models.AGUI_RunUsage.from_tuple(stats)
+
+    assert found.final_input_tokens is None
+    assert found.resolved_model_name is None

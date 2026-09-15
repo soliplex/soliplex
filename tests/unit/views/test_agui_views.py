@@ -492,6 +492,28 @@ async def test_get_room_agui_only(
     the_logger.debug.assert_called_once_with(loggers.AGUI_GET_ROOM)
 
 
+def _run_usage(values):
+    """A stored usage row yielding 'values', or None for an unmeasured run.
+
+    'AGUI_Run.from_run' feeds 'as_tuple()' straight into the pydantic
+    model, so it has to yield real values, not child mocks.
+    """
+    if values is None:
+        return None
+
+    usage = mock.create_autospec(
+        agui.RunUsage,
+        input_tokens=values[0],
+        output_tokens=values[1],
+        requests=values[2],
+        tool_calls=values[3],
+        final_input_tokens=values[4],
+        resolved_model_name=values[5],
+    )
+    usage.as_tuple.return_value = agui.RunUsageStats(*values)
+    return usage
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "tsgt_side_effect, expectation",
@@ -500,6 +522,10 @@ async def test_get_room_agui_only(
         (UNKNOWN_THREAD, raises_httpexc(code=404, match="Unknown thread")),
         (THREAD_ROOM_MISMATCH, raises_httpexc(code=400, match="Thread room")),
     ],
+)
+@pytest.mark.parametrize(
+    "w_usage",
+    [None, (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")],
 )
 @pytest.mark.parametrize("w_parent", [False, True])
 @pytest.mark.parametrize("w_run_meta", [False, True])
@@ -515,6 +541,7 @@ async def test_get_room_agui_thread_id_only(
     w_thread_meta,
     w_run_meta,
     w_parent,
+    w_usage,
     tsgt_side_effect,
     expectation,
 ):
@@ -565,6 +592,12 @@ async def test_get_room_agui_thread_id_only(
     else:
         test_run.parent_run_id = None
 
+    # Each listed run carries its usage, so a client opening a thread
+    # can show the latest measured context without a second request.
+    test_run.awaitable_attrs.run_usage = _awaitable(
+        "run_usage", _run_usage(w_usage)
+    )
+
     the_installation = mock.create_autospec(installation.Installation)
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -594,8 +627,16 @@ async def test_get_room_agui_thread_id_only(
             a_run_input=run_input,
             a_run_meta=test_run.run_metadata,
             a_run_events=None,
+            a_run_usage=(
+                agui.RunUsageStats(*w_usage) if w_usage is not None else None
+            ),
         )
         assert found.runs == {TEST_RUN_ID_UUID: exp_model_run}
+
+        if w_usage is not None:
+            assert found.runs[TEST_RUN_ID_UUID].usage.final_input_tokens == 5
+        else:
+            assert found.runs[TEST_RUN_ID_UUID].usage is None
 
         if w_thread_meta:
             assert found.metadata.name == TEST_THREAD_NAME
@@ -607,6 +648,7 @@ async def test_get_room_agui_thread_id_only(
         await test_run.awaitable_attrs.thread
         await test_run.awaitable_attrs.run_agent_input
         await test_run.awaitable_attrs.run_metadata
+        await test_run.awaitable_attrs.run_usage
 
     the_threads.get_thread.assert_called_once_with(
         user_name=USER_NAME,
@@ -634,7 +676,10 @@ async def test_get_room_agui_thread_id_only(
         (UNKNOWN_RUN, raises_httpexc(code=404, match="Unknown run")),
     ],
 )
-@pytest.mark.parametrize("w_usage", [None, (1, 2, 3, 4)])
+@pytest.mark.parametrize(
+    "w_usage",
+    [None, (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")],
+)
 @pytest.mark.parametrize("w_events", [[], AGUI_EVENTS])
 @pytest.mark.parametrize("w_parent", [False, True])
 @pytest.mark.parametrize("w_run_meta", [False, True])
@@ -683,16 +728,9 @@ async def test_get_room_agui_thread_id_run_id(
     else:
         test_run.parent_run_id = None
 
-    if w_usage is not None:
-        w_usage = mock.create_autospec(
-            agui.RunUsage,
-            input_tokens=w_usage[0],
-            output_tokens=w_usage[1],
-            requests=w_usage[2],
-            tool_calls=w_usage[3],
-        )
-
-    test_run.awaitable_attrs.run_usage = _awaitable("run_usage", w_usage)
+    test_run.awaitable_attrs.run_usage = _awaitable(
+        "run_usage", _run_usage(w_usage)
+    )
 
     test_run.awaitable_attrs.thread = _awaitable(
         "thread",
@@ -2351,4 +2389,101 @@ async def test_post_agui_resolve_recent_feedback(
     )
     the_logger.debug.assert_called_once_with(
         loggers.AGUI_POST_RESOLVE_RECENT_FEEDBACK,
+    )
+
+
+# A measured run, as the stored row holds it and as the endpoint
+# reports it. Spelling the model out by field rather than round-
+# tripping 'from_tuple' pins which tuple slot each name comes from.
+MEASURED_USAGE_STATS = (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")
+MEASURED_USAGE = models.AGUI_RunUsage(
+    input_tokens=1,
+    output_tokens=2,
+    requests=3,
+    tool_calls=4,
+    final_input_tokens=5,
+    resolved_model_name="gpt-4o-2024-11-20",
+)
+
+
+@pytest.mark.parametrize(
+    "w_usage, tsgru_side_effect, expectation",
+    [
+        (MEASURED_USAGE_STATS, None, no_error(MEASURED_USAGE)),
+        (None, None, no_error(None)),
+        (
+            None,
+            UNKNOWN_THREAD,
+            raises_httpexc(code=404, match="Unknown thread"),
+        ),
+        (
+            None,
+            THREAD_ROOM_MISMATCH,
+            raises_httpexc(code=400, match="Thread room"),
+        ),
+        (None, UNKNOWN_RUN, raises_httpexc(code=404, match="Unknown run")),
+    ],
+    ids=[
+        "measured",
+        "unmeasured",
+        "unknown-thread",
+        "thread-room-mismatch",
+        "unknown-run",
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+@pytest.mark.anyio
+async def test_get_room_agui_thread_id_run_id_usage(
+    cuir,
+    the_threads,
+    w_usage,
+    tsgru_side_effect,
+    expectation,
+):
+    """The usage alone, for a client that just drove the run.
+
+    Null is an answer: a run that never reached the model recorded no
+    usage, and the client falls back to the previous run's rather than
+    treating it as a failure.
+    """
+    cuir.return_value = mock.create_autospec(config_rooms.RoomConfig)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    if tsgru_side_effect is not None:
+        the_threads.get_run_usage.side_effect = tsgru_side_effect
+    else:
+        the_threads.get_run_usage.return_value = _run_usage(w_usage)
+
+    with expectation as expected:
+        found = await agui_views.get_room_agui_thread_id_run_id_usage(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            run_id=TEST_RUN_ID_UUID,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if tsgru_side_effect is None:
+        assert found == expected
+
+    the_threads.get_run_usage.assert_called_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+    )
+    cuir.assert_called_once_with(
+        room_id=TEST_ROOM_ID,
+        the_installation=the_installation,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_GET_ROOM_THREAD_RUN_USAGE,
     )
