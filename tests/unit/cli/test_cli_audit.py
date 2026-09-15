@@ -26,6 +26,8 @@ TESTING_QUIZ_ERROR = "testing quiz error"
 TESTING_SKILL_ERROR = "testing skill error"
 TESTING_AUTHZ_DB_ERROR = "testing authz db error"
 
+A_CONFIG_PATH = pathlib.Path("/tmp/installation.yaml")
+
 CHAT_ROLE = installation.ProviderRole.CHAT
 EMBEDDING_ROLE = installation.ProviderRole.EMBEDDING
 RERANKING_ROLE = installation.ProviderRole.RERANKING
@@ -421,7 +423,7 @@ def test__interpolation_finding___str__(w_overrides, exp_str):
     "w_config_path, exp_config_path",
     [
         (None, None),
-        (pathlib.Path("/tmp/installation.yaml"), "/tmp/installation.yaml"),
+        (A_CONFIG_PATH, str(A_CONFIG_PATH)),
     ],
 )
 def test__interpolation_finding_as_json(w_config_path, exp_config_path):
