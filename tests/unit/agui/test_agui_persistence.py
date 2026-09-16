@@ -1518,7 +1518,11 @@ async def test_capture_usage_after_stream(
     )
     if w_usage:
         final = mock.Mock(spec_set=["usage", "model_name"])
-        final.usage = mock.Mock(spec_set=["input_tokens"], input_tokens=99)
+        final.usage = mock.Mock(
+            spec_set=["input_tokens", "output_tokens"],
+            input_tokens=99,
+            output_tokens=7,
+        )
         final.model_name = "gpt-4o-2024-11-20"
         result = mock.Mock(spec_set=["usage", "all_messages"])
         result.usage = usage
@@ -1551,6 +1555,7 @@ async def test_capture_usage_after_stream(
             tool_calls=4,
             final_input_tokens=99,
             resolved_model_name="gpt-4o-2024-11-20",
+            final_output_tokens=7,
         )
         t_storage.assert_called_once_with(w_session)
         fake_async_session.cls.assert_called_once_with(bind=sqla_engine)
@@ -1628,10 +1633,10 @@ async def test_finish_run_helper(t_storage, fake_async_session):
 @pytest.mark.parametrize(
     "messages, expected",
     [
-        pytest.param([], (None, None), id="no-messages"),
+        pytest.param([], (None, None, None), id="no-messages"),
         pytest.param(
             [mock.Mock(spec_set=["usage"], usage=None)],
-            (None, None),
+            (None, None, None),
             id="request-without-usage",
         ),
     ],
@@ -1648,14 +1653,23 @@ def test_final_request_usage_takes_the_last_response():
     """'input_tokens' on the run is cumulative; the last request is not.
 
     A tool loop makes several requests, and only the final one describes
-    the context the model actually received at the end.
+    the context the model actually received at the end -- and its output
+    is the reply the next request will carry on top of that.
     """
     first = mock.Mock(spec_set=["usage", "model_name"])
-    first.usage = mock.Mock(spec_set=["input_tokens"], input_tokens=10)
+    first.usage = mock.Mock(
+        spec_set=["input_tokens", "output_tokens"],
+        input_tokens=10,
+        output_tokens=3,
+    )
     first.model_name = "gpt-4o-mini"
 
     last = mock.Mock(spec_set=["usage", "model_name"])
-    last.usage = mock.Mock(spec_set=["input_tokens"], input_tokens=800)
+    last.usage = mock.Mock(
+        spec_set=["input_tokens", "output_tokens"],
+        input_tokens=800,
+        output_tokens=120,
+    )
     last.model_name = "gpt-4o-2024-11-20"
 
     result = mock.Mock(spec_set=["all_messages"])
@@ -1663,4 +1677,4 @@ def test_final_request_usage_takes_the_last_response():
 
     found = agui_persistence._final_request_usage(result)
 
-    assert found == (800, "gpt-4o-2024-11-20")
+    assert found == (800, 120, "gpt-4o-2024-11-20")
