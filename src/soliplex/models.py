@@ -767,6 +767,14 @@ class AGUI_RunUsage(pydantic.BaseModel):
     final_input_tokens: int | None = None
     resolved_model_name: str | None = None
 
+    # The last request's reply, which the next request carries as input:
+    # 'final_input_tokens + final_output_tokens' is what the thread holds.
+    final_output_tokens: int | None = None
+
+    # Which of two measurements is newer, since the client may learn of
+    # runs out of order.
+    measured_at: datetime.datetime | None = None
+
     @classmethod
     def from_tuple(cls, ru_tuple: agui.RunUsageStats):
         return cls(
@@ -776,6 +784,8 @@ class AGUI_RunUsage(pydantic.BaseModel):
             tool_calls=ru_tuple.tool_calls,
             final_input_tokens=ru_tuple.final_input_tokens,
             resolved_model_name=ru_tuple.resolved_model_name,
+            final_output_tokens=ru_tuple.final_output_tokens,
+            measured_at=ru_tuple.measured_at,
         )
 
 
