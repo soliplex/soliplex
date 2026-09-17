@@ -33,6 +33,23 @@ image does not carry, so running the `alembic` CLI there reports `No
 its databases itself, on the first writable open, so there is normally
 nothing for an operator to run.
 
+## Rolling a version back
+
+Migrating happens on the way *up* only. A database stamped by a newer
+Soliplex than the one now running is refused, naming the revision it
+carries: this release does not have the revisions between its own head and
+that stamp, so it cannot move the database in either direction.
+
+Downgrade before rolling the code back, from the version that still has
+those revisions and with every writer stopped:
+
+```bash
+alx downgrade <the older release's head revision>
+```
+
+`soliplex-cli audit databases` reports the same condition, so it surfaces
+there rather than at the next restart.
+
 ## Cheat Sheet
 
 See the [Alembic docs](https://alembic.sqlalchemy.org/en/latest/) for details.

@@ -1140,11 +1140,11 @@ _UNSTAMPED = (
     f"{alembic_migrations.BOOTSTRAP_ISSUE}"
 )
 
-_AHEAD_OF_HEAD = (
+_DOWNGRADE_REQUIRED = (
     "stamped at a revision this release does not have, so its code was "
-    "rolled back without downgrading its databases first. Downgrade from "
-    "the newer version's checkout before rolling back; nothing here can "
-    "open it"
+    "rolled back without downgrading its databases first. The downgrade "
+    "has to come from the soliplex version which has that revision -- "
+    "nothing here can open this database, or move it"
 )
 
 _SEE_DATABASES = (
@@ -1174,13 +1174,20 @@ class DatabaseReport:
         return self.state is alembic_migrations.DatabaseState.STAMPED
 
     @property
-    def ahead_of_head(self) -> bool:
-        """True for a stamp this release's revision tree does not have."""
+    def downgrade_required(self) -> bool:
+        """True for a stamp this release's revision tree does not have.
+
+        Only the release which has that revision can downgrade it, so this
+        is a finding wherever it is seen.
+        """
         return self.stamped and not self.known
 
     @property
     def behind_head(self) -> bool:
-        """True for a stamped database not yet at the packaged head."""
+        """True for a stamped database not yet at the packaged head.
+
+        Not a finding: a sole writer migrates it on open.
+        """
         return self.stamped and self.known and self.revision != self.head
 
 
@@ -1268,8 +1275,8 @@ def _database_summary(report: DatabaseReport) -> str:
         return f"ERROR: {_UNSTAMPED}"
     if report.state is alembic_migrations.DatabaseState.EMPTY:
         return "not created (the next writable open creates it)"
-    if report.ahead_of_head:
-        return f"ERROR: {report.revision}: {_AHEAD_OF_HEAD}"
+    if report.downgrade_required:
+        return f"ERROR: {report.revision}: {_DOWNGRADE_REQUIRED}"
     if report.behind_head:
         return f"behind head ({report.revision} -> {report.head})"
     return f"OK ({report.revision})"
@@ -1287,9 +1294,11 @@ def _database_findings(reports) -> dict:
             findings[report.name] = {"unreachable": report.error}
         elif report.state is alembic_migrations.DatabaseState.UNSTAMPED:
             findings[report.name] = {"unstamped": _UNSTAMPED}
-        elif report.ahead_of_head:
+        elif report.downgrade_required:
             findings[report.name] = {
-                "ahead_of_head": f"{report.revision}: {_AHEAD_OF_HEAD}"
+                "downgrade_required": (
+                    f"{report.revision}: {_DOWNGRADE_REQUIRED}"
+                )
             }
     if findings:
         return {"databases": findings}

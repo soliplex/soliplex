@@ -2728,10 +2728,10 @@ def test_database_report_behind_head(state, revision, known, error, expected):
         (_DB_STATES.EMPTY, None, True, False),
     ],
 )
-def test_database_report_ahead_of_head(state, revision, known, expected):
+def test_database_report_downgrade_required(state, revision, known, expected):
     report = _report(state=state, revision=revision, known=known)
 
-    assert report.ahead_of_head is expected
+    assert report.downgrade_required is expected
 
 
 @pytest.mark.parametrize(
@@ -2768,13 +2768,16 @@ def test__database_summary(state, revision, error, expected):
         assert cli_audit.BOOTSTRAP_SCRIPT in found
 
 
-def test__database_summary_for_a_stamp_ahead_of_head():
+def test__database_summary_for_a_stamp_needing_a_downgrade():
     report = _report(state=_DB_STATES.STAMPED, revision="newer", known=False)
 
     found = cli_audit._database_summary(report)
 
     assert found.startswith("ERROR: newer: ")
-    assert "Downgrade" in found
+    assert "downgrade has to come from" in found
+    # Deliberately suggests no command: the revisions needed to move this
+    # database are not in this release, so none can be run here.
+    assert "alembic" not in found
 
 
 def test__database_findings_reports_an_unreachable_database():
@@ -2830,7 +2833,7 @@ def test__database_findings_stays_quiet(state, revision):
     assert found == {}
 
 
-def test__database_findings_reports_a_stamp_ahead_of_head():
+def test__database_findings_reports_a_stamp_needing_a_downgrade():
     reports = {
         cli_util.AGUI: _report(
             name=cli_util.AGUI,
@@ -2843,7 +2846,7 @@ def test__database_findings_reports_a_stamp_ahead_of_head():
 
     found = cli_audit._database_findings(reports)
 
-    assert found["databases"][cli_util.AGUI]["ahead_of_head"].startswith(
+    assert found["databases"][cli_util.AGUI]["downgrade_required"].startswith(
         "newer: "
     )
     assert cli_util.AUTHZ not in found["databases"]

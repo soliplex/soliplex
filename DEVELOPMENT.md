@@ -365,12 +365,18 @@ API:
 
 - `ensure_current_engine(engine, database, *, sole_writer)` -- one database,
   on an async engine the caller owns. It returns immediately when that
-  database is at head, migrates when it is not, and refuses in two cases:
-  another process may be writing (`serve --workers N` above one, or several
-  replicas), or the database holds tables with no `alembic_version` row,
-  which means soliplex 0.81 or earlier created it and it needs the one-off
-  bootstrap script from
-  [#1367](https://github.com/soliplex/soliplex/issues/1367).
+  database is at head, migrates when it is not, and refuses in three
+  cases: another process may be writing (`serve --workers N` above one, or
+  several replicas); the database holds tables with no `alembic_version`
+  row, which means soliplex 0.81 or earlier created it and it needs the
+  one-off bootstrap script from
+  [#1367](https://github.com/soliplex/soliplex/issues/1367); or it is
+  stamped at a revision this release does not have, which means the code
+  was rolled back without downgrading the databases first
+  (`DowngradeRequired`). That last one is checked ahead of the writer
+  check, because no number of stopped writers makes such a database
+  movable from here -- only the release holding that revision can
+  downgrade it.
 - `ensure_current_connection(connection, database, *, sole_writer)` -- the
   same decision, on a live connection. Migrating on the caller's own
   connection is what makes an in-memory database work: it lives inside one
