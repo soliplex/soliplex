@@ -14,6 +14,7 @@ from haiku.rag import client as hr_client
 from skills_ref import validator as skill_validator
 from typer import core as typer_core
 
+from soliplex import alembic_migrations
 from soliplex import authz
 from soliplex import installation
 from soliplex import models
@@ -652,6 +653,7 @@ def audit_all(
     errors |= _audit_environment_section(ctx, installation_path)
     errors |= _audit_oidc_section(ctx, installation_path)
     errors |= _audit_rooms_section(ctx, installation_path)
+    errors |= _audit_databases_section(ctx, installation_path)
     errors |= _audit_admin_users_section(ctx, installation_path)
     errors |= _audit_room_authz_section(ctx, installation_path)
     errors |= _audit_completions_section(ctx, installation_path)
@@ -1128,6 +1130,214 @@ def _invalid_completions(
     return errors
 
 
+# The one-off repair for a database built before soliplex stamped one.
+BOOTSTRAP_SCRIPT = "scripts/bootstrap_alembic_version.py"
+
+_UNSTAMPED = (
+    f"tables are present but '{alembic_migrations.VERSION_TABLE}' is empty, "
+    "so this database was created by soliplex 0.81 or earlier. Apply "
+    f"'{BOOTSTRAP_SCRIPT}' once, per "
+    f"{alembic_migrations.BOOTSTRAP_ISSUE}"
+)
+
+_AHEAD_OF_HEAD = (
+    "stamped at a revision this release does not have, so its code was "
+    "rolled back without downgrading its databases first. Downgrade from "
+    "the newer version's checkout before rolling back; nothing here can "
+    "open it"
+)
+
+_SEE_DATABASES = (
+    "SKIPPED: authorization database unreachable "
+    "(reported under 'Configured databases')"
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class DatabaseReport:
+    """What one database looks like to a reader, before anything writes.
+
+    ``error`` is set when the database could not be reached at all, in
+    which case ``state`` and ``revision`` say nothing.
+    """
+
+    name: str
+    dburi: str
+    head: str
+    state: alembic_migrations.DatabaseState | None = None
+    revision: str | None = None
+    known: bool = True
+    error: str | None = None
+
+    @property
+    def stamped(self) -> bool:
+        return self.state is alembic_migrations.DatabaseState.STAMPED
+
+    @property
+    def ahead_of_head(self) -> bool:
+        """True for a stamp this release's revision tree does not have."""
+        return self.stamped and not self.known
+
+    @property
+    def behind_head(self) -> bool:
+        """True for a stamped database not yet at the packaged head."""
+        return self.stamped and self.known and self.revision != self.head
+
+
+def _inspect_database(connection, db_type: str):
+    return (
+        alembic_migrations.database_state(
+            connection, alembic_migrations.METADATA[db_type]
+        ),
+        alembic_migrations.current_revision(connection),
+    )
+
+
+async def _probe_database(the_installation, db_type: str):
+    """Read one database's state without creating or migrating anything."""
+    engine = await cli_util.open_db(
+        the_installation,
+        db_type,
+        command="audit databases",
+        allow_ram=True,
+        must_exist=True,
+    )
+    try:
+        async with engine.connect() as connection:
+            return await connection.run_sync(_inspect_database, db_type)
+    finally:
+        await engine.dispose()
+
+
+def _database_reports(ctx, the_installation) -> dict:
+    """Probe both databases once per invocation, caching on ``ctx.obj``.
+
+    Every section that needs a database's state shares this, so an
+    unreachable DBURI costs one connection attempt per run rather than one
+    per section -- which matters when reaching it means waiting for a
+    connect timeout.
+    """
+    cached = ctx.obj.get("database_reports")
+    if cached is not None:
+        return cached
+
+    head = alembic_migrations.head_revision()
+    reports = {}
+    for db_type in alembic_migrations.DATABASE_NAMES:
+        dburi = cli_util.async_dburi(the_installation, db_type)
+        try:
+            state, revision = asyncio.run(
+                _probe_database(the_installation, db_type)
+            )
+        except cli_util.DatabaseNotCreated:
+            reports[db_type] = DatabaseReport(
+                name=db_type,
+                dburi=dburi,
+                head=head,
+                state=alembic_migrations.DatabaseState.EMPTY,
+            )
+        except Exception as exc:
+            reports[db_type] = DatabaseReport(
+                name=db_type,
+                dburi=dburi,
+                head=head,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+        else:
+            reports[db_type] = DatabaseReport(
+                name=db_type,
+                dburi=dburi,
+                head=head,
+                state=state,
+                revision=revision,
+                known=(
+                    revision is None
+                    or alembic_migrations.knows_revision(revision)
+                ),
+            )
+
+    ctx.obj["database_reports"] = reports
+    return reports
+
+
+def _database_summary(report: DatabaseReport) -> str:
+    """The one-line human summary for one database."""
+    if report.error is not None:
+        return f"ERROR: unreachable: {report.error}"
+    if report.state is alembic_migrations.DatabaseState.UNSTAMPED:
+        return f"ERROR: {_UNSTAMPED}"
+    if report.state is alembic_migrations.DatabaseState.EMPTY:
+        return "not created (the next writable open creates it)"
+    if report.ahead_of_head:
+        return f"ERROR: {report.revision}: {_AHEAD_OF_HEAD}"
+    if report.behind_head:
+        return f"behind head ({report.revision} -> {report.head})"
+    return f"OK ({report.revision})"
+
+
+def _database_findings(reports) -> dict:
+    """The findings among ``reports``: unreachable, or stamp-less.
+
+    A database merely behind head is not a finding: a sole writer migrates
+    it on open. See #1372 for the rollback case, where it cannot.
+    """
+    findings = {}
+    for report in reports.values():
+        if report.error is not None:
+            findings[report.name] = {"unreachable": report.error}
+        elif report.state is alembic_migrations.DatabaseState.UNSTAMPED:
+            findings[report.name] = {"unstamped": _UNSTAMPED}
+        elif report.ahead_of_head:
+            findings[report.name] = {
+                "ahead_of_head": f"{report.revision}: {_AHEAD_OF_HEAD}"
+            }
+    if findings:
+        return {"databases": findings}
+    return {}
+
+
+def _audit_databases_section(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+) -> dict:  # pragma NO COVER UI ONLY
+    """Print the databases section (rule header + one line per database)."""
+    quiet = ctx.obj["quiet"]
+    the_installation = _get_installation(ctx, installation_path)
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured databases")
+    tc_line()
+
+    reports = _database_reports(ctx, the_installation)
+    for report in reports.values():
+        tc_print(f"- {report.name}: {report.dburi}")
+        tc_print(f"  {_database_summary(report)}")
+    tc_line()
+
+    # Tells the authz sections that they need not repeat an unreachable
+    # database: this section has already reported it.
+    ctx.obj["databases_audited"] = True
+
+    return _database_findings(reports)
+
+
+@app.command("databases")
+def audit_databases(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):  # pragma NO COVER command
+    """Report the migration state of the 'agui' / 'authz' databases.
+
+    Neither database is created nor migrated: a database with no schema is
+    reported as such, while one holding tables with no 'alembic_version'
+    row is an audit error, because every writable open refuses it.
+    """
+    quiet = ctx.obj["quiet"]
+    errors = _audit_databases_section(ctx, installation_path)
+    _emit_errors(errors, quiet)
+
+
 async def _list_room_policies(the_installation):
     async with cli_util._room_authz_policy(
         the_installation, "audit room-authz", allow_ram=True, must_exist=True
@@ -1237,6 +1447,16 @@ def _audit_room_authz_section(
     tc_line()
     tc_rule("Configured rooms by authorization state")
     tc_line()
+
+    report = _database_reports(ctx, the_installation)[cli_util.AUTHZ]
+    if report.error is not None:
+        if ctx.obj.get("databases_audited"):
+            tc_print(_SEE_DATABASES)
+            tc_line()
+            return {}
+        tc_print(f"ERROR: authorization database unreachable: {report.error}")
+        tc_line()
+        return {"room_authz": {"unreachable": report.error}}
 
     room_policies, db_error = _room_policies(the_installation)
     if db_error is not None:
@@ -1353,6 +1573,16 @@ def _audit_admin_users_section(
     tc_line()
     tc_rule("Configured admin users")
     tc_line()
+
+    report = _database_reports(ctx, the_installation)[cli_util.AUTHZ]
+    if report.error is not None:
+        if ctx.obj.get("databases_audited"):
+            tc_print(_SEE_DATABASES)
+            tc_line()
+            return {}
+        tc_print(f"ERROR: authorization database unreachable: {report.error}")
+        tc_line()
+        return {"admin_users": {"unreachable": report.error}}
 
     json_paths, db_error = _admin_user_json_paths(the_installation)
     if db_error is not None:

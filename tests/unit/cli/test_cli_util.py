@@ -197,6 +197,21 @@ def _installation_at(tmp_path, *, ram=False):
     )
 
 
+@pytest.mark.parametrize(
+    "db_type, expected_attr",
+    [
+        (cli_util.AGUI, "thread_persistence_dburi_async"),
+        (cli_util.AUTHZ, "authorization_dburi_async"),
+    ],
+)
+def test_async_dburi(tmp_path, db_type, expected_attr):
+    the_installation = _installation_at(tmp_path)
+
+    found = cli_util.async_dburi(the_installation, db_type)
+
+    assert found == getattr(the_installation, expected_attr)
+
+
 async def _revision_of(engine):
     """The revision the database behind an async engine is stamped at."""
     async with engine.connect() as connection:

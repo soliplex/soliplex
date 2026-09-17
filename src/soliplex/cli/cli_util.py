@@ -93,6 +93,11 @@ _DBURI_FOR = {
 }
 
 
+def async_dburi(the_installation, db_type: str) -> str:
+    """The installation's *async* DBURI for one of the two databases."""
+    return getattr(the_installation, _DBURI_FOR[db_type])
+
+
 async def _require_existing_schema(engine, db_type: str) -> None:
     """Raise 'DatabaseNotCreated' unless the schema is already present."""
     async with engine.connect() as connection:
@@ -132,7 +137,7 @@ async def open_db(
     or migrated, and a database with no schema raises
     'DatabaseNotCreated'.
     """
-    dburi = getattr(the_installation, _DBURI_FOR[db_type])
+    dburi = async_dburi(the_installation, db_type)
 
     if not allow_ram:
         _check_ram_dburi(dburi, command)

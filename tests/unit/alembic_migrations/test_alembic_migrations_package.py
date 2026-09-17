@@ -248,6 +248,26 @@ async def test_ensure_current_engine_migrates_through_the_engine(tmp_path):
     assert revision == alembic_migrations.head_revision()
 
 
+@pytest.mark.parametrize(
+    "revision, expected",
+    [
+        # Every revision in the tree, plus one belonging to a release this
+        # tree predates (the rollback case).
+        ("d5009d4f9874", True),
+        ("63edaa5987f6", True),
+        ("ffffffffffff", False),
+    ],
+)
+def test_knows_revision(revision, expected):
+    assert alembic_migrations.knows_revision(revision) is expected
+
+
+def test_knows_revision_knows_head():
+    head = alembic_migrations.head_revision()
+
+    assert alembic_migrations.knows_revision(head) is True
+
+
 # --------------------------------------------------------------------------
 # resolve_dburis: the three sources, and the usage exit
 # --------------------------------------------------------------------------
