@@ -151,6 +151,12 @@ class RunUsage(abc.ABC):
     the next request's input. 'final_input_tokens' alone therefore reads
     one reply short of what the window holds; the sum of the two is the
     thread's occupancy. None when the run produced no model response.
+
+    The provider's own count, as reported: on a reasoning model it includes
+    the reasoning, which providers generally do not carry into the next
+    request, so the sum reads high there by the last reply's reasoning --
+    never low -- until the next run measures. Ollama itemises no reasoning
+    count, so nothing more exact is available for it.
     """
 
     measured_at: datetime.datetime | None
