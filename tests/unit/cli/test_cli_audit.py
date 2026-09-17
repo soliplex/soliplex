@@ -1013,6 +1013,7 @@ def test_cli_log_config_from_env(
 @mock.patch("soliplex.cli.audit._audit_completions_section")
 @mock.patch("soliplex.cli.audit._audit_room_authz_section")
 @mock.patch("soliplex.cli.audit._audit_admin_users_section")
+@mock.patch("soliplex.cli.audit._audit_databases_section")
 @mock.patch("soliplex.cli.audit._audit_rooms_section")
 @mock.patch("soliplex.cli.audit._audit_oidc_section")
 @mock.patch("soliplex.cli.audit._audit_environment_section")
@@ -1024,6 +1025,7 @@ def test_audit_all(
     _audit_environment_section,
     _audit_oidc_section,
     _audit_rooms_section,
+    _audit_databases_section,
     _audit_admin_users_section,
     _audit_room_authz_section,
     _audit_completions_section,
@@ -1046,6 +1048,7 @@ def test_audit_all(
         _audit_environment_section.return_value = {"environment": None}
         _audit_oidc_section.return_value = {"oidc": None}
         _audit_rooms_section.return_value = {"rooms": None}
+        _audit_databases_section.return_value = {"databases": None}
         _audit_admin_users_section.return_value = {"admin_users": None}
         _audit_room_authz_section.return_value = {"room_authz": None}
         _audit_completions_section.return_value = {"completions": None}
@@ -1061,6 +1064,7 @@ def test_audit_all(
             "environment": None,
             "oidc": None,
             "rooms": None,
+            "databases": None,
             "admin_users": None,
             "room_authz": None,
             "completions": None,
@@ -1076,6 +1080,7 @@ def test_audit_all(
         _audit_environment_section.return_value = {}
         _audit_oidc_section.return_value = {}
         _audit_rooms_section.return_value = {}
+        _audit_databases_section.return_value = {}
         _audit_admin_users_section.return_value = {}
         _audit_room_authz_section.return_value = {}
         _audit_completions_section.return_value = {}
@@ -2656,3 +2661,299 @@ def test__missing_ollama_models_skips_responsiveness_by_default(
 
 # _audit_ollama_section: ui only
 # audit_ollama: command
+
+
+# --------------------------------------------------------------------------
+# The 'databases' section: state of the 'agui' / 'authz' pair
+# --------------------------------------------------------------------------
+_HEAD = "head-revision"
+
+_DB_STATES = cli_audit.alembic_migrations.DatabaseState
+
+
+def _report(**kwargs):
+    """A 'DatabaseReport' with the boilerplate filled in."""
+    kwargs.setdefault("name", cli_util.AUTHZ)
+    kwargs.setdefault("dburi", "sqlite+aiosqlite://")
+    kwargs.setdefault("head", _HEAD)
+    return cli_audit.DatabaseReport(**kwargs)
+
+
+def _pair_installation(the_installation, tmp_path):
+    """Point an installation at its own throwaway file databases."""
+    paths = {}
+    for db_type, attr in (
+        (cli_util.AGUI, "thread_persistence_dburi"),
+        (cli_util.AUTHZ, "authorization_dburi"),
+    ):
+        paths[db_type] = db_path = tmp_path / f"{db_type}.sqlite"
+        setattr(
+            the_installation._config,
+            f"{attr}_async",
+            f"sqlite+aiosqlite:///{db_path}",
+        )
+        setattr(
+            the_installation._config, f"{attr}_sync", f"sqlite:///{db_path}"
+        )
+    return the_installation, paths
+
+
+@pytest.mark.parametrize(
+    "state, revision, known, error, expected",
+    [
+        (_DB_STATES.STAMPED, _HEAD, True, None, False),
+        (_DB_STATES.STAMPED, "older", True, None, True),
+        # A stamp this release does not have is ahead, not behind.
+        (_DB_STATES.STAMPED, "newer", False, None, False),
+        # Neither an empty nor an unstamped database is 'behind' anything.
+        (_DB_STATES.EMPTY, None, True, None, False),
+        (_DB_STATES.UNSTAMPED, None, True, None, False),
+        (None, None, True, "OperationalError: refused", False),
+    ],
+)
+def test_database_report_behind_head(state, revision, known, error, expected):
+    report = _report(state=state, revision=revision, known=known, error=error)
+
+    assert report.behind_head is expected
+
+
+@pytest.mark.parametrize(
+    "state, revision, known, expected",
+    [
+        (_DB_STATES.STAMPED, "newer", False, True),
+        (_DB_STATES.STAMPED, _HEAD, True, False),
+        (_DB_STATES.STAMPED, "older", True, False),
+        # An unstamped database has no revision to be ahead with.
+        (_DB_STATES.UNSTAMPED, None, True, False),
+        (_DB_STATES.EMPTY, None, True, False),
+    ],
+)
+def test_database_report_ahead_of_head(state, revision, known, expected):
+    report = _report(state=state, revision=revision, known=known)
+
+    assert report.ahead_of_head is expected
+
+
+@pytest.mark.parametrize(
+    "state, revision, error, expected",
+    [
+        (_DB_STATES.STAMPED, _HEAD, None, f"OK ({_HEAD})"),
+        (
+            _DB_STATES.STAMPED,
+            "older",
+            None,
+            f"behind head (older -> {_HEAD})",
+        ),
+        (
+            _DB_STATES.EMPTY,
+            None,
+            None,
+            "not created (the next writable open creates it)",
+        ),
+        (None, None, "OperationalError: refused", None),
+        (_DB_STATES.UNSTAMPED, None, None, None),
+    ],
+)
+def test__database_summary(state, revision, error, expected):
+    report = _report(state=state, revision=revision, error=error)
+
+    found = cli_audit._database_summary(report)
+
+    if expected is not None:
+        assert found == expected
+    elif error is not None:
+        assert found == f"ERROR: unreachable: {error}"
+    else:
+        assert found.startswith("ERROR: ")
+        assert cli_audit.BOOTSTRAP_SCRIPT in found
+
+
+def test__database_summary_for_a_stamp_ahead_of_head():
+    report = _report(state=_DB_STATES.STAMPED, revision="newer", known=False)
+
+    found = cli_audit._database_summary(report)
+
+    assert found.startswith("ERROR: newer: ")
+    assert "Downgrade" in found
+
+
+def test__database_findings_reports_an_unreachable_database():
+    reports = {
+        cli_util.AGUI: _report(
+            name=cli_util.AGUI, state=_DB_STATES.STAMPED, revision=_HEAD
+        ),
+        cli_util.AUTHZ: _report(error="OperationalError: refused"),
+    }
+
+    found = cli_audit._database_findings(reports)
+
+    assert found == {
+        "databases": {
+            cli_util.AUTHZ: {"unreachable": "OperationalError: refused"}
+        }
+    }
+
+
+def test__database_findings_reports_an_unstamped_database():
+    reports = {
+        cli_util.AGUI: _report(name=cli_util.AGUI, state=_DB_STATES.UNSTAMPED),
+        cli_util.AUTHZ: _report(state=_DB_STATES.STAMPED, revision=_HEAD),
+    }
+
+    found = cli_audit._database_findings(reports)
+
+    assert (
+        cli_audit.BOOTSTRAP_SCRIPT
+        in (found["databases"][cli_util.AGUI]["unstamped"])
+    )
+    assert cli_util.AUTHZ not in found["databases"]
+
+
+@pytest.mark.parametrize(
+    "state, revision",
+    [
+        # At head, and behind head: neither is a finding, because the next
+        # writable open migrates a database that is behind.
+        (_DB_STATES.STAMPED, _HEAD),
+        (_DB_STATES.STAMPED, "older"),
+        (_DB_STATES.EMPTY, None),
+    ],
+)
+def test__database_findings_stays_quiet(state, revision):
+    reports = {
+        name: _report(name=name, state=state, revision=revision)
+        for name in (cli_util.AGUI, cli_util.AUTHZ)
+    }
+
+    found = cli_audit._database_findings(reports)
+
+    assert found == {}
+
+
+def test__database_findings_reports_a_stamp_ahead_of_head():
+    reports = {
+        cli_util.AGUI: _report(
+            name=cli_util.AGUI,
+            state=_DB_STATES.STAMPED,
+            revision="newer",
+            known=False,
+        ),
+        cli_util.AUTHZ: _report(state=_DB_STATES.STAMPED, revision=_HEAD),
+    }
+
+    found = cli_audit._database_findings(reports)
+
+    assert found["databases"][cli_util.AGUI]["ahead_of_head"].startswith(
+        "newer: "
+    )
+    assert cli_util.AUTHZ not in found["databases"]
+
+
+def test__database_reports_returns_the_cached_probe(ctx, the_installation):
+    already = {"agui": object()}
+    ctx.obj["database_reports"] = already
+
+    found = cli_audit._database_reports(ctx, the_installation)
+
+    assert found is already
+
+
+@mock.patch.object(cli_audit.alembic_migrations, "head_revision")
+@mock.patch.object(cli_audit, "_probe_database", new_callable=mock.AsyncMock)
+def test__database_reports_probes_and_caches(
+    probe, head_revision, ctx, the_installation
+):
+    head_revision.return_value = _HEAD
+    probe.side_effect = [
+        (_DB_STATES.STAMPED, _HEAD),
+        (_DB_STATES.UNSTAMPED, None),
+    ]
+
+    found = cli_audit._database_reports(ctx, the_installation)
+
+    assert found[cli_util.AGUI].state is _DB_STATES.STAMPED
+    assert found[cli_util.AGUI].revision == _HEAD
+    assert found[cli_util.AUTHZ].state is _DB_STATES.UNSTAMPED
+    assert all(report.head == _HEAD for report in found.values())
+    assert ctx.obj["database_reports"] is found
+
+
+@mock.patch.object(cli_audit.alembic_migrations, "head_revision")
+@mock.patch.object(cli_audit, "_probe_database", new_callable=mock.AsyncMock)
+def test__database_reports_maps_an_uncreated_database_to_empty(
+    probe, head_revision, ctx, the_installation
+):
+    head_revision.return_value = _HEAD
+    probe.side_effect = cli_util.DatabaseNotCreated("authz")
+
+    found = cli_audit._database_reports(ctx, the_installation)
+
+    assert [report.state for report in found.values()] == [
+        _DB_STATES.EMPTY,
+        _DB_STATES.EMPTY,
+    ]
+    assert all(report.error is None for report in found.values())
+
+
+@mock.patch.object(cli_audit.alembic_migrations, "head_revision")
+@mock.patch.object(cli_audit, "_probe_database", new_callable=mock.AsyncMock)
+def test__database_reports_records_an_unreachable_database(
+    probe, head_revision, ctx, the_installation
+):
+    head_revision.return_value = _HEAD
+    probe.side_effect = RuntimeError("refused")
+
+    found = cli_audit._database_reports(ctx, the_installation)
+
+    assert all(
+        report.error == "RuntimeError: refused" for report in found.values()
+    )
+    assert all(report.state is None for report in found.values())
+
+
+def test__probe_database_reads_a_migrated_database(the_installation, tmp_path):
+    # Driven against real files: the probe has to agree with what alembic
+    # actually wrote, which a mocked connection could not show.
+    the_installation, paths = _pair_installation(the_installation, tmp_path)
+    cli_audit.alembic_migrations.upgrade(
+        "head",
+        dburis={name: f"sqlite:///{path}" for name, path in paths.items()},
+    )
+
+    state, revision = cli_audit.asyncio.run(
+        cli_audit._probe_database(the_installation, cli_util.AUTHZ)
+    )
+
+    assert state is _DB_STATES.STAMPED
+    assert revision == cli_audit.alembic_migrations.head_revision()
+
+
+def test__probe_database_reads_an_unstamped_database(
+    the_installation, tmp_path
+):
+    the_installation, paths = _pair_installation(the_installation, tmp_path)
+    cli_audit.alembic_migrations.upgrade(
+        "head",
+        dburis={name: f"sqlite:///{path}" for name, path in paths.items()},
+    )
+    engine = sa.create_engine(f"sqlite:///{paths[cli_util.AUTHZ]}")
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                sa.text(
+                    f"DROP TABLE {cli_audit.alembic_migrations.VERSION_TABLE}"
+                )
+            )
+    finally:
+        engine.dispose()
+
+    state, revision = cli_audit.asyncio.run(
+        cli_audit._probe_database(the_installation, cli_util.AUTHZ)
+    )
+
+    assert state is _DB_STATES.UNSTAMPED
+    assert revision is None
+
+
+# _audit_databases_section: ui only
+# audit_databases: command

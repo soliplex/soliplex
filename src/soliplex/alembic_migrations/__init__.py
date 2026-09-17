@@ -36,6 +36,7 @@ import sqlalchemy as sa
 from alembic import command as alembic_command
 from alembic import config as alembic_config_module
 from alembic import script as alembic_script
+from alembic import util as alembic_util
 
 from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
@@ -121,6 +122,20 @@ class MigrationRequired(MigrationError):
 def head_revision() -> str:
     """The newest revision in this package's ``versions/``."""
     return alembic_script.ScriptDirectory(str(TREE)).get_current_head()
+
+
+def knows_revision(revision: str) -> bool:
+    """True when this package's ``versions/`` contains ``revision``.
+
+    A stamp this tree does not know belongs to a *newer* release: the
+    deployment's code was rolled back without downgrading its databases
+    first, and there is no path from that revision to anything here.
+    """
+    try:
+        alembic_script.ScriptDirectory(str(TREE)).get_revision(revision)
+    except alembic_util.CommandError:
+        return False
+    return True
 
 
 def version_table() -> sa.Table:
