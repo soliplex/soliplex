@@ -221,6 +221,50 @@ def test_ensure_current_connection_refuses_an_unstamped_database(tmp_path):
     assert _revision(dburis[AUTHZ]) is None
 
 
+def _stamp(dburi: str, revision: str) -> None:
+    """Re-stamp a migrated database, as a newer release would have."""
+    engine = sa.create_engine(dburi)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                sa.text(
+                    f"UPDATE {alembic_migrations.VERSION_TABLE} "
+                    "SET version_num = :revision"
+                ),
+                {"revision": revision},
+            )
+    finally:
+        engine.dispose()
+
+
+# A revision no release has: stands in for one belonging to a soliplex
+# newer than the tree under test.
+_FROM_THE_FUTURE = "ffffffffffff"
+
+
+@pytest.mark.parametrize("sole_writer", [True, False])
+def test_ensure_current_connection_refuses_a_newer_stamp(
+    tmp_path, sole_writer
+):
+    # Rolling the code back without downgrading first: no number of
+    # stopped writers helps, so 'sole_writer' must not change the outcome.
+    dburis = _dburis(tmp_path)
+    alembic_migrations.upgrade("head", dburis=dburis)
+    _stamp(dburis[AUTHZ], _FROM_THE_FUTURE)
+
+    with pytest.raises(alembic_migrations.DowngradeRequired) as exc_info:
+        _ensure_on(dburis[AUTHZ], AUTHZ, sole_writer=sole_writer)
+
+    error = exc_info.value
+    assert error.names == (AUTHZ,)
+    assert error.revision == _FROM_THE_FUTURE
+    assert error.head == alembic_migrations.head_revision()
+    # Nothing was written, and no command is suggested: only the release
+    # holding that revision can move this database.
+    assert _revision(dburis[AUTHZ]) == _FROM_THE_FUTURE
+    assert "alembic" not in str(error)
+
+
 def test_ensure_current_connection_refuses_when_not_sole_writer(tmp_path):
     dburis = _dburis(tmp_path)
 

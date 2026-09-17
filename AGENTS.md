@@ -221,7 +221,7 @@ database from base reproduces the models exactly --
 database, *, sole_writer)` for an async engine, the
 `ensure_current_connection()` it runs on the caller's connection, plus
 `head_revision()`, `database_state()` and `upgrade()`. One database at a
-time, and three situations:
+time, and four situations:
 
 - at head -- returns, having written nothing (one `SELECT`);
 - empty, or behind head -- migrates, **but only when this process is the sole
@@ -232,7 +232,12 @@ time, and three situations:
 - tables but no `alembic_version` row -- raises `UnstampedDatabase`, naming
   the one-off bootstrap script (issue #1367). Such a database was built by
   soliplex <= 0.81, when nothing stamped; see #1368 for the promise that no
-  later release leaves one that way.
+  later release leaves one that way;
+- stamped at a revision `knows_revision()` does not find -- raises
+  `DowngradeRequired`. The code was rolled back without downgrading its
+  databases first, and this release cannot move them: the revisions between
+  its head and that stamp exist only in the newer release's tree. Checked
+  *before* the sole-writer gate, because stopping writers cannot help.
 
 Every writable open goes through one of two helpers, which own the
 migration and the engine's lifetime: `installation.open_engines` (for

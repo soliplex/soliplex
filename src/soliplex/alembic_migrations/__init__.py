@@ -119,6 +119,28 @@ class MigrationRequired(MigrationError):
         )
 
 
+class DowngradeRequired(MigrationError):
+    """The database is stamped at a revision this release does not have.
+
+    No command is suggested, because none can be run here: the revisions
+    between this release's head and the stamp exist only in the newer
+    release's tree, so the downgrade has to come from that version.
+    """
+
+    def __init__(self, names, revision, head):
+        self.names = tuple(names)
+        self.revision = revision
+        self.head = head
+        which = ", ".join(self.names)
+        super().__init__(
+            f"{which}: stamped at {revision}, which this release does not "
+            "have, so its code was rolled back without downgrading its "
+            "databases first. Downgrade them to "
+            f"{head} from the soliplex version which has {revision}, with "
+            "every writer stopped, then start this version again."
+        )
+
+
 def head_revision() -> str:
     """The newest revision in this package's ``versions/``."""
     return alembic_script.ScriptDirectory(str(TREE)).get_current_head()
@@ -243,8 +265,9 @@ def ensure_current_connection(
     connection opened here would leave the caller's engine with nothing.
 
     Raises :class:`UnstampedDatabase` for a database built before stamping
-    existed, and :class:`MigrationRequired` when a migration is needed but
-    this process cannot safely be the one to run it.
+    existed, :class:`DowngradeRequired` for one stamped by a newer release
+    than this one, and :class:`MigrationRequired` when a migration is
+    needed but this process cannot safely be the one to run it.
     """
     if database_state(connection, METADATA[database]) is (
         DatabaseState.UNSTAMPED
@@ -252,8 +275,13 @@ def ensure_current_connection(
         raise UnstampedDatabase([database])
 
     head = head_revision()
-    if current_revision(connection) == head:
+    current = current_revision(connection)
+    if current == head:
         return
+    # Before the sole-writer gate: no number of stopped writers makes a
+    # database migratable when the revisions to move it are not here.
+    if current is not None and not knows_revision(current):
+        raise DowngradeRequired([database], current, head)
     if not sole_writer:
         raise MigrationRequired([database])
 
