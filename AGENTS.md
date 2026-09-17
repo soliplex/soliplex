@@ -195,33 +195,88 @@ Key files:
 
 ## Database Migrations
 
-Alembic drives **two** databases from one revision tree (`alembic.ini`:
-`databases = agui, authz`):
+The operator- and developer-facing reference is
+[docs/server/migrations.md](docs/server/migrations.md) (published as
+"Database Migrations"); what follows is the part that constrains how code
+in this repository is written.
+
+Alembic drives **two** databases from one revision tree, which lives in the
+package -- `src/soliplex/alembic_migrations/` -- and therefore ships in the
+wheel, so a deployment can migrate from its own image:
 
 - `agui` -- `thread_persistence_dburi`, schema `soliplex.agui.schema`
 - `authz` -- `authorization_dburi`, schema `soliplex.authz.schema`
 
-Every revision therefore has `upgrade_agui()` / `upgrade_authz()` pairs
-behind an `upgrade(engine_name)` dispatcher.
+Every revision has `upgrade_agui()` / `upgrade_authz()` pairs behind an
+`upgrade(engine_name)` dispatcher.
+
+**The revisions are the schema.** a writable open brings its database to the
+alembic head, which creates it when it does not exist and leaves it
+stamped. That is only safe because migrating an empty
+database from base reproduces the models exactly --
+`scripts/lint_alembic_chain.py` proves it on every CI run, and its
+`--self-test` proves the comparison is not blind.
+
+`soliplex.alembic_migrations` is the API: `ensure_current_engine(engine,
+database, *, sole_writer)` for an async engine, the
+`ensure_current_connection()` it runs on the caller's connection, plus
+`head_revision()`, `database_state()` and `upgrade()`. One database at a
+time, and three situations:
+
+- at head -- returns, having written nothing (one `SELECT`);
+- empty, or behind head -- migrates, **but only when this process is the sole
+  writer**. `serve --workers N` (N > 1) sets `_SOLIPLEX_MULTIPLE_WRITERS` in
+  the private env-var contract, so no worker migrates and the app raises
+  `MigrationRequired` instead; migrate ahead of time with every writer
+  stopped;
+- tables but no `alembic_version` row -- raises `UnstampedDatabase`, naming
+  the one-off bootstrap script (issue #1367). Such a database was built by
+  soliplex <= 0.81, when nothing stamped; see #1368 for the promise that no
+  later release leaves one that way.
+
+Every writable open goes through one of two helpers, which own the
+migration and the engine's lifetime: `installation.open_engines` (for
+`lifespan`) and `cli_util.open_db` (the pre-flight for every `admin-users`
+/ `room-authz` command, and for `cli/ask.py`). `open_db` also owns the CLI
+policy an in-memory DBURI needs -- `alembic_migrations` knows nothing about
+RAM databases. `audit` is a reader: it passes `must_exist=True`, so nothing
+is created or migrated, and reports an uncreated database as "nothing
+configured".
 
 ```bash
 # Upgrade both databases
 uv run alembic -x soliplex.installation_path=<dir> upgrade head
 
-# Emit SQL instead: writes 'agui.sql' and 'authz.sql' into the cwd
+# Emit SQL instead: writes 'agui.sql' and 'authz.sql' into the cwd, and
+# never connects
 uv run alembic -x soliplex.installation_path=<dir> upgrade head --sql
 
-# New revision (per-database stubs from 'alembic/script.py.mako')
+# New revision (per-database stubs from the tree's 'script.py.mako')
 uv run alembic -x soliplex.installation_path=<dir> revision -m "soliplex-vX.Y"
 ```
 
-- The DB URIs come from the installation config, not `alembic.ini`, so
-  `-x soliplex.installation_path=` is mandatory; without it `env.py` prints
-  its usage and exits 2
-- `env.py` builds both engines at import with `init_schema=True`, so *every*
-  command -- `current` and `history` and `--sql` included -- connects and
-  runs `metadata.create_all()`. There is no read-only command; use a
-  throwaway installation when experimenting
+**Those are checkout-only.** `script_location` lives in `[tool.alembic]` in
+`pyproject.toml`, which no deployment image carries, so the bare `alembic`
+CLI there fails with `No 'script_location' key found in configuration`. A
+deployment migrates through soliplex's own writable open, or by calling
+`alembic_migrations.upgrade()`, both of which set `script_location` from the
+package directory.
+
+- The DB URIs come from the installation config rather than from any alembic
+  config file, so `-x soliplex.installation_path=` is mandatory; without it
+  `env.py` prints its usage and exits 2. `resolve_dburis()` reads that
+  config with `config.installation.load_installation()` plus
+  `resolve_environment()` -- all the DBURIs depend on, and nothing more, so
+  an unrelated broken room or OIDC config cannot block a migration
+- In-process callers pass either an explicit `{name: dburi}` mapping or a
+  live `connection` and the `database` it belongs to through
+  `config.attributes`. The connection form is what lets an in-memory
+  database be migrated at all: it lives inside one engine, so the migration
+  has to run on the caller's own connection
+- `env.py` is a four-line shim over `alembic_migrations.run()`, and builds
+  its engines without creating anything, so `current`, `history`, `check`
+  and `--sql` leave the schema alone. That is what makes `alembic check`
+  meaningful: it compares the models against the migrated database
 - Revisions must not import live app code: freeze any borrowed helper into
   the revision, so replaying history never depends on the current tree
 - Mode-dependent logic splits into `_x_online()` / `_x_offline()` behind a
@@ -229,11 +284,20 @@ uv run alembic -x soliplex.installation_path=<dir> revision -m "soliplex-vX.Y"
   as set-based `op.execute()` SQL
 - Branch on `op.get_context().dialect.name` where SQLite and PostgreSQL
   differ
-- Config is split by what Alembic can load from where, not by accident: the
-  logging sections and `databases` must stay in `alembic.ini`
-  (`fileConfig()` needs an ini; `databases` is read via `get_main_option()`,
-  which ignores `pyproject.toml`), while `prepend_sys_path` and
-  `post_write_hooks` live in `[tool.alembic]`
+- `DATABASE_NAMES` in the package names the two databases; alembic has no
+  `databases` option of its own to read. `script.py.mako` imports it to
+  emit one `upgrade_<name>()` / `downgrade_<name>()` pair per database, and
+  the chain lint builds both databases from it, while `env.py` iterates
+  whatever DBURIs `resolve_dburis()` hands it. There is no `alembic.ini`
+  at all:
+  `script_location`, `prepend_sys_path` and the `ruff` `post_write_hooks`
+  entry live in `[tool.alembic]` in `pyproject.toml`, and
+  `configure_logging()` skips `fileConfig()` unless the file alembic names
+  exists
+- Only `src/soliplex/alembic_migrations/versions/*` is exempt from the 100%
+  coverage bar. The package's `__init__.py` *and* `env.py` are held to it,
+  which is why the tests drive alembic for real against throwaway SQLite
+  files rather than mocking it
 
 ## Adding a New Tool
 

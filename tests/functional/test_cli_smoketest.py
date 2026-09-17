@@ -178,10 +178,10 @@ def _seed_stale_acl_entry(db_path, room_id):
     test. This is the scenario 'audit' must tolerate via the unchecked
     'list_room_policies' read.
     """
-    session = authz_schema.get_session(
-        engine_url=sqlite_dburi(db_path),
-        init_schema=True,
-    )
+    # Open the session manually, for locality in this exceptional case.
+    session = authz_schema.get_session(engine_url=sqlite_dburi(db_path))
+    authz_schema.Base.metadata.create_all(session.get_bind())
+
     with session:
         policy = session.scalars(
             sqlalchemy.select(authz_schema.RoomPolicy).where(

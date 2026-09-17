@@ -79,6 +79,17 @@ jobs:
           uv run python scripts/lint_interpolation.py --verbose 2>&1 \
             | tee -a lint-interpolation.log
 
+      # Ensure that the alembic migration chain reproduces the models exactly.
+      # The self-test runs # first, stopping one revision short of head,
+      # where the comparison # must report a difference.
+      - name: Check migration chain matches the models
+        run: |
+          set -o pipefail
+          uv run python scripts/lint_alembic_chain.py --self-test 2>&1 \
+            | tee lint-alembic-chain.log
+          uv run python scripts/lint_alembic_chain.py --verbose 2>&1 \
+            | tee -a lint-alembic-chain.log
+
       # Slack notification lives in 'ci-failure-notify.yaml', which only
       # links to this run (see #1203), so record what failed here.
       - name: Summarize failures
@@ -88,7 +99,7 @@ jobs:
             echo "## Linting failed"
             echo
             for log in ruff-format.log ruff-check.log lint-textio.log \
-                       lint-interpolation.log; do
+                       lint-interpolation.log lint-alembic-chain.log; do
               [ -f "$log" ] || continue
               echo "<details><summary>$log</summary>"
               echo

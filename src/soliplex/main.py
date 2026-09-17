@@ -22,6 +22,7 @@ def curry_lifespan(
     installation_path: pathlib.Path,
     no_auth_mode: bool,
     log_config_file: str = None,
+    multiple_writers: bool = False,
 ):
     installation_path = pathlib.Path(installation_path)
 
@@ -30,6 +31,7 @@ def curry_lifespan(
         installation_path=installation_path,
         no_auth_mode=no_auth_mode,
         log_config_file=log_config_file,
+        multiple_writers=multiple_writers,
     )
 
 
@@ -94,6 +96,7 @@ def create_app(
     installation_path: pathlib.Path,
     no_auth_mode: bool,
     log_config_file: str = None,
+    multiple_writers: bool = False,
     curry_lifespan=None,
     app_with_lifespan=None,
 ):
@@ -119,6 +122,7 @@ def create_app(
         installation_path=installation_path,
         no_auth_mode=no_auth_mode,
         log_config_file=log_config_file,
+        multiple_writers=multiple_writers,
     )
     app = app_with_lifespan(curried_lifespan)
 
@@ -143,11 +147,15 @@ def create_app_from_environment():
     installation_path = pathlib.Path(installation_path_str)
     no_auth_mode = os.environ.get("_SOLIPLEX_NO_AUTH_MODE") == "Y"
     log_config_file = os.environ.get("_SOLIPLEX_LOG_CONFIG_FILE")
+    # Several uvicorn workers open the databases at once, so none of them
+    # may migrate: 'serve' sets this when '--workers' is above one.
+    multiple_writers = os.environ.get("_SOLIPLEX_MULTIPLE_WRITERS") == "Y"
 
     return create_app(
         installation_path=installation_path,
         log_config_file=log_config_file,
         no_auth_mode=no_auth_mode,
+        multiple_writers=multiple_writers,
     )
 
 

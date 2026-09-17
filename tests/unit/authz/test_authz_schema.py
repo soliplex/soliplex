@@ -585,104 +585,55 @@ def test_aclentry_check_token_w_email(
         assert found is None
 
 
-@pytest.mark.parametrize("init_schema", [None, False, True])
 @mock.patch("sqlalchemy.event.listens_for")
 @mock.patch("sqlalchemy.create_engine")
 @mock.patch("soliplex.authz.schema.metadata.create_all")
-def test_get_engine(
-    ca,
-    ce,
-    lf,
-    init_schema,
-):
-    kwargs = {}
-
-    if init_schema is not None:
-        kwargs["init_schema"] = init_schema
-
-    found = authz_schema.get_engine(**kwargs)
+def test_get_engine(ca, ce, lf):
+    found = authz_schema.get_engine()
 
     assert found is ce.return_value
-
     ce.assert_called_once_with(
         config_installation.SYNC_MEMORY_ENGINE_URL,
         json_serializer=util.serialize_sqla_json,
     )
-
     # A 'connect' listener is registered to enable SQLite foreign keys.
     lf.assert_called_once_with(ce.return_value, "connect")
-
-    if init_schema:
-        connection = ce.return_value.connect.return_value
-        ca.assert_called_once_with(connection.__enter__.return_value)
-    else:
-        ca.assert_not_called()
+    # Opening an engine never creates the schema: the revisions do, when
+    # 'alembic_migrations.ensure_current_engine' runs them.
+    ca.assert_not_called()
 
 
-@pytest.mark.parametrize("init_schema", [None, False, True])
 @mock.patch("soliplex.authz.schema.get_engine")
-def test_get_session(
-    ge,
-    init_schema,
-):
-    kwargs = {}
-
-    if init_schema is not None:
-        kwargs["init_schema"] = init_schema
-        exp_kwargs = kwargs
-    else:
-        exp_kwargs = {"init_schema": False}
-
-    with authz_schema.get_session(**kwargs) as session:
+def test_get_session(ge):
+    with authz_schema.get_session() as session:
         assert isinstance(session, sqla_orm.Session)
         assert session.bind is ge.return_value
 
         ge.assert_called_once_with(
             engine_url=config_installation.SYNC_MEMORY_ENGINE_URL,
-            **exp_kwargs,
         )
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("init_schema", [None, False, True])
 @mock.patch("sqlalchemy.ext.asyncio.create_async_engine")
 @mock.patch("soliplex.authz.schema.metadata.create_all")
-async def test_get_async_engine(ca, cae, init_schema):
-    kwargs = {}
-
-    if init_schema:
-        kwargs["init_schema"] = True
-
-    found = await authz_schema.get_async_engine(**kwargs)
+async def test_get_async_engine(ca, cae):
+    found = await authz_schema.get_async_engine()
 
     assert found is cae.return_value
-
     cae.assert_called_once_with(
         config_installation.ASYNC_MEMORY_ENGINE_URL,
         json_serializer=util.serialize_sqla_json,
     )
-
-    if init_schema:
-        found.begin.assert_called_once_with()
-        connection = found.begin.return_value.__aenter__.return_value
-        connection.run_sync.assert_called_once_with(ca)
-    else:
-        found.begin.assert_not_called()
+    # As above: no schema creation on the way in.
+    found.begin.assert_not_called()
+    ca.assert_not_called()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("init_schema", [None, False, True])
 @mock.patch("soliplex.authz.schema.get_async_engine")
-async def test_get_async_session(gae, init_schema):
-    kwargs = {}
-
-    if init_schema is not None:
-        kwargs["init_schema"] = init_schema
-        exp_kwargs = kwargs
-    else:
-        exp_kwargs = {"init_schema": False}
-
-    session_maker = await authz_schema.get_async_session(**kwargs)
+async def test_get_async_session(gae):
+    session_maker = await authz_schema.get_async_session()
 
     async with session_maker as session:
         assert isinstance(session, sqla_asyncio.AsyncSession)
@@ -690,5 +641,4 @@ async def test_get_async_session(gae, init_schema):
 
         gae.assert_called_once_with(
             engine_url=config_installation.ASYNC_MEMORY_ENGINE_URL,
-            **exp_kwargs,
         )

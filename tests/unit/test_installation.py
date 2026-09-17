@@ -11,11 +11,14 @@ from sqlalchemy import pool as sqla_pool  # NullPool
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
+from soliplex import alembic_migrations
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex import secrets
 from soliplex import util
+from soliplex.agui import schema as agui_schema
+from soliplex.authz import schema as authz_schema
 from soliplex.config import agents as config_agents
 from soliplex.config import completions as config_completions
 from soliplex.config import installation as config_installation
@@ -1391,6 +1394,162 @@ def mcp_apps():
     return {key: _mock_mcp_app(key) for key in ["room1", "room2"]}
 
 
+# --------------------------------------------------------------------------
+# Engines / open_engines
+# --------------------------------------------------------------------------
+def _memory_installation():
+    """An installation whose two databases are throwaway and in memory."""
+    return mock.Mock(
+        thread_persistence_dburi_async=(
+            config_installation.ASYNC_MEMORY_ENGINE_URL
+        ),
+        authorization_dburi_async=(
+            config_installation.ASYNC_MEMORY_ENGINE_URL
+        ),
+    )
+
+
+def test_engines_as_context_names_the_engines():
+    engines = installation.Engines(
+        threads_engine=mock.sentinel.threads,
+        authorization_engine=mock.sentinel.authorization,
+    )
+
+    found = engines.as_context
+
+    assert found == {
+        "threads_engine": mock.sentinel.threads,
+        "authorization_engine": mock.sentinel.authorization,
+    }
+
+
+@pytest.mark.asyncio
+async def test_engines_dispose_engines_releases_both():
+    threads_engine = mock.AsyncMock()
+    authorization_engine = mock.AsyncMock()
+    engines = installation.Engines(
+        threads_engine=threads_engine,
+        authorization_engine=authorization_engine,
+    )
+
+    await engines.dispose_engines()
+
+    threads_engine.dispose.assert_awaited_once_with()
+    authorization_engine.dispose.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_open_engines_migrates_an_in_memory_pair():
+    # The migration has to land on the engines handed back, which is the
+    # only thing that works for a database living inside one engine.
+    the_installation = _memory_installation()
+
+    async with installation.open_engines(
+        the_installation=the_installation,
+        multiple_writers=False,
+        no_auth_mode=False,
+    ) as found:
+        for engine, metadata in (
+            (found.threads_engine, agui_schema.metadata),
+            (found.authorization_engine, authz_schema.metadata),
+        ):
+            async with engine.connect() as connection:
+                tables = await connection.run_sync(
+                    lambda sync: set(
+                        sqlalchemy.inspect(sync).get_table_names()
+                    )
+                )
+                revision = await connection.run_sync(
+                    alembic_migrations.current_revision
+                )
+            assert set(metadata.tables) <= tables
+            assert revision == alembic_migrations.head_revision()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("w_multiple_writers", [False, True])
+async def test_open_engines_honors_multiple_writers(w_multiple_writers):
+    the_installation = _memory_installation()
+
+    with mock.patch.object(
+        alembic_migrations, "ensure_current_engine"
+    ) as ensure_current_engine:
+        async with installation.open_engines(
+            the_installation=the_installation,
+            multiple_writers=w_multiple_writers,
+            no_auth_mode=False,
+        ):
+            pass
+
+    assert [
+        call.kwargs["sole_writer"]
+        for call in ensure_current_engine.call_args_list
+    ] == [not w_multiple_writers] * 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("w_no_auth_mode", [False, True])
+@mock.patch("soliplex.installation.add_no_auth_user_as_admin")
+async def test_open_engines_handles_no_auth_mode(anauaa, w_no_auth_mode):
+    the_installation = _memory_installation()
+
+    with mock.patch.object(alembic_migrations, "ensure_current_engine"):
+        async with installation.open_engines(
+            the_installation=the_installation,
+            multiple_writers=False,
+            no_auth_mode=w_no_auth_mode,
+        ):
+            pass
+
+    if w_no_auth_mode:
+        (anauaa_called,) = anauaa.call_args_list
+        (conn,) = anauaa_called.args
+        assert isinstance(conn, sqlalchemy.Connection)
+        assert anauaa_called.kwargs == {}
+    else:
+        anauaa.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("w_refusal", [False, True])
+async def test_open_engines_disposes_on_the_way_out(w_refusal):
+    # However the block ends -- normally, or on a refused migration --
+    # both engines are released.
+    the_installation = _memory_installation()
+    disposed = []
+    real_dispose = installation.Engines.dispose_engines
+
+    async def spy(self):
+        # Record *and* release: a stub here would leak the engines into
+        # the next test, where aiosqlite finalizes them on a closed loop.
+        disposed.append(True)
+        await real_dispose(self)
+
+    refusal = mock.patch.object(
+        alembic_migrations,
+        "ensure_current_engine",
+        side_effect=alembic_migrations.MigrationRequired(["agui"]),
+    )
+
+    with (
+        mock.patch.object(installation.Engines, "dispose_engines", new=spy),
+        contextlib.ExitStack() as stack,
+    ):
+        if w_refusal:
+            stack.enter_context(refusal)
+            stack.enter_context(
+                pytest.raises(alembic_migrations.MigrationRequired)
+            )
+        async with installation.open_engines(
+            the_installation=the_installation,
+            multiple_writers=False,
+            no_auth_mode=False,
+        ):
+            pass
+
+    assert disposed == [True]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_max_age", [7200, "7200"])
 @pytest.mark.parametrize(
@@ -1409,6 +1568,8 @@ def mcp_apps():
         (True, []),
     ],
 )
+@pytest.mark.parametrize("w_multiple_writers", [None, False, True])
+@mock.patch("soliplex.alembic_migrations.ensure_current_engine")
 @mock.patch("soliplex.loggers.ProcessLifetimeAuditLog")
 @mock.patch("soliplex.installation.add_no_auth_user_as_admin")
 @mock.patch("soliplex.installation.apply_logfire_configuration")
@@ -1426,6 +1587,7 @@ async def test_lifespan(
     alc,
     anauaa,
     plal_klass,
+    ensure_current_engine,
     mcp_apps,
     temp_dir,
     w_no_auth_mode,
@@ -1433,6 +1595,7 @@ async def test_lifespan(
     w_log_config_file,
     w_ic_logging_config,
     w_max_age,
+    w_multiple_writers,
 ):
     INSTALLATION_PATH = "/path/to/installation"
     ASYNC_ENGINE_URL = config_installation.ASYNC_MEMORY_ENGINE_URL
@@ -1472,6 +1635,13 @@ async def test_lifespan(
     else:
         exp_no_auth_mode = False
 
+    if w_multiple_writers is not None:
+        exp_sole_writer = not kwargs.setdefault(
+            "multiple_writers", w_multiple_writers
+        )
+    else:
+        exp_sole_writer = True
+
     if w_log_config_file is not None:
         w_log_config_file = temp_dir / w_log_config_file
         w_log_config_file.write_text("""\
@@ -1497,6 +1667,21 @@ root:
     assert the_installation._config is i_config
 
     assert i_config.oidc_paths == exp_oidc_paths
+
+    # Both databases are brought to head before anything is served, each
+    # through the engine the context goes on to carry, and only a sole
+    # writer is allowed to do it.
+    assert [
+        (call.args[1], call.kwargs["sole_writer"])
+        for call in ensure_current_engine.call_args_list
+    ] == [
+        ("agui", exp_sole_writer),
+        ("authz", exp_sole_writer),
+    ]
+    assert [call.args[0] for call in ensure_current_engine.call_args_list] == [
+        found[0]["threads_engine"],
+        found[0]["authorization_engine"],
+    ]
 
     i_config.reload_configurations.assert_called_once_with()
     i_config.resolve_environment.assert_called_once_with()

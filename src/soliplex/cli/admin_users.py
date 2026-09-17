@@ -197,20 +197,20 @@ def _check_admin_user_args(
     json_path: str | None,
     command: str,
     allow_invalid_json_path: bool = False,
-) -> tuple[str, str]:
+) -> tuple:
     """Run the validation prolog shared by 'admin-users' add/delete.
 
-    Loads the installation, validates the discriminator selection,
-    resolves and validates the JSONPath, and rejects a RAM-based
-    authorization DB.
+    Loads the installation, validates the discriminator selection, and
+    resolves and validates the JSONPath. Reaching the database -- and
+    rejecting a RAM-based one -- is 'cli_util.open_db''s job.
 
     Pass 'allow_invalid_json_path=True' to skip the JSONPath compile
     check -- intended for 'admin-users delete --allow-invalid-json-path',
     so a stored entry whose 'json_path' no longer compiles can still
     be matched and removed.
 
-    Returns '(dburi, json_path)' -- the values both commands need to
-    perform their database update.
+    Returns '(the_installation, json_path)' -- the values both commands
+    need to perform their database update.
 
     Raises 'typer.Exit(1)' on any validation failure.
     """
@@ -226,10 +226,7 @@ def _check_admin_user_args(
         allow_invalid=allow_invalid_json_path,
     )
 
-    dburi = the_installation.authorization_dburi_async
-    cli_util._check_ram_dburi(dburi, command)
-
-    return dburi, resolved
+    return the_installation, resolved
 
 
 def _dump(ctx, json_paths):
@@ -256,31 +253,41 @@ def _dump_admin_users(json_paths):  # pragma NO COVER UI ONLY
     print(json.dumps({"admin_users": admin_users}))
 
 
-async def _list_discriminators(dburi):
-    async with cli_util._admin_user_policy(dburi) as policy:
+async def _list_discriminators(the_installation, command):
+    async with cli_util._admin_user_policy(
+        the_installation, command
+    ) as policy:
         return await policy.list_admin_user_discriminators()
 
 
-async def _clear_discriminators(dburi):
-    async with cli_util._admin_user_policy(dburi) as policy:
+async def _clear_discriminators(the_installation, command):
+    async with cli_util._admin_user_policy(
+        the_installation, command
+    ) as policy:
         await policy.clear_admin_user_discriminators()
         return await policy.list_admin_user_discriminators()
 
 
-async def _add_discriminator(dburi, json_path):
-    async with cli_util._admin_user_policy(dburi) as policy:
+async def _add_discriminator(the_installation, command, json_path):
+    async with cli_util._admin_user_policy(
+        the_installation, command
+    ) as policy:
         await policy.add_admin_user_discriminator(json_path)
         return await policy.list_admin_user_discriminators()
 
 
-async def _remove_discriminator(dburi, json_path):
-    async with cli_util._admin_user_policy(dburi) as policy:
+async def _remove_discriminator(the_installation, command, json_path):
+    async with cli_util._admin_user_policy(
+        the_installation, command
+    ) as policy:
         await policy.remove_admin_user_discriminator(json_path)
         return await policy.list_admin_user_discriminators()
 
 
-async def _replace_discriminators(dburi, json_paths):
-    async with cli_util._admin_user_policy(dburi) as policy:
+async def _replace_discriminators(the_installation, command, json_paths):
+    async with cli_util._admin_user_policy(
+        the_installation, command
+    ) as policy:
         await policy.clear_admin_user_discriminators()
         for json_path in json_paths:
             await policy.add_admin_user_discriminator(json_path)
@@ -293,11 +300,10 @@ def list_admin_users(
 ):
     """Show admin users defined in the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
 
-    cli_util._check_ram_dburi(dburi, "admin-users list")
-
-    discriminators = asyncio.run(_list_discriminators(dburi))
+    discriminators = asyncio.run(
+        _list_discriminators(the_installation, "admin-users list")
+    )
     _dump(ctx, discriminators)
 
 
@@ -308,11 +314,10 @@ def clear_admin_users(
 ):
     """Clear admin users from the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
 
-    cli_util._check_ram_dburi(dburi, "admin-users clear")
-
-    discriminators = asyncio.run(_clear_discriminators(dburi))
+    discriminators = asyncio.run(
+        _clear_discriminators(the_installation, "admin-users clear")
+    )
     _dump(ctx, discriminators)
 
 
@@ -353,7 +358,7 @@ def add_admin_user(
     command reports that and exits non-zero without inserting a
     duplicate row.
     """
-    dburi, resolved = _check_admin_user_args(
+    the_installation, resolved = _check_admin_user_args(
         installation_path,
         admin_user_email,
         preferred_username,
@@ -362,7 +367,9 @@ def add_admin_user(
     )
 
     try:
-        discriminators = asyncio.run(_add_discriminator(dburi, resolved))
+        discriminators = asyncio.run(
+            _add_discriminator(the_installation, "admin-users add", resolved)
+        )
     except authz.AdminUserExists:
         the_console.rule(f"{_describe_admin(resolved)} is already an admin")
         the_console.print("Nothing to do.")
@@ -419,7 +426,7 @@ def delete_admin_user(
     stored 'json_path'. If no admin entry matches the resolved
     JSONPath, the command reports that and exits non-zero.
     """
-    dburi, resolved = _check_admin_user_args(
+    the_installation, resolved = _check_admin_user_args(
         installation_path,
         admin_user_email,
         preferred_username,
@@ -429,7 +436,11 @@ def delete_admin_user(
     )
 
     try:
-        discriminators = asyncio.run(_remove_discriminator(dburi, resolved))
+        discriminators = asyncio.run(
+            _remove_discriminator(
+                the_installation, "admin-users delete", resolved
+            )
+        )
     except authz.NoSuchAdminUser:
         the_console.rule(f"{_describe_admin(resolved)} is not an admin")
         the_console.print("Nothing to do.")
@@ -464,11 +475,10 @@ def admin_users_as_yaml(
     (they round-trip via 'from-yaml').
     """
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
 
-    cli_util._check_ram_dburi(dburi, "admin-users as-yaml")
-
-    discriminators = asyncio.run(_list_discriminators(dburi))
+    discriminators = asyncio.run(
+        _list_discriminators(the_installation, "admin-users as-yaml")
+    )
     yaml_text = _admin_users_as_yaml(discriminators)
 
     if output is not None:
@@ -503,9 +513,6 @@ def admin_users_from_yaml(
     removes every admin entry.
     """
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
-
-    cli_util._check_ram_dburi(dburi, "admin-users from-yaml")
 
     if input_ is not None:
         yaml_text = input_.read_text(encoding="utf-8")
@@ -514,4 +521,8 @@ def admin_users_from_yaml(
 
     json_paths = _admin_users_from_jsonable(yaml.safe_load(yaml_text))
 
-    asyncio.run(_replace_discriminators(dburi, json_paths))
+    asyncio.run(
+        _replace_discriminators(
+            the_installation, "admin-users from-yaml", json_paths
+        )
+    )

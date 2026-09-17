@@ -54,6 +54,7 @@ def test_curry_lifespan(
         "installation_path": pathlib.Path(exp_path),
         "no_auth_mode": exp_no_auth_mode,
         "log_config_file": exp_log_config_file,
+        "multiple_writers": False,
     }
 
 
@@ -212,6 +213,7 @@ def test_create_app_with_explicit_overrides(
         installation_path=i_path,
         no_auth_mode=w_no_auth_mode,
         log_config_file=w_log_config_file,
+        multiple_writers=False,
     )
 
 
@@ -279,9 +281,11 @@ def test_create_app_wo_explicit_overrides(
         installation_path=i_path,
         no_auth_mode=w_no_auth_mode,
         log_config_file=w_log_config_file,
+        multiple_writers=False,
     )
 
 
+@pytest.mark.parametrize("w_multiple_writers", [False, True])
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 @mock.patch("soliplex.main.create_app")
@@ -290,6 +294,7 @@ def test_create_app_from_environment(
     temp_dir,
     w_no_auth_mode,
     w_log_config_file,
+    w_multiple_writers,
 ):
     i_path = temp_dir / "installation.yaml"
 
@@ -301,6 +306,9 @@ def test_create_app_from_environment(
     if w_log_config_file:
         env_patch["_SOLIPLEX_LOG_CONFIG_FILE"] = w_log_config_file
 
+    if w_multiple_writers:
+        env_patch["_SOLIPLEX_MULTIPLE_WRITERS"] = "Y"
+
     with mock.patch.dict("os.environ", clear=True, **env_patch):
         found = main.create_app_from_environment()
 
@@ -309,4 +317,5 @@ def test_create_app_from_environment(
         installation_path=i_path,
         no_auth_mode=w_no_auth_mode,
         log_config_file=w_log_config_file,
+        multiple_writers=w_multiple_writers,
     )

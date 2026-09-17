@@ -8,6 +8,7 @@ import shutil
 import pytest
 from typer.testing import CliRunner
 
+from soliplex import alembic_migrations
 from soliplex.authz import schema as authz_schema
 from tests._dburi import sqlite_dburi
 
@@ -15,11 +16,21 @@ from tests._dburi import sqlite_dburi
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 _EXAMPLE_DIR = _REPO_ROOT / "example"
 
-# Matches the 'authorization_dburi' stanza in 'example/minimal.yaml' so a
-# scratch copy can be repointed at a throwaway sqlite file.
-_AUTHZ_DBURI_RE = re.compile(
-    r'authorization_dburi:\n  sync: "[^"]*"\n  async: "[^"]*"',
-)
+
+# Matches a DBURI stanza in 'example/minimal.yaml' so a scratch copy can be
+# repointed at throwaway sqlite files. Both databases are repointed: a CLI
+# command brings them to the current revision (see
+# 'soliplex.alembic_migrations'), so both have to be disposable.
+def _dburi_re(key):
+    return re.compile(
+        rf'{key}:\n  sync: "[^"]*"\n  async: "[^"]*"',
+    )
+
+
+_DBURI_KEYS = {
+    "agui": "thread_persistence_dburi",
+    "authz": "authorization_dburi",
+}
 
 # Matches the bare 'OLLAMA_BASE_URL' environment requirement so a scratch
 # copy can pin a dummy value inline (the CLI never connects to it),
@@ -34,24 +45,34 @@ class ScratchInstallation:
 
     'path' is the installation YAML to hand to a CLI command;
     'dburi' / 'db_path' locate the (initially empty) sync authz database
-    that the installation's 'authorization_dburi' has been repointed at.
-    'session()' opens a sync SQLAlchemy session against that database,
-    creating the authz schema on first use.
+    that the installation's 'authorization_dburi' has been repointed at,
+    and 'agui_db_path' the thread-persistence one. 'session()' opens a sync
+    SQLAlchemy session against the authz database, creating its schema on
+    first use.
     """
 
     path: pathlib.Path
     dburi: str
     db_path: pathlib.Path
+    agui_db_path: pathlib.Path
 
     def session(self):
-        return authz_schema.get_session(
-            engine_url=self.dburi,
-            init_schema=True,
+        """A sync session over the authz DB, brought to the current
+        revision first -- the same way a command or the server would, so
+        the database a test seeds is stamped like any other."""
+        alembic_migrations.upgrade(
+            dburis={
+                alembic_migrations.AGUI: sqlite_dburi(self.agui_db_path),
+                alembic_migrations.AUTHZ: sqlite_dburi(self.db_path),
+            }
         )
+        return authz_schema.get_session(engine_url=self.dburi)
 
 
-def _point_authz_db(config_path: pathlib.Path, db_path: pathlib.Path) -> None:
-    """Repoint a copied installation's authz DB at an absolute scratch file.
+def _point_db(
+    config_path: pathlib.Path, key: str, db_path: pathlib.Path
+) -> None:
+    """Repoint one of a copied installation's DBs at a scratch file.
 
     The replacement is passed to 'subn' as a callable because 're.sub'
     expands backslash escapes in a replacement *string*.
@@ -63,13 +84,13 @@ def _point_authz_db(config_path: pathlib.Path, db_path: pathlib.Path) -> None:
     """
     text = config_path.read_text()
     replacement = (
-        "authorization_dburi:\n"
+        f"{key}:\n"
         f'  sync: "{sqlite_dburi(db_path)}"\n'
         f'  async: "{sqlite_dburi(db_path, "+aiosqlite")}"'
     )
-    text, n_subs = _AUTHZ_DBURI_RE.subn(lambda _: replacement, text)
+    text, n_subs = _dburi_re(key).subn(lambda _: replacement, text)
     # Fail loudly if the example config's shape drifts out from under us.
-    assert n_subs == 1, f"expected one authz_dburi stanza, found {n_subs}"
+    assert n_subs == 1, f"expected one {key} stanza, found {n_subs}"
     config_path.write_text(text)
 
 
@@ -102,10 +123,12 @@ def _installation_template(tmp_path_factory):
 
     config_path = dst / "minimal.yaml"
     db_path = base / "authz.sqlite"
-    _point_authz_db(config_path, db_path)
+    agui_db_path = base / "agui.sqlite"
+    _point_db(config_path, _DBURI_KEYS["authz"], db_path)
+    _point_db(config_path, _DBURI_KEYS["agui"], agui_db_path)
     _pin_ollama_base_url(config_path)
 
-    return config_path, db_path
+    return config_path, db_path, agui_db_path
 
 
 @pytest.fixture
@@ -118,12 +141,14 @@ def scratch_installation(_installation_template) -> ScratchInstallation:
     suite that needs to drive commands against a real installation and
     a real-but-disposable authorization database.
     """
-    config_path, db_path = _installation_template
+    config_path, db_path, agui_db_path = _installation_template
     db_path.unlink(missing_ok=True)
+    agui_db_path.unlink(missing_ok=True)
     return ScratchInstallation(
         path=config_path,
         dburi=sqlite_dburi(db_path),
         db_path=db_path,
+        agui_db_path=agui_db_path,
     )
 
 

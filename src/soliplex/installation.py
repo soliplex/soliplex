@@ -17,11 +17,11 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from sqlalchemy.pool import NullPool
 
 from soliplex import agents
+from soliplex import alembic_migrations
 from soliplex import authz
 from soliplex import loggers
 from soliplex import mcp_server
 from soliplex import util
-from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
@@ -607,12 +607,92 @@ def add_no_auth_user_as_admin(connection):
         add_user_as_admin(connection, email=email)
 
 
+@dataclasses.dataclass(frozen=True)
+class Engines:
+    """The two database engines an installation runs on."""
+
+    threads_engine: sqla_asyncio.AsyncEngine
+    authorization_engine: sqla_asyncio.AsyncEngine
+
+    @property
+    def as_context(self) -> dict:
+        """The engines, under the names the app context knows them by."""
+        return {
+            "threads_engine": self.threads_engine,
+            "authorization_engine": self.authorization_engine,
+        }
+
+    async def dispose_engines(self) -> None:
+        """Release both engines' connection pools."""
+        await self.threads_engine.dispose()
+        await self.authorization_engine.dispose()
+
+
+@contextlib.asynccontextmanager
+async def open_engines(
+    *,
+    the_installation: Installation,
+    multiple_writers: bool,
+    no_auth_mode: bool,
+):
+    """Yield both engines, at the revision this release of soliplex expects.
+
+    Handle the special case for `no_auth_mode` (add the default user
+    as an admin) here.
+
+    The engines are disposed on the way out, however the block ends -- a
+    refused migration included.
+
+    Each database is migrated through the engine returned here, and is
+    created that way when it does not exist yet: the revisions are the
+    schema (see 'soliplex.alembic_migrations'). Migrating on the returned
+    engine is also what makes an in-memory database work, since such a
+    database lives and dies with the engine that opened it.
+
+    Several workers or replicas must not migrate one database at the same
+    time, so with 'multiple_writers' the databases are checked and left
+    alone, and a migration they still need is raised rather than run.
+    """
+    engines = Engines(
+        threads_engine=_create_async_engine(
+            the_installation.thread_persistence_dburi_async,
+            json_serializer=util.serialize_sqla_json,
+            pool_pre_ping=True,
+        ),
+        authorization_engine=_create_async_engine(
+            the_installation.authorization_dburi_async,
+            json_serializer=util.serialize_sqla_json,
+            pool_pre_ping=True,
+        ),
+    )
+    try:
+        for database, engine in (
+            (alembic_migrations.AGUI, engines.threads_engine),
+            (alembic_migrations.AUTHZ, engines.authorization_engine),
+        ):
+            await alembic_migrations.ensure_current_engine(
+                engine, database, sole_writer=not multiple_writers
+            )
+
+        if no_auth_mode:
+            authz_engine = engines.authorization_engine
+            async with authz_engine.begin() as ra_connection:
+                await ra_connection.run_sync(
+                    add_no_auth_user_as_admin,
+                )
+
+        yield engines
+    finally:
+        await engines.dispose_engines()
+
+
 async def lifespan(
     app: fastapi.FastAPI,
     *,
     installation_path: pathlib.Path,
     no_auth_mode: bool = False,
     log_config_file: str = None,
+    multiple_writers: bool = False,
 ):
     i_config = config_installation.load_installation(installation_path)
 
@@ -647,36 +727,6 @@ async def lifespan(
     audit_log = loggers.ProcessLifetimeAuditLog()
     audit_log.server_starting()
 
-    agui_engine = _create_async_engine(
-        the_installation.thread_persistence_dburi_async,
-        json_serializer=util.serialize_sqla_json,
-        pool_pre_ping=True,
-    )
-    async with agui_engine.begin() as agui_connection:
-        await agui_connection.run_sync(
-            agui_schema.Base.metadata.create_all,
-        )
-
-    authz_engine = _create_async_engine(
-        the_installation.authorization_dburi_async,
-        json_serializer=util.serialize_sqla_json,
-        pool_pre_ping=True,
-    )
-    async with authz_engine.begin() as ra_connection:
-        await ra_connection.run_sync(
-            authz_schema.Base.metadata.create_all,
-        )
-        if no_auth_mode:
-            await ra_connection.run_sync(
-                add_no_auth_user_as_admin,
-            )
-
-    context = {
-        "the_installation": the_installation,
-        "threads_engine": agui_engine,
-        "authorization_engine": authz_engine,
-    }
-
     # Extract room configs FBO mcp_server.setup_mcp_for_rooms
     available_rooms = the_installation._config.room_configs
 
@@ -692,24 +742,28 @@ async def lifespan(
     if isinstance(max_token_age_secs, str):
         max_token_age_secs = int(max_token_age_secs)
 
-    async with contextlib.AsyncExitStack() as stack:
-        mcp_apps = mcp_server.setup_mcp_for_rooms(
-            available_rooms=available_rooms,
-            auth_disabled=auth_disabled,
-            url_safe_token_secret=url_safe_token_secret,
-            max_token_age_secs=max_token_age_secs,
-        )
+    async with open_engines(
+        the_installation=the_installation,
+        multiple_writers=multiple_writers,
+        no_auth_mode=no_auth_mode,
+    ) as the_engines:
+        async with contextlib.AsyncExitStack() as stack:
+            mcp_apps = mcp_server.setup_mcp_for_rooms(
+                available_rooms=available_rooms,
+                auth_disabled=auth_disabled,
+                url_safe_token_secret=url_safe_token_secret,
+                max_token_age_secs=max_token_age_secs,
+            )
 
-        for mcp_name, mcp_app in mcp_apps.items():
-            mcp_lifespan = mcp_app.lifespan(app)
-            await stack.enter_async_context(mcp_lifespan)
-            app.mount(f"/mcp/{mcp_name}", mcp_app, name=f"mcp_{mcp_name}")
+            for mcp_name, mcp_app in mcp_apps.items():
+                mcp_lifespan = mcp_app.lifespan(app)
+                await stack.enter_async_context(mcp_lifespan)
+                app.mount(f"/mcp/{mcp_name}", mcp_app, name=f"mcp_{mcp_name}")
 
-        audit_log.server_started()
+            audit_log.server_started()
 
-        yield context
+            yield {
+                "the_installation": the_installation
+            } | the_engines.as_context
 
-        audit_log.server_stopping()
-
-    await agui_engine.dispose()
-    await authz_engine.dispose()
+            audit_log.server_stopping()

@@ -235,6 +235,12 @@ Passing this option now fails with a non-zero exit.
         #        setting them yourself, either directly or via a '.env' file.
         os.environ["_SOLIPLEX_INSTALLATION_PATH"] = str(installation_path)
 
+        if workers is not None and workers > 1:
+            # Every worker opens the databases, so no worker may migrate
+            # them; the app aborts instead, telling the operator to
+            # migrate with the writers stopped.
+            os.environ["_SOLIPLEX_MULTIPLE_WRITERS"] = "Y"
+
         if no_auth_mode:
             os.environ["_SOLIPLEX_NO_AUTH_MODE"] = "Y"
 

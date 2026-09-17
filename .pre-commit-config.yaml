@@ -51,6 +51,19 @@ repos:
         language: system
         pass_filenames: false
         files: ^scripts/lint_textio\.py$
+      - id: lint-alembic-chain
+        name: lint migration chain vs models
+        entry: uv run python scripts/lint_alembic_chain.py --verbose
+        language: system
+        pass_filenames: false
+        # The models and the revisions have to agree.
+        files: ^src/soliplex/(agui|authz)/schema\.py$|^src/soliplex/alembic_migrations/
+      - id: lint-alembic-chain-self-test
+        name: lint migration chain vs models (self-test)
+        entry: uv run python scripts/lint_alembic_chain.py --self-test
+        language: system
+        pass_filenames: false
+        files: ^scripts/lint_alembic_chain\.py$
       - id: lint-interpolation
         name: lint ad-hoc interpolation
         entry: uv run python scripts/lint_interpolation.py --verbose

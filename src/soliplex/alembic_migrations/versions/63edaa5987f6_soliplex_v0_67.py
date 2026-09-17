@@ -11,7 +11,6 @@ import re
 import typing
 
 import sqlalchemy as sa
-
 from alembic import context
 from alembic import op
 

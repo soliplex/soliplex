@@ -13,12 +13,9 @@ from ag_ui import core as agui_core
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import installation
 from soliplex import loggers
 from soliplex import models
-from soliplex import util
 from soliplex.agui import persistence as agui_persistence
-from soliplex.agui import schema as agui_schema
 from soliplex.cli import cli_util
 from soliplex.cli import types
 
@@ -113,15 +110,16 @@ async def _run_ask(the_installation, room_id, prompt, claims) -> _AskResult:
         room_id=room_id,
         user=user,
     )
-    engine = installation._create_async_engine(
-        the_installation.thread_persistence_dburi_async,
-        json_serializer=util.serialize_sqla_json,
-        pool_pre_ping=True,
+    # Writes a thread and a run, and can be the first thing to touch a
+    # fresh installation. An in-memory database is allowed: the reply is
+    # the point, and the transcript dying with the command is no loss.
+    engine = await cli_util.open_db(
+        the_installation,
+        cli_util.AGUI,
+        command="ask",
+        allow_ram=True,
     )
     try:
-        async with engine.begin() as connection:
-            await connection.run_sync(agui_schema.Base.metadata.create_all)
-
         thread_id, run_id = await _create_thread_run(
             engine,
             user_name=user_name,
