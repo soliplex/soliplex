@@ -8,6 +8,7 @@ from unittest import mock
 import pytest
 import typer
 
+from soliplex import alembic_migrations
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
@@ -183,13 +184,90 @@ def test__configure_cli_logging_noop_when_already_configured(
     assert audit_logger.propagate is saved_propagate
 
 
+def _installation_at(tmp_path, *, ram=False):
+    """An installation whose two databases are this test's own."""
+    if ram:
+        agui = authz = config_installation.ASYNC_MEMORY_ENGINE_URL
+    else:
+        agui = f"sqlite+aiosqlite:///{tmp_path / 'agui.sqlite'}"
+        authz = f"sqlite+aiosqlite:///{tmp_path / 'authz.sqlite'}"
+    return mock.Mock(
+        thread_persistence_dburi_async=agui,
+        authorization_dburi_async=authz,
+    )
+
+
+async def _revision_of(engine):
+    """The revision the database behind an async engine is stamped at."""
+    async with engine.connect() as connection:
+        return await connection.run_sync(alembic_migrations.current_revision)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.cli.cli_util.the_console")
+async def test_open_db_rejects_a_ram_dburi_by_default(the_console, tmp_path):
+    the_installation = _installation_at(tmp_path, ram=True)
+
+    with pytest.raises(typer.Exit):
+        await cli_util.open_db(
+            the_installation, cli_util.AUTHZ, command="test-command"
+        )
+
+    the_console.rule.assert_called_once_with(
+        "Authorization DB is RAM-based",
+    )
+
+
+@pytest.mark.anyio
+async def test_open_db_migrates_a_ram_dburi_when_allowed(tmp_path):
+    # An in-memory database lives inside the engine that opened it, so the
+    # migration has to run on the engine handed back -- nowhere else.
+    the_installation = _installation_at(tmp_path, ram=True)
+
+    engine = await cli_util.open_db(
+        the_installation,
+        cli_util.AUTHZ,
+        command="test-command",
+        allow_ram=True,
+    )
+
+    try:
+        assert await _revision_of(engine) == alembic_migrations.head_revision()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_open_db_must_exist_accepts_a_created_database(tmp_path):
+    the_installation = _installation_at(tmp_path)
+    dburi = the_installation.authorization_dburi_async
+    created = installation._create_async_engine(dburi)
+    try:
+        await alembic_migrations.ensure_current_engine(
+            created, cli_util.AUTHZ, sole_writer=True
+        )
+    finally:
+        await created.dispose()
+
+    engine = await cli_util.open_db(
+        the_installation,
+        cli_util.AUTHZ,
+        command="test-command",
+        must_exist=True,
+    )
+
+    try:
+        assert await _revision_of(engine) == alembic_migrations.head_revision()
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.anyio
 @mock.patch("soliplex.cli.cli_util._configure_cli_logging")
 async def test__authz_session_configures_logging(configure_logging, tmp_path):
-    db_path = tmp_path / "authz.sqlite"
-    dburi = f"sqlite+aiosqlite:///{db_path}"
+    the_installation = _installation_at(tmp_path)
 
-    async with cli_util._authz_session(dburi):
+    async with cli_util._authz_session(the_installation, "test-command"):
         pass
 
     configure_logging.assert_called_once_with()
@@ -198,11 +276,12 @@ async def test__authz_session_configures_logging(configure_logging, tmp_path):
 @pytest.mark.anyio
 @mock.patch("soliplex.cli.cli_util._configure_cli_logging")
 async def test__admin_user_policy(_configure_logging, tmp_path):
-    db_path = tmp_path / "authz.sqlite"
-    dburi = f"sqlite+aiosqlite:///{db_path}"
+    the_installation = _installation_at(tmp_path)
     json_path = authz.token_field_json_path("email", "alice@example.com")
 
-    async with cli_util._admin_user_policy(dburi) as policy:
+    async with cli_util._admin_user_policy(
+        the_installation, "test-command"
+    ) as policy:
         await policy.add_admin_user_discriminator(json_path)
         found = await policy.list_admin_user_discriminators()
 
@@ -212,10 +291,11 @@ async def test__admin_user_policy(_configure_logging, tmp_path):
 @pytest.mark.anyio
 @mock.patch("soliplex.cli.cli_util._configure_cli_logging")
 async def test__room_authz_policy(_configure_logging, tmp_path):
-    db_path = tmp_path / "authz.sqlite"
-    dburi = f"sqlite+aiosqlite:///{db_path}"
+    the_installation = _installation_at(tmp_path)
 
-    async with cli_util._room_authz_policy(dburi) as policy:
+    async with cli_util._room_authz_policy(
+        the_installation, "test-command"
+    ) as policy:
         await policy.set_room_default("faux", authz.AllowDeny.DENY)
         found = await policy.list_room_policies()
 

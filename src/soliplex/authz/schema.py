@@ -309,7 +309,6 @@ def _acl_entry_check_discriminator(_mapper, _connection, target) -> None:
 def get_engine(
     *,
     engine_url=config_installation.SYNC_MEMORY_ENGINE_URL,
-    init_schema=False,
     **engine_kwargs,
 ) -> sqlalchemy.Engine:
     engine = sqlalchemy.create_engine(
@@ -334,22 +333,16 @@ def get_engine(
         cursor_fk.execute("PRAGMA foreign_keys=ON")
         cursor_fk.close()
 
-    if init_schema:
-        with engine.connect() as connection:
-            Base.metadata.create_all(connection)
-
     return engine
 
 
 def get_session(
     *,
     engine_url=config_installation.SYNC_MEMORY_ENGINE_URL,
-    init_schema=False,
     **engine_kwargs,
 ) -> sqla_orm.Session:
     engine = get_engine(
         engine_url=engine_url,
-        init_schema=init_schema,
         **engine_kwargs,
     )
     return sqla_orm.Session(bind=engine)
@@ -358,7 +351,6 @@ def get_session(
 async def get_async_engine(
     *,
     engine_url=config_installation.ASYNC_MEMORY_ENGINE_URL,
-    init_schema=False,
     **engine_kwargs,
 ):
     engine = sqla_asyncio.create_async_engine(
@@ -367,22 +359,16 @@ async def get_async_engine(
         **engine_kwargs,
     )
 
-    if init_schema:
-        async with engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
-
     return engine
 
 
 async def get_async_session(
     *,
     engine_url=config_installation.ASYNC_MEMORY_ENGINE_URL,
-    init_schema=False,
     **engine_kwargs,
 ):
     engine = await get_async_engine(
         engine_url=engine_url,
-        init_schema=init_schema,
         **engine_kwargs,
     )
     return sqla_asyncio.AsyncSession(bind=engine)

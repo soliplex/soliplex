@@ -1128,13 +1128,17 @@ def _invalid_completions(
     return errors
 
 
-async def _list_room_policies(dburi):
-    async with cli_util._room_authz_policy(dburi) as policy:
+async def _list_room_policies(the_installation):
+    async with cli_util._room_authz_policy(
+        the_installation, "audit room-authz", allow_ram=True, must_exist=True
+    ) as policy:
         return await policy.list_room_policies()
 
 
-async def _list_admin_discriminators(dburi):
-    async with cli_util._admin_user_policy(dburi) as policy:
+async def _list_admin_discriminators(the_installation):
+    async with cli_util._admin_user_policy(
+        the_installation, "audit admin-users", allow_ram=True, must_exist=True
+    ) as policy:
         return await policy.list_admin_user_discriminators()
 
 
@@ -1143,21 +1147,22 @@ def _room_policies(the_installation) -> tuple[list, str | None]:
 
     ``policies`` holds the unchecked policy models read via
     'RoomAuthorizationPolicy.list_room_policies' and ``error`` is ``None``
-    on success. A RAM-based authz DB can hold no persisted rows, so it
-    short-circuits to ``([], None)`` without touching the database.
+    on success. A database nothing has created yet -- including an
+    in-memory one -- holds no policies, so it reports ``([], None)``
+    rather than creating a schema to read from.
 
     When the database itself cannot be reached -- e.g. its DBURI names a
     Postgres server that isn't listening -- ``policies`` is empty and
     ``error`` carries the exception message, so the audit can report the
     unreachable DB instead of dying on the traceback.
     """
-    dburi = the_installation.authorization_dburi_async
-
-    if dburi in cli_util._RAM_DBURIS:
-        return [], None
-
     try:
-        return list(asyncio.run(_list_room_policies(dburi))), None
+        return list(asyncio.run(_list_room_policies(the_installation))), None
+    except cli_util.DatabaseNotCreated:
+        # Nothing has created the authorization schema, so there are no
+        # policies to audit. Creating one is a writable open's job, never
+        # an audit's.
+        return [], None
     except Exception as exc:
         return [], f"{type(exc).__name__}: {exc}"
 
@@ -1294,22 +1299,23 @@ def _admin_user_json_paths(
 
     ``json_paths`` holds every stored 'AdminUser.json_path', in insertion
     order, read via 'AdminUserPolicy.list_admin_user_discriminators';
-    ``error`` is ``None`` on success. A RAM-based authz DB can hold no
-    persisted rows, so it short-circuits to ``([], None)`` without
-    touching the database.
+    ``error`` is ``None`` on success. A database nothing has created yet
+    -- including an in-memory one -- holds no admin rows, so it reports
+    ``([], None)`` rather than creating a schema to read from.
 
     When the database itself cannot be reached -- e.g. its DBURI names a
     Postgres server that isn't listening -- ``json_paths`` is empty and
     ``error`` carries the exception message, so the audit can report the
     unreachable DB instead of dying on the traceback.
     """
-    dburi = the_installation.authorization_dburi_async
-
-    if dburi in cli_util._RAM_DBURIS:
-        return [], None
-
     try:
-        return list(asyncio.run(_list_admin_discriminators(dburi))), None
+        return (
+            list(asyncio.run(_list_admin_discriminators(the_installation))),
+            None,
+        )
+    except cli_util.DatabaseNotCreated:
+        # As above: no schema means nothing to audit.
+        return [], None
     except Exception as exc:
         return [], f"{type(exc).__name__}: {exc}"
 

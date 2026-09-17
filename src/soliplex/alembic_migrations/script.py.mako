@@ -1,5 +1,5 @@
 <%!
-import re
+from soliplex.alembic_migrations import DATABASE_NAMES
 
 %>"""${message}
 
@@ -30,14 +30,10 @@ def downgrade(engine_name: str) -> None:
     """Downgrade schema."""
     globals()[f"downgrade_{engine_name}"]()
 
-<%
-    db_names = config.get_main_option("databases")
-%>
-
 ## generate an "upgrade_<xyz>() / downgrade_<xyz>()" function
-## for each database name in the ini file.
+## for each database named by 'soliplex.alembic_migrations'.
 
-% for db_name in re.split(r',\s*', db_names):
+% for db_name in DATABASE_NAMES:
 
 def upgrade_${db_name}() -> None:
     """Upgrade ${db_name} schema."""

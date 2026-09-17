@@ -11,11 +11,11 @@ import typer
 from rich import console
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+from soliplex import alembic_migrations
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex.authz import persistence as authz_persistence
-from soliplex.authz import schema as authz_schema
 from soliplex.config import installation as config_installation
 
 the_console = console.Console()
@@ -57,6 +57,13 @@ def get_installation(
 # Both the sync ('sqlite://') and async ('sqlite+aiosqlite://') in-memory
 # URLs spell a throwaway database; a CLI mutation against either is a no-op
 # once the process exits, so commands reject them up front.
+AGUI = alembic_migrations.AGUI
+AUTHZ = alembic_migrations.AUTHZ
+
+# An in-memory database is a throwaway: it lives inside one engine, in one
+# process. Whether that is useful depends on the command -- 'ask' prints a
+# reply and exits, while an 'admin-users' mutation would be discarded -- so
+# it is a CLI policy question, decided per caller by 'open_db'.
 _RAM_DBURIS = frozenset(
     {
         config_installation.SYNC_MEMORY_ENGINE_URL,
@@ -70,6 +77,79 @@ def _check_ram_dburi(dburi: str, command: str):
         the_console.rule("Authorization DB is RAM-based")
         the_console.print(f"'{command}' is a no-op with a RAM-based database")
         raise typer.Exit(1)
+
+
+class DatabaseNotCreated(Exception):
+    """The database has no schema, and this caller will not create one."""
+
+    def __init__(self, db_type: str):
+        self.db_type = db_type
+        super().__init__(f"the {db_type} database has not been created")
+
+
+_DBURI_FOR = {
+    AGUI: "thread_persistence_dburi_async",
+    AUTHZ: "authorization_dburi_async",
+}
+
+
+async def _require_existing_schema(engine, db_type: str) -> None:
+    """Raise 'DatabaseNotCreated' unless the schema is already present."""
+    async with engine.connect() as connection:
+        state = await connection.run_sync(
+            alembic_migrations.database_state,
+            alembic_migrations.METADATA[db_type],
+        )
+    if state is alembic_migrations.DatabaseState.EMPTY:
+        raise DatabaseNotCreated(db_type)
+
+
+async def open_db(
+    the_installation,
+    db_type: str,
+    *,
+    command: str,
+    allow_ram: bool = False,
+    must_exist: bool = False,
+):
+    """An engine for one of the installation's databases, ready to use.
+
+    The engine is built by the same factory the server uses, so the CLI
+    inherits its file-based-SQLite tuning -- notably 'PRAGMA
+    foreign_keys=ON', which enables the 'ON DELETE CASCADE' behind room
+    policy / ACL deletes. Ownership passes to the caller, which disposes
+    it.
+
+    By default the database is brought to the revision this release
+    expects, creating it when it does not exist: a CLI command can be the
+    first thing to touch a fresh installation, and a single process is by
+    definition the sole writer. The migration runs through the engine
+    returned here, which is what makes an in-memory database work at all.
+
+    'allow_ram' admits an in-memory database, whose contents die with the
+    command; without it, such a DBURI ends the command, since its work
+    would be thrown away. 'must_exist' is for a reader: nothing is created
+    or migrated, and a database with no schema raises
+    'DatabaseNotCreated'.
+    """
+    dburi = getattr(the_installation, _DBURI_FOR[db_type])
+
+    if not allow_ram:
+        _check_ram_dburi(dburi, command)
+
+    engine = installation._create_async_engine(dburi)
+    try:
+        if must_exist:
+            await _require_existing_schema(engine, db_type)
+        else:
+            await alembic_migrations.ensure_current_engine(
+                engine, db_type, sole_writer=True
+            )
+    except BaseException:
+        await engine.dispose()
+        raise
+
+    return engine
 
 
 # Logging is process-global; the first caller (a group callback, or the
@@ -110,26 +190,23 @@ def _configure_cli_logging(cli_log_config: pathlib.Path | None = None) -> None:
 
 
 @contextlib.asynccontextmanager
-async def _authz_session(dburi):
+async def _authz_session(the_installation, command: str, **open_kwargs):
     """Yield an async session over the authz DB, disposing its engine.
 
-    Builds a fresh async engine per call via
-    'installation._create_async_engine' -- the same factory the app's
-    lifespan uses -- so the CLI inherits its file-based-SQLite tuning,
-    notably 'PRAGMA foreign_keys=ON' (which enables the 'ON DELETE
-    CASCADE' behind room policy / ACL deletes). The schema is created if
-    needed, and the engine is disposed on exit -- on both the success and
-    'typer.Exit' paths -- so the underlying SQLite connection is released
-    deterministically instead of leaking it until garbage collection.
+    The database is opened by 'open_db', which owns the policy: see it for
+    'allow_ram' and 'must_exist'. The engine is disposed on exit -- on the
+    success and 'typer.Exit' paths alike -- so the underlying SQLite
+    connection is released deterministically rather than leaking until
+    garbage collection.
     """
     # Safety net: the hidden 'add-admin-user' / 'show-room-authz' / ...
     # aliases bypass the group callbacks, so silence audit output here unless
     # a callback already configured it.
     _configure_cli_logging()
-    engine = installation._create_async_engine(dburi)
+    engine = await open_db(
+        the_installation, AUTHZ, command=command, **open_kwargs
+    )
     try:
-        async with engine.begin() as connection:
-            await connection.run_sync(authz_schema.Base.metadata.create_all)
         async with sqla_asyncio.AsyncSession(bind=engine) as session:
             yield session
             # The policy methods no longer commit; this context manager
@@ -157,16 +234,20 @@ def _audit_claims() -> dict[str, str]:
 
 
 @contextlib.asynccontextmanager
-async def _admin_user_policy(dburi):
+async def _admin_user_policy(the_installation, command: str, **open_kwargs):
     """Yield an async 'AdminUserPolicy' (see '_authz_session')."""
-    async with _authz_session(dburi) as session:
+    async with _authz_session(
+        the_installation, command, **open_kwargs
+    ) as session:
         yield authz_persistence.AdminUserPolicy(session, _audit_claims())
 
 
 @contextlib.asynccontextmanager
-async def _room_authz_policy(dburi):
+async def _room_authz_policy(the_installation, command: str, **open_kwargs):
     """Yield an async 'RoomAuthorizationPolicy' (see '_authz_session')."""
-    async with _authz_session(dburi) as session:
+    async with _authz_session(
+        the_installation, command, **open_kwargs
+    ) as session:
         yield authz_persistence.RoomAuthorizationPolicy(
             session, _audit_claims()
         )

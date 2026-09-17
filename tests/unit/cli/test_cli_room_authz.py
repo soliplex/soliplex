@@ -544,9 +544,8 @@ def test__resolve_allow_deny_mutex_violation(
     )
 
 
-@mock.patch("soliplex.cli.room_authz.cli_util._check_ram_dburi")
 @mock.patch("soliplex.cli.room_authz.cli_util.get_installation")
-def test__check_acl_entry_args(get_installation, _check_ram_dburi):
+def test__check_acl_entry_args(get_installation):
     the_installation = get_installation.return_value
     the_installation._config.room_configs = {"chat": mock.Mock()}
     the_installation.authorization_dburi_async = "sqlite:///fake.sqlite"
@@ -565,23 +564,17 @@ def test__check_acl_entry_args(get_installation, _check_ram_dburi):
     )
 
     assert found == (
-        "sqlite:///fake.sqlite",
+        the_installation,
         authz.AllowDeny.ALLOW,
         '$[?$.preferred_username == "alice"]',
     )
 
     get_installation.assert_called_once_with(mock.sentinel.installation_path)
-    _check_ram_dburi.assert_called_once_with(
-        "sqlite:///fake.sqlite",
-        "room-authz add-acl-entry",
-    )
 
 
-@mock.patch("soliplex.cli.room_authz.cli_util._check_ram_dburi")
 @mock.patch("soliplex.cli.room_authz.cli_util.get_installation")
 def test__check_acl_entry_args_allow_invalid_json_path(
     get_installation,
-    _check_ram_dburi,
 ):
     the_installation = get_installation.return_value
     the_installation._config.room_configs = {"chat": mock.Mock()}
@@ -604,7 +597,7 @@ def test__check_acl_entry_args_allow_invalid_json_path(
     )
 
     assert found == (
-        "sqlite:///fake.sqlite",
+        the_installation,
         authz.AllowDeny.DENY,
         bogus,
     )

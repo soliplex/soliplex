@@ -102,9 +102,8 @@ def test__check_admin_discriminator_rejects_other_arities(
     )
 
 
-@mock.patch("soliplex.cli.admin_users.cli_util._check_ram_dburi")
 @mock.patch("soliplex.cli.admin_users.cli_util.get_installation")
-def test__check_admin_user_args(get_installation, _check_ram_dburi):
+def test__check_admin_user_args(get_installation):
     the_installation = get_installation.return_value
     the_installation.authorization_dburi_async = (
         "sqlite+aiosqlite:///fake.sqlite"
@@ -119,22 +118,15 @@ def test__check_admin_user_args(get_installation, _check_ram_dburi):
     )
 
     assert found == (
-        "sqlite+aiosqlite:///fake.sqlite",
+        the_installation,
         '$[?$.email == "alice@example.com"]',
     )
 
     get_installation.assert_called_once_with(mock.sentinel.installation_path)
-    _check_ram_dburi.assert_called_once_with(
-        "sqlite+aiosqlite:///fake.sqlite",
-        "admin-users add",
-    )
 
 
-@mock.patch("soliplex.cli.admin_users.cli_util._check_ram_dburi")
 @mock.patch("soliplex.cli.admin_users.cli_util.get_installation")
-def test__check_admin_user_args_allow_invalid_json_path(
-    get_installation, _check_ram_dburi
-):
+def test__check_admin_user_args_allow_invalid_json_path(get_installation):
     the_installation = get_installation.return_value
     the_installation.authorization_dburi_async = (
         "sqlite+aiosqlite:///fake.sqlite"
@@ -151,7 +143,7 @@ def test__check_admin_user_args_allow_invalid_json_path(
         allow_invalid_json_path=True,
     )
 
-    assert found == ("sqlite+aiosqlite:///fake.sqlite", bogus)
+    assert found == (the_installation, bogus)
 
 
 @pytest.mark.parametrize(

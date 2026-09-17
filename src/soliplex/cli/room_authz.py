@@ -217,41 +217,55 @@ def _effective_room_id(room_id, model) -> str | None:
     return None
 
 
-async def _get_policy(dburi, room_id):
-    async with cli_util._room_authz_policy(dburi) as policy:
+async def _get_policy(the_installation, command, room_id):
+    async with cli_util._room_authz_policy(
+        the_installation, command
+    ) as policy:
         return await policy.get_room_policy_unchecked(room_id)
 
 
-async def _update_policy(dburi, room_id, model):
-    async with cli_util._room_authz_policy(dburi) as policy:
+async def _update_policy(the_installation, command, room_id, model):
+    async with cli_util._room_authz_policy(
+        the_installation, command
+    ) as policy:
         await policy.update_room_policy(room_id, model)
 
 
-async def _delete_policy(dburi, room_id):
-    async with cli_util._room_authz_policy(dburi) as policy:
+async def _delete_policy(the_installation, command, room_id):
+    async with cli_util._room_authz_policy(
+        the_installation, command
+    ) as policy:
         await policy.delete_room_policy(room_id)
 
 
-async def _set_default(dburi, room_id, allow_deny):
-    async with cli_util._room_authz_policy(dburi) as policy:
+async def _set_default(the_installation, command, room_id, allow_deny):
+    async with cli_util._room_authz_policy(
+        the_installation, command
+    ) as policy:
         await policy.set_room_default(room_id, allow_deny)
         return await policy.get_room_policy_unchecked(room_id)
 
 
-async def _clear_acl(dburi, room_id):
-    async with cli_util._room_authz_policy(dburi) as policy:
+async def _clear_acl(the_installation, command, room_id):
+    async with cli_util._room_authz_policy(
+        the_installation, command
+    ) as policy:
         await policy.clear_room_acl(room_id)
         return await policy.get_room_policy_unchecked(room_id)
 
 
-async def _add_acl_entry(dburi, room_id, entry):
-    async with cli_util._room_authz_policy(dburi) as policy:
+async def _add_acl_entry(the_installation, command, room_id, entry):
+    async with cli_util._room_authz_policy(
+        the_installation, command
+    ) as policy:
         await policy.add_acl_entry(room_id, entry)
         return await policy.get_room_policy_unchecked(room_id)
 
 
-async def _remove_acl_entry(dburi, room_id, entry):
-    async with cli_util._room_authz_policy(dburi) as policy:
+async def _remove_acl_entry(the_installation, command, room_id, entry):
+    async with cli_util._room_authz_policy(
+        the_installation, command
+    ) as policy:
         await policy.remove_acl_entry(room_id, entry)
         return await policy.get_room_policy_unchecked(room_id)
 
@@ -272,13 +286,17 @@ def show_room_authz(
 ):
     """Show room ACL entries defined in the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
 
-    cli_util._check_ram_dburi(dburi, "room-authz show")
     if not allow_stale:
         _check_room_id(the_installation, room_id)
 
-    policy = asyncio.run(_get_policy(dburi, room_id))
+    policy = asyncio.run(
+        _get_policy(
+            the_installation,
+            "room-authz show",
+            room_id,
+        )
+    )
     _dump(ctx, room_id, policy)
 
 
@@ -315,13 +333,17 @@ def room_authz_as_yaml(
     A room with no RoomPolicy row dumps as 'null'.
     """
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
 
-    cli_util._check_ram_dburi(dburi, "room-authz as-yaml")
     if not allow_stale:
         _check_room_id(the_installation, room_id)
 
-    policy = asyncio.run(_get_policy(dburi, room_id))
+    policy = asyncio.run(
+        _get_policy(
+            the_installation,
+            "room-authz as-yaml",
+            room_id,
+        )
+    )
     yaml_text = _room_policy_as_yaml(policy)
 
     if output is not None:
@@ -367,9 +389,6 @@ def room_authz_from_yaml(
     removes the target room's policy entirely.
     """
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
-
-    cli_util._check_ram_dburi(dburi, "room-authz from-yaml")
 
     if input_ is not None:
         yaml_text = input_.read_text(encoding="utf-8")
@@ -390,9 +409,22 @@ def room_authz_from_yaml(
     _check_room_id(the_installation, room_id)
 
     if model is None:
-        asyncio.run(_delete_policy(dburi, room_id))
+        asyncio.run(
+            _delete_policy(
+                the_installation,
+                "room-authz from-yaml",
+                room_id,
+            )
+        )
     else:
-        asyncio.run(_update_policy(dburi, room_id, model))
+        asyncio.run(
+            _update_policy(
+                the_installation,
+                "room-authz from-yaml",
+                room_id,
+                model,
+            )
+        )
 
 
 @app.command("make-private")
@@ -427,16 +459,25 @@ def make_room_private(
     policy is updated in place to DENY (ACL entries still preserved).
     """
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
 
-    cli_util._check_ram_dburi(dburi, "room-authz make-private")
     _check_room_id(the_installation, room_id)
 
-    policy = asyncio.run(_get_policy(dburi, room_id))
+    policy = asyncio.run(
+        _get_policy(
+            the_installation,
+            "room-authz make-private",
+            room_id,
+        )
+    )
 
     if policy is None:
         policy = asyncio.run(
-            _set_default(dburi, room_id, authz.AllowDeny.DENY)
+            _set_default(
+                the_installation,
+                "room-authz make-private",
+                room_id,
+                authz.AllowDeny.DENY,
+            )
         )
     elif policy.default_allow_deny == authz.AllowDeny.ALLOW:
         if not update:
@@ -450,7 +491,12 @@ def make_room_private(
             )
             raise typer.Exit(1)
         policy = asyncio.run(
-            _set_default(dburi, room_id, authz.AllowDeny.DENY)
+            _set_default(
+                the_installation,
+                "room-authz make-private",
+                room_id,
+                authz.AllowDeny.DENY,
+            )
         )
 
     _dump(ctx, room_id, policy)
@@ -487,12 +533,16 @@ def make_room_public(
     policy is updated in place to ALLOW (ACL entries still preserved).
     """
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
 
-    cli_util._check_ram_dburi(dburi, "room-authz make-public")
     _check_room_id(the_installation, room_id)
 
-    policy = asyncio.run(_get_policy(dburi, room_id))
+    policy = asyncio.run(
+        _get_policy(
+            the_installation,
+            "room-authz make-public",
+            room_id,
+        )
+    )
 
     if policy is not None and (
         policy.default_allow_deny == authz.AllowDeny.DENY
@@ -508,7 +558,12 @@ def make_room_public(
             )
             raise typer.Exit(1)
         policy = asyncio.run(
-            _set_default(dburi, room_id, authz.AllowDeny.ALLOW)
+            _set_default(
+                the_installation,
+                "room-authz make-public",
+                room_id,
+                authz.AllowDeny.ALLOW,
+            )
         )
 
     _dump(ctx, room_id, policy)
@@ -531,12 +586,16 @@ def clear_room_acl(
     If no RoomPolicy exists for the room, the command is a no-op.
     """
     the_installation = cli_util.get_installation(installation_path)
-    dburi = the_installation.authorization_dburi_async
 
-    cli_util._check_ram_dburi(dburi, "room-authz clear-acl")
     _check_room_id(the_installation, room_id)
 
-    policy = asyncio.run(_clear_acl(dburi, room_id))
+    policy = asyncio.run(
+        _clear_acl(
+            the_installation,
+            "room-authz clear-acl",
+            room_id,
+        )
+    )
     _dump(ctx, room_id, policy)
 
 
@@ -591,7 +650,7 @@ def _check_acl_entry_args(
     so a stored entry whose 'json_path' no longer compiles can still
     be matched and removed.
 
-    Returns '(dburi, allow_deny, json_path)' -- the values both commands
+    Returns '(the_installation, allow_deny, json_path)' -- what both commands
     need to perform their database update.
 
     Raises 'typer.Exit(1)' on any validation failure.
@@ -618,10 +677,7 @@ def _check_acl_entry_args(
         allow_invalid=allow_invalid_json_path,
     )
 
-    dburi = the_installation.authorization_dburi_async
-    cli_util._check_ram_dburi(dburi, command)
-
-    return dburi, allow_deny, json_path
+    return the_installation, allow_deny, json_path
 
 
 @app.command("add-acl-entry")
@@ -685,7 +741,7 @@ def add_acl_entry(
     replaced by the new entry. Entries with different discriminators
     are left untouched.
     """
-    dburi, allow_deny, json_path = _check_acl_entry_args(
+    the_installation, allow_deny, json_path = _check_acl_entry_args(
         installation_path,
         room_id,
         allow,
@@ -706,7 +762,14 @@ def add_acl_entry(
     )
 
     try:
-        policy = asyncio.run(_add_acl_entry(dburi, room_id, entry))
+        policy = asyncio.run(
+            _add_acl_entry(
+                the_installation,
+                "room-authz add-acl-entry",
+                room_id,
+                entry,
+            )
+        )
     except authz.NoSuchRoomPolicy:
         the_console.rule(f"No policy exists for room '{room_id}'")
         the_console.print(
@@ -785,7 +848,7 @@ def delete_acl_entry(
     The RoomPolicy row is preserved; only matching ACL entries
     are removed.
     """
-    dburi, allow_deny, json_path = _check_acl_entry_args(
+    the_installation, allow_deny, json_path = _check_acl_entry_args(
         installation_path,
         room_id,
         allow,
@@ -807,7 +870,14 @@ def delete_acl_entry(
     )
 
     try:
-        policy = asyncio.run(_remove_acl_entry(dburi, room_id, entry))
+        policy = asyncio.run(
+            _remove_acl_entry(
+                the_installation,
+                "room-authz delete-acl-entry",
+                room_id,
+                entry,
+            )
+        )
     except authz.NoSuchRoomPolicy:
         the_console.rule(f"No policy exists for room '{room_id}'")
         the_console.print(

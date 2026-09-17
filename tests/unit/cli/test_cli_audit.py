@@ -7,6 +7,7 @@ from unittest import mock
 
 import pytest
 import requests
+import sqlalchemy as sa
 import typer
 import yaml
 
@@ -15,6 +16,7 @@ from soliplex import installation
 from soliplex import models
 from soliplex import secrets
 from soliplex.cli import audit as cli_audit
+from soliplex.cli import cli_util
 from soliplex.config import installation as config_installation
 from soliplex.config import interpolation as config_interp
 from soliplex.config import quizzes as config_quizzes
@@ -1594,10 +1596,15 @@ async def test__list_room_policies(authz_policy):
     policy.list_room_policies.return_value = policies
     authz_policy.return_value.__aenter__.return_value = policy
 
-    found = await cli_audit._list_room_policies("dburi")
+    found = await cli_audit._list_room_policies(mock.sentinel.installation)
 
     assert found == policies
-    authz_policy.assert_called_once_with("dburi")
+    authz_policy.assert_called_once_with(
+        mock.sentinel.installation,
+        "audit room-authz",
+        allow_ram=True,
+        must_exist=True,
+    )
     policy.list_room_policies.assert_awaited_once_with()
 
 
@@ -1614,42 +1621,81 @@ async def test__list_admin_discriminators(authz_policy):
     policy.list_admin_user_discriminators.return_value = discriminators
     authz_policy.return_value.__aenter__.return_value = policy
 
-    found = await cli_audit._list_admin_discriminators("dburi")
+    found = await cli_audit._list_admin_discriminators(
+        mock.sentinel.installation
+    )
 
     assert found == discriminators
-    authz_policy.assert_called_once_with("dburi")
+    authz_policy.assert_called_once_with(
+        mock.sentinel.installation,
+        "audit admin-users",
+        allow_ram=True,
+        must_exist=True,
+    )
     policy.list_admin_user_discriminators.assert_awaited_once_with()
 
 
+def _tables(db_path):
+    """The tables in a SQLite file. Connecting creates the file itself --
+    an empty one -- so the schema is what says whether anything was
+    created."""
+    engine = sa.create_engine(f"sqlite:///{db_path}")
+    try:
+        return set(sa.inspect(engine).get_table_names())
+    finally:
+        engine.dispose()
+
+
+def _uncreated_installation(the_installation, tmp_path):
+    """Point an installation at an authz database nothing has created."""
+    db_path = tmp_path / "authz.sqlite"
+    the_installation._config.authorization_dburi_async = (
+        f"sqlite+aiosqlite:///{db_path}"
+    )
+    the_installation._config.authorization_dburi_sync = f"sqlite:///{db_path}"
+    return the_installation, db_path
+
+
+def test__room_policies_on_an_uncreated_database(the_installation, tmp_path):
+    the_installation, db_path = _uncreated_installation(
+        the_installation, tmp_path
+    )
+
+    found_policies, found_error = cli_audit._room_policies(the_installation)
+
+    assert found_policies == []
+    assert found_error is None
+    # Reading is all an audit does: no schema was created.
+    assert _tables(db_path) == set()
+
+
 @pytest.mark.parametrize(
-    "dburi, policies, exc, exp_queried, exp_policies, exp_error",
+    "policies, exc, exp_policies, exp_error",
     [
-        # RAM DB: no rows can be persisted, so the DB is never queried.
-        (_RAM_DBURI, None, None, False, [], None),
-        # File DB, no stored rows.
-        (_FILE_DBURI, [], None, True, [], None),
-        # File DB: stored rows pass through in the order they are read.
-        (_FILE_DBURI, ["p1", "p2"], None, True, ["p1", "p2"], None),
-        # File DB the driver cannot reach: reported, not raised.
-        (_FILE_DBURI, None, AuthzDBError, True, [], EXP_AUTHZ_DB_ERROR),
+        # A database nothing has created -- an in-memory one included --
+        # holds no policies, and that is not a finding.
+        (None, cli_util.DatabaseNotCreated("authz"), [], None),
+        # Created, with no stored rows.
+        ([], None, [], None),
+        # Stored rows pass through in the order they are read.
+        (["p1", "p2"], None, ["p1", "p2"], None),
+        # A database the driver cannot reach: reported, not raised.
+        (None, AuthzDBError(), [], EXP_AUTHZ_DB_ERROR),
     ],
 )
 @mock.patch("soliplex.cli.audit._list_room_policies")
 def test__room_policies(
     list_room_policies,
     the_installation,
-    dburi,
     policies,
     exc,
-    exp_queried,
     exp_policies,
     exp_error,
 ):
     # The helper is a pass-through, so opaque stand-ins stand in for the
     # 'models.RoomPolicyUnchecked' instances the policy yields.
-    the_installation._config.authorization_dburi_async = dburi
     if exc is not None:
-        list_room_policies.side_effect = exc()
+        list_room_policies.side_effect = exc
     else:
         list_room_policies.return_value = policies
 
@@ -1657,10 +1703,7 @@ def test__room_policies(
 
     assert found_policies == exp_policies
     assert found_error == exp_error
-    if exp_queried:
-        list_room_policies.assert_called_once_with(dburi)
-    else:
-        list_room_policies.assert_not_called()
+    list_room_policies.assert_called_once_with(the_installation)
 
 
 @pytest.mark.parametrize(
@@ -1801,46 +1844,58 @@ def test__invalid_acl_json_paths(policy_specs, exp_invalid):
 # audit_room_authz: command
 
 
+def test__admin_user_json_paths_on_an_uncreated_database(
+    the_installation, tmp_path
+):
+    the_installation, db_path = _uncreated_installation(
+        the_installation, tmp_path
+    )
+
+    found_paths, found_error = cli_audit._admin_user_json_paths(
+        the_installation
+    )
+
+    assert found_paths == []
+    assert found_error is None
+    assert _tables(db_path) == set()
+
+
 @pytest.mark.parametrize(
-    "dburi, json_paths, exc, exp_queried, exp_json_paths, exp_error",
+    "json_paths, exc, exp_json_paths, exp_error",
     [
-        # RAM DB: no rows can be persisted, so the DB is never queried.
-        (_RAM_DBURI, None, None, False, [], None),
-        # File DB, no stored admins.
-        (_FILE_DBURI, [], None, True, [], None),
-        # File DB: stored rows pass through in the order they are read.
+        # A database nothing has created -- an in-memory one included --
+        # holds no admin rows, and that is not a finding.
+        (None, cli_util.DatabaseNotCreated("authz"), [], None),
+        # Created, with no stored admins.
+        ([], None, [], None),
+        # Stored rows pass through in the order they are read.
         (
-            _FILE_DBURI,
             [
                 '$[?$.email == "alice@example.com"]',
                 "$[?some_func($.email)]",
             ],
             None,
-            True,
             [
                 '$[?$.email == "alice@example.com"]',
                 "$[?some_func($.email)]",
             ],
             None,
         ),
-        # File DB the driver cannot reach: reported, not raised.
-        (_FILE_DBURI, None, AuthzDBError, True, [], EXP_AUTHZ_DB_ERROR),
+        # A database the driver cannot reach: reported, not raised.
+        (None, AuthzDBError(), [], EXP_AUTHZ_DB_ERROR),
     ],
 )
 @mock.patch("soliplex.cli.audit._list_admin_discriminators")
 def test__admin_user_json_paths(
     list_admin_discriminators,
     the_installation,
-    dburi,
     json_paths,
     exc,
-    exp_queried,
     exp_json_paths,
     exp_error,
 ):
-    the_installation._config.authorization_dburi_async = dburi
     if exc is not None:
-        list_admin_discriminators.side_effect = exc()
+        list_admin_discriminators.side_effect = exc
     else:
         list_admin_discriminators.return_value = json_paths
 
@@ -1850,10 +1905,7 @@ def test__admin_user_json_paths(
 
     assert found_json_paths == exp_json_paths
     assert found_error == exp_error
-    if exp_queried:
-        list_admin_discriminators.assert_called_once_with(dburi)
-    else:
-        list_admin_discriminators.assert_not_called()
+    list_admin_discriminators.assert_called_once_with(the_installation)
 
 
 @pytest.mark.parametrize(
