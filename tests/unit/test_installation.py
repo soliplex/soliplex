@@ -408,7 +408,6 @@ def test_installation_agent_provider_info(
 HR_SECTION_ROLES = {
     "embeddings": installation.ProviderRole.EMBEDDING,
     "qa": installation.ProviderRole.CHAT,
-    "analysis": installation.ProviderRole.CHAT,
     "reranking": installation.ProviderRole.RERANKING,
 }
 HR_CONFIG_SECTIONS = list(HR_SECTION_ROLES)
@@ -431,7 +430,6 @@ def hr_config_w_providers(request):
         which=request.param,
         embeddings=None,
         qa=None,
-        analysis=None,
         reranking=None,
     )
     model = FauxHRModel()
@@ -519,7 +517,6 @@ def test_installation_haiku_rag_provider_info_w_conflicting_roles():
         spec_set=HR_CONFIG_SECTIONS,
         embeddings=mock.Mock(spec_set=["model"], model=model),
         qa=mock.Mock(spec_set=["model"], model=model),
-        analysis=None,
         reranking=None,
     )
     i_config = mock.create_autospec(
@@ -624,7 +621,6 @@ def test_installation_all_provider_info_folds_models_wo_base_url():
             spec_set=HR_CONFIG_SECTIONS,
             embeddings=None,
             qa=None,
-            analysis=None,
             reranking=None,
         ),
     )

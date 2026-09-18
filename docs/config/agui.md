@@ -38,8 +38,8 @@ during installation load:
 
 Importing `soliplex.config.skills` (which happens transitively
 whenever `soliplex.config` is imported) registers Soliplex's own
-built-in features. As of this writing, that includes the RAG and analysis
-capability state namespaces, registered with `source=server`.
+built-in features. As of this writing, that includes the RAG and citation
+policy capability state namespaces, registered with `source=server`.
 
 These registrations happen at module-import time and are present
 before any installation YAML is parsed.
