@@ -122,7 +122,6 @@ room_paths:
   - "./rooms/faux"
   - "./rooms/quiztest"
   - "./rooms/search"
-  - "./rooms/analysis"
 
 #==========================================================================
 # Skills configuration

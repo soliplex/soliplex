@@ -4,7 +4,6 @@ import dataclasses
 import typing
 
 import pydantic_ai
-from haiku.rag.capabilities import analysis as hr_caps_analysis
 from haiku.rag.capabilities import rag as hr_caps_rag
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import capabilities as ai_capabilities
@@ -20,11 +19,6 @@ from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 
 ToolConfigMap = dict[str, typing.Any]
-
-# Capabilities which take 'vision' from agent config's 'multimodal'
-HR_VisionCapabilities = (
-    hr_caps_rag.RAGCapability | hr_caps_analysis.AnalysisCapability
-)
 
 
 class CapabilityConfig(typing.Protocol):
@@ -136,12 +130,12 @@ def get_default_agent_from_configs(
                 )
             )
 
-    # RAG/analysis capabilities attach picture chunks to search results as
+    # The RAG capability attaches picture chunks to search results as
     # images only when the receiving model accepts them. That model is this
     # agent's model, not haiku.rag's configured model, so gate on the room
     # agent's declared multimodality.
     for capability in capabilities:
-        if isinstance(capability, HR_VisionCapabilities):
+        if isinstance(capability, hr_caps_rag.RAGCapability):
             capability.vision = agent_config.multimodal
 
     # A hook-only capability is never deferred:  nothing would load it, and

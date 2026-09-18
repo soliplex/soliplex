@@ -8,8 +8,9 @@ You have two skills:
   Files are mounted at `/sandbox/volumes/thread/` (per-thread)
   and `/sandbox/volumes/room/` (shared). The sandbox can read
   all mounted files directly.
-- **rag**: Search the document knowledge base. Use this when you
-  need context that isn't available in the mounted files.
+- **rag**: Search the document knowledge base, and run Python over its
+  documents. Use this when you need context that isn't available in the
+  mounted files.
 
 Use these tools to answer user questions about the files available for
 use by the sandbox skill:
