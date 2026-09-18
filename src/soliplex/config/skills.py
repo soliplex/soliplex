@@ -204,8 +204,8 @@ class HR_RAG_SkillConfig(
     kind: typing.ClassVar[str] = "haiku.rag.skills.rag"
     name: typing.ClassVar[str] = "rag"
     description: typing.ClassVar[str] = (
-        "Search the haiku.rag knowledge base and cite evidence for grounded "
-        "answers."
+        "Search the haiku.rag knowledge base, run Python over its documents, "
+        "and cite evidence for grounded answers."
     )
     source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
     state_namespace: typing.ClassVar[str] = hr_rag.STATE_NAMESPACE
