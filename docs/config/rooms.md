@@ -182,17 +182,7 @@ E.g.:
 
         - kind: "haiku.rag.skills.rag"
           rag_lancedb_stem: "rag"
-
-        - kind: "haiku.rag.skills.analysis"
-          rag_lancedb_stem: "notes"
   ```
-
-  Configure at most one of these two kinds per corpus.  Analysis searches
-  and cites as well as running code, so pairing it with the RAG skill over
-  the same database gives the agent two near-identical search tools, splits
-  its citations across the two records, and gives one question two search
-  budgets to spend.  Two kinds over *different* databases is fine, as
-  above.
 
 #### Deferred Loading
 
@@ -210,7 +200,6 @@ differs by kind:
 | Kind | Default |
 | --- | --- |
 | `haiku.rag.skills.rag` | `false` |
-| `haiku.rag.skills.analysis` | `false` |
 | `bwrap_sandbox` | `false` |
 | `entrypoint` | `true` |
 | filesystem skills, named in `installation_skill_names` | `true` |
@@ -254,10 +243,9 @@ results on every request.
 
 #### Default Skill Configuration Kinds
 
-Soliplex provides two such skill configuration classes by default:
-one of kind `haiku.rag.skills.rag` and one of kind
-`haiku.rag.skills.analysis`.  Both of these configurations have options for
-configuring the RAG database and RAG client:
+Soliplex provides one such skill configuration class by default, of kind
+`haiku.rag.skills.rag`.  It has options for configuring the RAG database
+and RAG client:
 
 - At most one of the following.  A configuration providing none of them
   reads the databases its `haiku.rag.yaml` places in `lancedb.databases`,
@@ -342,13 +330,6 @@ agent the following RAG tools:
   and synthesis. Slower than the `ask` tool, and more expensive in
   terms of token budget, but potentially produces a higher-quality
   result.
-
-The `haiku.rag.skills.analysis` skill gives the agent an `analyze` tool that
-iteratively writes and executes Python code in a Docker sandbox with
-access to `haiku.rag` functions (`search`, `list_documents`, `get_document`,
-`llm`, etc.).  Suited for aggregation, multi-document comparison, and
-structured data extraction.  Requires Docker.  This skill does not offer
-any additional options.
 
 ### Quiz-related elements
 

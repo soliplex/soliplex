@@ -10,7 +10,6 @@ import typing
 import pydantic
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
-from haiku.rag.capabilities import analysis as hr_analysis
 from haiku.rag.capabilities import compaction as hr_compaction
 from haiku.rag.capabilities import policy as hr_policy
 from haiku.rag.capabilities import rag as hr_rag
@@ -281,18 +280,6 @@ class HR_RAG_SkillConfig(_HaikuRAGCapabilityConfig):
     )
     state_namespace = hr_rag.STATE_NAMESPACE
     state_type = hr_rag.RAGState
-
-
-@dataclasses.dataclass(kw_only=True)
-class HR_Analysis_SkillConfig(_HaikuRAGCapabilityConfig):
-    kind: typing.ClassVar[str] = "haiku.rag.skills.analysis"
-    capability_factory = hr_analysis.create_capability
-    capability_name = "rag-analysis"
-    description = (
-        "Analyze the haiku.rag corpus with search and sandboxed Python code."
-    )
-    state_namespace = hr_analysis.STATE_NAMESPACE
-    state_type = hr_analysis.AnalysisState
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -581,7 +568,6 @@ class EntrypointCapabilityConfig:
 
 for feature_name, model in (
     (hr_rag.STATE_NAMESPACE, hr_rag.RAGState),
-    (hr_analysis.STATE_NAMESPACE, hr_analysis.AnalysisState),
     (hr_policy.STATE_NAMESPACE, hr_policy.CitationPolicyState),
 ):
     config_agui.AGUI_FEATURES_BY_NAME[feature_name] = config_agui.AGUI_Feature(
@@ -595,7 +581,6 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
     klass.kind: klass
     for klass in [
         HR_RAG_SkillConfig,
-        HR_Analysis_SkillConfig,
         HR_EvidenceCompaction_SkillConfig,
         HR_CitationPolicy_SkillConfig,
         BwrapSandboxSkillConfig,
@@ -608,7 +593,6 @@ SKILL_CONFIG_CLASSES_BY_KIND["bubble-sandbox"] = BwrapSandboxSkillConfig
 SkillConfigTypes = (
     FilesystemSkillConfig
     | HR_RAG_SkillConfig
-    | HR_Analysis_SkillConfig
     | BwrapSandboxSkillConfig
     | EntrypointCapabilityConfig
 )
