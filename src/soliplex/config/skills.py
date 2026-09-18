@@ -10,7 +10,6 @@ import typing
 import pydantic
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
-from haiku.rag.capabilities import analysis as hr_analysis
 from haiku.rag.capabilities import compaction as hr_compaction
 from haiku.rag.capabilities import policy as hr_policy
 from haiku.rag.capabilities import rag as hr_rag
@@ -198,16 +197,19 @@ class FilesystemSkillConfig:
 
 
 @dataclasses.dataclass(kw_only=True)
-class _HaikuRAGCapabilityConfig(
+class HR_RAG_SkillConfig(
     config_rag._RAGConfigBase,
     config_rag._RAGDatabasesBase,
 ):
-    capability_factory: typing.ClassVar[typing.Callable]
-    capability_name: typing.ClassVar[str]
-    description: typing.ClassVar[str]
-    state_namespace: typing.ClassVar[str]
-    state_type: typing.ClassVar[type[pydantic.BaseModel]]
+    kind: typing.ClassVar[str] = "haiku.rag.skills.rag"
+    name: typing.ClassVar[str] = "rag"
+    description: typing.ClassVar[str] = (
+        "Search the haiku.rag knowledge base, run Python over its documents, "
+        "and cite evidence for grounded answers."
+    )
     source: typing.ClassVar[SkillKind] = SkillKind.NATIVE
+    state_namespace: typing.ClassVar[str] = hr_rag.STATE_NAMESPACE
+    state_type: typing.ClassVar[type[pydantic.BaseModel]] = hr_rag.RAGState
 
     defer_loading: bool = False
 
@@ -238,12 +240,8 @@ class _HaikuRAGCapabilityConfig(
             ) from exc
 
     @property
-    def name(self) -> str:
-        return self.capability_name
-
-    @property
-    def capability(self) -> ai_capabilities.AbstractCapability:
-        return type(self).capability_factory(
+    def capability(self) -> hr_rag.RAGCapability:
+        return hr_rag.create_capability(
             config=self.haiku_rag_config,
             defer_loading=self.defer_loading,
         )
@@ -268,31 +266,6 @@ class _HaikuRAGCapabilityConfig(
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:
         return self.get_extra_parameters()
-
-
-@dataclasses.dataclass(kw_only=True)
-class HR_RAG_SkillConfig(_HaikuRAGCapabilityConfig):
-    kind: typing.ClassVar[str] = "haiku.rag.skills.rag"
-    capability_factory = hr_rag.create_capability
-    capability_name = "rag"
-    description = (
-        "Search the haiku.rag knowledge base and cite evidence for grounded "
-        "answers."
-    )
-    state_namespace = hr_rag.STATE_NAMESPACE
-    state_type = hr_rag.RAGState
-
-
-@dataclasses.dataclass(kw_only=True)
-class HR_Analysis_SkillConfig(_HaikuRAGCapabilityConfig):
-    kind: typing.ClassVar[str] = "haiku.rag.skills.analysis"
-    capability_factory = hr_analysis.create_capability
-    capability_name = "rag-analysis"
-    description = (
-        "Analyze the haiku.rag corpus with search and sandboxed Python code."
-    )
-    state_namespace = hr_analysis.STATE_NAMESPACE
-    state_type = hr_analysis.AnalysisState
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -581,7 +554,6 @@ class EntrypointCapabilityConfig:
 
 for feature_name, model in (
     (hr_rag.STATE_NAMESPACE, hr_rag.RAGState),
-    (hr_analysis.STATE_NAMESPACE, hr_analysis.AnalysisState),
     (hr_policy.STATE_NAMESPACE, hr_policy.CitationPolicyState),
 ):
     config_agui.AGUI_FEATURES_BY_NAME[feature_name] = config_agui.AGUI_Feature(
@@ -595,7 +567,6 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
     klass.kind: klass
     for klass in [
         HR_RAG_SkillConfig,
-        HR_Analysis_SkillConfig,
         HR_EvidenceCompaction_SkillConfig,
         HR_CitationPolicy_SkillConfig,
         BwrapSandboxSkillConfig,
@@ -608,7 +579,6 @@ SKILL_CONFIG_CLASSES_BY_KIND["bubble-sandbox"] = BwrapSandboxSkillConfig
 SkillConfigTypes = (
     FilesystemSkillConfig
     | HR_RAG_SkillConfig
-    | HR_Analysis_SkillConfig
     | BwrapSandboxSkillConfig
     | EntrypointCapabilityConfig
 )
@@ -765,7 +735,7 @@ class RoomSkillsConfig:
     def rag_db_paths(self) -> dict[str, str]:
         paths = {}
         for config in self.skill_configs.values():
-            if isinstance(config, _HaikuRAGCapabilityConfig):
+            if isinstance(config, HR_RAG_SkillConfig):
                 capability = config.capability
                 # Paranoid defence against a "can't get here" condition
                 assert capability.id is not None

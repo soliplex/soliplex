@@ -29,8 +29,8 @@ in the installation configuration file.
 
 ## Configuring Room-Specific Skills
 
-Soliplex also provides native capability configuration types for RAG,
-analysis, and sandbox execution. Because these capabilities require
+Soliplex also provides native capability configuration types for RAG and
+sandbox execution. Because these capabilities require
 room-specific parameters, they are defined using the
 [`skill_configs` stanza](rooms.md#skill-configuration)
 of the room configuration's `skills` entry.

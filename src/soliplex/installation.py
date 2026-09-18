@@ -239,7 +239,6 @@ class Installation:
         sections = (
             (hr.embeddings, ProviderRole.EMBEDDING),
             (hr.qa, ProviderRole.CHAT),
-            (hr.analysis, ProviderRole.CHAT),
             (hr.reranking, ProviderRole.RERANKING),
         )
 

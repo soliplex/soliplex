@@ -194,8 +194,8 @@ class AgentConfig:
     context_window: int = None
 
     # Declares whether this agent's model accepts image input. Gates whether
-    # RAG/analysis capabilities attach picture chunks to search results as
-    # images (the capabilities run on this agent's model, not haiku.rag's).
+    # the RAG capability attaches picture chunks to search results as
+    # images (the capability runs on this agent's model, not haiku.rag's).
     multimodal: bool = False
 
     _capability_configs: list[AgentCapabilityConfig] = _default_list_field()
