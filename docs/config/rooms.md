@@ -310,26 +310,24 @@ and RAG client:
   `haiku_rag_config`.
 
 Skill configurations with the `kind` of `"haiku.rag.skills.rag"` give the
-agent the following RAG tools:
+agent three tools:
 
-- `"search"` — semantic document search with multi-query expansion.
-  Gives the agent a `search` tool that returns ranked passages with
-  citations.
+- `search` — semantic search over the configured databases, returning
+  ranked chunks with the ids a citation quotes.  Picture chunks arrive as
+  images when the room's agent declares `multimodal: true`.
 
-- `"list_documents"` — list the documents in the RAG database.
+- `execute_code` — Python over the corpus, in an interpreter with
+  `search` and `list_documents` available inside it and every document
+  mounted read-only under `/documents/`.  Suited to counts, aggregation
+  and structural reading a search cannot express.  Variables persist
+  between calls, and the code has no network.
 
-- `"get_document"` — return the content of a single document in the
-  RAG database.
+- `cite` — register the chunk ids grounding the answer, or an empty list
+  where none do.
 
-- `"ask"` — question-answering via a research graph.  Gives the agent
-  an `ask` tool that searches, synthesizes an answer with citations,
-  and caches results for similar follow-up questions.
-
-- `"research"` — deep research via a research graph. Gives the agent
-  a `research` tool that performs a more elaborate search, analysis,
-  and synthesis. Slower than the `ask` tool, and more expensive in
-  terms of token budget, but potentially produces a higher-quality
-  result.
+The per-question budgets and the sandbox's limits come from the room's
+`haiku.rag` configuration: `qa.max_searches`, `qa.max_executions`,
+`sandbox.code_timeout` and `sandbox.max_output_chars`.
 
 ### Quiz-related elements
 
