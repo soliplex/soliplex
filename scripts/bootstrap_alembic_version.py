@@ -359,8 +359,8 @@ def installation_dburis(installation_path: pathlib.Path) -> dict[str, str]:
         raise InstallationUnavailable(exc) from exc
 
     return {
-        AGUI: the_installation.thread_persistence_dburi_sync,
-        AUTHZ: the_installation.authorization_dburi_sync,
+        AGUI: the_installation.thread_persistence_sync_dburi,
+        AUTHZ: the_installation.authorization_sync_dburi,
     }
 
 

@@ -99,12 +99,12 @@ def authz_db_path(tmp_path):
 
 
 @pytest.fixture
-def authz_dburi_sync(authz_db_path):
+def authz_sync_dburi(authz_db_path):
     """Synchronous 'sqlite:///' URI for 'authz_db_path'."""
     return sqlite_dburi(authz_db_path)
 
 
 @pytest.fixture
-def authz_dburi_async(authz_db_path):
+def authz_async_dburi(authz_db_path):
     """Asynchronous 'sqlite+aiosqlite:///' URI for 'authz_db_path'."""
     return sqlite_dburi(authz_db_path, "+aiosqlite")

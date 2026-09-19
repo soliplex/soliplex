@@ -642,8 +642,9 @@ def _check_acl_entry_args(
     """Run the validation prolog shared by add/delete-acl-entry.
 
     Loads the installation, checks the room id is configured, validates
-    the '--allow'/'--deny' and discriminator selections, resolves and
-    validates the JSONPath, and rejects a RAM-based authorization DB.
+    the '--allow'/'--deny' and discriminator selections, and resolves and
+    validates the JSONPath. Reaching the database -- and rejecting a
+    RAM-based one -- is 'cli_util.open_db''s job.
 
     Pass 'allow_invalid_json_path=True' to skip the JSONPath compile
     check -- intended for 'delete-acl-entry --allow-invalid-json-path',

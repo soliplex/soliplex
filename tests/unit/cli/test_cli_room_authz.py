@@ -548,7 +548,6 @@ def test__resolve_allow_deny_mutex_violation(
 def test__check_acl_entry_args(get_installation):
     the_installation = get_installation.return_value
     the_installation._config.room_configs = {"chat": mock.Mock()}
-    the_installation.authorization_dburi_async = "sqlite:///fake.sqlite"
 
     found = cli_room_authz._check_acl_entry_args(
         mock.sentinel.installation_path,
@@ -578,7 +577,6 @@ def test__check_acl_entry_args_allow_invalid_json_path(
 ):
     the_installation = get_installation.return_value
     the_installation._config.room_configs = {"chat": mock.Mock()}
-    the_installation.authorization_dburi_async = "sqlite:///fake.sqlite"
 
     bogus = "$[?stale_filter_func($.email)]"
 

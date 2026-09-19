@@ -214,8 +214,8 @@ def installation_dburis(installation) -> dict[str, str]:
     ``InstallationConfig`` it wraps.
     """
     return {
-        AGUI: installation.thread_persistence_dburi_sync,
-        AUTHZ: installation.authorization_dburi_sync,
+        AGUI: installation.thread_persistence_sync_dburi,
+        AUTHZ: installation.authorization_sync_dburi,
     }
 
 

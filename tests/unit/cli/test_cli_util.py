@@ -192,16 +192,16 @@ def _installation_at(tmp_path, *, ram=False):
         agui = f"sqlite+aiosqlite:///{tmp_path / 'agui.sqlite'}"
         authz = f"sqlite+aiosqlite:///{tmp_path / 'authz.sqlite'}"
     return mock.Mock(
-        thread_persistence_dburi_async=agui,
-        authorization_dburi_async=authz,
+        thread_persistence_async_dburi=agui,
+        authorization_async_dburi=authz,
     )
 
 
 @pytest.mark.parametrize(
     "db_type, expected_attr",
     [
-        (cli_util.AGUI, "thread_persistence_dburi_async"),
-        (cli_util.AUTHZ, "authorization_dburi_async"),
+        (cli_util.AGUI, "thread_persistence_async_dburi"),
+        (cli_util.AUTHZ, "authorization_async_dburi"),
     ],
 )
 def test_async_dburi(tmp_path, db_type, expected_attr):
@@ -255,7 +255,7 @@ async def test_open_db_migrates_a_ram_dburi_when_allowed(tmp_path):
 @pytest.mark.anyio
 async def test_open_db_must_exist_accepts_a_created_database(tmp_path):
     the_installation = _installation_at(tmp_path)
-    dburi = the_installation.authorization_dburi_async
+    dburi = the_installation.authorization_async_dburi
     created = installation._create_async_engine(dburi)
     try:
         await alembic_migrations.ensure_current_engine(

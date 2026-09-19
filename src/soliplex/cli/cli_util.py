@@ -88,8 +88,8 @@ class DatabaseNotCreated(Exception):
 
 
 _DBURI_FOR = {
-    AGUI: "thread_persistence_dburi_async",
-    AUTHZ: "authorization_dburi_async",
+    AGUI: "thread_persistence_async_dburi",
+    AUTHZ: "authorization_async_dburi",
 }
 
 

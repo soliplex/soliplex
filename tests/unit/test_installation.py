@@ -58,6 +58,9 @@ NoSuchSecret = pytest.raises(KeyError)
 RaisesSecretError = pytest.raises(secrets.SecretError)
 NoRaise = contextlib.nullcontext()
 
+no_depr_warning = contextlib.nullcontext()
+has_depr_warning = pytest.deprecated_call()
+
 
 @pytest.fixture
 def test_user() -> models.UserProfile:
@@ -672,44 +675,72 @@ def test_installation_logfire_config():
     assert the_installation.logfire_config is i_config.logfire_config
 
 
-def test_installation_thread_persistence_dburi_sync():
+def test_installation_thread_persistence_sync_dburi():
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
-        the_installation.thread_persistence_dburi_sync
-        is i_config.thread_persistence_dburi_sync
+        the_installation.thread_persistence_sync_dburi
+        is i_config.thread_persistence_sync_dburi
     )
 
+    # Deprecated spellings: remove after v0.84.
+    with has_depr_warning:
+        assert (
+            the_installation.thread_persistence_dburi_sync
+            is i_config.thread_persistence_sync_dburi
+        )
 
-def test_installation_thread_persistence_dburi_async():
+
+def test_installation_thread_persistence_async_dburi():
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
-        the_installation.thread_persistence_dburi_async
-        is i_config.thread_persistence_dburi_async
+        the_installation.thread_persistence_async_dburi
+        is i_config.thread_persistence_async_dburi
     )
 
+    # Deprecated spellings: remove after v0.84.
+    with has_depr_warning:
+        assert (
+            the_installation.thread_persistence_dburi_async
+            is i_config.thread_persistence_async_dburi
+        )
 
-def test_installation_authorization_dburi_sync():
+
+def test_installation_authorization_sync_dburi():
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
-        the_installation.authorization_dburi_sync
-        is i_config.authorization_dburi_sync
+        the_installation.authorization_sync_dburi
+        is i_config.authorization_sync_dburi
     )
 
+    # Deprecated spellings: remove after v0.84.
+    with has_depr_warning:
+        assert (
+            the_installation.authorization_dburi_sync
+            is i_config.authorization_sync_dburi
+        )
 
-def test_installation_authorization_dburi_async():
+
+def test_installation_authorization_async_dburi():
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
-        the_installation.authorization_dburi_async
-        is i_config.authorization_dburi_async
+        the_installation.authorization_async_dburi
+        is i_config.authorization_async_dburi
     )
+
+    # Deprecated spellings: remove after v0.84.
+    with has_depr_warning:
+        assert (
+            the_installation.authorization_dburi_async
+            is i_config.authorization_async_dburi
+        )
 
 
 @pytest.mark.parametrize("w_oidc_configs", [[], [object()]])
@@ -1400,10 +1431,10 @@ def mcp_apps():
 def _memory_installation():
     """An installation whose two databases are throwaway and in memory."""
     return mock.Mock(
-        thread_persistence_dburi_async=(
+        thread_persistence_async_dburi=(
             config_installation.ASYNC_MEMORY_ENGINE_URL
         ),
-        authorization_dburi_async=(
+        authorization_async_dburi=(
             config_installation.ASYNC_MEMORY_ENGINE_URL
         ),
     )
@@ -1621,8 +1652,8 @@ async def test_lifespan(
         environment=ic_environment,
         get_environment=ic_environment.get,
         logging_config=w_ic_logging_config,
-        thread_persistence_dburi_async=ASYNC_ENGINE_URL,
-        authorization_dburi_async=ASYNC_ENGINE_URL,
+        thread_persistence_async_dburi=ASYNC_ENGINE_URL,
+        authorization_async_dburi=ASYNC_ENGINE_URL,
     )
     load_installation.return_value = i_config
     app = mock.create_autospec(fastapi.FastAPI)

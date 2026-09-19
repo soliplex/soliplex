@@ -1017,17 +1017,19 @@ def test_installation_from_config_bare(bare_installation_config):
     assert installation_model.completion_paths == []
     assert installation_model.quizzes_paths == []
     assert installation_model.oidc_auth_systems == []
-    assert (
-        installation_model.thread_persistence_dburi_sync
-        == config_installation.SYNC_MEMORY_ENGINE_URL
-    )
-    assert (
-        installation_model.thread_persistence_dburi_async
-        == config_installation.ASYNC_MEMORY_ENGINE_URL
-    )
     assert installation_model.logging_config_file is None
     assert installation_model.logging_headers_map == {}
     assert installation_model.logging_claims_map == {}
+
+    # Deprecated, will be removed after v0.84.
+    assert (
+        installation_model.thread_persistence_dburi_sync
+        == models.DUMMY_TP_DBURI
+    )
+    assert (
+        installation_model.thread_persistence_dburi_async
+        == models.DUMMY_TP_DBURI
+    )
 
 
 @pytest.fixture
@@ -1196,46 +1198,6 @@ def test_installation_from_config_w_quizzes_path(bare_installation_config):
     )
 
     assert installation_model.quizzes_paths == [INSTALLATION_QUIZZES_PATH]
-
-
-def test_installation_from_config_w_tp_dburi(bare_installation_config):
-    installation_config = bare_installation_config
-    installation_config._thread_persistence_dburi_sync = (
-        INSTALLATION_TP_DBURI_SYNC
-    )
-    installation_config._thread_persistence_dburi_async = (
-        INSTALLATION_TP_DBURI_ASYNC
-    )
-
-    installation_model = models.Installation.from_config(
-        installation_config,
-    )
-
-    assert installation_model.thread_persistence_dburi_sync == (
-        INSTALLATION_TP_DBURI_SYNC
-    )
-    assert installation_model.thread_persistence_dburi_async == (
-        INSTALLATION_TP_DBURI_ASYNC
-    )
-
-
-def test_installation_from_config_w_tp_dburi_keeps_markers_unresolved(
-    bare_installation_config,
-):
-    # 'from_config' reads the raw field, never the interpolating property,
-    # so a resolved secret cannot reach the API model.
-    installation_config = bare_installation_config
-    installation_config._thread_persistence_dburi_sync = (
-        INSTALLATION_TP_DBURI_SYNC_W_MARKERS
-    )
-
-    installation_model = models.Installation.from_config(
-        installation_config,
-    )
-
-    assert installation_model.thread_persistence_dburi_sync == (
-        INSTALLATION_TP_DBURI_SYNC_W_MARKERS
-    )
 
 
 def test_installation_from_config_w_logging_config_file(

@@ -356,6 +356,13 @@ Use instead '{stem}_db', with sub-keys 'sync_dburi' and 'async_dburi'.
 """
 
 
+TYPE_SFX_DBURI_DEPRECATION = """\
+The '{stem}_dburi_{type_}' installation configuration property is deprecated,
+and will be removed after soliplex v0.84 (configured in {config_path}).
+Use instead '{stem}_{type_}_dburi'.
+"""
+
+
 @dataclasses.dataclass(kw_only=True)
 class InstallationConfig:
     """Configuration for a set of rooms, completion, etc."""
@@ -807,60 +814,114 @@ class InstallationConfig:
             )
 
     #
-    # Thread persistence DB-URI
+    # Thread persistence DB
     #
-    _thread_persistence_dburi_sync: str = _both_embedded_field(
+    _thread_persistence_sync_dburi: str = _both_embedded_field(
         default=None,
         public_name="thread_persistence_db.sync_dburi",
-        accessor="thread_persistence_dburi_sync",
+        accessor="thread_persistence_sync_dburi",
     )
-    _thread_persistence_dburi_async: str = _both_embedded_field(
+    _thread_persistence_async_dburi: str = _both_embedded_field(
         default=None,
         public_name="thread_persistence_db.async_dburi",
-        accessor="thread_persistence_dburi_async",
+        accessor="thread_persistence_async_dburi",
     )
 
     @property
-    def thread_persistence_dburi_sync(self):
+    def thread_persistence_sync_dburi(self) -> str:
         return self._interpolate_dburi(
-            "_thread_persistence_dburi_sync",
+            "_thread_persistence_sync_dburi",
             SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
-    def thread_persistence_dburi_async(self):
+    def thread_persistence_async_dburi(self) -> str:
         return self._interpolate_dburi(
-            "_thread_persistence_dburi_async",
+            "_thread_persistence_async_dburi",
             ASYNC_MEMORY_ENGINE_URL,
         )
 
+    # Deprecated aliases: remove after v0.84
+    @property
+    def thread_persistence_dburi_sync(self) -> str:
+        warnings.warn(
+            TYPE_SFX_DBURI_DEPRECATION.format(
+                stem="thread_persistence",
+                type_="sync",
+                config_path=str(self._config_path),
+            ),
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.thread_persistence_sync_dburi
+
+    @property
+    def thread_persistence_dburi_async(self) -> str:
+        warnings.warn(
+            TYPE_SFX_DBURI_DEPRECATION.format(
+                stem="thread_persistence",
+                type_="async",
+                config_path=str(self._config_path),
+            ),
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.thread_persistence_async_dburi
+
     #
-    # Room authorization DB-URI
+    # Authorization DB
     #
-    _authorization_dburi_sync: str = _both_embedded_field(
+    _authorization_sync_dburi: str = _both_embedded_field(
         default=None,
         public_name="authorization_db.sync_dburi",
-        accessor="authorization_dburi_sync",
+        accessor="authorization_sync_dburi",
     )
-    _authorization_dburi_async: str = _both_embedded_field(
+    _authorization_async_dburi: str = _both_embedded_field(
         default=None,
         public_name="authorization_db.async_dburi",
-        accessor="authorization_dburi_async",
+        accessor="authorization_async_dburi",
     )
 
     @property
-    def authorization_dburi_sync(self):
+    def authorization_sync_dburi(self) -> str:
         return self._interpolate_dburi(
-            "_authorization_dburi_sync",
+            "_authorization_sync_dburi",
             SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
-    def authorization_dburi_async(self):
+    def authorization_async_dburi(self) -> str:
         return self._interpolate_dburi(
-            "_authorization_dburi_async",
+            "_authorization_async_dburi",
             ASYNC_MEMORY_ENGINE_URL,
         )
+
+    # Deprecated aliases: remove after v0.84
+    @property
+    def authorization_dburi_sync(self) -> str:
+        warnings.warn(
+            TYPE_SFX_DBURI_DEPRECATION.format(
+                stem="authorization",
+                type_="sync",
+                config_path=str(self._config_path),
+            ),
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.authorization_sync_dburi
+
+    @property
+    def authorization_dburi_async(self) -> str:
+        warnings.warn(
+            TYPE_SFX_DBURI_DEPRECATION.format(
+                stem="authorization",
+                type_="async",
+                config_path=str(self._config_path),
+            ),
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.authorization_async_dburi
 
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
@@ -977,6 +1038,7 @@ class InstallationConfig:
 
             config_dict["logfire_config"] = logfire_cfg
 
+            # Deprecated spellings: remove after v0.84.
             depr_tbd = config_dict.pop("thread_persistence_dburi", None)
 
             if depr_tbd is not None:
@@ -998,13 +1060,14 @@ class InstallationConfig:
                     }
 
             tp_db = config_dict.pop("thread_persistence_db", {})
-            config_dict["_thread_persistence_dburi_sync"] = tp_db.get(
+            config_dict["_thread_persistence_sync_dburi"] = tp_db.get(
                 "sync_dburi"
             )
-            config_dict["_thread_persistence_dburi_async"] = tp_db.get(
+            config_dict["_thread_persistence_async_dburi"] = tp_db.get(
                 "async_dburi"
             )
 
+            # Deprecated spellings: remove after v0.84.
             depr_adb = config_dict.pop("authorization_dburi", None)
 
             if depr_adb is not None:
@@ -1026,8 +1089,8 @@ class InstallationConfig:
                     }
 
             az_db = config_dict.pop("authorization_db", {})
-            config_dict["_authorization_dburi_sync"] = az_db.get("sync_dburi")
-            config_dict["_authorization_dburi_async"] = az_db.get(
+            config_dict["_authorization_sync_dburi"] = az_db.get("sync_dburi")
+            config_dict["_authorization_async_dburi"] = az_db.get(
                 "async_dburi"
             )
 
@@ -1155,12 +1218,12 @@ class InstallationConfig:
             "completion_paths": [str(path) for path in self.completion_paths],
             "quizzes_paths": [str(path) for path in self.quizzes_paths],
             "thread_persistence_db": {
-                "sync_dburi": self._thread_persistence_dburi_sync,
-                "async_dburi": self._thread_persistence_dburi_async,
+                "sync_dburi": self._thread_persistence_sync_dburi,
+                "async_dburi": self._thread_persistence_async_dburi,
             },
             "authorization_db": {
-                "sync_dburi": self._authorization_dburi_sync,
-                "async_dburi": self._authorization_dburi_async,
+                "sync_dburi": self._authorization_sync_dburi,
+                "async_dburi": self._authorization_async_dburi,
             },
         }
 

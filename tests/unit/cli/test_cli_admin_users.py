@@ -105,9 +105,6 @@ def test__check_admin_discriminator_rejects_other_arities(
 @mock.patch("soliplex.cli.admin_users.cli_util.get_installation")
 def test__check_admin_user_args(get_installation):
     the_installation = get_installation.return_value
-    the_installation.authorization_dburi_async = (
-        "sqlite+aiosqlite:///fake.sqlite"
-    )
 
     found = cli_admin_users._check_admin_user_args(
         mock.sentinel.installation_path,
@@ -128,9 +125,6 @@ def test__check_admin_user_args(get_installation):
 @mock.patch("soliplex.cli.admin_users.cli_util.get_installation")
 def test__check_admin_user_args_allow_invalid_json_path(get_installation):
     the_installation = get_installation.return_value
-    the_installation.authorization_dburi_async = (
-        "sqlite+aiosqlite:///fake.sqlite"
-    )
 
     bogus = "$[?stale_filter_func($.email)]"
 

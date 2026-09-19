@@ -330,7 +330,7 @@ def upgrade(engine_name: str) -> None:
 The database URIs do not live in any Alembic config file.
 `src/soliplex/alembic_migrations/env.py` loads an
 installation config and resolves them -- secrets included -- from
-`thread_persistence_dburi_sync` and `authorization_dburi_sync`. Every
+`thread_persistence_sync_dburi` and `authorization_sync_dburi`. Every
 invocation therefore has to say which installation it acts on:
 
 ```bash

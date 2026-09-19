@@ -55,9 +55,9 @@ UNREACHABLE_MARKER = "authorization database unreachable"
 
 
 @pytest.fixture
-def scratch_installation(tmp_path, authz_dburi_sync, authz_dburi_async):
+def scratch_installation(tmp_path, authz_sync_dburi, authz_async_dburi):
     """A copy of 'example/minimal.yaml' backed by a fresh, empty authz DB."""
-    return _scratch_installation(tmp_path, authz_dburi_sync, authz_dburi_async)
+    return _scratch_installation(tmp_path, authz_sync_dburi, authz_async_dburi)
 
 
 @pytest.fixture
