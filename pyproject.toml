@@ -56,7 +56,7 @@ soliplex-tui-serve = "soliplex.tui.serve:the_cli"
 
 [dependency-groups]
 dev = [
-    "anyio >= 4.12.1, < 4.13",
+    "anyio >= 4.14.2, < 4.15",
     "coverage >= 7.13.5, < 7.14",
     "pytest >= 9.0.2, < 9.1",
     "pytest-cov >= 7.0.0, < 7.1",
