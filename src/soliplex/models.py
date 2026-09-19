@@ -409,6 +409,9 @@ class Secret(pydantic.BaseModel):
         )
 
 
+DUMMY_TP_DBURI = "https://tp.example.com/"
+
+
 class Installation(pydantic.BaseModel):
     """Configuration for a set of rooms, completions, etc."""
 
@@ -425,11 +428,13 @@ class Installation(pydantic.BaseModel):
     quizzes_paths: list[pathlib.Path] = []
     filesystem_skills_paths: list[pathlib.Path] = []
     oidc_auth_systems: list[OIDCAuthSystem] = []
-    thread_persistence_dburi_sync: str | None = None
-    thread_persistence_dburi_async: str | None = None
     logging_config_file: pathlib.Path | None = None
     logging_headers_map: dict[str, str] | None = {}
     logging_claims_map: dict[str, str] | None = {}
+
+    # Deprecated:  will be removed after v0.84
+    thread_persistence_dburi_sync: str | None = None
+    thread_persistence_dburi_async: str | None = None
 
     @classmethod
     def from_config(
@@ -477,20 +482,13 @@ class Installation(pydantic.BaseModel):
             completion_paths=installation_config.completion_paths,
             quizzes_paths=installation_config.quizzes_paths,
             oidc_auth_systems=oidc_auth_systems,
-            # Use the non-property versions here to avoid exposing
-            # interpolated secrets
-            thread_persistence_dburi_sync=(
-                installation_config._thread_persistence_dburi_sync
-                or config_installation.SYNC_MEMORY_ENGINE_URL
-            ),
-            thread_persistence_dburi_async=(
-                installation_config._thread_persistence_dburi_async
-                or config_installation.ASYNC_MEMORY_ENGINE_URL
-            ),
             # Don't resolve path to logging config
             logging_config_file=installation_config._logging_config_file,
             logging_headers_map=installation_config.logging_headers_map,
             logging_claims_map=installation_config.logging_claims_map,
+            # Deprecated:  return dummy values until after v0.84.
+            thread_persistence_dburi_sync=DUMMY_TP_DBURI,
+            thread_persistence_dburi_async=DUMMY_TP_DBURI,
         )
 
 

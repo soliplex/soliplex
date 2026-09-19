@@ -1654,10 +1654,10 @@ def _tables(db_path):
 def _uncreated_installation(the_installation, tmp_path):
     """Point an installation at an authz database nothing has created."""
     db_path = tmp_path / "authz.sqlite"
-    the_installation._config.authorization_dburi_async = (
+    the_installation._config.authorization_async_dburi = (
         f"sqlite+aiosqlite:///{db_path}"
     )
-    the_installation._config.authorization_dburi_sync = f"sqlite:///{db_path}"
+    the_installation._config.authorization_sync_dburi = f"sqlite:///{db_path}"
     return the_installation, db_path
 
 
@@ -2682,18 +2682,20 @@ def _report(**kwargs):
 def _pair_installation(the_installation, tmp_path):
     """Point an installation at its own throwaway file databases."""
     paths = {}
-    for db_type, attr in (
-        (cli_util.AGUI, "thread_persistence_dburi"),
-        (cli_util.AUTHZ, "authorization_dburi"),
+    for db_type, db_pfx in (
+        (cli_util.AGUI, "thread_persistence"),
+        (cli_util.AUTHZ, "authorization"),
     ):
         paths[db_type] = db_path = tmp_path / f"{db_type}.sqlite"
         setattr(
             the_installation._config,
-            f"{attr}_async",
+            f"{db_pfx}_async_dburi",
             f"sqlite+aiosqlite:///{db_path}",
         )
         setattr(
-            the_installation._config, f"{attr}_sync", f"sqlite:///{db_path}"
+            the_installation._config,
+            f"{db_pfx}_sync_dburi",
+            f"sqlite:///{db_path}",
         )
     return the_installation, paths
 

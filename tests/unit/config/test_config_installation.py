@@ -34,6 +34,8 @@ from tests.unit.config import test_config_rooms as test_rooms
 from tests.unit.config import test_config_skills as test_skills
 
 NoRaise = contextlib.nullcontext()
+no_depr_warning = contextlib.nullcontext()
+has_depr_warning = pytest.deprecated_call()
 
 
 class FauxToolConfig:
@@ -623,89 +625,91 @@ ENVVAR_NAME_2 = "TEST_SECRET_TWO"
 ENVVAR_VALUE_1 = "<envvar1>"
 ENVVAR_VALUE_2 = "<envvar2>"
 
-TP_DBURI_SYNC = "sqlite+pysqlite:////tmp/tp_testing.sqlite"
-TP_DBURI_SYNC_W_SECRET_AND_ENV = (
+TP_SYNC_DBURI = "sqlite+pysqlite:////tmp/tp_testing.sqlite"
+TP_SYNC_DBURI_W_SECRET_AND_ENV = (
     f"sqlite+pysqlcipher://env:DB_USER_NAME@"
     f"secret:{DB_SECRET_NAME}//tmp/tp_testing.sqlite"
 )
-TP_DBURI_SYNC_W_SECRET_AND_ENV_RESOLVED = (
+TP_SYNC_DBURI_W_SECRET_AND_ENV_RESOLVED = (
     f"sqlite+pysqlcipher://{DB_USER_NAME}@"
     f"{DB_SECRET_VALUE}//tmp/tp_testing.sqlite"
 )
-TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/tp_testing.sqlite"
+TP_ASYNC_DBURI = "sqlite+aiosqlite:////tmp/tp_testing.sqlite"
 
 W_TP_DBURI_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "_thread_persistence_dburi_sync": TP_DBURI_SYNC,
-    "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
+    "_thread_persistence_sync_dburi": TP_SYNC_DBURI,
+    "_thread_persistence_async_dburi": TP_ASYNC_DBURI,
 }
 W_TP_DBURI_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 thread_persistence_db:
-    sync_dburi: {TP_DBURI_SYNC}
-    async_dburi: {TP_DBURI_ASYNC}
+    sync_dburi: {TP_SYNC_DBURI}
+    async_dburi: {TP_ASYNC_DBURI}
 """
+# Deprecated spelling: remove after v0.84.
 W_DEPR_TP_DBURI_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 thread_persistence_dburi:
-    sync: {TP_DBURI_SYNC}
-    async: {TP_DBURI_ASYNC}
+    sync: {TP_SYNC_DBURI}
+    async: {TP_ASYNC_DBURI}
 """
 
 W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "_thread_persistence_dburi_sync": TP_DBURI_SYNC_W_SECRET_AND_ENV,
+    "_thread_persistence_sync_dburi": TP_SYNC_DBURI_W_SECRET_AND_ENV,
     # aiosqlite doesn't support secrets
-    "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
+    "_thread_persistence_async_dburi": TP_ASYNC_DBURI,
 }
 W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 thread_persistence_db:
-    sync_dburi: {TP_DBURI_SYNC_W_SECRET_AND_ENV}
-    async_dburi: {TP_DBURI_ASYNC}
+    sync_dburi: {TP_SYNC_DBURI_W_SECRET_AND_ENV}
+    async_dburi: {TP_ASYNC_DBURI}
 """
 
-RA_DB_USER_NAME = "ra_db_user"
-RA_DBURI_SYNC = "sqlite+pysqlite:////tmp/ra_testing.sqlite"
-RA_DBURI_SYNC_W_SECRET_AND_ENV = (
+AZ_DB_USER_NAME = "az_db_user"
+AZ_SYNC_DBURI = "sqlite+pysqlite:////tmp/az_testing.sqlite"
+AZ_SYNC_DBURI_W_SECRET_AND_ENV = (
     f"sqlite+pysqlcipher://env:DB_USER_NAME@"
-    f"secret:{DB_SECRET_NAME}//tmp/ra_testing.sqlite"
+    f"secret:{DB_SECRET_NAME}//tmp/az_testing.sqlite"
 )
-RA_DBURI_SYNC_W_SECRET_AND_ENV_RESOLVED = (
+AZ_SYNC_DBURI_W_SECRET_AND_ENV_RESOLVED = (
     f"sqlite+pysqlcipher://{DB_USER_NAME}@"
-    f"{DB_SECRET_VALUE}//tmp/ra_testing.sqlite"
+    f"{DB_SECRET_VALUE}//tmp/az_testing.sqlite"
 )
-RA_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/ra_testing.sqlite"
+AZ_ASYNC_DBURI = "sqlite+aiosqlite:////tmp/az_testing.sqlite"
 
-W_RA_DBURI_INSTALLATION_CONFIG_KW = {
+W_AZ_DBURI_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "_authorization_dburi_sync": RA_DBURI_SYNC,
-    "_authorization_dburi_async": RA_DBURI_ASYNC,
+    "_authorization_sync_dburi": AZ_SYNC_DBURI,
+    "_authorization_async_dburi": AZ_ASYNC_DBURI,
 }
-W_RA_DBURI_INSTALLATION_CONFIG_YAML = f"""\
+W_AZ_DBURI_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 authorization_db:
-    sync_dburi: {RA_DBURI_SYNC}
-    async_dburi: {RA_DBURI_ASYNC}
+    sync_dburi: {AZ_SYNC_DBURI}
+    async_dburi: {AZ_ASYNC_DBURI}
 """
-W_DEPR_RA_DBURI_INSTALLATION_CONFIG_YAML = f"""\
+# Deprecated spelling: remove after v0.84.
+W_DEPR_AZ_DBURI_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 authorization_dburi:
-    sync: {RA_DBURI_SYNC}
-    async: {RA_DBURI_ASYNC}
+    sync: {AZ_SYNC_DBURI}
+    async: {AZ_ASYNC_DBURI}
 """
 
-W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
+W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "_authorization_dburi_sync": RA_DBURI_SYNC_W_SECRET_AND_ENV,
+    "_authorization_sync_dburi": AZ_SYNC_DBURI_W_SECRET_AND_ENV,
     # aiosqlite doesn't support secrets
-    "_authorization_dburi_async": RA_DBURI_ASYNC,
+    "_authorization_async_dburi": AZ_ASYNC_DBURI,
 }
-W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
+W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 authorization_db:
-    sync_dburi: {RA_DBURI_SYNC_W_SECRET_AND_ENV}
-    async_dburi: {RA_DBURI_ASYNC}
+    sync_dburi: {AZ_SYNC_DBURI_W_SECRET_AND_ENV}
+    async_dburi: {AZ_ASYNC_DBURI}
 """
 
 
@@ -1917,23 +1921,29 @@ def test_installationconfig_agui_features(
             BARE_INSTALLATION_CONFIG_KW.copy(),
             config_installation.SYNC_MEMORY_ENGINE_URL,
         ),
-        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_DBURI_SYNC),
+        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_SYNC_DBURI),
         (
             (
                 W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
                 | {"secrets": [DB_SECRET_CONFIG]}
                 | {"environment": {"DB_USER_NAME": DB_USER_NAME}}
             ),
-            TP_DBURI_SYNC_W_SECRET_AND_ENV_RESOLVED,
+            TP_SYNC_DBURI_W_SECRET_AND_ENV_RESOLVED,
         ),
     ],
 )
-def test_installationconfig_thread_persistence_dburi_sync(w_kw, expected):
+def test_installationconfig_thread_persistence_sync_dburi(w_kw, expected):
     installation_config = config_installation.InstallationConfig(**w_kw)
 
-    found = installation_config.thread_persistence_dburi_sync
+    found = installation_config.thread_persistence_sync_dburi
 
     assert found == expected
+
+    # Deprecated spellings: remove after v0.84.
+    with has_depr_warning:
+        depr_found = installation_config.thread_persistence_dburi_sync
+
+    assert depr_found == expected
 
 
 @pytest.mark.parametrize(
@@ -1943,15 +1953,21 @@ def test_installationconfig_thread_persistence_dburi_sync(w_kw, expected):
             BARE_INSTALLATION_CONFIG_KW.copy(),
             config_installation.ASYNC_MEMORY_ENGINE_URL,
         ),
-        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_DBURI_ASYNC),
+        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_ASYNC_DBURI),
     ],
 )
-def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
+def test_installationconfig_thread_persistence_async_dburi(w_kw, expected):
     installation_config = config_installation.InstallationConfig(**w_kw)
 
-    found = installation_config.thread_persistence_dburi_async
+    found = installation_config.thread_persistence_async_dburi
 
     assert found == expected
+
+    # Deprecated spellings: remove after v0.84.
+    with has_depr_warning:
+        depr_found = installation_config.thread_persistence_dburi_async
+
+    assert depr_found == expected
 
 
 @pytest.mark.parametrize(
@@ -1961,23 +1977,29 @@ def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
             BARE_INSTALLATION_CONFIG_KW.copy(),
             config_installation.SYNC_MEMORY_ENGINE_URL,
         ),
-        (W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(), RA_DBURI_SYNC),
+        (W_AZ_DBURI_INSTALLATION_CONFIG_KW.copy(), AZ_SYNC_DBURI),
         (
             (
-                W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
+                W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
                 | {"secrets": [DB_SECRET_CONFIG]}
                 | {"environment": {"DB_USER_NAME": DB_USER_NAME}}
             ),
-            RA_DBURI_SYNC_W_SECRET_AND_ENV_RESOLVED,
+            AZ_SYNC_DBURI_W_SECRET_AND_ENV_RESOLVED,
         ),
     ],
 )
-def test_installationconfig_authorization_dburi_sync(w_kw, expected):
+def test_installationconfig_authorization_sync_dburi(w_kw, expected):
     installation_config = config_installation.InstallationConfig(**w_kw)
 
-    found = installation_config.authorization_dburi_sync
+    found = installation_config.authorization_sync_dburi
 
     assert found == expected
+
+    # Deprecated spellings: remove after v0.84.
+    with has_depr_warning:
+        depr_found = installation_config.authorization_dburi_sync
+
+    assert depr_found == expected
 
 
 @pytest.mark.parametrize(
@@ -1987,15 +2009,21 @@ def test_installationconfig_authorization_dburi_sync(w_kw, expected):
             BARE_INSTALLATION_CONFIG_KW.copy(),
             config_installation.ASYNC_MEMORY_ENGINE_URL,
         ),
-        (W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(), RA_DBURI_ASYNC),
+        (W_AZ_DBURI_INSTALLATION_CONFIG_KW.copy(), AZ_ASYNC_DBURI),
     ],
 )
-def test_installationconfig_authorization_dburi_async(w_kw, expected):
+def test_installationconfig_authorization_async_dburi(w_kw, expected):
     installation_config = config_installation.InstallationConfig(**w_kw)
 
-    found = installation_config.authorization_dburi_async
+    found = installation_config.authorization_async_dburi
 
     assert found == expected
+
+    # Deprecated spellings: remove after v0.84.
+    with has_depr_warning:
+        depr_found = installation_config.authorization_dburi_async
+
+    assert depr_found == expected
 
 
 def _marshal_iconfig_kw(iconfig_kw, config_path):
@@ -2087,10 +2115,6 @@ def _marshal_iconfig_kw(iconfig_kw, config_path):
     iconfig = dataclasses.replace(iconfig, room_paths=ic_room_paths)
 
     return iconfig
-
-
-no_depr_warning = contextlib.nullcontext()
-has_depr_warning = pytest.deprecated_call()
 
 
 @pytest.mark.parametrize(
@@ -2247,23 +2271,24 @@ has_depr_warning = pytest.deprecated_call()
             no_depr_warning,
         ),
         (
+            W_AZ_DBURI_INSTALLATION_CONFIG_YAML,
+            W_AZ_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
+        ),
+        (
+            W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
+            W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
+        ),
+        # Deprecated spellings: remove after v0.84.
+        (
             W_DEPR_TP_DBURI_INSTALLATION_CONFIG_YAML,
             W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(),
             has_depr_warning,
         ),
         (
-            W_RA_DBURI_INSTALLATION_CONFIG_YAML,
-            W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
-        ),
-        (
-            W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
-            W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
-        ),
-        (
-            W_DEPR_RA_DBURI_INSTALLATION_CONFIG_YAML,
-            W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            W_DEPR_AZ_DBURI_INSTALLATION_CONFIG_YAML,
+            W_AZ_DBURI_INSTALLATION_CONFIG_KW.copy(),
             has_depr_warning,
         ),
     ],
@@ -2673,13 +2698,13 @@ def _as_yaml_only_w_app_router_operations(config_path):
 def _as_yaml_only_w_tp_db(config_path):
     return (
         {
-            "_thread_persistence_dburi_sync": (TP_DBURI_SYNC_W_SECRET_AND_ENV),
-            "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
+            "_thread_persistence_sync_dburi": (TP_SYNC_DBURI_W_SECRET_AND_ENV),
+            "_thread_persistence_async_dburi": TP_ASYNC_DBURI,
         },
         {
             "thread_persistence_db": {
-                "sync_dburi": TP_DBURI_SYNC_W_SECRET_AND_ENV,
-                "async_dburi": TP_DBURI_ASYNC,
+                "sync_dburi": TP_SYNC_DBURI_W_SECRET_AND_ENV,
+                "async_dburi": TP_ASYNC_DBURI,
             },
         },
     )
@@ -2688,13 +2713,13 @@ def _as_yaml_only_w_tp_db(config_path):
 def _as_yaml_only_w_authz_db(config_path):
     return (
         {
-            "_authorization_dburi_sync": RA_DBURI_SYNC_W_SECRET_AND_ENV,
-            "_authorization_dburi_async": RA_DBURI_ASYNC,
+            "_authorization_sync_dburi": AZ_SYNC_DBURI_W_SECRET_AND_ENV,
+            "_authorization_async_dburi": AZ_ASYNC_DBURI,
         },
         {
             "authorization_db": {
-                "sync_dburi": RA_DBURI_SYNC_W_SECRET_AND_ENV,
-                "async_dburi": RA_DBURI_ASYNC,
+                "sync_dburi": AZ_SYNC_DBURI_W_SECRET_AND_ENV,
+                "async_dburi": AZ_ASYNC_DBURI,
             },
         },
     )
@@ -2829,10 +2854,10 @@ INSTALLATION_STATE_ATTRS = (
     "logging_config_file",
     "logging_headers_map",
     "logging_claims_map",
-    "_thread_persistence_dburi_sync",
-    "_thread_persistence_dburi_async",
-    "_authorization_dburi_sync",
-    "_authorization_dburi_async",
+    "_thread_persistence_sync_dburi",
+    "_thread_persistence_async_dburi",
+    "_authorization_sync_dburi",
+    "_authorization_async_dburi",
     "_skill_configs",
 )
 
@@ -2864,8 +2889,8 @@ INSTALLATION_STATE_ATTRS = (
         # markers must survive the dump unresolved: 'as_yaml' reads the raw
         # field, never the interpolating property
         W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
-        W_RA_DBURI_INSTALLATION_CONFIG_YAML,
-        W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
+        W_AZ_DBURI_INSTALLATION_CONFIG_YAML,
+        W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
     ],
 )
 def test_installationconfig_as_yaml_round_trips(

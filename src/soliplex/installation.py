@@ -3,6 +3,7 @@ import dataclasses
 import enum
 import pathlib
 import sqlite3
+import warnings
 from logging import config as logging_config
 
 import fastapi
@@ -161,6 +162,13 @@ def _create_async_engine(url, **kwargs):
     return engine
 
 
+TYPE_SFX_DBURI_DEPRECATION = """\
+The '{stem}_dburi_{type_}' installation property is deprecated,
+and will be removed after soliplex v0.84 (configured in {config_path}).
+Use instead '{stem}_{type_}_dburi'.
+"""
+
+
 @dataclasses.dataclass
 class Installation:
     _config: config_installation.InstallationConfig
@@ -315,20 +323,73 @@ class Installation:
         return self._config.logfire_config
 
     @property
+    def thread_persistence_sync_dburi(self) -> str:
+        return self._config.thread_persistence_sync_dburi
+
+    @property
+    def thread_persistence_async_dburi(self) -> str:
+        return self._config.thread_persistence_async_dburi
+
+    @property
+    def authorization_sync_dburi(self) -> str:
+        return self._config.authorization_sync_dburi
+
+    @property
+    def authorization_async_dburi(self) -> str:
+        return self._config.authorization_async_dburi
+
+    # Deprecated aliases: remove after v0.84.
+    @property
     def thread_persistence_dburi_sync(self) -> str:
-        return self._config.thread_persistence_dburi_sync
+        warnings.warn(
+            TYPE_SFX_DBURI_DEPRECATION.format(
+                stem="thread_persistence",
+                type_="sync",
+                config_path=str(self._config._config_path),
+            ),
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._config.thread_persistence_sync_dburi
 
     @property
     def thread_persistence_dburi_async(self) -> str:
-        return self._config.thread_persistence_dburi_async
+        warnings.warn(
+            TYPE_SFX_DBURI_DEPRECATION.format(
+                stem="thread_persistence",
+                type_="async",
+                config_path=str(self._config._config_path),
+            ),
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._config.thread_persistence_async_dburi
 
     @property
     def authorization_dburi_sync(self) -> str:
-        return self._config.authorization_dburi_sync
+        warnings.warn(
+            TYPE_SFX_DBURI_DEPRECATION.format(
+                stem="authorization",
+                type_="sync",
+                config_path=str(self._config._config_path),
+            ),
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._config.authorization_sync_dburi
 
     @property
     def authorization_dburi_async(self) -> str:
-        return self._config.authorization_dburi_async
+        warnings.warn(
+            TYPE_SFX_DBURI_DEPRECATION.format(
+                stem="authorization",
+                type_="async",
+                config_path=str(self._config._config_path),
+            ),
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._config.authorization_async_dburi
 
     @property
     def auth_disabled(self):
@@ -655,12 +716,12 @@ async def open_engines(
     """
     engines = Engines(
         threads_engine=_create_async_engine(
-            the_installation.thread_persistence_dburi_async,
+            the_installation.thread_persistence_async_dburi,
             json_serializer=util.serialize_sqla_json,
             pool_pre_ping=True,
         ),
         authorization_engine=_create_async_engine(
-            the_installation.authorization_dburi_async,
+            the_installation.authorization_async_dburi,
             json_serializer=util.serialize_sqla_json,
             pool_pre_ping=True,
         ),

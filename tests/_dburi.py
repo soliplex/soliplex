@@ -5,7 +5,7 @@ A plain module rather than a 'conftest.py' because both suites need the
 a second, separate instance of that module. 'tests/' is importable as a
 namespace package thanks to 'pythonpath = ["."]' in 'pyproject.toml'.
 
-The fixture wrappers ('authz_dburi_sync' / 'authz_dburi_async') live in
+The fixture wrappers ('authz_sync_dburi' / 'authz_async_dburi') live in
 'tests/conftest.py'.
 """
 

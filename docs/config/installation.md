@@ -132,10 +132,14 @@ marker styles may be mixed within a single value.
 
 In the main installation configuration:
 
-- `thread_persistence_dburi_sync`
-- `thread_persistence_dburi_async`
-- `authorization_dburi_sync`
-- `authorization_dburi_async`
+- `thread_persistence_sync_dburi`
+- `thread_persistence_async_dburi`
+- `authorization_sync_dburi`
+- `authorization_async_dburi`
+
+Through Soliplex v0.81 these four named the URL flavor first, as
+`thread_persistence_dburi_sync` and so on.  The old names still work, but
+are deprecated and will be removed after Soliplex v0.84.
 
 In the `mcp_client_toolsets:` stanza of a room or completion configuration,
 for each configured MCP client toolset:
