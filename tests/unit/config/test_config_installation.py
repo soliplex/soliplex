@@ -200,6 +200,7 @@ SECRET_NAME_1 = "TEST_SECRET_ONE"
 SECRET_NAME_2 = "TEST_SECRET_TWO"
 DB_SECRET_NAME = "DBSECRET"
 DB_SECRET_VALUE = "R34ll7#S33KR1T"
+DB_OWNER_SECRET_VALUE = "0wn3r#S33KR1T"
 
 SECRET_CONFIG_1 = config_secrets.SecretConfig(secret_name=SECRET_NAME_1)
 SECRET_CONFIG_2 = config_secrets.SecretConfig(secret_name=SECRET_NAME_2)
@@ -619,6 +620,7 @@ logfire_config:
 """
 
 DB_USER_NAME = "db_user"
+DB_OWNER_NAME = "db_owner"
 
 ENVVAR_NAME_1 = "TEST_SECRET_ONE"
 ENVVAR_NAME_2 = "TEST_SECRET_TWO"
@@ -635,13 +637,18 @@ TP_SYNC_DBURI_W_SECRET_AND_ENV_RESOLVED = (
     f"{DB_SECRET_VALUE}//tmp/tp_testing.sqlite"
 )
 TP_ASYNC_DBURI = "sqlite+aiosqlite:////tmp/tp_testing.sqlite"
+TP_MIGRATION_DBURI = (
+    f"sqlite+pysqlcipher://{DB_OWNER_NAME}@"
+    f"{DB_OWNER_SECRET_VALUE}//tmp/tp_testing.sqlite"
+)
+TP_MIGRATION_POLICY = config_installation.MigrationPolicy.EXPLICIT
 
-W_TP_DBURI_INSTALLATION_CONFIG_KW = {
+W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "_thread_persistence_sync_dburi": TP_SYNC_DBURI,
     "_thread_persistence_async_dburi": TP_ASYNC_DBURI,
 }
-W_TP_DBURI_INSTALLATION_CONFIG_YAML = f"""\
+W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 thread_persistence_db:
     sync_dburi: {TP_SYNC_DBURI}
@@ -655,18 +662,37 @@ thread_persistence_dburi:
     async: {TP_ASYNC_DBURI}
 """
 
-W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
+W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "_thread_persistence_sync_dburi": TP_SYNC_DBURI_W_SECRET_AND_ENV,
-    # aiosqlite doesn't support secrets
     "_thread_persistence_async_dburi": TP_ASYNC_DBURI,
+    "_thread_persistence_migration_dburi": TP_MIGRATION_DBURI,
+    "_thread_persistence_migration_policy": str(TP_MIGRATION_POLICY),
 }
-W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
+W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 thread_persistence_db:
     sync_dburi: {TP_SYNC_DBURI_W_SECRET_AND_ENV}
     async_dburi: {TP_ASYNC_DBURI}
+    migration_dburi: {TP_MIGRATION_DBURI}
+    migration_policy: {TP_MIGRATION_POLICY}
 """
+
+W_TP_DB_W_INTERP_MIGRATION_POLICY_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_thread_persistence_sync_dburi": TP_SYNC_DBURI_W_SECRET_AND_ENV,
+    "_thread_persistence_async_dburi": TP_ASYNC_DBURI,
+    "_thread_persistence_migration_dburi": TP_MIGRATION_DBURI,
+    "_thread_persistence_migration_policy": "env:MIGRATION_POLICY",
+}
+
+W_TP_DB_W_BOGUS_MIGRATION_POLICY_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_thread_persistence_sync_dburi": TP_SYNC_DBURI_W_SECRET_AND_ENV,
+    "_thread_persistence_async_dburi": TP_ASYNC_DBURI,
+    "_thread_persistence_migration_dburi": TP_MIGRATION_DBURI,
+    "_thread_persistence_migration_policy": "BOGUS",
+}
 
 AZ_DB_USER_NAME = "az_db_user"
 AZ_SYNC_DBURI = "sqlite+pysqlite:////tmp/az_testing.sqlite"
@@ -679,18 +705,24 @@ AZ_SYNC_DBURI_W_SECRET_AND_ENV_RESOLVED = (
     f"{DB_SECRET_VALUE}//tmp/az_testing.sqlite"
 )
 AZ_ASYNC_DBURI = "sqlite+aiosqlite:////tmp/az_testing.sqlite"
+AZ_MIGRATION_DBURI = (
+    f"sqlite+pysqlcipher://{DB_OWNER_NAME}@"
+    f"{DB_OWNER_SECRET_VALUE}//tmp/az_testing.sqlite"
+)
+AZ_MIGRATION_POLICY = config_installation.MigrationPolicy.DISABLED
 
-W_AZ_DBURI_INSTALLATION_CONFIG_KW = {
+W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "_authorization_sync_dburi": AZ_SYNC_DBURI,
     "_authorization_async_dburi": AZ_ASYNC_DBURI,
 }
-W_AZ_DBURI_INSTALLATION_CONFIG_YAML = f"""\
+W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 authorization_db:
     sync_dburi: {AZ_SYNC_DBURI}
     async_dburi: {AZ_ASYNC_DBURI}
 """
+
 # Deprecated spelling: remove after v0.84.
 W_DEPR_AZ_DBURI_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
@@ -699,18 +731,50 @@ authorization_dburi:
     async: {AZ_ASYNC_DBURI}
 """
 
-W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
+W_AZ_DB_W_SECRET_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "_authorization_sync_dburi": AZ_SYNC_DBURI_W_SECRET_AND_ENV,
     # aiosqlite doesn't support secrets
     "_authorization_async_dburi": AZ_ASYNC_DBURI,
 }
-W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
+W_AZ_DB_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 authorization_db:
     sync_dburi: {AZ_SYNC_DBURI_W_SECRET_AND_ENV}
     async_dburi: {AZ_ASYNC_DBURI}
 """
+
+W_AZ_DB_W_MIGRATION_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_authorization_sync_dburi": AZ_SYNC_DBURI_W_SECRET_AND_ENV,
+    "_authorization_async_dburi": AZ_ASYNC_DBURI,
+    "_authorization_migration_dburi": AZ_MIGRATION_DBURI,
+    "_authorization_migration_policy": str(AZ_MIGRATION_POLICY),
+}
+W_AZ_DB_W_MIGRATION_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+authorization_db:
+    sync_dburi: {AZ_SYNC_DBURI_W_SECRET_AND_ENV}
+    async_dburi: {AZ_ASYNC_DBURI}
+    migration_dburi: {AZ_MIGRATION_DBURI}
+    migration_policy: {AZ_MIGRATION_POLICY}
+"""
+
+W_AZ_DB_W_INTERP_MIGRATION_POLICY_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_authorization_sync_dburi": AZ_SYNC_DBURI_W_SECRET_AND_ENV,
+    "_authorization_async_dburi": AZ_ASYNC_DBURI,
+    "_authorization_migration_dburi": AZ_MIGRATION_DBURI,
+    "_authorization_migration_policy": "env:MIGRATION_POLICY",
+}
+
+W_AZ_DB_W_BOGUS_MIGRATION_POLICY_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_authorization_sync_dburi": AZ_SYNC_DBURI_W_SECRET_AND_ENV,
+    "_authorization_async_dburi": AZ_ASYNC_DBURI,
+    "_authorization_migration_dburi": AZ_MIGRATION_DBURI,
+    "_authorization_migration_policy": "BOGUS",
+}
 
 
 def test__check_is_dict_passes_through_dict():
@@ -1921,10 +1985,10 @@ def test_installationconfig_agui_features(
             BARE_INSTALLATION_CONFIG_KW.copy(),
             config_installation.SYNC_MEMORY_ENGINE_URL,
         ),
-        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_SYNC_DBURI),
+        (W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(), TP_SYNC_DBURI),
         (
             (
-                W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
+                W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_KW
                 | {"secrets": [DB_SECRET_CONFIG]}
                 | {"environment": {"DB_USER_NAME": DB_USER_NAME}}
             ),
@@ -1953,7 +2017,7 @@ def test_installationconfig_thread_persistence_sync_dburi(w_kw, expected):
             BARE_INSTALLATION_CONFIG_KW.copy(),
             config_installation.ASYNC_MEMORY_ENGINE_URL,
         ),
-        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_ASYNC_DBURI),
+        (W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(), TP_ASYNC_DBURI),
     ],
 )
 def test_installationconfig_thread_persistence_async_dburi(w_kw, expected):
@@ -1973,14 +2037,66 @@ def test_installationconfig_thread_persistence_async_dburi(w_kw, expected):
 @pytest.mark.parametrize(
     "w_kw, expected",
     [
+        (BARE_INSTALLATION_CONFIG_KW.copy(), None),
+        (
+            W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_KW.copy(),
+            TP_MIGRATION_DBURI,
+        ),
+    ],
+)
+def test_installationconfig_thread_persistence_migration_dburi(w_kw, expected):
+    installation_config = config_installation.InstallationConfig(**w_kw)
+
+    found = installation_config.thread_persistence_migration_dburi
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kw, expectation",
+    [
+        (BARE_INSTALLATION_CONFIG_KW.copy(), contextlib.nullcontext()),
+        (
+            W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_KW.copy(),
+            contextlib.nullcontext(TP_MIGRATION_POLICY),
+        ),
+        (
+            W_TP_DB_W_INTERP_MIGRATION_POLICY_INSTALLATION_CONFIG_KW.copy(),
+            contextlib.nullcontext(TP_MIGRATION_POLICY),
+        ),
+        (
+            W_TP_DB_W_BOGUS_MIGRATION_POLICY_INSTALLATION_CONFIG_KW.copy(),
+            pytest.raises(ValueError, match="MigrationPolicy"),
+        ),
+    ],
+)
+def test_installationconfig_thread_persistence_migration_policy(
+    w_kw,
+    expectation,
+):
+    installation_config = config_installation.InstallationConfig(**w_kw)
+    installation_config.environment["MIGRATION_POLICY"] = str(
+        TP_MIGRATION_POLICY
+    )
+
+    with expectation as expected:
+        found = installation_config.thread_persistence_migration_policy
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert found is expected
+
+
+@pytest.mark.parametrize(
+    "w_kw, expected",
+    [
         (
             BARE_INSTALLATION_CONFIG_KW.copy(),
             config_installation.SYNC_MEMORY_ENGINE_URL,
         ),
-        (W_AZ_DBURI_INSTALLATION_CONFIG_KW.copy(), AZ_SYNC_DBURI),
+        (W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(), AZ_SYNC_DBURI),
         (
             (
-                W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
+                W_AZ_DB_W_SECRET_INSTALLATION_CONFIG_KW
                 | {"secrets": [DB_SECRET_CONFIG]}
                 | {"environment": {"DB_USER_NAME": DB_USER_NAME}}
             ),
@@ -2009,7 +2125,7 @@ def test_installationconfig_authorization_sync_dburi(w_kw, expected):
             BARE_INSTALLATION_CONFIG_KW.copy(),
             config_installation.ASYNC_MEMORY_ENGINE_URL,
         ),
-        (W_AZ_DBURI_INSTALLATION_CONFIG_KW.copy(), AZ_ASYNC_DBURI),
+        (W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(), AZ_ASYNC_DBURI),
     ],
 )
 def test_installationconfig_authorization_async_dburi(w_kw, expected):
@@ -2024,6 +2140,55 @@ def test_installationconfig_authorization_async_dburi(w_kw, expected):
         depr_found = installation_config.authorization_dburi_async
 
     assert depr_found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kw, expected",
+    [
+        (BARE_INSTALLATION_CONFIG_KW.copy(), None),
+        (
+            W_AZ_DB_W_MIGRATION_INSTALLATION_CONFIG_KW.copy(),
+            AZ_MIGRATION_DBURI,
+        ),
+    ],
+)
+def test_installationconfig_authorization_migration_dburi(w_kw, expected):
+    installation_config = config_installation.InstallationConfig(**w_kw)
+
+    found = installation_config.authorization_migration_dburi
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kw, expectation",
+    [
+        (BARE_INSTALLATION_CONFIG_KW.copy(), contextlib.nullcontext()),
+        (
+            W_AZ_DB_W_MIGRATION_INSTALLATION_CONFIG_KW.copy(),
+            contextlib.nullcontext(AZ_MIGRATION_POLICY),
+        ),
+        (
+            W_AZ_DB_W_INTERP_MIGRATION_POLICY_INSTALLATION_CONFIG_KW.copy(),
+            contextlib.nullcontext(AZ_MIGRATION_POLICY),
+        ),
+        (
+            W_AZ_DB_W_BOGUS_MIGRATION_POLICY_INSTALLATION_CONFIG_KW.copy(),
+            pytest.raises(ValueError, match="MigrationPolicy"),
+        ),
+    ],
+)
+def test_installationconfig_authorization_migration_policy(w_kw, expectation):
+    installation_config = config_installation.InstallationConfig(**w_kw)
+    installation_config.environment["MIGRATION_POLICY"] = str(
+        AZ_MIGRATION_POLICY
+    )
+
+    with expectation as expected:
+        found = installation_config.authorization_migration_policy
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert found is expected
 
 
 def _marshal_iconfig_kw(iconfig_kw, config_path):
@@ -2123,7 +2288,7 @@ def _marshal_iconfig_kw(iconfig_kw, config_path):
         (
             BOGUS_INSTALLATION_CONFIG_YAML,
             None,
-            no_depr_warning,
+            None,
         ),
         (
             BARE_INSTALLATION_CONFIG_YAML,
@@ -2261,34 +2426,39 @@ def _marshal_iconfig_kw(iconfig_kw, config_path):
             no_depr_warning,
         ),
         (
-            W_TP_DBURI_INSTALLATION_CONFIG_YAML,
-            W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_YAML,
+            W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(),
             no_depr_warning,
         ),
         (
-            W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
-            W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
+            W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_YAML,
+            W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_KW.copy(),
             no_depr_warning,
         ),
         (
-            W_AZ_DBURI_INSTALLATION_CONFIG_YAML,
-            W_AZ_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_YAML,
+            W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(),
             no_depr_warning,
         ),
         (
-            W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
-            W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
+            W_AZ_DB_W_SECRET_INSTALLATION_CONFIG_YAML,
+            W_AZ_DB_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
+        ),
+        (
+            W_AZ_DB_W_MIGRATION_INSTALLATION_CONFIG_YAML,
+            W_AZ_DB_W_MIGRATION_INSTALLATION_CONFIG_KW.copy(),
             no_depr_warning,
         ),
         # Deprecated spellings: remove after v0.84.
         (
             W_DEPR_TP_DBURI_INSTALLATION_CONFIG_YAML,
-            W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(),
             has_depr_warning,
         ),
         (
             W_DEPR_AZ_DBURI_INSTALLATION_CONFIG_YAML,
-            W_AZ_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(),
             has_depr_warning,
         ),
     ],
@@ -2550,10 +2720,14 @@ def _as_yaml_only_base_stanzas():
         "thread_persistence_db": {
             "sync_dburi": None,
             "async_dburi": None,
+            "migration_dburi": None,
+            "migration_policy": None,
         },
         "authorization_db": {
             "sync_dburi": None,
             "async_dburi": None,
+            "migration_dburi": None,
+            "migration_policy": None,
         },
     }
 
@@ -2700,11 +2874,15 @@ def _as_yaml_only_w_tp_db(config_path):
         {
             "_thread_persistence_sync_dburi": (TP_SYNC_DBURI_W_SECRET_AND_ENV),
             "_thread_persistence_async_dburi": TP_ASYNC_DBURI,
+            "_thread_persistence_migration_dburi": TP_MIGRATION_DBURI,
+            "_thread_persistence_migration_policy": str(TP_MIGRATION_POLICY),
         },
         {
             "thread_persistence_db": {
                 "sync_dburi": TP_SYNC_DBURI_W_SECRET_AND_ENV,
                 "async_dburi": TP_ASYNC_DBURI,
+                "migration_dburi": TP_MIGRATION_DBURI,
+                "migration_policy": str(TP_MIGRATION_POLICY),
             },
         },
     )
@@ -2715,11 +2893,15 @@ def _as_yaml_only_w_authz_db(config_path):
         {
             "_authorization_sync_dburi": AZ_SYNC_DBURI_W_SECRET_AND_ENV,
             "_authorization_async_dburi": AZ_ASYNC_DBURI,
+            "_authorization_migration_dburi": AZ_MIGRATION_DBURI,
+            "_authorization_migration_policy": str(AZ_MIGRATION_POLICY),
         },
         {
             "authorization_db": {
                 "sync_dburi": AZ_SYNC_DBURI_W_SECRET_AND_ENV,
                 "async_dburi": AZ_ASYNC_DBURI,
+                "migration_dburi": AZ_MIGRATION_DBURI,
+                "migration_policy": str(AZ_MIGRATION_POLICY),
             },
         },
     )
@@ -2856,8 +3038,12 @@ INSTALLATION_STATE_ATTRS = (
     "logging_claims_map",
     "_thread_persistence_sync_dburi",
     "_thread_persistence_async_dburi",
+    "_thread_persistence_migration_dburi",
+    "_thread_persistence_migration_policy",
     "_authorization_sync_dburi",
     "_authorization_async_dburi",
+    "_authorization_migration_dburi",
+    "_authorization_migration_policy",
     "_skill_configs",
 )
 
@@ -2885,12 +3071,12 @@ INSTALLATION_STATE_ATTRS = (
         W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_YAML,
         W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_YAML,
         W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
-        W_TP_DBURI_INSTALLATION_CONFIG_YAML,
+        W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_YAML,
         # markers must survive the dump unresolved: 'as_yaml' reads the raw
         # field, never the interpolating property
-        W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
-        W_AZ_DBURI_INSTALLATION_CONFIG_YAML,
-        W_AZ_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
+        W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_YAML,
+        W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_YAML,
+        W_AZ_DB_W_SECRET_INSTALLATION_CONFIG_YAML,
     ],
 )
 def test_installationconfig_as_yaml_round_trips(

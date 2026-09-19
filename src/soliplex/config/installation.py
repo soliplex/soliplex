@@ -48,6 +48,7 @@ ENVIRONMENT_RE = config_interp.ENVIRONMENT_RE
 _both_embedded_field = config_interp.both_embedded_field
 _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
+_env_whole_or_literal_field = config_interp.env_whole_or_literal_field
 _no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
@@ -361,6 +362,11 @@ The '{stem}_dburi_{type_}' installation configuration property is deprecated,
 and will be removed after soliplex v0.84 (configured in {config_path}).
 Use instead '{stem}_{type_}_dburi'.
 """
+
+
+class MigrationPolicy(enum.StrEnum):
+    EXPLICIT = "explicit"
+    DISABLED = "disabled"
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -826,6 +832,16 @@ class InstallationConfig:
         public_name="thread_persistence_db.async_dburi",
         accessor="thread_persistence_async_dburi",
     )
+    _thread_persistence_migration_dburi: str = _both_embedded_field(
+        default=None,
+        public_name="thread_persistence_db.migration_dburi",
+        accessor="thread_persistence_migration_dburi",
+    )
+    _thread_persistence_migration_policy: str = _env_whole_or_literal_field(
+        default=None,
+        public_name="thread_persistence_db.migration_policy",
+        accessor="thread_persistence_migration_policy",
+    )
 
     @property
     def thread_persistence_sync_dburi(self) -> str:
@@ -840,6 +856,24 @@ class InstallationConfig:
             "_thread_persistence_async_dburi",
             ASYNC_MEMORY_ENGINE_URL,
         )
+
+    @property
+    def thread_persistence_migration_dburi(self) -> str | None:
+        return self._interpolate_dburi(
+            "_thread_persistence_migration_dburi",
+            None,
+        )
+
+    @property
+    def thread_persistence_migration_policy(self) -> MigrationPolicy | None:
+        if self._thread_persistence_migration_policy is not None:
+            return MigrationPolicy(
+                config_interp.resolve_field(
+                    self,
+                    "_thread_persistence_migration_policy",
+                    installation_config=self,
+                )
+            )
 
     # Deprecated aliases: remove after v0.84
     @property
@@ -881,6 +915,16 @@ class InstallationConfig:
         public_name="authorization_db.async_dburi",
         accessor="authorization_async_dburi",
     )
+    _authorization_migration_dburi: str = _both_embedded_field(
+        default=None,
+        public_name="authorization_db.migration_dburi",
+        accessor="authorization_migration_dburi",
+    )
+    _authorization_migration_policy: str = _env_whole_or_literal_field(
+        default=None,
+        public_name="authorization_db.migration_policy",
+        accessor="authorization_migration_policy",
+    )
 
     @property
     def authorization_sync_dburi(self) -> str:
@@ -895,6 +939,24 @@ class InstallationConfig:
             "_authorization_async_dburi",
             ASYNC_MEMORY_ENGINE_URL,
         )
+
+    @property
+    def authorization_migration_dburi(self) -> str | None:
+        return self._interpolate_dburi(
+            "_authorization_migration_dburi",
+            None,
+        )
+
+    @property
+    def authorization_migration_policy(self) -> MigrationPolicy | None:
+        if self._authorization_migration_policy is not None:
+            return MigrationPolicy(
+                config_interp.resolve_field(
+                    self,
+                    "_authorization_migration_policy",
+                    installation_config=self,
+                )
+            )
 
     # Deprecated aliases: remove after v0.84
     @property
@@ -1066,6 +1128,12 @@ class InstallationConfig:
             config_dict["_thread_persistence_async_dburi"] = tp_db.get(
                 "async_dburi"
             )
+            config_dict["_thread_persistence_migration_dburi"] = tp_db.get(
+                "migration_dburi"
+            )
+            config_dict["_thread_persistence_migration_policy"] = tp_db.get(
+                "migration_policy"
+            )
 
             # Deprecated spellings: remove after v0.84.
             depr_adb = config_dict.pop("authorization_dburi", None)
@@ -1092,6 +1160,12 @@ class InstallationConfig:
             config_dict["_authorization_sync_dburi"] = az_db.get("sync_dburi")
             config_dict["_authorization_async_dburi"] = az_db.get(
                 "async_dburi"
+            )
+            config_dict["_authorization_migration_dburi"] = az_db.get(
+                "migration_dburi"
+            )
+            config_dict["_authorization_migration_policy"] = az_db.get(
+                "migration_policy"
             )
 
             return cls(**config_dict)
@@ -1220,10 +1294,14 @@ class InstallationConfig:
             "thread_persistence_db": {
                 "sync_dburi": self._thread_persistence_sync_dburi,
                 "async_dburi": self._thread_persistence_async_dburi,
+                "migration_dburi": self._thread_persistence_migration_dburi,
+                "migration_policy": self._thread_persistence_migration_policy,
             },
             "authorization_db": {
                 "sync_dburi": self._authorization_sync_dburi,
                 "async_dburi": self._authorization_async_dburi,
+                "migration_dburi": self._authorization_migration_dburi,
+                "migration_policy": self._authorization_migration_policy,
             },
         }
 
