@@ -312,8 +312,8 @@ deployment can migrate from its own image:
 
 | Alembic name | Installation setting | Schema module |
 | --- | --- | --- |
-| `agui` | `thread_persistence_dburi` | `soliplex.agui.schema` |
-| `authz` | `authorization_dburi` | `soliplex.authz.schema` |
+| `agui` | `thread_persistence_db` | `soliplex.agui.schema` |
+| `authz` | `authorization_db` | `soliplex.authz.schema` |
 
 `soliplex.alembic_migrations.DATABASE_NAMES` names them, so every revision
 carries an `upgrade_<name>()` / `downgrade_<name>()` pair per database, plus

@@ -27,10 +27,10 @@ from tests._dburi import sqlite_dburi
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 _EXAMPLE_DIR = _REPO_ROOT / "example"
 
-# The 'authorization_dburi' stanza in 'example/minimal.yaml', repointed at a
+# The 'authorization_db' stanza in 'example/minimal.yaml', repointed at a
 # throwaway sqlite file so the smoke test never touches the checked-in DB.
 _AUTHZ_DBURI_RE = re.compile(
-    r'authorization_dburi:\n  sync: "[^"]*"\n  async: "[^"]*"',
+    r'authorization_db:\n  sync_dburi: "[^"]*"\n  async_dburi: "[^"]*"',
 )
 # The bare 'OLLAMA_BASE_URL' env requirement, pinned inline so the scratch
 # installation resolves without an ambient env var or a repo-root '.env'.
@@ -86,9 +86,9 @@ def _scratch_installation(tmp_path, authz_dburi_sync, authz_dburi_async):
     # Passed as a callable because 're.sub' expands backslash escapes in a
     # replacement *string*, which a Windows 'tmp_path' would trip over.
     authz_replacement = (
-        "authorization_dburi:\n"
-        f'  sync: "{authz_dburi_sync}"\n'
-        f'  async: "{authz_dburi_async}"'
+        "authorization_db:\n"
+        f'  sync_dburi: "{authz_dburi_sync}"\n'
+        f'  async_dburi: "{authz_dburi_async}"'
     )
     text, n_db = _AUTHZ_DBURI_RE.subn(
         lambda _: authz_replacement,

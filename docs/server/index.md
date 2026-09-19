@@ -180,14 +180,14 @@ when running multiple Soliplex server instances behind a load balancer:
   storage (the default), or a filesystem-based storage (`sqlite` does not
   support multiple writers to a shared filesystem database).  Instead,
   configure the SQLAlchemy using a supported relational database
-  server, as described [here](../config/dburis.md#thread_persistence_dburi).
+  server, as described [here](../config/dburis.md#thread_persistence_db).
 
 - The SQLAlchemy DBURI used to store authorization data should not
   be configured to use the `sqlite` engine, using either the RAM-based
   storage (the default), or a filesystem-based storage (`sqlite` does not
   support multiple writers to a shared filesystem database).  Instead,
   configure the SQLAlchemy using a supported relational database
-  server, as described [here](../config/dburis.md#authorization_dburi).
+  server, as described [here](../config/dburis.md#authorization_db).
 
 - The [secret](../config/secrets.md#session_middleware_token) used to manage
   session encryption should not be configured to use a `random_chars` secret

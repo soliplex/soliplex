@@ -873,12 +873,12 @@ Two blocks are printed:
   [`admin-users delete --allow-invalid-json-path`](#admin-users-delete)
   to remove such an entry. `(none)` if every stored row validates.
 
-When the installation's `authorization_dburi` is the in-memory
+When the installation's `authorization_db` is the in-memory
 default (`sqlite://`), no admin rows are persisted; both blocks read
 as `(none)`.
 
 When the authorization database cannot be reached at all — e.g. its
-`authorization_dburi` names a Postgres server that isn't listening —
+`authorization_db` names a Postgres server that isn't listening —
 neither block is printed. A single line reports the driver's error
 instead:
 
@@ -974,13 +974,13 @@ compile:
   [`room-authz delete-acl-entry --allow-invalid-json-path`](#room-authz-delete-acl-entry)
   to remove such an entry.
 
-When the installation's `authorization_dburi` is the in-memory
+When the installation's `authorization_db` is the in-memory
 default (`sqlite://`), every configured room falls into the
 **Default** bucket, the other three state buckets are empty, and no
 ACL rows are persisted so the invalid-JSONPath block is empty.
 
 When the authorization database cannot be reached at all — e.g. its
-`authorization_dburi` names a Postgres server that isn't listening —
+`authorization_db` names a Postgres server that isn't listening —
 none of the blocks are printed. A single line reports the driver's
 error instead:
 
@@ -1486,7 +1486,7 @@ This group replaces the deprecated flat `list-admin-users` /
 [Deprecated Command Names](#deprecated-command-names).
 
 These subcommands only make sense against a *persistent* authorization
-database (configured via `authorization_dburi` in the installation
+database (configured via `authorization_db` in the installation
 YAML). When the installation uses the default in-memory SQLite DB
 (`sqlite://`), each command detects the RAM-based URI, prints a note
 that the operation would be a no-op, and exits with status `1` without
@@ -1901,7 +1901,7 @@ All eight commands share the following:
   policies left behind by removed or renamed rooms; the other
   commands do not, so cleanup of stale rows still requires direct
   database tooling.
-- As with `admin-users`, when the installation's `authorization_dburi`
+- As with `admin-users`, when the installation's `authorization_db`
   is the in-memory default (`sqlite://`), each command detects the
   RAM-based URI, prints a note that the operation would be a no-op,
   and exits with status `1` without touching the database. There is

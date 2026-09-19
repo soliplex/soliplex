@@ -344,16 +344,16 @@ sandbox_config:
 #==========================================================================
 # Thread peristence:  SQLAlchemy DBURIs
 #==========================================================================
-thread_persistence_dburi:
-  sync: "sqlite:///db/sqlite/thread_persistence.sqlite"
-  async: "sqlite+aiosqlite:///db/sqlite/thread_persistence.sqlite"
+thread_persistence_db:
+  sync_dburi: "sqlite:///db/sqlite/thread_persistence.sqlite"
+  async_dburi: "sqlite+aiosqlite:///db/sqlite/thread_persistence.sqlite"
 
 #==========================================================================
 # Authorization policy:  SQLAlchemy DBURIs
 #==========================================================================
-authorization_dburi:
-  sync: "sqlite:///db/sqlite/authorization.sqlite"
-  async: "sqlite+aiosqlite:///db/sqlite/authorization.sqlite"
+authorization_db:
+  sync_dburi: "sqlite:///db/sqlite/authorization.sqlite"
+  async_dburi: "sqlite+aiosqlite:///db/sqlite/authorization.sqlite"
 
 #==========================================================================
 # OIDC authentication provider configuration

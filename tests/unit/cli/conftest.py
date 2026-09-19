@@ -23,13 +23,13 @@ _EXAMPLE_DIR = _REPO_ROOT / "example"
 # 'soliplex.alembic_migrations'), so both have to be disposable.
 def _dburi_re(key):
     return re.compile(
-        rf'{key}:\n  sync: "[^"]*"\n  async: "[^"]*"',
+        rf'{key}:\n  sync_dburi: "[^"]*"\n  async_dburi: "[^"]*"',
     )
 
 
-_DBURI_KEYS = {
-    "agui": "thread_persistence_dburi",
-    "authz": "authorization_dburi",
+_DB_KEYS = {
+    "agui": "thread_persistence_db",
+    "authz": "authorization_db",
 }
 
 # Matches the bare 'OLLAMA_BASE_URL' environment requirement so a scratch
@@ -85,8 +85,8 @@ def _point_db(
     text = config_path.read_text()
     replacement = (
         f"{key}:\n"
-        f'  sync: "{sqlite_dburi(db_path)}"\n'
-        f'  async: "{sqlite_dburi(db_path, "+aiosqlite")}"'
+        f'  sync_dburi: "{sqlite_dburi(db_path)}"\n'
+        f'  async_dburi: "{sqlite_dburi(db_path, "+aiosqlite")}"'
     )
     text, n_subs = _dburi_re(key).subn(lambda _: replacement, text)
     # Fail loudly if the example config's shape drifts out from under us.
@@ -124,8 +124,8 @@ def _installation_template(tmp_path_factory):
     config_path = dst / "minimal.yaml"
     db_path = base / "authz.sqlite"
     agui_db_path = base / "agui.sqlite"
-    _point_db(config_path, _DBURI_KEYS["authz"], db_path)
-    _point_db(config_path, _DBURI_KEYS["agui"], agui_db_path)
+    _point_db(config_path, _DB_KEYS["authz"], db_path)
+    _point_db(config_path, _DB_KEYS["agui"], agui_db_path)
     _pin_ollama_base_url(config_path)
 
     return config_path, db_path, agui_db_path
