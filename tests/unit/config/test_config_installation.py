@@ -641,6 +641,12 @@ W_TP_DBURI_INSTALLATION_CONFIG_KW = {
 }
 W_TP_DBURI_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
+thread_persistence_db:
+    sync_dburi: {TP_DBURI_SYNC}
+    async_dburi: {TP_DBURI_ASYNC}
+"""
+W_DEPR_TP_DBURI_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
 thread_persistence_dburi:
     sync: {TP_DBURI_SYNC}
     async: {TP_DBURI_ASYNC}
@@ -654,9 +660,9 @@ W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
 }
 W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-thread_persistence_dburi:
-    sync: {TP_DBURI_SYNC_W_SECRET_AND_ENV}
-    async: {TP_DBURI_ASYNC}
+thread_persistence_db:
+    sync_dburi: {TP_DBURI_SYNC_W_SECRET_AND_ENV}
+    async_dburi: {TP_DBURI_ASYNC}
 """
 
 RA_DB_USER_NAME = "ra_db_user"
@@ -678,6 +684,12 @@ W_RA_DBURI_INSTALLATION_CONFIG_KW = {
 }
 W_RA_DBURI_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
+authorization_db:
+    sync_dburi: {RA_DBURI_SYNC}
+    async_dburi: {RA_DBURI_ASYNC}
+"""
+W_DEPR_RA_DBURI_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
 authorization_dburi:
     sync: {RA_DBURI_SYNC}
     async: {RA_DBURI_ASYNC}
@@ -691,9 +703,9 @@ W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
 }
 W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-authorization_dburi:
-    sync: {RA_DBURI_SYNC_W_SECRET_AND_ENV}
-    async: {RA_DBURI_ASYNC}
+authorization_db:
+    sync_dburi: {RA_DBURI_SYNC_W_SECRET_AND_ENV}
+    async_dburi: {RA_DBURI_ASYNC}
 """
 
 
@@ -2077,136 +2089,182 @@ def _marshal_iconfig_kw(iconfig_kw, config_path):
     return iconfig
 
 
+no_depr_warning = contextlib.nullcontext()
+has_depr_warning = pytest.deprecated_call()
+
+
 @pytest.mark.parametrize(
-    "config_yaml, expected_kw",
+    "config_yaml, expected_kw, exp_deprecation",
     [
         (
             BOGUS_INSTALLATION_CONFIG_YAML,
             None,
+            no_depr_warning,
         ),
         (
             BARE_INSTALLATION_CONFIG_YAML,
             BARE_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_BARE_META_INSTALLATION_CONFIG_YAML,
             W_BARE_META_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_FULL_META_INSTALLATION_CONFIG_YAML,
             W_FULL_META_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_YAML,
             W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_YAML,
             W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_SECRETS_INSTALLATION_CONFIG_YAML,
             W_SECRETS_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_ENVIRONMENT_LIST_INSTALLATION_CONFIG_YAML,
             W_ENVIRONMENT_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_ENVIRONMENT_MAPPING_INSTALLATION_CONFIG_YAML,
             W_ENVIRONMENT_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_HR_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
             W_HR_CONFIG_FILE_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
             W_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
             W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
             W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
             W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
             W_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_SANDBOX_INSTALLATION_CONFIG_YAML,
             W_SANDBOX_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_OIDC_PATHS_INSTALLATION_CONFIG_YAML,
             W_OIDC_PATHS_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_OIDC_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_OIDC_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_ROOM_PATHS_INSTALLATION_CONFIG_YAML,
             W_ROOM_PATHS_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_ROOM_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_ROOM_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_COMPLETION_PATHS_INSTALLATION_CONFIG_YAML,
             W_COMPLETION_PATHS_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_COMPLETION_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_COMPLETION_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_QUIZZES_PATHS_INSTALLATION_CONFIG_YAML,
             W_QUIZZES_PATHS_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
             W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_SKILLS_PATHS_INSTALLATION_CONFIG_YAML,
             W_SKILLS_PATHS_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_YAML,
             W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_TP_DBURI_INSTALLATION_CONFIG_YAML,
             W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
             W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
+        ),
+        (
+            W_DEPR_TP_DBURI_INSTALLATION_CONFIG_YAML,
+            W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            has_depr_warning,
         ),
         (
             W_RA_DBURI_INSTALLATION_CONFIG_YAML,
             W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
         ),
         (
             W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
             W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
+        ),
+        (
+            W_DEPR_RA_DBURI_INSTALLATION_CONFIG_YAML,
+            W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(),
+            has_depr_warning,
         ),
     ],
 )
@@ -2220,6 +2278,7 @@ def test_installationconfig_from_yaml(
     patched_secret_getters,
     config_yaml,
     expected_kw,
+    exp_deprecation,
 ):
     patched_soliplex_config["test_secret_func"] = test_meta.secret_source_func
     config_path = temp_dir / "installation.yaml"
@@ -2241,10 +2300,16 @@ def test_installationconfig_from_yaml(
     else:
         expected = _marshal_iconfig_kw(expected_kw, config_path)
 
-        found = config_installation.InstallationConfig.from_yaml(
-            config_path,
-            config_dict,
-        )
+        with exp_deprecation as deprecated:
+            found = config_installation.InstallationConfig.from_yaml(
+                config_path,
+                config_dict,
+            )
+
+        if deprecated is not None:
+            warned = deprecated.pop(DeprecationWarning)
+            msg = warned.message.args[0]
+            assert f"(configured in {config_path})" in msg
 
         if "secrets" in expected_kw:
             replaced_secrets = []
@@ -2457,13 +2522,13 @@ def _as_yaml_only_base_stanzas():
             str(pathlib.Path(AS_YAML_ONLY_SKILLS_PATH))
         ],
         # Always emitted, even when unset.
-        "thread_persistence_dburi": {
-            "sync": None,
-            "async": None,
+        "thread_persistence_db": {
+            "sync_dburi": None,
+            "async_dburi": None,
         },
-        "authorization_dburi": {
-            "sync": None,
-            "async": None,
+        "authorization_db": {
+            "sync_dburi": None,
+            "async_dburi": None,
         },
     }
 
@@ -2605,31 +2670,31 @@ def _as_yaml_only_w_app_router_operations(config_path):
     )
 
 
-def _as_yaml_only_w_tp_dburi(config_path):
+def _as_yaml_only_w_tp_db(config_path):
     return (
         {
             "_thread_persistence_dburi_sync": (TP_DBURI_SYNC_W_SECRET_AND_ENV),
             "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
         },
         {
-            "thread_persistence_dburi": {
-                "sync": TP_DBURI_SYNC_W_SECRET_AND_ENV,
-                "async": TP_DBURI_ASYNC,
+            "thread_persistence_db": {
+                "sync_dburi": TP_DBURI_SYNC_W_SECRET_AND_ENV,
+                "async_dburi": TP_DBURI_ASYNC,
             },
         },
     )
 
 
-def _as_yaml_only_w_authz_dburi(config_path):
+def _as_yaml_only_w_authz_db(config_path):
     return (
         {
             "_authorization_dburi_sync": RA_DBURI_SYNC_W_SECRET_AND_ENV,
             "_authorization_dburi_async": RA_DBURI_ASYNC,
         },
         {
-            "authorization_dburi": {
-                "sync": RA_DBURI_SYNC_W_SECRET_AND_ENV,
-                "async": RA_DBURI_ASYNC,
+            "authorization_db": {
+                "sync_dburi": RA_DBURI_SYNC_W_SECRET_AND_ENV,
+                "async_dburi": RA_DBURI_ASYNC,
             },
         },
     )
@@ -2672,8 +2737,8 @@ AS_YAML_ONLY_STANZA_CASES = (
     _as_yaml_only_w_title_agent_config_id,
     _as_yaml_only_w_logfire_config,
     _as_yaml_only_w_app_router_operations,
-    _as_yaml_only_w_tp_dburi,
-    _as_yaml_only_w_authz_dburi,
+    _as_yaml_only_w_tp_db,
+    _as_yaml_only_w_authz_db,
     _as_yaml_only_w_logging_config_file,
     _as_yaml_only_w_logging_headers_map,
     _as_yaml_only_w_logging_claims_map,

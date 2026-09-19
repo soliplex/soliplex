@@ -338,12 +338,12 @@ _DBURI_ONLY_INSTALLATION = """\
 id: alembic-migrations-testcase
 environment:
   - "SOLIPLEX_TEST_PGHOST"
-thread_persistence_dburi:
-  sync: "postgresql://soliplex@env:SOLIPLEX_TEST_PGHOST/agui"
-  async: "postgresql+asyncpg://soliplex@env:SOLIPLEX_TEST_PGHOST/agui"
-authorization_dburi:
-  sync: "postgresql://soliplex@env:SOLIPLEX_TEST_PGHOST/authz"
-  async: "postgresql+asyncpg://soliplex@env:SOLIPLEX_TEST_PGHOST/authz"
+thread_persistence_db:
+  sync_dburi: "postgresql://soliplex@env:SOLIPLEX_TEST_PGHOST/agui"
+  async_dburi: "postgresql+asyncpg://soliplex@env:SOLIPLEX_TEST_PGHOST/agui"
+authorization_db:
+  sync_dburi: "postgresql://soliplex@env:SOLIPLEX_TEST_PGHOST/authz"
+  async_dburi: "postgresql+asyncpg://soliplex@env:SOLIPLEX_TEST_PGHOST/authz"
 """
 
 

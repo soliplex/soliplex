@@ -204,8 +204,8 @@ Alembic drives **two** databases from one revision tree, which lives in the
 package -- `src/soliplex/alembic_migrations/` -- and therefore ships in the
 wheel, so a deployment can migrate from its own image:
 
-- `agui` -- `thread_persistence_dburi`, schema `soliplex.agui.schema`
-- `authz` -- `authorization_dburi`, schema `soliplex.authz.schema`
+- `agui` -- `thread_persistence_db`, schema `soliplex.agui.schema`
+- `authz` -- `authorization_db`, schema `soliplex.authz.schema`
 
 Every revision has `upgrade_agui()` / `upgrade_authz()` pairs behind an
 `upgrade(engine_name)` dispatcher.

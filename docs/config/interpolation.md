@@ -108,7 +108,7 @@ wrote:
 
 ```python
 _dburi: str = config_interp.both_embedded_field(
-    public_name="thread_persistence_dburi.sync",
+    public_name="thread_persistence_db.sync_dburi",
     accessor="thread_persistence_dburi_sync",
     default=None,
 )

@@ -214,9 +214,9 @@ By default, Soliplex configures thread persistence using in-memory DBURIS:
 The default configuration is equivalent to this explicit YAML:
 
 ```yaml
-thread_persistence_dburi:
-  sync: "sqlite://"
-  async: "sqlite+aiosqlite://"
+thread_persistence_db:
+  sync_dburi: "sqlite://"
+  async_dburi: "sqlite+aiosqlite://"
 ```
 
 ### Database passwords as secrets
@@ -231,9 +231,9 @@ secrets:
       # Configure sources here
 ...
 
-thread_persistence_dburi:
-  sync: "postgresql+psycopg2://user:secret:MY_DBURI_SECRET@dbhost/dbname"
-  async: "postgresql+asyncpg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
+thread_persistence_db:
+  sync_dburi: "postgresql+psycopg2://user:secret:MY_DBURI_SECRET@dbhost/dbname"
+  async_dburi: "postgresql+asyncpg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
 ```
 
 ## OIDC Auth Provider Paths
