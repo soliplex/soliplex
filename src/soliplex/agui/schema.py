@@ -465,7 +465,6 @@ class RunUsage(Base):
             self.final_input_tokens,
             self.resolved_model_name,
             self.final_output_tokens,
-            self.created,
         )
 
 
