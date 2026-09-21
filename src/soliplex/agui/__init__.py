@@ -105,11 +105,10 @@ RunUsageStats = collections.namedtuple(
         "final_input_tokens",
         "resolved_model_name",
         "final_output_tokens",
-        "measured_at",
     ],
     # Rows written before these columns existed deserialize with them
     # unset, so they stay optional at the tuple boundary too.
-    defaults=(None, None, None, None),
+    defaults=(None, None, None),
 )
 
 
@@ -157,15 +156,6 @@ class RunUsage(abc.ABC):
     request, so the sum reads high there by the last reply's reasoning --
     never low -- until the next run measures. Ollama itemises no reasoning
     count, so nothing more exact is available for it.
-    """
-
-    measured_at: datetime.datetime | None
-    """When the usage was recorded.
-
-    Runs may be measured out of the order a client learns of them, and a
-    thread can be run from more than one client; the timestamp says which
-    of two measurements is the newer. None only for the abstract value --
-    every stored row carries one.
     """
 
     @abc.abstractmethod

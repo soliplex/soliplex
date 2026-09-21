@@ -126,8 +126,7 @@ async def test_runusage_as_tuple(the_session):
 
     found = usage.as_tuple()
 
-    assert found == (1, 2, 3, 4, 5, "gpt-4o-2024-11-20", 6, usage.created)
-    assert found.measured_at is not None
+    assert found == (1, 2, 3, 4, 5, "gpt-4o-2024-11-20", 6)
 
 
 @pytest.mark.anyio
@@ -158,7 +157,7 @@ async def test_runusage_as_tuple_wo_final_request(the_session):
     the_session.add(usage)
     the_session.commit()
 
-    assert usage.as_tuple() == (1, 2, 3, 4, None, None, None, usage.created)
+    assert usage.as_tuple() == (1, 2, 3, 4, None, None, None)
 
 
 @pytest.mark.parametrize(

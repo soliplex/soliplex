@@ -492,11 +492,9 @@ async def test_get_room_agui_only(
     the_logger.debug.assert_called_once_with(loggers.AGUI_GET_ROOM)
 
 
-MEASURED_AT = datetime.datetime(2026, 9, 16, 10, 0, tzinfo=datetime.UTC)
-
 # A measured run, as the stored row holds it: the tuple slots are the
 # 'RunUsageStats' fields in order.
-MEASURED_USAGE_STATS = (1, 2, 3, 4, 5, "gpt-4o-2024-11-20", 6, MEASURED_AT)
+MEASURED_USAGE_STATS = (1, 2, 3, 4, 5, "gpt-4o-2024-11-20", 6)
 
 
 def _run_usage(values):
@@ -517,7 +515,6 @@ def _run_usage(values):
         final_input_tokens=values[4],
         resolved_model_name=values[5],
         final_output_tokens=values[6],
-        measured_at=values[7],
     )
     usage.as_tuple.return_value = agui.RunUsageStats(*values)
     return usage
@@ -646,7 +643,6 @@ async def test_get_room_agui_thread_id_only(
             usage = found.runs[TEST_RUN_ID_UUID].usage
             assert usage.final_input_tokens == 5
             assert usage.final_output_tokens == 6
-            assert usage.measured_at == MEASURED_AT
         else:
             assert found.runs[TEST_RUN_ID_UUID].usage is None
 
@@ -2415,7 +2411,6 @@ MEASURED_USAGE = models.AGUI_RunUsage(
     final_input_tokens=5,
     resolved_model_name="gpt-4o-2024-11-20",
     final_output_tokens=6,
-    measured_at=MEASURED_AT,
 )
 
 

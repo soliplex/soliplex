@@ -1554,7 +1554,6 @@ def test_agui_run_usage_from_tuple_carries_final_request():
     Its input is what the window held; its output is the reply the next
     request adds to that.
     """
-    measured_at = datetime.datetime(2026, 9, 16, 10, 0, tzinfo=datetime.UTC)
     stats = agui.RunUsageStats(
         input_tokens=5000,
         output_tokens=200,
@@ -1563,7 +1562,6 @@ def test_agui_run_usage_from_tuple_carries_final_request():
         final_input_tokens=1800,
         resolved_model_name="gpt-4o-2024-11-20",
         final_output_tokens=120,
-        measured_at=measured_at,
     )
 
     found = models.AGUI_RunUsage.from_tuple(stats)
@@ -1572,7 +1570,6 @@ def test_agui_run_usage_from_tuple_carries_final_request():
     assert found.final_input_tokens == 1800
     assert found.resolved_model_name == "gpt-4o-2024-11-20"
     assert found.final_output_tokens == 120
-    assert found.measured_at == measured_at
 
 
 def test_agui_run_usage_from_tuple_wo_final_request():
@@ -1589,4 +1586,3 @@ def test_agui_run_usage_from_tuple_wo_final_request():
     assert found.final_input_tokens is None
     assert found.resolved_model_name is None
     assert found.final_output_tokens is None
-    assert found.measured_at is None
