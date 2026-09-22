@@ -328,10 +328,11 @@ def upgrade(engine_name: str) -> None:
 ### Running migrations
 
 The database URIs do not live in any Alembic config file.
-`src/soliplex/alembic_migrations/env.py` loads an
-installation config and resolves them -- secrets included -- from
-`thread_persistence_sync_dburi` and `authorization_sync_dburi`. Every
-invocation therefore has to say which installation it acts on:
+`src/soliplex/alembic_migrations/env.py` loads an installation config and
+resolves them -- secrets included -- through `migration_dburi()`: the
+configured `migration_dburi` for that database when there is one, and
+`thread_persistence_sync_dburi` / `authorization_sync_dburi` when there is
+not. Every invocation therefore has to say which installation it acts on:
 
 ```bash
 # Upgrade both databases to the latest revision
@@ -349,10 +350,23 @@ Those commands need a **source checkout**: `script_location` lives in
 `[tool.alembic]` in `pyproject.toml`, so the bare `alembic` CLI inside a
 deployment image fails with `No 'script_location' key found in
 configuration`. A deployment migrates through soliplex's own writable open,
-or by calling `soliplex.alembic_migrations.upgrade()`, both of which set
-`script_location` from the installed package directory. An operator-facing
-command for doing that deliberately, with writers stopped, is still to
-come.
+or through the `soliplex-cli database` command group, both of which set
+`script_location` from the installed package directory:
+
+```bash
+# What each database has applied, and what is pending
+uv run soliplex-cli database status <installation-path>
+
+# Move them, deliberately, with writers stopped
+uv run soliplex-cli database upgrade <installation-path>
+uv run soliplex-cli database downgrade <installation-path> <revision>
+```
+
+That group is the sole consumer of `migration_dburi` / `migration_policy`
+(see [docs/config/dburis.md](docs/config/dburis.md)): it migrates as the
+schema's owner rather than as the application role, and refuses a database
+whose policy is `disabled`. The automatic path does not yet consult the
+policy.
 
 **The revisions are the schema.** Migrating an empty database from base
 reproduces what the models declare, exactly. `scripts/lint_alembic_chain.py`
@@ -382,7 +396,16 @@ API:
   connection is what makes an in-memory database work: it lives inside one
   engine, so a migration run through any other engine would leave the
   caller's database empty.
-- `head_revision()`, `database_state()` and `upgrade()` for everything else.
+- `upgrade(revision, *, dburis=..., sql=...)` and `downgrade(revision, *,
+  dburis, sql=...)` -- named databases, which is what the CLI group drives.
+  `sql=True` writes `<database>.sql` instead of running anything.
+- `migration_dburi(installation, database)` and
+  `migration_policy(installation, database)` -- which credential, and
+  whether a migration is allowed here at all. A configured
+  `migration_dburi` with no policy implies `explicit`.
+- `head_revision()`, `database_state()`, `knows_revision()`,
+  `revision_chain()` and `split_chain(revision)` -- reading the tree, and
+  splitting it at a stamp into what has been applied and what is pending.
 
 Callers do not reach for those directly. `installation.open_engines` (used
 by `lifespan`) and `cli_util.open_db` (used by `admin-users`, `room-authz`
@@ -392,7 +415,10 @@ command at hand -- `alembic_migrations` itself knows nothing about RAM
 databases.
 
 `audit` is deliberately *not* in that list: it only reads, and reports an
-uncreated database as "nothing configured" rather than creating one.
+uncreated database as "nothing configured" rather than creating one. Nor
+is the `database` group, which opens a sync engine on the migration DBURI
+itself: it must not create or migrate anything just to report, and the
+credential it uses is not the one `open_db` would reach for.
 
 **A databse built by soliplex 0.81 or earlier needs stamping once.**
 Its schema was built by `create_all`, and so carries no `alembic_version` row:

@@ -114,7 +114,19 @@ installation environment:
 - `provider_base_url`, in any agent configuration.
 
 The entire value must be a single `env:` marker; any other value is used
-literally.  In the `logfire:` configuration (see [Logfire](logfire.md)):
+literally.
+
+In the main installation configuration:
+
+- `thread_persistence_migration_policy`
+- `authorization_migration_policy`
+
+Both are further constrained by their own value domain: a literal has to
+name one of the migration policies, and anything else is an error rather
+than a value used literally.  See
+[Migrations](dburis.md#migrations).
+
+In the `logfire:` configuration (see [Logfire](logfire.md)):
 
 - `service_name`, `service_version`, and `environment`
 - `config_dir`, `data_dir`, and `min_level`
@@ -134,12 +146,16 @@ In the main installation configuration:
 
 - `thread_persistence_sync_dburi`
 - `thread_persistence_async_dburi`
+- `thread_persistence_migration_dburi`
 - `authorization_sync_dburi`
 - `authorization_async_dburi`
+- `authorization_migration_dburi`
 
-Through Soliplex v0.81 these four named the URL flavor first, as
+Through Soliplex v0.81 the four runtime URLs named the flavor first, as
 `thread_persistence_dburi_sync` and so on.  The old names still work, but
-are deprecated and will be removed after Soliplex v0.84.
+are deprecated and will be removed after Soliplex v0.84.  The two
+migration URLs (see [Migrations](dburis.md#migrations)) never had that
+spelling.
 
 In the `mcp_client_toolsets:` stanza of a room or completion configuration,
 for each configured MCP client toolset:

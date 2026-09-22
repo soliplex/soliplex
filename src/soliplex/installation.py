@@ -338,6 +338,22 @@ class Installation:
     def authorization_async_dburi(self) -> str:
         return self._config.authorization_async_dburi
 
+    @property
+    def thread_persistence_migration_dburi(self) -> str | None:
+        return self._config.thread_persistence_migration_dburi
+
+    @property
+    def thread_persistence_migration_policy(self):
+        return self._config.thread_persistence_migration_policy
+
+    @property
+    def authorization_migration_dburi(self) -> str | None:
+        return self._config.authorization_migration_dburi
+
+    @property
+    def authorization_migration_policy(self):
+        return self._config.authorization_migration_policy
+
     # Deprecated aliases: remove after v0.84.
     @property
     def thread_persistence_dburi_sync(self) -> str:

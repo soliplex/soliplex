@@ -1470,6 +1470,192 @@ Drive the audit from automation, capturing missing-models JSON:
 soliplex-cli audit -q ollama example/installation.yaml
 ```
 
+## `database`
+
+Report and apply the Alembic migrations for the installation's two
+SQLAlchemy databases, `agui` (thread persistence) and `authz`
+(authorization). See [Database Migrations](migrations.md) for what the
+revision tree is and how it is maintained.
+
+Most deployments never need this group: Soliplex migrates its own
+databases on the first writable open. It exists for the deployment which
+has taken that job away from the application role -- the schema owned by
+an administrative role, the application granted only DML -- and for anyone
+who would rather migrate at a chosen moment than at the next restart.
+That separation is configured by `migration_dburi` and `migration_policy`
+(see [SQLAlchemy DBURIs](../config/dburis.md#migrations)), and this group
+is their only consumer.
+
+It also works where the `alembic` CLI does not. Alembic reads
+`script_location` from a source checkout's `pyproject.toml`, which no
+deployment image carries; these commands read the revision tree out of the
+installed `soliplex` package.
+
+The group has no options of its own.
+
+### Which DBURI, and whether at all
+
+Every subcommand resolves, per database:
+
+- **The DBURI to use** — the stanza's `migration_dburi` if it sets one,
+  otherwise its `sync_dburi`. An installation which configures no
+  `migration_dburi` therefore migrates exactly as it always did.
+- **The policy in force** — the stanza's `migration_policy`, or
+  `explicit` when a `migration_dburi` is configured and no policy is.
+  `upgrade` and `downgrade` refuse a database whose policy is `disabled`;
+  `status` reports it and carries on, since reporting is not migrating.
+
+### `database status`
+
+Report what each database has applied and what is still pending. Nothing
+is created, migrated or stamped, so this is the pre-flight for the other
+two subcommands.
+
+```bash
+soliplex-cli database status [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Options
+
+- `-d NAME` / `--database NAME` — limit the report to one database,
+  `agui` or `authz`. Both are reported by default.
+
+#### Output
+
+A rule-decorated header naming the revision this release's tree ends at,
+then, per database: the DBURI a migration would use with its password
+masked, the policy in force, the revisions already applied, and those
+still pending. Each revision is listed as its id followed by the message
+naming the release it belongs to (e.g. `a1c7d3e90b42  soliplex-v0.80`).
+
+A database which cannot be migrated as it stands is reported as a single
+`ERROR:` line in place of its revision lists.
+
+#### Exit Status
+
+- `0` — every database in scope could be migrated as it stands, whatever
+  is pending.
+- `1` — at least one could not: it did not open, it holds tables with no
+  `alembic_version` row (see
+  [#1367](https://github.com/soliplex/soliplex/issues/1367)), or it is
+  stamped at a revision this release does not have, which means the code
+  was rolled back without downgrading its databases first.
+
+### `database upgrade`
+
+Migrate the databases forward.
+
+```bash
+soliplex-cli database upgrade [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Options
+
+- `-d NAME` / `--database NAME` — limit the run to one database. Both
+  move by default.
+- `-r REV` / `--revision REV` — the revision to migrate to; `head` by
+  default. With `--sql`, Alembic's `<from>:<to>` range form is accepted
+  too.
+- `--sql` — write the SQL to `<database>.sql` in the current directory
+  instead of running it, for a deployment whose DDL somebody else
+  applies. Each file covers that database's own pending range, read from
+  its stamp, so the output is the delta rather than a replay from base.
+  Passing an explicit `<from>:<to>` range skips reading the stamp, which
+  is the only form that works when the databases cannot be reached from
+  wherever the command runs.
+
+#### Behavior Notes
+
+- **All or nothing.** Both databases move in one Alembic run, committing
+  together, and the whole run is refused if any target cannot be moved:
+  its policy is `disabled`, it did not open, it is unstamped, or it is
+  stamped by a newer release. `--database` narrows the run, which is what
+  a configuration giving the two databases different policies needs.
+- **Refusals are messages, not tracebacks.** A revision name the tree
+  does not have, a database that will not open, a role the database
+  refuses the DDL to: each is reported under a `Cannot upgrade` rule.
+
+#### Exit Status
+
+- `0` — every database in scope reached the requested revision, or its
+  SQL was written.
+- `1` — the run was refused, or Alembic failed.
+
+### `database downgrade`
+
+Migrate the databases back to an explicit revision. For the deployment
+whose code is about to be rolled back: downgrade first, from the version
+which still has these revisions, with every writer stopped.
+
+```bash
+soliplex-cli database downgrade [OPTIONS] INSTALLATION_CONFIG_PATH REVISION
+```
+
+#### Positional Arguments
+
+- `INSTALLATION_CONFIG_PATH` — as above.
+- `REVISION` — the revision to migrate back to. Required: there is no
+  sensible default for going backwards.
+
+#### Options
+
+`-d` / `--database` and `--sql`, both as for `database upgrade`. There is
+no `--revision`: the revision is the positional argument above, and under
+`--sql` it accepts the same `<from>:<to>` range form -- which is what lets
+a rollback be planned from somewhere that cannot reach the databases.
+
+#### Exit Status
+
+As for `database upgrade`, with refusals reported under a
+`Cannot downgrade` rule.
+
+### Examples
+
+See what an upgrade would do, without doing it:
+
+```bash
+soliplex-cli database status /environment
+```
+
+Migrate both databases to the revision this release expects:
+
+```bash
+soliplex-cli database upgrade /environment
+```
+
+Migrate only the authorization database, where the two stanzas configure
+different policies:
+
+```bash
+soliplex-cli database upgrade /environment --database authz
+```
+
+Hand the DDL to somebody else instead of applying it:
+
+```bash
+soliplex-cli database upgrade /environment --sql
+```
+
+Do the same where the databases cannot be reached from here, naming the
+revision they stand at:
+
+```bash
+soliplex-cli database upgrade /environment --sql --revision 63edaa5987f6:head
+```
+
+Roll back to a previous release's head before rolling back the code:
+
+```bash
+soliplex-cli database downgrade /environment 63edaa5987f6
+```
+
 ## `admin-users`
 
 The `admin-users` group manages the installation's admin-user table.

@@ -47,6 +47,21 @@ def installation_yaml(tmp_path, haiku_rag_yaml):  # , oidc_config_yaml):
     return yaml_file
 
 
+@pytest.mark.parametrize("w_dir", [False, True])
+def test_installation_config_path(installation_yaml, w_dir):
+    # Either the YAML itself or the directory holding it names the same
+    # configuration, which is what lets every command take a bare
+    # deployment directory.
+    if w_dir:
+        installation_path = installation_yaml.parent
+    else:
+        installation_path = installation_yaml
+
+    found = cli_util.installation_config_path(installation_path)
+
+    assert found == installation_yaml
+
+
 @pytest.mark.parametrize(
     "w_append_text, would_raise",
     [

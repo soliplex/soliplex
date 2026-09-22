@@ -22,6 +22,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from soliplex import alembic_migrations
 from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
+from soliplex.config import installation as config_installation
 
 AGUI = alembic_migrations.AGUI
 AUTHZ = alembic_migrations.AUTHZ
@@ -179,6 +180,39 @@ def test_upgrade_without_a_source_refuses():
 
 
 # --------------------------------------------------------------------------
+# downgrade: the operator's way back, named databases only
+# --------------------------------------------------------------------------
+def test_downgrade_moves_both_databases_back(tmp_path):
+    dburis = _dburis(tmp_path)
+    baseline = "d5009d4f9874"
+    alembic_migrations.upgrade(dburis=dburis)
+
+    alembic_migrations.downgrade(baseline, dburis=dburis)
+
+    assert _revision(dburis[AGUI]) == baseline
+    assert _revision(dburis[AUTHZ]) == baseline
+
+
+def test_downgrade_offline_writes_one_sql_file_per_database(
+    tmp_path, monkeypatch
+):
+    # As for 'upgrade': nothing connects, so the range has to say where
+    # the databases stand.
+    dburis = _dburis(tmp_path / "nonexistent")
+    head = alembic_migrations.head_revision()
+    monkeypatch.chdir(tmp_path)
+
+    alembic_migrations.downgrade(
+        f"{head}:d5009d4f9874", dburis=dburis, sql=True
+    )
+
+    for name in (AGUI, AUTHZ):
+        written = (tmp_path / f"{name}.sql").read_text(encoding="utf-8")
+        assert "DROP TABLE" in written or "ALTER TABLE" in written
+    assert not (tmp_path / "nonexistent").exists()
+
+
+# --------------------------------------------------------------------------
 # ensure_current_connection: the core, on a connection the caller owns
 # --------------------------------------------------------------------------
 def _ensure_on(dburi, database, *, sole_writer=True):
@@ -313,6 +347,152 @@ def test_knows_revision_knows_head():
 
 
 # --------------------------------------------------------------------------
+# revision_chain / split_chain: what a report shows an operator
+# --------------------------------------------------------------------------
+def test_revision_chain_runs_oldest_first_to_head():
+    found = alembic_migrations.revision_chain()
+
+    assert found[0].revision == "d5009d4f9874"
+    assert found[-1].revision == alembic_migrations.head_revision()
+    # Every revision carries the message naming its release.
+    assert all(entry.doc for entry in found)
+
+
+@pytest.mark.parametrize(
+    "revision, n_applied",
+    [
+        # An empty (or unstamped) database has applied nothing.
+        (None, 0),
+        ("d5009d4f9874", 1),
+        ("63edaa5987f6", 4),
+    ],
+)
+def test_split_chain(revision, n_applied):
+    chain = alembic_migrations.revision_chain()
+
+    applied, pending = alembic_migrations.split_chain(revision)
+
+    assert len(applied) == n_applied
+    assert applied + pending == chain
+
+
+def test_split_chain_at_head_leaves_nothing_pending():
+    head = alembic_migrations.head_revision()
+
+    applied, pending = alembic_migrations.split_chain(head)
+
+    assert applied[-1].revision == head
+    assert pending == ()
+
+
+def test_split_chain_refuses_a_revision_this_tree_lacks():
+    with pytest.raises(alembic_migrations.UnknownRevision, match="ffff"):
+        alembic_migrations.split_chain("ffffffffffff")
+
+
+# --------------------------------------------------------------------------
+# migration_dburi / migration_policy: which credential, and whether at all
+# --------------------------------------------------------------------------
+_POLICY = config_installation.MigrationPolicy
+
+# The six properties the resolvers read; an 'Installation' and the
+# 'InstallationConfig' it wraps both answer to exactly these.
+_INSTALLATION_ATTRS = {
+    "thread_persistence_sync_dburi": "sqlite:///agui-runtime",
+    "authorization_sync_dburi": "sqlite:///authz-runtime",
+    "thread_persistence_migration_dburi": None,
+    "authorization_migration_dburi": None,
+    "thread_persistence_migration_policy": None,
+    "authorization_migration_policy": None,
+}
+
+
+def _installation(**overrides):
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig,
+        **(_INSTALLATION_ATTRS | overrides),
+    )
+    return i_config
+
+
+@pytest.mark.parametrize(
+    "database, runtime",
+    [
+        (AGUI, "sqlite:///agui-runtime"),
+        (AUTHZ, "sqlite:///authz-runtime"),
+    ],
+)
+def test_migration_dburi_falls_back_to_the_runtime_sync_uri(database, runtime):
+    installation = _installation()
+
+    found = alembic_migrations.migration_dburi(installation, database)
+
+    assert found == runtime
+
+
+@pytest.mark.parametrize(
+    "database, attribute",
+    [
+        (AGUI, "thread_persistence_migration_dburi"),
+        (AUTHZ, "authorization_migration_dburi"),
+    ],
+)
+def test_migration_dburi_prefers_the_configured_one(database, attribute):
+    installation = _installation(**{attribute: "postgresql://owner@/db"})
+
+    found = alembic_migrations.migration_dburi(installation, database)
+
+    assert found == "postgresql://owner@/db"
+
+
+@pytest.mark.parametrize(
+    "configured, policy, expected",
+    [
+        # The dev-mode default: nothing configured, nothing implied.
+        (None, None, None),
+        (None, _POLICY.EXPLICIT, _POLICY.EXPLICIT),
+        (None, _POLICY.DISABLED, _POLICY.DISABLED),
+        # A configured credential with no policy implies 'explicit'.
+        ("postgresql://owner@/db", None, _POLICY.EXPLICIT),
+        ("postgresql://owner@/db", _POLICY.EXPLICIT, _POLICY.EXPLICIT),
+        ("postgresql://owner@/db", _POLICY.DISABLED, _POLICY.DISABLED),
+    ],
+)
+def test_migration_policy(configured, policy, expected):
+    installation = _installation(
+        thread_persistence_migration_dburi=configured,
+        thread_persistence_migration_policy=policy,
+    )
+
+    found = alembic_migrations.migration_policy(installation, AGUI)
+
+    assert found is expected
+
+
+def test_migration_policy_reads_the_authorization_fields():
+    installation = _installation(
+        authorization_migration_policy=_POLICY.DISABLED,
+    )
+
+    found = alembic_migrations.migration_policy(installation, AUTHZ)
+
+    assert found is _POLICY.DISABLED
+
+
+def test_migration_dburis_covers_both_databases():
+    installation = _installation(
+        authorization_migration_dburi="postgresql://owner@/authz",
+    )
+
+    found = alembic_migrations.migration_dburis(installation)
+
+    assert found == {
+        AGUI: "sqlite:///agui-runtime",
+        AUTHZ: "postgresql://owner@/authz",
+    }
+
+
+# --------------------------------------------------------------------------
 # resolve_dburis: the three sources, and the usage exit
 # --------------------------------------------------------------------------
 def _context(*, attributes=None, x_args=None):
@@ -422,7 +602,7 @@ def test_offline_mode_writes_one_sql_file_per_database(tmp_path, monkeypatch):
     dburis = _dburis(tmp_path / "nonexistent")
     monkeypatch.chdir(tmp_path)
 
-    alembic_migrations.upgrade(dburis=dburis, _offline=True)
+    alembic_migrations.upgrade(dburis=dburis, sql=True)
 
     for name in (AGUI, AUTHZ):
         written = (tmp_path / f"{name}.sql").read_text(encoding="utf-8")
