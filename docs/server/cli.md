@@ -17,6 +17,16 @@ work, but new scripts should use the grouped form documented below.
 See [Deprecated Command Names](#deprecated-command-names) at the bottom
 of this page for the full mapping.
 
+## A Note on Migration Failures
+
+A refused migration is reported as a single `Error: <message>` line on
+stderr, with exit status 1, rather than as a traceback. Those conditions —
+a database built before soliplex stamped one, a database stamped by a
+newer release, a migration this process may not run — are things an
+operator acts on, not defects, and the message names what to do. Every
+other failure still renders a traceback, because a traceback is the right
+answer for a bug. See [Database Migrations](migrations.md).
+
 ## `serve` Command
 
 Run the Soliplex FastAPI backend under uvicorn.
@@ -837,6 +847,103 @@ Just the room IDs and names, skipping the RAG detail:
 soliplex-cli audit rooms example/installation.yaml | grep '^- \['
 ```
 
+### `audit databases`
+
+Report the migration state of the two SQLAlchemy databases, `agui` (thread
+persistence) and `authz` (authorization), against the Alembic revision tree
+this release ships. Nothing is created, migrated or stamped: a database
+with no schema is reported as such rather than built.
+
+```bash
+soliplex-cli audit [OPTIONS] databases [INSTALLATION_CONFIG_PATH]
+```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
+
+This answers "is anything wrong?". For "what would an upgrade do?" -- the
+revisions already applied, and those still pending -- see
+[`database status`](#database-status), which reports the same two databases
+from the migration tool's side.
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+One entry per database, under a `Configured databases` rule:
+
+```text
+- agui: postgresql://soliplex:***@db.example.net/soliplex_agui
+  migration policy: explicit
+  migration dburi: postgresql://owner:***@db.example.net/soliplex_agui
+  OK (a1c7d3e90b42)
+```
+
+The first line is the runtime DBURI, with its password masked. The
+`migration policy` and `migration dburi` lines appear only for a database
+which configures them (see
+[SQLAlchemy DBURIs](../config/dburis.md#migrations)); a deployment which
+has not separated the schema owner from the application role sees neither.
+
+The last line is the state:
+
+| Line | Meaning |
+| --- | --- |
+| `OK (<revision>)` | stamped at the revision this release expects |
+| `behind head (<current> -> <head>)` | a migration is pending; the next writable open applies it |
+| `not created (the next writable open creates it)` | no schema yet |
+| `ERROR: behind head (...); 'migration_policy' is ...` | a migration is pending and the policy forbids applying it here |
+| `ERROR: not created; 'migration_policy' is ...` | no schema yet, and the policy forbids building one here |
+| `ERROR: tables are present but alembic_version is empty, ...` | built by soliplex 0.81 or earlier; needs the one-off bootstrap script |
+| `ERROR: <revision>: stamped at a revision this release does not have, ...` | the code was rolled back without downgrading first |
+| `ERROR: unreachable: <Type>: <message>` | the database did not open |
+
+Note which of those are *not* errors. A database behind head is ordinarily
+routine — soliplex migrates it on the next writable open — and so is one
+with no schema. Both become findings only when a `migration_policy` means
+no open here will act on them, leaving the database as it is until an
+operator runs [`database upgrade`](#database-upgrade).
+
+Under the group's `-q` / `--quiet` flag the human output is suppressed and
+any findings are emitted as JSON, keyed by database name:
+
+```json
+{
+  "databases": {
+    "agui": {
+      "migration_owed": "'migration_policy' is 'explicit', so apply it with 'soliplex-cli database upgrade'"
+    }
+  }
+}
+```
+
+The finding keys are `unreachable`, `unstamped`, `downgrade_required` and
+`migration_owed`.
+
+#### Exit Status
+
+- `0` — every database is current, or is behind head (or uncreated) with
+  no policy preventing the next writable open from dealing with it.
+- `1` — at least one finding above.
+
+#### Examples
+
+Report both databases:
+
+```bash
+soliplex-cli audit databases example/minimal.yaml
+```
+
+Drive it from automation, capturing findings as JSON:
+
+```bash
+soliplex-cli audit -q databases /environment
+```
+
 ### `audit admin-users`
 
 List every admin user stored in the installation's authorization
@@ -1483,8 +1590,13 @@ has taken that job away from the application role -- the schema owned by
 an administrative role, the application granted only DML -- and for anyone
 who would rather migrate at a chosen moment than at the next restart.
 That separation is configured by `migration_dburi` and `migration_policy`
-(see [SQLAlchemy DBURIs](../config/dburis.md#migrations)), and this group
-is their only consumer.
+(see [SQLAlchemy DBURIs](../config/dburis.md#migrations)). Only the
+deliberate tools read the credential -- this group, and the one-off
+bootstrap script behind
+[#1367](https://github.com/soliplex/soliplex/issues/1367); the policy
+binds everywhere, so a database it covers is refused by the server's
+startup and by every other writable command rather than migrated with the
+runtime credential.
 
 It also works where the `alembic` CLI does not. Alembic reads
 `script_location` from a source checkout's `pyproject.toml`, which no

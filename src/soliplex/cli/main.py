@@ -9,6 +9,7 @@ from importlib import metadata as importlib_metadata
 import typer
 import yaml
 
+from soliplex import alembic_migrations
 from soliplex import secrets
 from soliplex import util
 from soliplex.cli import admin_users
@@ -162,5 +163,31 @@ def shell(
 
 the_cli.add_typer(misc_app)
 
+
+def main():
+    """The 'soliplex-cli' console script.
+
+    The one seam between Typer and the shell, and therefore the only place
+    a 'MigrationError' can be given the presentation its own contract
+    promises -- "reported without a traceback" -- for every command at
+    once, including any added later. 'ask' and the 'database' group
+    convert theirs before it could reach here, so this changes nothing for
+    them; the 'admin-users' and 'room-authz' commands convert nothing, and
+    Typer renders their refusals as tracebacks.
+
+    Only that family is caught. Everything else still renders as it did,
+    because a traceback is the right answer for a bug.
+
+    'SystemExit', not 'typer.Exit': the latter is 'click.exceptions.Exit',
+    a 'RuntimeError', which outside click's own context would print the
+    very traceback this exists to remove.
+    """
+    try:
+        the_cli()
+    except alembic_migrations.MigrationError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
+
+
 if __name__ == "__main__":  # pragma NO COVER
-    the_cli()
+    main()

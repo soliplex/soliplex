@@ -5,6 +5,7 @@ from unittest import mock
 
 import pytest
 
+from soliplex import alembic_migrations
 from soliplex import secrets
 from soliplex.cli import main as cli_main
 from soliplex.config import installation as config_installation
@@ -91,3 +92,38 @@ def test_shell(cli_runner, scratch_installation):
 
     assert result.exit_code == 0
     interact.assert_called_once()
+
+
+# --------------------------------------------------------------------------
+# main: the console-script seam (see '#1371')
+# --------------------------------------------------------------------------
+def test_main_invokes_the_cli():
+    with mock.patch.object(cli_main, "the_cli") as the_cli:
+        cli_main.main()
+
+    the_cli.assert_called_once_with()
+
+
+def test_main_reports_a_migration_error_without_a_traceback(capsys):
+    # Every 'admin-users' / 'room-authz' command reaches the shell through
+    # here, and none of them converts the family itself.
+    boom = alembic_migrations.UnstampedDatabase(["agui"])
+
+    with mock.patch.object(cli_main, "the_cli", side_effect=boom):
+        with pytest.raises(SystemExit) as exc_info:
+            cli_main.main()
+
+    assert exc_info.value.code == 1
+    written = capsys.readouterr().err
+    assert written.startswith("Error: agui: ")
+    assert "Traceback" not in written
+
+
+def test_main_leaves_other_exceptions_alone():
+    # A traceback is the right answer for a bug, so only the documented
+    # family is flattened.
+    boom = RuntimeError("a bug")
+
+    with mock.patch.object(cli_main, "the_cli", side_effect=boom):
+        with pytest.raises(RuntimeError, match="a bug"):
+            cli_main.main()

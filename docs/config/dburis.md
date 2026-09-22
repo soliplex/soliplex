@@ -157,18 +157,14 @@ Two named values; absence is the third state:
 | `explicit` | only `soliplex-cli database upgrade` migrates |
 | `disabled` | nothing migrates this database from this configuration |
 
-Configuring a `migration_dburi` and leaving `migration_policy` unset
-implies `explicit`.  That is not merely a convenient default: the
-migration tool is the only consumer of that credential, so configuring one
-while leaving the automatic path in charge would name a credential nothing
-reads.
+Configuring `migration_dburi` without a `migration_policy` implies `explicit`.
 
-`disabled` earns its own value rather than folding into `explicit`,
-because it is what lets a single `installation.yaml` serve services
-running as different roles: the server resolves `disabled`, and whatever
-runs the migration resolves `explicit`.  The whole value may be a single
-`env:` marker instead of a literal, and Compose already gives each service
-its own environment:
+Configuring `disabled` allows sharing a single `installation.yaml` between
+services running as different roles: one service resolves `disabled`, while
+another (the one which runs the migration) resolves `explicit`.
+
+The whole value may be a single `env:` marker instead of a literal, wired
+via the compose service environment and the installation config:
 
 ```yaml
 authorization_db:
@@ -197,12 +193,27 @@ A value which is neither policy name is an error, reported when the policy
 is read.  Absence means automatic migration, so an unrecognized value must
 not fall through to it.
 
-**Not yet enforced at runtime.**  `soliplex-cli database` honors both
-values today.  The automatic migration on a writable open does not yet
-consult them: a server started against a database which is still behind
-head will try to migrate it with the runtime credential, and fail as it
-always did, rather than reporting that a migration is owed.  Migrate
-before starting it.
+### What a policy refuses
+
+Both values are enforced wherever soliplex would otherwise migrate on its
+own: the server's startup, and every `soliplex-cli` command which opens a
+database for writing.  The refusal names the remedy under `explicit`
+(`soliplex-cli database upgrade`) and deliberately names no command under
+`disabled`, where migrating belongs to another service entirely.
+
+A policy bites only when a migration is actually owed.  A database already
+at the revision this release expects starts normally under any policy,
+which is what lets a service configured `disabled` run against a current
+database without knowing or caring.
+
+One consequence is worth planning for: **a database under a policy does not
+get its schema built on first use.**  Ordinarily the first writable open
+creates the tables; under `explicit` or `disabled` it refuses instead, so a
+newly created database has to be initialized with
+`soliplex-cli database upgrade` before the server is started against it.
+Reading is unaffected -- `soliplex-cli audit databases` creates and migrates
+nothing, so it keeps working, and reporting that a migration is owed is
+exactly its job.
 
 ## Interpolation
 

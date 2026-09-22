@@ -199,16 +199,34 @@ def test__configure_cli_logging_noop_when_already_configured(
     assert audit_logger.propagate is saved_propagate
 
 
-def _installation_at(tmp_path, *, ram=False):
-    """An installation whose two databases are this test's own."""
-    if ram:
-        agui = authz = config_installation.ASYNC_MEMORY_ENGINE_URL
-    else:
-        agui = f"sqlite+aiosqlite:///{tmp_path / 'agui.sqlite'}"
-        authz = f"sqlite+aiosqlite:///{tmp_path / 'authz.sqlite'}"
-    return mock.Mock(
-        thread_persistence_async_dburi=agui,
-        authorization_async_dburi=authz,
+def test_redacted_dburi_masks_the_password():
+    found = cli_util.redacted_dburi("postgresql://owner:swordfish@db/agui")
+
+    assert "swordfish" not in found
+    assert "owner" in found
+
+
+def test_redacted_dburi_refuses_an_unparseable_dburi():
+    # Nothing of it is shown: the text that would not parse may still hold
+    # the password this is here to keep off a terminal.
+    found = cli_util.redacted_dburi("postgres, but with a typo")
+
+    assert found == cli_util.UNPARSEABLE_DBURI
+
+
+def _installation_at(write_installation, *, ram=False, **stanzas):
+    """An installation whose two databases are this test's own.
+
+    Built from a real configuration rather than a double, because
+    'open_db' reads more of one than its DBURI: it now also reads the
+    migration policy, and a 'Mock' answers a 'Mock' to every property
+    nobody thought to pin. 'stanzas' adds sub-keys, e.g.
+    'authz={"migration_policy": "explicit"}'.
+    """
+    return installation.Installation(
+        config_installation.load_installation(
+            write_installation(in_memory=ram, **stanzas)
+        )
     )
 
 
@@ -219,8 +237,8 @@ def _installation_at(tmp_path, *, ram=False):
         (cli_util.AUTHZ, "authorization_async_dburi"),
     ],
 )
-def test_async_dburi(tmp_path, db_type, expected_attr):
-    the_installation = _installation_at(tmp_path)
+def test_async_dburi(db_type, expected_attr, write_installation):
+    the_installation = _installation_at(write_installation)
 
     found = cli_util.async_dburi(the_installation, db_type)
 
@@ -235,8 +253,10 @@ async def _revision_of(engine):
 
 @pytest.mark.anyio
 @mock.patch("soliplex.cli.cli_util.the_console")
-async def test_open_db_rejects_a_ram_dburi_by_default(the_console, tmp_path):
-    the_installation = _installation_at(tmp_path, ram=True)
+async def test_open_db_rejects_a_ram_dburi_by_default(
+    the_console, write_installation
+):
+    the_installation = _installation_at(write_installation, ram=True)
 
     with pytest.raises(typer.Exit):
         await cli_util.open_db(
@@ -249,10 +269,10 @@ async def test_open_db_rejects_a_ram_dburi_by_default(the_console, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_open_db_migrates_a_ram_dburi_when_allowed(tmp_path):
+async def test_open_db_migrates_a_ram_dburi_when_allowed(write_installation):
     # An in-memory database lives inside the engine that opened it, so the
     # migration has to run on the engine handed back -- nowhere else.
-    the_installation = _installation_at(tmp_path, ram=True)
+    the_installation = _installation_at(write_installation, ram=True)
 
     engine = await cli_util.open_db(
         the_installation,
@@ -268,13 +288,58 @@ async def test_open_db_migrates_a_ram_dburi_when_allowed(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_open_db_must_exist_accepts_a_created_database(tmp_path):
-    the_installation = _installation_at(tmp_path)
+async def test_open_db_must_exist_accepts_a_created_database(
+    write_installation,
+):
+    the_installation = _installation_at(write_installation)
     dburi = the_installation.authorization_async_dburi
     created = installation._create_async_engine(dburi)
     try:
         await alembic_migrations.ensure_current_engine(
-            created, cli_util.AUTHZ, sole_writer=True
+            created, cli_util.AUTHZ, sole_writer=True, policy=None
+        )
+    finally:
+        await created.dispose()
+
+    engine = await cli_util.open_db(
+        the_installation,
+        cli_util.AUTHZ,
+        command="test-command",
+        must_exist=True,
+    )
+
+    try:
+        assert await _revision_of(engine) == alembic_migrations.head_revision()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_open_db_refuses_under_a_migration_policy(write_installation):
+    # A command is not the migration tool, so it does not migrate for one.
+    the_installation = _installation_at(
+        write_installation, authz={"migration_policy": "explicit"}
+    )
+
+    with pytest.raises(alembic_migrations.ExplicitMigrationRequired):
+        await cli_util.open_db(
+            the_installation, cli_util.AUTHZ, command="test-command"
+        )
+
+
+@pytest.mark.anyio
+async def test_open_db_must_exist_ignores_the_policy(write_installation):
+    # The reader creates and migrates nothing, so there is nothing for a
+    # policy to forbid -- and 'audit databases' has to keep working for
+    # exactly the deployments which set one.
+    the_installation = _installation_at(
+        write_installation, authz={"migration_policy": "disabled"}
+    )
+    dburi = the_installation.authorization_async_dburi
+    created = installation._create_async_engine(dburi)
+    try:
+        await alembic_migrations.ensure_current_engine(
+            created, cli_util.AUTHZ, sole_writer=True, policy=None
         )
     finally:
         await created.dispose()
@@ -294,8 +359,10 @@ async def test_open_db_must_exist_accepts_a_created_database(tmp_path):
 
 @pytest.mark.anyio
 @mock.patch("soliplex.cli.cli_util._configure_cli_logging")
-async def test__authz_session_configures_logging(configure_logging, tmp_path):
-    the_installation = _installation_at(tmp_path)
+async def test__authz_session_configures_logging(
+    configure_logging, write_installation
+):
+    the_installation = _installation_at(write_installation)
 
     async with cli_util._authz_session(the_installation, "test-command"):
         pass
@@ -305,8 +372,8 @@ async def test__authz_session_configures_logging(configure_logging, tmp_path):
 
 @pytest.mark.anyio
 @mock.patch("soliplex.cli.cli_util._configure_cli_logging")
-async def test__admin_user_policy(_configure_logging, tmp_path):
-    the_installation = _installation_at(tmp_path)
+async def test__admin_user_policy(_configure_logging, write_installation):
+    the_installation = _installation_at(write_installation)
     json_path = authz.token_field_json_path("email", "alice@example.com")
 
     async with cli_util._admin_user_policy(
@@ -320,8 +387,8 @@ async def test__admin_user_policy(_configure_logging, tmp_path):
 
 @pytest.mark.anyio
 @mock.patch("soliplex.cli.cli_util._configure_cli_logging")
-async def test__room_authz_policy(_configure_logging, tmp_path):
-    the_installation = _installation_at(tmp_path)
+async def test__room_authz_policy(_configure_logging, write_installation):
+    the_installation = _installation_at(write_installation)
 
     async with cli_util._room_authz_policy(
         the_installation, "test-command"

@@ -12,7 +12,6 @@ import pathlib
 import pytest
 import sqlalchemy as sa
 import typer
-import yaml
 
 from soliplex import alembic_migrations
 from soliplex.agui import schema as agui_schema
@@ -35,46 +34,6 @@ _NEWER = "ffffffffffff"
 def _chain_length() -> int:
     """How many revisions the shipped tree holds, which grows over time."""
     return len(alembic_migrations.revision_chain())
-
-
-def _db_stanza(db_path: pathlib.Path, **extra) -> dict:
-    return {
-        "sync_dburi": sqlite_dburi(db_path),
-        "async_dburi": sqlite_dburi(db_path, "+aiosqlite"),
-        **extra,
-    }
-
-
-def _write_installation(tmp_path, *, agui=None, authz=None) -> pathlib.Path:
-    """A minimal installation naming two throwaway SQLite files.
-
-    Two database stanzas and an id, and nothing else: these commands load
-    the config alone, so no rooms, completions or OIDC are needed here --
-    which is the point, and what keeps an unrelated broken config from
-    blocking a migration.
-
-    'agui' / 'authz' add sub-keys to one stanza, e.g.
-    'authz={"migration_policy": "disabled"}'.
-    """
-    config = {
-        "id": "cli-database-testcase",
-        "thread_persistence_db": _db_stanza(
-            tmp_path / "agui.sqlite", **(agui or {})
-        ),
-        "authorization_db": _db_stanza(
-            tmp_path / "authz.sqlite", **(authz or {})
-        ),
-    }
-    path = tmp_path / "installation.yaml"
-    path.write_text(yaml.safe_dump(config), encoding="utf-8")
-    return path
-
-
-def _dburis(tmp_path) -> dict[str, str]:
-    return {
-        AGUI: sqlite_dburi(tmp_path / "agui.sqlite"),
-        AUTHZ: sqlite_dburi(tmp_path / "authz.sqlite"),
-    }
 
 
 def _revision(dburi: str) -> str | None:
@@ -122,24 +81,6 @@ def _a_status(**kwargs):
     kwargs.setdefault("dburi", "sqlite://")
     kwargs.setdefault("policy", None)
     return cli_database.MigrationStatus(**kwargs)
-
-
-# --------------------------------------------------------------------------
-# _redacted
-# --------------------------------------------------------------------------
-def test__redacted_masks_the_password():
-    found = cli_database._redacted("postgresql://owner:swordfish@db/agui")
-
-    assert "swordfish" not in found
-    assert "owner" in found
-
-
-def test__redacted_refuses_to_print_an_unparseable_dburi():
-    # Nothing of it is shown: the text that would not parse may still hold
-    # the password this is here to keep off a terminal.
-    found = cli_database._redacted("postgres, but with a typo")
-
-    assert found == cli_database._UNPARSEABLE_DBURI
 
 
 # --------------------------------------------------------------------------
@@ -249,8 +190,8 @@ def test__targets(database, expected):
 # --------------------------------------------------------------------------
 # _status: one probe, reporting rather than raising
 # --------------------------------------------------------------------------
-def test__status_reads_an_empty_database(tmp_path):
-    i_config = cli_database._load_config(_write_installation(tmp_path))
+def test__status_reads_an_empty_database(write_installation, tmp_path):
+    i_config = cli_database._load_config(write_installation())
 
     found = cli_database._status(i_config, AGUI)
 
@@ -259,9 +200,9 @@ def test__status_reads_an_empty_database(tmp_path):
     assert found.dburi == sqlite_dburi(tmp_path / "agui.sqlite")
 
 
-def test__status_reads_a_migrated_database(tmp_path):
-    i_config = cli_database._load_config(_write_installation(tmp_path))
-    alembic_migrations.upgrade(dburis=_dburis(tmp_path))
+def test__status_reads_a_migrated_database(cli_dburis, write_installation):
+    i_config = cli_database._load_config(write_installation())
+    alembic_migrations.upgrade(dburis=cli_dburis)
 
     found = cli_database._status(i_config, AUTHZ)
 
@@ -270,10 +211,12 @@ def test__status_reads_a_migrated_database(tmp_path):
     assert found.known is True
 
 
-def test__status_reports_a_database_which_will_not_open(tmp_path):
+def test__status_reports_a_database_which_will_not_open(
+    write_installation, tmp_path
+):
     missing = tmp_path / "no-such-directory"
-    path = _write_installation(
-        tmp_path, agui={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
+    path = write_installation(
+        agui={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
     )
     i_config = cli_database._load_config(path)
 
@@ -283,12 +226,12 @@ def test__status_reports_a_database_which_will_not_open(tmp_path):
     assert found.state is None
 
 
-def test__status_skips_the_probe_when_asked(tmp_path):
+def test__status_skips_the_probe_when_asked(write_installation, tmp_path):
     # The offline case: an explicit '--sql' range says where the database
     # stands, so it need not be reachable from here at all.
     missing = tmp_path / "no-such-directory"
-    path = _write_installation(
-        tmp_path, authz={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
+    path = write_installation(
+        authz={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
     )
     i_config = cli_database._load_config(path)
 
@@ -298,10 +241,8 @@ def test__status_skips_the_probe_when_asked(tmp_path):
     assert found.state is None
 
 
-def test__status_carries_the_configured_policy(tmp_path):
-    path = _write_installation(
-        tmp_path, authz={"migration_policy": "disabled"}
-    )
+def test__status_carries_the_configured_policy(write_installation):
+    path = write_installation(authz={"migration_policy": "disabled"})
     i_config = cli_database._load_config(path)
 
     found = cli_database._status(i_config, AUTHZ)
@@ -443,9 +384,9 @@ def test__sql_revision_starts_from_base_when_nothing_is_stamped():
 # status
 # --------------------------------------------------------------------------
 def test_status_reports_an_empty_installation_as_all_pending(
-    tmp_path, cli_runner
+    write_installation, cli_runner
 ):
-    path = _write_installation(tmp_path)
+    path = write_installation()
 
     result = _invoke(cli_runner, "status", path)
 
@@ -455,10 +396,10 @@ def test_status_reports_an_empty_installation_as_all_pending(
 
 
 def test_status_reports_a_migrated_installation_as_current(
-    tmp_path, cli_runner
+    cli_dburis, write_installation, cli_runner
 ):
-    path = _write_installation(tmp_path)
-    alembic_migrations.upgrade(dburis=_dburis(tmp_path))
+    path = write_installation()
+    alembic_migrations.upgrade(dburis=cli_dburis)
 
     result = _invoke(cli_runner, "status", path)
 
@@ -467,8 +408,10 @@ def test_status_reports_a_migrated_installation_as_current(
     assert result.output.count("pending: 0") == 2
 
 
-def test_status_reports_one_database_when_asked(tmp_path, cli_runner):
-    path = _write_installation(tmp_path)
+def test_status_reports_one_database_when_asked(
+    write_installation, cli_runner
+):
+    path = write_installation()
 
     result = _invoke(cli_runner, "status", path, "--database", "authz")
 
@@ -477,11 +420,12 @@ def test_status_reports_one_database_when_asked(tmp_path, cli_runner):
     assert "agui" not in result.output
 
 
-def test_status_shows_the_policy_in_force(tmp_path, cli_runner):
+def test_status_shows_the_policy_in_force(
+    write_installation, tmp_path, cli_runner
+):
     # Configured credential, no policy: 'explicit' is implied, and saying
     # so is the point of printing a policy nobody wrote down.
-    path = _write_installation(
-        tmp_path,
+    path = write_installation(
         agui={"migration_dburi": sqlite_dburi(tmp_path / "agui.sqlite")},
         authz={"migration_policy": "disabled"},
     )
@@ -492,9 +436,11 @@ def test_status_shows_the_policy_in_force(tmp_path, cli_runner):
     assert "policy: disabled" in result.output
 
 
-def test_status_exits_one_for_an_unstamped_database(tmp_path, cli_runner):
-    path = _write_installation(tmp_path)
-    _create_all_unstamped(_dburis(tmp_path)[AGUI], agui_schema.metadata)
+def test_status_exits_one_for_an_unstamped_database(
+    cli_dburis, write_installation, cli_runner
+):
+    path = write_installation()
+    _create_all_unstamped(cli_dburis[AGUI], agui_schema.metadata)
 
     result = _invoke(cli_runner, "status", path)
 
@@ -503,11 +449,11 @@ def test_status_exits_one_for_an_unstamped_database(tmp_path, cli_runner):
 
 
 def test_status_exits_one_for_a_stamp_from_a_newer_release(
-    tmp_path, cli_runner
+    cli_dburis, write_installation, cli_runner
 ):
-    path = _write_installation(tmp_path)
-    alembic_migrations.upgrade(dburis=_dburis(tmp_path))
-    _stamp(_dburis(tmp_path)[AUTHZ], _NEWER)
+    path = write_installation()
+    alembic_migrations.upgrade(dburis=cli_dburis)
+    _stamp(cli_dburis[AUTHZ], _NEWER)
 
     result = _invoke(cli_runner, "status", path)
 
@@ -516,11 +462,11 @@ def test_status_exits_one_for_a_stamp_from_a_newer_release(
 
 
 def test_status_exits_one_for_a_database_which_will_not_open(
-    tmp_path, cli_runner
+    write_installation, tmp_path, cli_runner
 ):
     missing = tmp_path / "no-such-directory"
-    path = _write_installation(
-        tmp_path, agui={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
+    path = write_installation(
+        agui={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
     )
 
     result = _invoke(cli_runner, "status", path)
@@ -532,44 +478,50 @@ def test_status_exits_one_for_a_database_which_will_not_open(
 # --------------------------------------------------------------------------
 # upgrade
 # --------------------------------------------------------------------------
-def test_upgrade_brings_both_databases_to_head(tmp_path, cli_runner):
-    path = _write_installation(tmp_path)
+def test_upgrade_brings_both_databases_to_head(
+    cli_dburis, write_installation, cli_runner
+):
+    path = write_installation()
 
     result = _invoke(cli_runner, "upgrade", path)
 
     assert result.exit_code == 0
     head = alembic_migrations.head_revision()
-    assert _revision(_dburis(tmp_path)[AGUI]) == head
-    assert _revision(_dburis(tmp_path)[AUTHZ]) == head
+    assert _revision(cli_dburis[AGUI]) == head
+    assert _revision(cli_dburis[AUTHZ]) == head
 
 
-def test_upgrade_to_an_explicit_revision(tmp_path, cli_runner):
-    path = _write_installation(tmp_path)
+def test_upgrade_to_an_explicit_revision(
+    cli_dburis, write_installation, cli_runner
+):
+    path = write_installation()
 
     result = _invoke(cli_runner, "upgrade", path, "--revision", _BASELINE)
 
     assert result.exit_code == 0
-    assert _revision(_dburis(tmp_path)[AGUI]) == _BASELINE
+    assert _revision(cli_dburis[AGUI]) == _BASELINE
 
 
-def test_upgrade_moves_only_the_named_database(tmp_path, cli_runner):
-    path = _write_installation(tmp_path)
+def test_upgrade_moves_only_the_named_database(
+    cli_dburis, write_installation, cli_runner
+):
+    path = write_installation()
 
     result = _invoke(cli_runner, "upgrade", path, "-d", "agui")
 
     assert result.exit_code == 0
-    assert _revision(_dburis(tmp_path)[AGUI]) is not None
-    assert _revision(_dburis(tmp_path)[AUTHZ]) is None
+    assert _revision(cli_dburis[AGUI]) is not None
+    assert _revision(cli_dburis[AUTHZ]) is None
 
 
-def test_upgrade_uses_the_configured_migration_dburi(tmp_path, cli_runner):
+def test_upgrade_uses_the_configured_migration_dburi(
+    write_installation, tmp_path, cli_runner
+):
     # The whole point of #1378: the credential a migration runs as is not
     # the one the application runs as. Here it simply names another file,
     # which is enough to show which of the two was used.
     owner_db = tmp_path / "agui-as-owner.sqlite"
-    path = _write_installation(
-        tmp_path, agui={"migration_dburi": sqlite_dburi(owner_db)}
-    )
+    path = write_installation(agui={"migration_dburi": sqlite_dburi(owner_db)})
 
     result = _invoke(cli_runner, "upgrade", path, "-d", "agui")
 
@@ -578,22 +530,24 @@ def test_upgrade_uses_the_configured_migration_dburi(tmp_path, cli_runner):
     assert not (tmp_path / "agui.sqlite").exists()
 
 
-def test_upgrade_refuses_a_disabled_database(tmp_path, cli_runner):
-    path = _write_installation(
-        tmp_path, authz={"migration_policy": "disabled"}
-    )
+def test_upgrade_refuses_a_disabled_database(
+    cli_dburis, write_installation, cli_runner
+):
+    path = write_installation(authz={"migration_policy": "disabled"})
 
     result = _invoke(cli_runner, "upgrade", path)
 
     assert result.exit_code == 1
     assert "Cannot upgrade" in result.output
     # All or nothing: the database which was not disabled did not move.
-    assert _revision(_dburis(tmp_path)[AGUI]) is None
+    assert _revision(cli_dburis[AGUI]) is None
 
 
-def test_upgrade_refuses_an_unstamped_database(tmp_path, cli_runner):
-    path = _write_installation(tmp_path)
-    _create_all_unstamped(_dburis(tmp_path)[AUTHZ], authz_schema.metadata)
+def test_upgrade_refuses_an_unstamped_database(
+    cli_dburis, write_installation, cli_runner
+):
+    path = write_installation()
+    _create_all_unstamped(cli_dburis[AUTHZ], authz_schema.metadata)
 
     result = _invoke(cli_runner, "upgrade", path)
 
@@ -601,9 +555,11 @@ def test_upgrade_refuses_an_unstamped_database(tmp_path, cli_runner):
     assert "bootstrap" in result.output
 
 
-def test_upgrade_reports_a_revision_the_tree_lacks(tmp_path, cli_runner):
+def test_upgrade_reports_a_revision_the_tree_lacks(
+    write_installation, cli_runner
+):
     # Alembic's own refusal, reported as a message rather than a traceback.
-    path = _write_installation(tmp_path)
+    path = write_installation()
 
     result = _invoke(cli_runner, "upgrade", path, "--revision", _NEWER)
 
@@ -611,9 +567,11 @@ def test_upgrade_reports_a_revision_the_tree_lacks(tmp_path, cli_runner):
     assert "Cannot upgrade" in result.output
 
 
-def test_upgrade_sql_writes_the_pending_delta(tmp_path, cli_runner, capsys):
-    path = _write_installation(tmp_path)
-    alembic_migrations.upgrade(_BASELINE, dburis=_dburis(tmp_path))
+def test_upgrade_sql_writes_the_pending_delta(
+    cli_dburis, write_installation, tmp_path, cli_runner, capsys
+):
+    path = write_installation()
+    alembic_migrations.upgrade(_BASELINE, dburis=cli_dburis)
 
     with cli_runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
         result = _invoke(cli_runner, "upgrade", path, "--sql")
@@ -625,17 +583,17 @@ def test_upgrade_sql_writes_the_pending_delta(tmp_path, cli_runner, capsys):
     # From the stamp, not from base: the baseline's own DDL is not here.
     assert f"Running upgrade {_BASELINE}" in written
     # And nothing ran: the databases are where they were.
-    assert _revision(_dburis(tmp_path)[AGUI]) == _BASELINE
+    assert _revision(cli_dburis[AGUI]) == _BASELINE
 
 
 def test_upgrade_sql_accepts_an_unreachable_database_with_a_range(
-    tmp_path, cli_runner
+    write_installation, tmp_path, cli_runner
 ):
     # The DBA's case: the databases cannot be reached from here at all, so
     # the operator says where they stand and gets the SQL to hand over.
     missing = tmp_path / "no-such-directory"
-    path = _write_installation(
-        tmp_path, agui={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
+    path = write_installation(
+        agui={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
     )
 
     with cli_runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
@@ -661,33 +619,37 @@ def test_upgrade_sql_accepts_an_unreachable_database_with_a_range(
 # --------------------------------------------------------------------------
 # downgrade
 # --------------------------------------------------------------------------
-def test_downgrade_moves_both_databases_back(tmp_path, cli_runner):
-    path = _write_installation(tmp_path)
-    alembic_migrations.upgrade(dburis=_dburis(tmp_path))
+def test_downgrade_moves_both_databases_back(
+    cli_dburis, write_installation, cli_runner
+):
+    path = write_installation()
+    alembic_migrations.upgrade(dburis=cli_dburis)
 
     result = _invoke(cli_runner, "downgrade", path, _BASELINE)
 
     assert result.exit_code == 0
-    assert _revision(_dburis(tmp_path)[AGUI]) == _BASELINE
-    assert _revision(_dburis(tmp_path)[AUTHZ]) == _BASELINE
+    assert _revision(cli_dburis[AGUI]) == _BASELINE
+    assert _revision(cli_dburis[AUTHZ]) == _BASELINE
 
 
-def test_downgrade_refuses_a_disabled_database(tmp_path, cli_runner):
-    path = _write_installation(
-        tmp_path, authz={"migration_policy": "disabled"}
-    )
-    alembic_migrations.upgrade(dburis=_dburis(tmp_path))
+def test_downgrade_refuses_a_disabled_database(
+    cli_dburis, write_installation, cli_runner
+):
+    path = write_installation(authz={"migration_policy": "disabled"})
+    alembic_migrations.upgrade(dburis=cli_dburis)
 
     result = _invoke(cli_runner, "downgrade", path, _BASELINE)
 
     assert result.exit_code == 1
     assert "Cannot downgrade" in result.output
-    assert _revision(_dburis(tmp_path)[AGUI]) != _BASELINE
+    assert _revision(cli_dburis[AGUI]) != _BASELINE
 
 
-def test_downgrade_sql_writes_the_delta(tmp_path, cli_runner):
-    path = _write_installation(tmp_path)
-    alembic_migrations.upgrade(dburis=_dburis(tmp_path))
+def test_downgrade_sql_writes_the_delta(
+    cli_dburis, write_installation, tmp_path, cli_runner
+):
+    path = write_installation()
+    alembic_migrations.upgrade(dburis=cli_dburis)
 
     with cli_runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
         result = _invoke(
@@ -700,18 +662,18 @@ def test_downgrade_sql_writes_the_delta(tmp_path, cli_runner):
     assert result.exit_code == 0
     assert f"Running downgrade {alembic_migrations.head_revision()}" in written
     # Nothing ran: the database is still where it was.
-    assert _revision(_dburis(tmp_path)[AUTHZ]) != _BASELINE
+    assert _revision(cli_dburis[AUTHZ]) != _BASELINE
 
 
 def test_downgrade_sql_accepts_an_unreachable_database_with_a_range(
-    tmp_path, cli_runner
+    write_installation, tmp_path, cli_runner
 ):
     # The escape hatch 'upgrade --sql' offers, on the command most likely
     # to need it: a rollback is planned from somewhere that cannot reach
     # the databases, so the operator names the range and nothing connects.
     missing = tmp_path / "no-such-directory"
-    path = _write_installation(
-        tmp_path, authz={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
+    path = write_installation(
+        authz={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
     )
     head = alembic_migrations.head_revision()
 

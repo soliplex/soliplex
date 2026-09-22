@@ -1130,14 +1130,10 @@ def _invalid_completions(
     return errors
 
 
-# The one-off repair for a database built before soliplex stamped one.
-BOOTSTRAP_SCRIPT = "scripts/bootstrap_alembic_version.py"
-
 _UNSTAMPED = (
     f"tables are present but '{alembic_migrations.VERSION_TABLE}' is empty, "
-    "so this database was created by soliplex 0.81 or earlier. Apply "
-    f"'{BOOTSTRAP_SCRIPT}' once, per "
-    f"{alembic_migrations.BOOTSTRAP_ISSUE}"
+    "so this database was created by soliplex 0.81 or earlier. "
+    f"{alembic_migrations.BOOTSTRAP_REMEDY}"
 )
 
 _DOWNGRADE_REQUIRED = (
@@ -1146,6 +1142,19 @@ _DOWNGRADE_REQUIRED = (
     "has to come from the soliplex version which has that revision -- "
     "nothing here can open this database, or move it"
 )
+
+# What to do about a migration the policy will not let this deployment
+# run automatically. 'disabled' names no command: the tool refuses it too.
+_MIGRATION_OWED = {
+    config_installation.MigrationPolicy.EXPLICIT: (
+        "'migration_policy' is 'explicit', so apply it with "
+        "'soliplex-cli database upgrade'"
+    ),
+    config_installation.MigrationPolicy.DISABLED: (
+        "'migration_policy' is 'disabled', so nothing migrates it from "
+        "this configuration"
+    ),
+}
 
 _SEE_DATABASES = (
     "SKIPPED: authorization database unreachable "
@@ -1168,6 +1177,8 @@ class DatabaseReport:
     revision: str | None = None
     known: bool = True
     error: str | None = None
+    policy: config_installation.MigrationPolicy | None = None
+    migration_dburi: str | None = None
 
     @property
     def stamped(self) -> bool:
@@ -1184,11 +1195,21 @@ class DatabaseReport:
 
     @property
     def behind_head(self) -> bool:
-        """True for a stamped database not yet at the packaged head.
-
-        Not a finding: a sole writer migrates it on open.
-        """
+        """True for a stamped database not yet at the packaged head."""
         return self.stamped and self.known and self.revision != self.head
+
+    @property
+    def migration_owed(self) -> bool:
+        """True when a migration is needed and no open here will run it.
+
+        With no policy the next writable open migrates; with one it
+        refuses, so the database stays as it is until an operator acts.
+        """
+        if self.policy is None:
+            return False
+        return self.behind_head or (
+            self.state is alembic_migrations.DatabaseState.EMPTY
+        )
 
 
 def _inspect_database(connection, db_type: str):
@@ -1231,30 +1252,36 @@ def _database_reports(ctx, the_installation) -> dict:
     head = alembic_migrations.head_revision()
     reports = {}
     for db_type in alembic_migrations.DATABASE_NAMES:
-        dburi = cli_util.async_dburi(the_installation, db_type)
+        configured = {
+            "name": db_type,
+            "dburi": cli_util.async_dburi(the_installation, db_type),
+            "head": head,
+            "policy": alembic_migrations.migration_policy(
+                the_installation, db_type
+            ),
+            "migration_dburi": (
+                alembic_migrations.configured_migration_dburi(
+                    the_installation, db_type
+                )
+            ),
+        }
         try:
             state, revision = asyncio.run(
                 _probe_database(the_installation, db_type)
             )
         except cli_util.DatabaseNotCreated:
             reports[db_type] = DatabaseReport(
-                name=db_type,
-                dburi=dburi,
-                head=head,
+                **configured,
                 state=alembic_migrations.DatabaseState.EMPTY,
             )
         except Exception as exc:
             reports[db_type] = DatabaseReport(
-                name=db_type,
-                dburi=dburi,
-                head=head,
+                **configured,
                 error=f"{type(exc).__name__}: {exc}",
             )
         else:
             reports[db_type] = DatabaseReport(
-                name=db_type,
-                dburi=dburi,
-                head=head,
+                **configured,
                 state=state,
                 revision=revision,
                 known=(
@@ -1274,19 +1301,40 @@ def _database_summary(report: DatabaseReport) -> str:
     if report.state is alembic_migrations.DatabaseState.UNSTAMPED:
         return f"ERROR: {_UNSTAMPED}"
     if report.state is alembic_migrations.DatabaseState.EMPTY:
+        if report.policy is not None:
+            return f"ERROR: not created; {_MIGRATION_OWED[report.policy]}"
         return "not created (the next writable open creates it)"
     if report.downgrade_required:
         return f"ERROR: {report.revision}: {_DOWNGRADE_REQUIRED}"
     if report.behind_head:
-        return f"behind head ({report.revision} -> {report.head})"
+        behind = f"behind head ({report.revision} -> {report.head})"
+        if report.policy is not None:
+            return f"ERROR: {behind}; {_MIGRATION_OWED[report.policy]}"
+        return behind
     return f"OK ({report.revision})"
 
 
-def _database_findings(reports) -> dict:
-    """The findings among ``reports``: unreachable, or stamp-less.
+def _database_config_lines(report: DatabaseReport) -> list[str]:
+    """The migration settings configured for one database, if any.
 
-    A database merely behind head is not a finding: a sole writer migrates
-    it on open. See #1372 for the rollback case, where it cannot.
+    Nothing is printed for a deployment which configures neither.
+    """
+    lines = []
+    if report.policy is not None:
+        lines.append(f"migration policy: {report.policy}")
+    if report.migration_dburi is not None:
+        shown = cli_util.redacted_dburi(report.migration_dburi)
+        lines.append(f"migration dburi: {shown}")
+    return lines
+
+
+def _database_findings(reports) -> dict:
+    """The findings among ``reports``.
+
+    Unreachable, stamp-less, stamped ahead of this release, or owed a
+    migration the installation's 'migration_policy' will not let this
+    deployment run. A database behind head with no policy is not a
+    finding: the next writable open migrates it.
     """
     findings = {}
     for report in reports.values():
@@ -1299,6 +1347,10 @@ def _database_findings(reports) -> dict:
                 "downgrade_required": (
                     f"{report.revision}: {_DOWNGRADE_REQUIRED}"
                 )
+            }
+        elif report.migration_owed:
+            findings[report.name] = {
+                "migration_owed": _MIGRATION_OWED[report.policy]
             }
     if findings:
         return {"databases": findings}
@@ -1320,7 +1372,9 @@ def _audit_databases_section(
 
     reports = _database_reports(ctx, the_installation)
     for report in reports.values():
-        tc_print(f"- {report.name}: {report.dburi}")
+        tc_print(f"- {report.name}: {cli_util.redacted_dburi(report.dburi)}")
+        for line in _database_config_lines(report):
+            tc_print(f"  {line}")
         tc_print(f"  {_database_summary(report)}")
     tc_line()
 

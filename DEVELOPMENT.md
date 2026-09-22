@@ -362,11 +362,14 @@ uv run soliplex-cli database upgrade <installation-path>
 uv run soliplex-cli database downgrade <installation-path> <revision>
 ```
 
-That group is the sole consumer of `migration_dburi` / `migration_policy`
+That group reads `migration_dburi`
 (see [docs/config/dburis.md](docs/config/dburis.md)): it migrates as the
 schema's owner rather than as the application role, and refuses a database
-whose policy is `disabled`. The automatic path does not yet consult the
-policy.
+whose policy is `disabled`. `scripts/bootstrap_alembic_version.py` reads it
+too, for the same reason -- stamping needs `CREATE TABLE`. The `migration_policy` itself binds more
+widely: `ensure_current_connection` consults it, so the server's startup
+and every writable CLI open refuse too, rather than migrating with the
+runtime credential.
 
 **The revisions are the schema.** Migrating an empty database from base
 reproduces what the models declare, exactly. `scripts/lint_alembic_chain.py`
@@ -377,21 +380,25 @@ So the databases are created by migrating them, and a database soliplex
 creates is stamped by construction. `soliplex.alembic_migrations` is the
 API:
 
-- `ensure_current_engine(engine, database, *, sole_writer)` -- one database,
-  on an async engine the caller owns. It returns immediately when that
-  database is at head, migrates when it is not, and refuses in three
+- `ensure_current_engine(engine, database, *, sole_writer, policy)` -- one
+  database, on an async engine the caller owns. It returns immediately when
+  that database is at head, migrates when it is not, and refuses in four
   cases: another process may be writing (`serve --workers N` above one, or
   several replicas); the database holds tables with no `alembic_version`
   row, which means soliplex 0.81 or earlier created it and it needs the
   one-off bootstrap script from
-  [#1367](https://github.com/soliplex/soliplex/issues/1367); or it is
+  [#1367](https://github.com/soliplex/soliplex/issues/1367); it is
   stamped at a revision this release does not have, which means the code
   was rolled back without downgrading the databases first
-  (`DowngradeRequired`). That last one is checked ahead of the writer
-  check, because no number of stopped writers makes such a database
-  movable from here -- only the release holding that revision can
-  downgrade it.
-- `ensure_current_connection(connection, database, *, sole_writer)` -- the
+  (`DowngradeRequired`); or the installation's `migration_policy` says this
+  process does not migrate (`ExplicitMigrationRequired` /
+  `MigrationsDisabled`). The last two are checked ahead of the writer
+  check, because neither is something stopping writers can fix. `policy` is
+  a required keyword, resolved by the caller with `migration_policy()`: a
+  default would let a new caller quietly migrate where a deployment said
+  not to.
+- `ensure_current_connection(connection, database, *, sole_writer, policy)`
+  -- the
   same decision, on a live connection. Migrating on the caller's own
   connection is what makes an in-memory database work: it lives inside one
   engine, so a migration run through any other engine would leave the

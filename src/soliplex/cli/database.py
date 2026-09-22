@@ -28,7 +28,6 @@ import contextlib
 import dataclasses
 import enum
 
-import sqlalchemy as sa
 import typer
 
 from soliplex import alembic_migrations
@@ -91,22 +90,6 @@ _SQL_OPTION = typer.Option(
     ),
 )
 
-_UNPARSEABLE_DBURI = "<unparseable DBURI>"
-
-
-def _redacted(dburi: str) -> str:
-    """``dburi`` as a report may print it, with its password masked.
-
-    A DBURI too malformed to parse is not printed at all: it is about to
-    fail to connect anyway, and its text may still hold the password.
-    This helper keeps the password out of a terminal an operator pastes
-    from.
-    """
-    try:
-        return sa.engine.make_url(dburi).render_as_string(hide_password=True)
-    except sa.exc.ArgumentError:
-        return _UNPARSEABLE_DBURI
-
 
 @dataclasses.dataclass(frozen=True)
 class MigrationStatus:
@@ -114,8 +97,8 @@ class MigrationStatus:
 
     ``dburi`` is the *migration* DBURI -- the configured one, or the
     runtime sync one standing in for it -- held unredacted because a
-    command connects through it; :func:`_redacted` is what printing goes
-    through.
+    command connects through it; printing goes through
+    :func:`cli_util.redacted_dburi`.
 
     ``state`` and ``revision`` are unset either because the database could
     not be read (``error``) or because it was deliberately not probed (an
@@ -293,7 +276,8 @@ def _print_revisions(label: str, revisions) -> None:
 
 
 def _print_status(status: MigrationStatus) -> None:
-    the_console.print(f"- {status.name}: {_redacted(status.dburi)}")
+    shown = cli_util.redacted_dburi(status.dburi)
+    the_console.print(f"- {status.name}: {shown}")
     the_console.print(f"  policy: {status.policy or '(unset)'}")
 
     blocker = _blocker(status)

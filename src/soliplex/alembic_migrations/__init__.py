@@ -13,14 +13,22 @@ leaves the database stamped. So every writable open calls
 :func:`ensure_current_engine` rather than creating tables, and a database
 soliplex creates is stamped by construction.
 
-One database at a time, on a connection the caller owns. Three situations,
+One database at a time, on a connection the caller owns. Four situations,
 and what :func:`ensure_current_connection` does with each:
 
-- the database is at head -- return, having written nothing (one ``SELECT``);
-- it is empty, or behind head -- migrate it, but only when this process is
-  the sole writer; otherwise raise :class:`MigrationRequired`, because two
-  processes migrating one database race;
-- it holds tables but no ``alembic_version`` row -- raise
+- The database is at head -- return, having written nothing (one ``SELECT``).
+
+- The database is empty, or behind head, and the installation's
+  ``migration_policy`` does not permit this process to migrate:
+  raise, naming the tool that is permitted; if the policy is ``disabled``,
+  name no command at all.
+
+- The database is empty, or behind head, and the installation's
+  ``migration_policy`` permits this process to migrate:  migrate if this
+  process is the sole writer; otherwise raise :class:`MigrationRequired`,
+  because two processes migrating one database race.
+
+- The database holds tables but no ``alembic_version`` row: raise
   :class:`UnstampedDatabase`. Such a database was built by soliplex 0.81 or
   earlier, and needs the one-off bootstrap script named in that error.
 """
@@ -67,8 +75,15 @@ METADATA = {
     AUTHZ: authz_schema.metadata,
 }
 
-# The one-off repair for databases built before stamping existed.
+# The one-off repair for databases built before stamping existed. The
+# script ships in the source tree, not in a deployment image, so anything
+# naming it says where it comes from.
 BOOTSTRAP_ISSUE = "https://github.com/soliplex/soliplex/issues/1367"
+BOOTSTRAP_SCRIPT = "scripts/bootstrap_alembic_version.py"
+BOOTSTRAP_REMEDY = (
+    f"Apply '{BOOTSTRAP_SCRIPT}' (from a soliplex checkout) once, per "
+    f"{BOOTSTRAP_ISSUE}"
+)
 
 logger = logging.getLogger("alembic.env")
 
@@ -94,9 +109,8 @@ class UnstampedDatabase(MigrationError):
         which = ", ".join(self.names)
         super().__init__(
             f"{which}: tables are present but {VERSION_TABLE} is empty, so "
-            "this database was created by soliplex 0.81 or earlier. Apply "
-            f"the one-off bootstrap script once, per {BOOTSTRAP_ISSUE}, and "
-            "then start soliplex again."
+            "this database was created by soliplex 0.81 or earlier. "
+            f"{BOOTSTRAP_REMEDY}, and then start soliplex again."
         )
 
 
@@ -116,7 +130,31 @@ class MigrationRequired(MigrationError):
             f"{which}: a migration is needed, and this process is not the "
             "sole writer (several workers or replicas would race). Migrate "
             "first, with every writer stopped: "
-            "alembic -x soliplex.installation_path=<path> upgrade head"
+            "soliplex-cli database upgrade <installation-path>"
+        )
+
+
+class ExplicitMigrationRequired(MigrationError):
+    """A migration is owed, and the policy says only the tool applies it.
+
+    ``migration_policy: explicit`` -- or a configured ``migration_dburi``,
+    which implies it, requires that the normal application *not* do
+    migrations.
+
+    Reaching here means an automatic, writable open found the database
+    behind head: the remedy is the migration tool, run as the role which
+    owns the schema, and not this process.
+    """
+
+    def __init__(self, names):
+        self.names = tuple(names)
+        which = ", ".join(self.names)
+        super().__init__(
+            f"{which}: a migration is needed, and 'migration_policy' is "
+            f"'{config_installation.MigrationPolicy.EXPLICIT}' here, so "
+            "nothing migrates these databases automatically. Migrate "
+            "first, with every writer stopped: "
+            "soliplex-cli database upgrade <installation-path>"
         )
 
 
@@ -163,8 +201,9 @@ class MigrationsDisabled(MigrationError):
     ``migration_policy: disabled`` is what lets one shared
     ``installation.yaml`` serve services with different roles: the service
     which migrates resolves ``explicit``, every other one resolves
-    ``disabled``. Reaching here means the migration tool was run somewhere
-    the configuration says it must not migrate.
+    ``disabled``. Reaching here means something tried to migrate where the
+    configuration says nothing may: either the migration tool was run
+    there, or an automatic writable open found the database behind head.
     """
 
     def __init__(self, names):
@@ -175,6 +214,17 @@ class MigrationsDisabled(MigrationError):
             f"'{config_installation.MigrationPolicy.DISABLED}' here, so "
             "nothing migrates these databases from this configuration"
         )
+
+
+# Which refusal each policy raises from an automatic, writable open. A
+# mapping rather than a branch: the two policies differ only in the
+# exception they name, and an 'else' here would be unreachable -- the
+# config's policy properties construct 'MigrationPolicy(...)' on read, so
+# a value outside the enum raises long before it could arrive here.
+_POLICY_REFUSAL = {
+    config_installation.MigrationPolicy.EXPLICIT: ExplicitMigrationRequired,
+    config_installation.MigrationPolicy.DISABLED: MigrationsDisabled,
+}
 
 
 # What an operator can get wrong, reported to them without a traceback: a
@@ -340,10 +390,7 @@ def migration_dburi(installation, database: str) -> str:
     """The DBURI to migrate ``database`` through.
 
     The configured ``migration_dburi`` when there is one, else the runtime
-    ``sync_dburi``. A deployment whose application role also owns its
-    schema -- SQLite, a ``soliplex-template`` stack, a default PostgreSQL
-    one -- configures no second credential and gets exactly today's
-    behaviour.
+    ``sync_dburi``.
     """
     configured = getattr(installation, _MIGRATION_DBURI_FOR[database])
     if configured is not None:
@@ -351,14 +398,19 @@ def migration_dburi(installation, database: str) -> str:
     return getattr(installation, _SYNC_DBURI_FOR[database])
 
 
+def configured_migration_dburi(installation, database: str) -> str | None:
+    """The stanza's ``migration_dburi``, or ``None`` when it sets none.
+
+    Unlike :func:`migration_dburi`, this does not fall back to the runtime
+    URI: it returns *only* the separate credential, if configured, or None.
+    """
+    return getattr(installation, _MIGRATION_DBURI_FOR[database])
+
+
 def migration_policy(installation, database: str):
     """The migration policy in force for ``database``.
 
-    A configured ``migration_dburi`` with no ``migration_policy`` implies
-    ``EXPLICIT``. That is not merely a convenient default: the migration
-    tool is the only consumer of that credential, so configuring one while
-    leaving the automatic path in charge would name a credential nothing
-    reads.
+    ``migration_dburi`` without ``migration_policy`` implies ``EXPLICIT``.
     """
     policy = getattr(installation, _MIGRATION_POLICY_FOR[database])
     if policy is None:
@@ -368,8 +420,10 @@ def migration_policy(installation, database: str):
 
 
 def migration_dburis(installation) -> dict[str, str]:
-    """The DBURI to migrate each database through (see
-    :func:`migration_dburi`)."""
+    """The DBURI to migrate each database through
+
+    (see :func:`migration_dburi`).
+    """
     return {
         name: migration_dburi(installation, name) for name in DATABASE_NAMES
     }
@@ -439,19 +493,33 @@ def downgrade(revision: str, *, dburis, sql: bool = False):
 
 
 def ensure_current_connection(
-    connection, database: str, *, sole_writer: bool
+    connection, database: str, *, sole_writer: bool, policy
 ) -> None:
-    """Bring one database to head, on a connection the caller owns.
+    """Migrate a database to head, on a connection the caller owns.
 
-    Migrating on the caller's own connection is what makes this work for
-    any database, an in-memory one included: such a database lives and
-    dies with the engine that opened it, so a migration run through a
-    connection opened here would leave the caller's engine with nothing.
+    ``policy`` is the resolved ``MigrationPolicy`` in force for this
+    database, or ``None`` for the default of migrating automatically.
 
-    Raises :class:`UnstampedDatabase` for a database built before stamping
-    existed, :class:`DowngradeRequired` for one stamped by a newer release
-    than this one, and :class:`MigrationRequired` when a migration is
-    needed but this process cannot safely be the one to run it.
+    It is a resolved value rather than an installation configuration
+    entry:  it is required, because any default could let a new caller
+    quietly migrate where a deployment said not to.
+
+    ``sole_writer`` is a resolved bool rather than a worker count.  If
+    true, the application is running in a mode where it cannot race with
+    other potential writers.
+
+    Raises:
+
+    - :class:`UnstampedDatabase` for a database built before stamping existed
+
+    - :class:`DowngradeRequired` for one stamped by a newer release
+      than this one
+
+    - :class:`ExplicitMigrationRequired` or :class:`MigrationsDisabled` when
+      the policy says this process does not migrate
+
+    - :class:`MigrationRequired` when a migration is needed but this process
+      cannot safely be the one to run it.
     """
     if database_state(connection, METADATA[database]) is (
         DatabaseState.UNSTAMPED
@@ -460,12 +528,20 @@ def ensure_current_connection(
 
     head = head_revision()
     current = current_revision(connection)
+
+    # Is a migration needed?
     if current == head:
         return
-    # Before the sole-writer gate: no number of stopped writers makes a
-    # database migratable when the revisions to move it are not here.
+
+    # Is this a known migration?  Checked before the policy or sole-writer.
     if current is not None and not knows_revision(current):
         raise DowngradeRequired([database], current, head)
+
+    # Is a migration allowed? Checked before sole-writer.
+    if policy is not None:
+        raise _POLICY_REFUSAL[policy]([database])
+
+    # Is this process the only one running which might migrate?
     if not sole_writer:
         raise MigrationRequired([database])
 
@@ -474,12 +550,15 @@ def ensure_current_connection(
 
 
 async def ensure_current_engine(
-    engine, database: str, *, sole_writer: bool
+    engine, database: str, *, sole_writer: bool, policy
 ) -> None:
     """Bring the database behind an async ``engine`` to head."""
     async with engine.begin() as connection:
         await connection.run_sync(
-            ensure_current_connection, database, sole_writer=sole_writer
+            ensure_current_connection,
+            database,
+            sole_writer=sole_writer,
+            policy=policy,
         )
 
 

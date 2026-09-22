@@ -722,13 +722,10 @@ async def open_engines(
 
     Each database is migrated through the engine returned here, and is
     created that way when it does not exist yet: the revisions are the
-    schema (see 'soliplex.alembic_migrations'). Migrating on the returned
-    engine is also what makes an in-memory database work, since such a
-    database lives and dies with the engine that opened it.
+    schema (see 'soliplex.alembic_migrations').
 
-    Several workers or replicas must not migrate one database at the same
-    time, so with 'multiple_writers' the databases are checked and left
-    alone, and a migration they still need is raised rather than run.
+    Refuse migrations prohibited by the installation's 'migration_policy',
+    as well as in the case that the application runs with 'multiple_writers'.
     """
     engines = Engines(
         threads_engine=_create_async_engine(
@@ -748,7 +745,12 @@ async def open_engines(
             (alembic_migrations.AUTHZ, engines.authorization_engine),
         ):
             await alembic_migrations.ensure_current_engine(
-                engine, database, sole_writer=not multiple_writers
+                engine,
+                database,
+                sole_writer=not multiple_writers,
+                policy=alembic_migrations.migration_policy(
+                    the_installation, database
+                ),
             )
 
         if no_auth_mode:
