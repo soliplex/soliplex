@@ -112,6 +112,98 @@ authorization_db:
   async_dburi: "postgresql+asyncpg://soliplex:secret:POSTGRES_PASSWORD@/soliplex_authorization"
 ```
 
+## Migrations
+
+Soliplex keeps both databases at the schema revision its release expects,
+and by default does that itself, on the first writable open (see
+[Database Migrations](../server/migrations.md)).  That is the right
+arrangement when the application role also owns its schema, which is the
+case for SQLite and for a default PostgreSQL stack.
+
+It does not work for a deployment which deliberately runs the application
+as a least-privilege role -- every object owned by an administrative role,
+the application granted only `SELECT, INSERT, UPDATE, DELETE`.  Such a
+role is refused `CREATE TABLE` and `ALTER TABLE`, correctly.  Two optional
+sub-keys, available on both stanzas, hand the job to somebody else.
+
+### `migration_dburi`
+
+A **synchronous** DBURI naming the role which owns the schema.  Only a
+sync URL is needed, because Alembic's online mode is synchronous.
+
+```yaml
+authorization_db:
+  sync_dburi: "postgresql://soliplex:secret:APP_PASSWORD@/soliplex_authz"
+  async_dburi: "postgresql+asyncpg://soliplex:secret:APP_PASSWORD@/soliplex_authz"
+  migration_dburi: "postgresql://owner:secret:OWNER_PASSWORD@/soliplex_authz"
+```
+
+When it is absent, migrations use `sync_dburi`, which is exactly what
+every release before this key existed did.  A SQLite deployment, a
+`soliplex-template` stack, or a PostgreSQL deployment which has not
+separated owner from application role needs no change and sees no
+difference.
+
+Like the other two URLs, it interpolates both `secret:` and `env:`
+markers.
+
+### `migration_policy`
+
+Two named values; absence is the third state:
+
+| value | meaning |
+| --- | --- |
+| absent | migrate automatically, on any writable open |
+| `explicit` | only `soliplex-cli database upgrade` migrates |
+| `disabled` | nothing migrates this database from this configuration |
+
+Configuring a `migration_dburi` and leaving `migration_policy` unset
+implies `explicit`.  That is not merely a convenient default: the
+migration tool is the only consumer of that credential, so configuring one
+while leaving the automatic path in charge would name a credential nothing
+reads.
+
+`disabled` earns its own value rather than folding into `explicit`,
+because it is what lets a single `installation.yaml` serve services
+running as different roles: the server resolves `disabled`, and whatever
+runs the migration resolves `explicit`.  The whole value may be a single
+`env:` marker instead of a literal, and Compose already gives each service
+its own environment:
+
+```yaml
+authorization_db:
+  sync_dburi: "postgresql://soliplex:secret:APP_PASSWORD@/soliplex_authz"
+  async_dburi: "postgresql+asyncpg://soliplex:secret:APP_PASSWORD@/soliplex_authz"
+  migration_dburi: "postgresql://owner:secret:OWNER_PASSWORD@/soliplex_authz"
+  migration_policy: "env:SOLIPLEX_MIGRATION_POLICY"
+```
+
+Both the ordinary server container and a special-purpose migrations
+container read that one stanza, and they differ only in what
+`SOLIPLEX_MIGRATION_POLICY` says:
+
+| container | policy resolves to | what it does |
+| --- | --- | --- |
+| server | `disabled` | runs as `soliplex`, migrates nothing |
+| migrations | `explicit` | runs `soliplex-cli database upgrade` as `owner` |
+
+Which is why the stanza names two credentials.  `soliplex` /
+`APP_PASSWORD` is the least-privilege role the application runs as,
+granted only DML; `owner` / `OWNER_PASSWORD` owns the schema, and nothing
+but the migrations container's `soliplex-cli database` invocation ever
+connects with it.
+
+A value which is neither policy name is an error, reported when the policy
+is read.  Absence means automatic migration, so an unrecognized value must
+not fall through to it.
+
+**Not yet enforced at runtime.**  `soliplex-cli database` honors both
+values today.  The automatic migration on a writable open does not yet
+consult them: a server started against a database which is still behind
+head will try to migrate it with the runtime credential, and fail as it
+always did, rather than reporting that a migration is owed.  Migrate
+before starting it.
+
 ## Interpolation
 
 Each of the DBURI values can include values

@@ -15,6 +15,7 @@ from soliplex.cli import admin_users
 from soliplex.cli import ask
 from soliplex.cli import audit
 from soliplex.cli import cli_util
+from soliplex.cli import database
 from soliplex.cli import ollama
 from soliplex.cli import room_authz
 from soliplex.cli import serve
@@ -84,6 +85,7 @@ _hidden_alias("show-room-authz", room_authz.show_room_authz)
 the_cli.add_typer(serve.app)
 the_cli.add_typer(ask.app)
 the_cli.add_typer(audit.app)
+the_cli.add_typer(database.app)
 the_cli.add_typer(admin_users.app)
 the_cli.add_typer(room_authz.app)
 the_cli.add_typer(ollama.app)

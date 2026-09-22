@@ -36,14 +36,21 @@ CLI_LOG_CONFIG_OPTION = typer.Option(
 )
 
 
+def installation_config_path(installation_path: pathlib.Path) -> pathlib.Path:
+    """The installation YAML, given either it or the directory holding it."""
+    if installation_path.is_dir():
+        return installation_path / "installation.yaml"
+    return installation_path
+
+
 def get_installation(
     installation_path: pathlib.Path,
     auditing: bool = False,
 ) -> installation.Installation:
 
-    if installation_path.is_dir():
-        installation_path = installation_path / "installation.yaml"
-    i_config = config_installation.load_installation(installation_path)
+    i_config = config_installation.load_installation(
+        installation_config_path(installation_path)
+    )
 
     try:
         i_config.reload_configurations()

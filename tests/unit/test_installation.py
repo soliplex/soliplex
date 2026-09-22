@@ -743,6 +743,46 @@ def test_installation_authorization_async_dburi():
         )
 
 
+def test_installation_thread_persistence_migration_dburi():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.thread_persistence_migration_dburi
+        is i_config.thread_persistence_migration_dburi
+    )
+
+
+def test_installation_thread_persistence_migration_policy():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.thread_persistence_migration_policy
+        is i_config.thread_persistence_migration_policy
+    )
+
+
+def test_installation_authorization_migration_dburi():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.authorization_migration_dburi
+        is i_config.authorization_migration_dburi
+    )
+
+
+def test_installation_authorization_migration_policy():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.authorization_migration_policy
+        is i_config.authorization_migration_policy
+    )
+
+
 @pytest.mark.parametrize("w_oidc_configs", [[], [object()]])
 def test_installation_auth_disabled(w_oidc_configs):
     i_config = mock.create_autospec(config_installation.InstallationConfig)

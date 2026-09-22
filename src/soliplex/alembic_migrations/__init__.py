@@ -27,6 +27,7 @@ and what :func:`ensure_current_connection` does with each:
 
 from __future__ import annotations
 
+import dataclasses
 import enum
 import logging
 import logging.config
@@ -141,6 +142,55 @@ class DowngradeRequired(MigrationError):
         )
 
 
+class DatabaseUnreachable(MigrationError):
+    """The database did not open, so nothing can be migrated in it.
+
+    Carries the reason as text rather than the original exception: the
+    caller has already turned that into something an operator reads, and
+    what reaches here is a report, not a traceback.
+    """
+
+    def __init__(self, names, reason):
+        self.names = tuple(names)
+        self.reason = reason
+        which = ", ".join(self.names)
+        super().__init__(f"{which}: did not open: {reason}")
+
+
+class MigrationsDisabled(MigrationError):
+    """The configuration says these databases are not migrated here.
+
+    ``migration_policy: disabled`` is what lets one shared
+    ``installation.yaml`` serve services with different roles: the service
+    which migrates resolves ``explicit``, every other one resolves
+    ``disabled``. Reaching here means the migration tool was run somewhere
+    the configuration says it must not migrate.
+    """
+
+    def __init__(self, names):
+        self.names = tuple(names)
+        which = ", ".join(self.names)
+        super().__init__(
+            f"{which}: 'migration_policy' is "
+            f"'{config_installation.MigrationPolicy.DISABLED}' here, so "
+            "nothing migrates these databases from this configuration"
+        )
+
+
+# What an operator can get wrong, reported to them without a traceback: a
+# database that will not open, a role the database refuses the DDL to, or
+# a revision name alembic cannot locate. That last one is alembic's own
+# 'CommandError' rather than anything of ours, which is the reason this
+# tuple spans three exception trees -- and the reason it lives here, since
+# the alembic and SQLAlchemy ones are this package's business, not the
+# CLI's.
+OPERATOR_ERRORS = (
+    MigrationError,
+    alembic_util.CommandError,
+    sa.exc.SQLAlchemyError,
+)
+
+
 def head_revision() -> str:
     """The newest revision in this package's ``versions/``."""
     return alembic_script.ScriptDirectory(str(TREE)).get_current_head()
@@ -158,6 +208,68 @@ def knows_revision(revision: str) -> bool:
     except alembic_util.CommandError:
         return False
     return True
+
+
+class UnknownRevision(ValueError):
+    """A revision this package's ``versions/`` tree does not have.
+
+    Deliberately *not* a :class:`MigrationError`. That family is reported
+    to an operator without a traceback, and reaching this one means a
+    caller skipped :func:`knows_revision`, not that anybody mistyped
+    anything: an operator's bad revision name never gets this far, because
+    alembic refuses it first with its own ``CommandError``.
+    """
+
+    def __init__(self, revision):
+        self.revision = revision
+        super().__init__(f"not a revision in this tree: {revision}")
+
+
+@dataclasses.dataclass(frozen=True)
+class Revision:
+    """One revision in this package's tree, as a report names it.
+
+    ``doc`` is the revision's message -- ``soliplex-v0.80`` and the like --
+    which is what tells an operator which release a pending revision
+    belongs to.
+    """
+
+    revision: str
+    doc: str
+
+
+def revision_chain() -> tuple[Revision, ...]:
+    """Every revision in this package's ``versions/``, oldest first."""
+    script = alembic_script.ScriptDirectory(str(TREE))
+    return tuple(
+        Revision(revision=entry.revision, doc=entry.doc)
+        for entry in reversed(list(script.walk_revisions()))
+    )
+
+
+def split_chain(
+    revision: str | None,
+) -> tuple[tuple[Revision, ...], tuple[Revision, ...]]:
+    """The chain either side of ``revision``: ``(applied, pending)``.
+
+    A stamp means every revision up to and including it has run, so the
+    split is positional. ``None`` -- an empty database, or one built
+    before stamping existed -- has applied nothing.
+
+    Raises :class:`UnknownRevision` (a ``ValueError``) for a revision this
+    tree does not have. Callers check :func:`knows_revision` first,
+    because such a stamp is not a chain to split but the
+    :class:`DowngradeRequired` condition.
+    """
+    chain = revision_chain()
+    if revision is None:
+        return (), chain
+
+    for index, entry in enumerate(chain):
+        if entry.revision == revision:
+            return chain[: index + 1], chain[index + 1 :]
+
+    raise UnknownRevision(revision)
 
 
 def version_table() -> sa.Table:
@@ -207,16 +319,77 @@ def engine_for(name: str, dburi: str) -> sa.Engine:
     return authz_schema.get_engine(engine_url=dburi)
 
 
-def installation_dburis(installation) -> dict[str, str]:
-    """The two *sync* DBURIs, from an installation or its config.
+# The installation properties naming each database's URIs and its policy.
+# Either an 'Installation' or the 'InstallationConfig' it wraps will do:
+# the former delegates all six.
+_SYNC_DBURI_FOR = {
+    AGUI: "thread_persistence_sync_dburi",
+    AUTHZ: "authorization_sync_dburi",
+}
+_MIGRATION_DBURI_FOR = {
+    AGUI: "thread_persistence_migration_dburi",
+    AUTHZ: "authorization_migration_dburi",
+}
+_MIGRATION_POLICY_FOR = {
+    AGUI: "thread_persistence_migration_policy",
+    AUTHZ: "authorization_migration_policy",
+}
 
-    Either will do: ``Installation`` delegates both properties to the
-    ``InstallationConfig`` it wraps.
+
+def migration_dburi(installation, database: str) -> str:
+    """The DBURI to migrate ``database`` through.
+
+    The configured ``migration_dburi`` when there is one, else the runtime
+    ``sync_dburi``. A deployment whose application role also owns its
+    schema -- SQLite, a ``soliplex-template`` stack, a default PostgreSQL
+    one -- configures no second credential and gets exactly today's
+    behaviour.
     """
+    configured = getattr(installation, _MIGRATION_DBURI_FOR[database])
+    if configured is not None:
+        return configured
+    return getattr(installation, _SYNC_DBURI_FOR[database])
+
+
+def migration_policy(installation, database: str):
+    """The migration policy in force for ``database``.
+
+    A configured ``migration_dburi`` with no ``migration_policy`` implies
+    ``EXPLICIT``. That is not merely a convenient default: the migration
+    tool is the only consumer of that credential, so configuring one while
+    leaving the automatic path in charge would name a credential nothing
+    reads.
+    """
+    policy = getattr(installation, _MIGRATION_POLICY_FOR[database])
+    if policy is None:
+        if getattr(installation, _MIGRATION_DBURI_FOR[database]) is not None:
+            return config_installation.MigrationPolicy.EXPLICIT
+    return policy
+
+
+def migration_dburis(installation) -> dict[str, str]:
+    """The DBURI to migrate each database through (see
+    :func:`migration_dburi`)."""
     return {
-        AGUI: installation.thread_persistence_sync_dburi,
-        AUTHZ: installation.authorization_sync_dburi,
+        name: migration_dburi(installation, name) for name in DATABASE_NAMES
     }
+
+
+def _alembic_config(dburis, connection, database):
+    """The config alembic runs ``env.py`` with, naming its databases.
+
+    The databases travel in ``attributes`` rather than in an ini file:
+    either ``dburis``, a ``{name: dburi}`` mapping, or a live
+    ``connection`` and the ``database`` it belongs to.
+    """
+    cfg = alembic_config_module.Config()
+    cfg.set_main_option("script_location", str(TREE))
+    if dburis is not None:
+        cfg.attributes["dburis"] = dict(dburis)
+    else:
+        cfg.attributes["connection"] = connection
+        cfg.attributes["database"] = database
+    return cfg
 
 
 def upgrade(
@@ -225,33 +398,44 @@ def upgrade(
     dburis=None,
     connection=None,
     database=None,
-    _offline: bool = False,
+    sql: bool = False,
 ):
     """Migrate to ``revision`` (default: head).
 
-    One source of databases is required, and travels to ``env.py`` in the
-    config's ``attributes``: either ``dburis``, a ``{name: dburi}`` mapping
-    covering both databases, or a live ``connection`` and the ``database``
-    it belongs to.
+    One source of databases is required: ``dburis``, a ``{name: dburi}``
+    mapping of one or both of them, or a live ``connection`` and the
+    ``database`` it belongs to.
 
-    ``_offline`` is a test seam: it emits the SQL instead of running it
-    (one ``<name>.sql`` per database, in the current directory), which is
-    the only way a test reaches :func:`run_migrations_offline`. The
-    ``--sql`` an operator or developer runs goes through alembic's own
-    CLI, and never through here.
+    ``sql`` emits the SQL instead of running it -- one ``<name>.sql`` per
+    database, in the current directory -- for a deployment whose DDL is
+    applied by somebody other than whoever runs this. Offline there is no
+    connection to read a stamp from, so ``revision`` wants alembic's
+    ``<from>:<to>`` range form; ``soliplex-cli database upgrade --sql``
+    builds one.
     """
     if dburis is None and connection is None:
         raise NoDatabasesNamed()
 
-    cfg = alembic_config_module.Config()
-    cfg.set_main_option("script_location", str(TREE))
-    if dburis is not None:
-        cfg.attributes["dburis"] = dict(dburis)
-    else:
-        cfg.attributes["connection"] = connection
-        cfg.attributes["database"] = database
+    alembic_command.upgrade(
+        _alembic_config(dburis, connection, database), revision, sql=sql
+    )
 
-    alembic_command.upgrade(cfg, revision, sql=_offline)
+
+def downgrade(revision: str, *, dburis, sql: bool = False):
+    """Migrate *back* to ``revision``, which is required.
+
+    Named databases only: nothing downgrades on a caller's own connection,
+    because no automatic path ever downgrades. This exists for the
+    operator holding a deployment whose code is about to be rolled back,
+    and whose own image is the only place the revisions between the two
+    releases can be found -- alembic's CLI needs the ``script_location``
+    from a source checkout, which that image does not carry.
+
+    ``sql`` behaves as it does for :func:`upgrade`.
+    """
+    alembic_command.downgrade(
+        _alembic_config(dburis, None, None), revision, sql=sql
+    )
 
 
 def ensure_current_connection(
@@ -317,25 +501,33 @@ def configure_logging(cfg) -> None:
     logging.config.fileConfig(name, disable_existing_loggers=False)
 
 
+def load_installation_config(installation_path: pathlib.Path):
+    """The ``InstallationConfig`` a migration reads its DBURIs from.
+
+    Deliberately *not* ``cli.cli_util.get_installation``, which would
+    build a whole ``Installation`` -- from a module that imports this
+    package -- by way of ``reload_configurations()``. That also loads the
+    rooms, completions, OIDC and filesystem-skill configs, none of which a
+    migration needs and any of which can fail, so an unrelated broken room
+    config would otherwise block an upgrade.
+
+    ``resolve_environment()`` is the one part of it the DBURIs do depend
+    on: an ``env:<name>`` marker resolves against the config's
+    ``environment`` mapping, which holds declared names until that call
+    fills in their values. A ``secret:`` marker needs no such call, since
+    it resolves on each read.
+    """
+    i_config = config_installation.load_installation(installation_path)
+    i_config.resolve_environment()
+    return i_config
+
+
 def resolve_dburis(context) -> dict[str, str]:
     """The two DBURIs for this alembic run.
 
     Two sources: an explicit mapping in ``config.attributes`` (what
     :func:`upgrade` passes, and what the chain lint uses), or
     ``-x soliplex.installation_path=`` on the command line.
-
-    The config is loaded here rather than through
-    ``cli.cli_util.get_installation``, which would build a whole
-    ``Installation`` -- from a module that imports this package -- by way
-    of ``reload_configurations()``. That also loads the rooms,
-    completions, OIDC and filesystem-skill configs, none of which a
-    migration needs and any of which can fail, so an unrelated broken
-    room config would block an upgrade.
-
-    ``resolve_environment()`` is the one part of it the DBURIs do depend
-    on: an ``env:<name>`` marker resolves against the config's
-    ``environment`` mapping, which holds declared names until that call
-    fills in their values.
     """
     dburis = context.config.attributes.get("dburis")
     if dburis is not None:
@@ -347,9 +539,7 @@ def resolve_dburis(context) -> dict[str, str]:
         print(USAGE)
         raise SystemExit(2)
 
-    i_config = config_installation.load_installation(pathlib.Path(given))
-    i_config.resolve_environment()
-    return installation_dburis(i_config)
+    return migration_dburis(load_installation_config(pathlib.Path(given)))
 
 
 def run_migrations_offline(context, dburis: dict[str, str]) -> None:
