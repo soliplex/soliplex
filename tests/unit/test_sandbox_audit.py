@@ -173,3 +173,41 @@ def test_audit_sandbox_exec_records_truncation(audit_records):
     record = audit_records[-1]
     assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
     assert record.truncated is True
+
+
+def test_audit_sandbox_read_image_records_success(audit_records):
+    with sandbox_audit.audit_sandbox_read_image(
+        _state(), path="/sandbox/volumes/room/figure.png"
+    ) as access:
+        access.record_image("room", b"1234567890", "image/png")
+
+    record = audit_records[-1]
+    assert record.getMessage() == loggers.AUDIT_SANDBOX_EXEC
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_READ_IMAGE
+    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.path == "/sandbox/volumes/room/figure.png"
+    assert record.volume == "room"
+    assert record.byte_count == 10
+    assert record.media_type == "image/png"
+    assert record.claims == {"preferred_username": USERNAME}
+    assert record.room_id == ROOM_ID
+    assert record.thread_id == THREAD_ID
+    assert record.run_id == RUN_ID
+
+
+def test_audit_sandbox_read_image_records_failure(audit_records):
+    with pytest.raises(RuntimeError):
+        with sandbox_audit.audit_sandbox_read_image(
+            _state(), path="/sandbox/work/nope.png"
+        ) as access:
+            _raise_runtime_error(access)
+
+    record = audit_records[-1]
+    assert record.action == loggers.AUDIT_SANDBOX_ACTION_READ_IMAGE
+    assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
+    assert record.reason == "RuntimeError"
+    assert record.path == "/sandbox/work/nope.png"
+
+
+def _raise_runtime_error(access):
+    raise RuntimeError("boom")

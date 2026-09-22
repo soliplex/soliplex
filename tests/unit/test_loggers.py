@@ -1018,3 +1018,50 @@ def test_room_agent_run_failed(audit_records):
             "reason": "boom",
         },
     )
+
+
+def test_sandbox_image_read(audit_records):
+    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
+
+    wrapper.image_read(
+        "/sandbox/work/plot.png",
+        "work",
+        byte_count=77,
+        media_type="image/png",
+    )
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SANDBOX_EXEC,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_SANDBOX_EXEC,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_SANDBOX_ACTION_READ_IMAGE,
+            "path": "/sandbox/work/plot.png",
+            "volume": "work",
+            "byte_count": 77,
+            "media_type": "image/png",
+        },
+    )
+
+
+def test_sandbox_image_read_failed(audit_records):
+    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
+
+    wrapper.image_read_failed("/sandbox/work/nope.png", "UnreadablePath")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SANDBOX_EXEC,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_SANDBOX_EXEC,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_SANDBOX_ACTION_READ_IMAGE,
+            "path": "/sandbox/work/nope.png",
+            "reason": "UnreadablePath",
+        },
+    )
