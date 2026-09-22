@@ -149,6 +149,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 force-single-line = true
+known-third-party = ["alembic"]
 
 [tool.ruff.lint.flake8-pytest-style]
 parametrize-names-type = "csv"
