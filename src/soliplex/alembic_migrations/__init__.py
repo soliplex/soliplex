@@ -116,7 +116,7 @@ class MigrationRequired(MigrationError):
             f"{which}: a migration is needed, and this process is not the "
             "sole writer (several workers or replicas would race). Migrate "
             "first, with every writer stopped: "
-            "alembic -x soliplex.installation_path=<path> upgrade head"
+            "soliplex-cli database upgrade <installation-path>"
         )
 
 

@@ -17,6 +17,16 @@ work, but new scripts should use the grouped form documented below.
 See [Deprecated Command Names](#deprecated-command-names) at the bottom
 of this page for the full mapping.
 
+## A Note on Migration Failures
+
+A refused migration is reported as a single `Error: <message>` line on
+stderr, with exit status 1, rather than as a traceback. Those conditions —
+a database built before soliplex stamped one, a database stamped by a
+newer release, a migration this process may not run — are things an
+operator acts on, not defects, and the message names what to do. Every
+other failure still renders a traceback, because a traceback is the right
+answer for a bug. See [Database Migrations](migrations.md).
+
 ## `serve` Command
 
 Run the Soliplex FastAPI backend under uvicorn.
