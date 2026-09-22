@@ -492,6 +492,11 @@ async def test_get_room_agui_only(
     the_logger.debug.assert_called_once_with(loggers.AGUI_GET_ROOM)
 
 
+# A measured run, as the stored row holds it: the tuple slots are the
+# 'RunUsageStats' fields in order.
+MEASURED_USAGE_STATS = (1, 2, 3, 4, 5, "gpt-4o-2024-11-20", 6)
+
+
 def _run_usage(values):
     """A stored usage row yielding 'values', or None for an unmeasured run.
 
@@ -509,6 +514,7 @@ def _run_usage(values):
         tool_calls=values[3],
         final_input_tokens=values[4],
         resolved_model_name=values[5],
+        final_output_tokens=values[6],
     )
     usage.as_tuple.return_value = agui.RunUsageStats(*values)
     return usage
@@ -525,7 +531,7 @@ def _run_usage(values):
 )
 @pytest.mark.parametrize(
     "w_usage",
-    [None, (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")],
+    [None, MEASURED_USAGE_STATS],
 )
 @pytest.mark.parametrize("w_parent", [False, True])
 @pytest.mark.parametrize("w_run_meta", [False, True])
@@ -634,7 +640,9 @@ async def test_get_room_agui_thread_id_only(
         assert found.runs == {TEST_RUN_ID_UUID: exp_model_run}
 
         if w_usage is not None:
-            assert found.runs[TEST_RUN_ID_UUID].usage.final_input_tokens == 5
+            usage = found.runs[TEST_RUN_ID_UUID].usage
+            assert usage.final_input_tokens == 5
+            assert usage.final_output_tokens == 6
         else:
             assert found.runs[TEST_RUN_ID_UUID].usage is None
 
@@ -678,7 +686,7 @@ async def test_get_room_agui_thread_id_only(
 )
 @pytest.mark.parametrize(
     "w_usage",
-    [None, (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")],
+    [None, MEASURED_USAGE_STATS],
 )
 @pytest.mark.parametrize("w_events", [[], AGUI_EVENTS])
 @pytest.mark.parametrize("w_parent", [False, True])
@@ -2392,10 +2400,9 @@ async def test_post_agui_resolve_recent_feedback(
     )
 
 
-# A measured run, as the stored row holds it and as the endpoint
-# reports it. Spelling the model out by field rather than round-
-# tripping 'from_tuple' pins which tuple slot each name comes from.
-MEASURED_USAGE_STATS = (1, 2, 3, 4, 5, "gpt-4o-2024-11-20")
+# The measured run as the endpoint reports it. Spelling the model out by
+# field rather than round-tripping 'from_tuple' pins which tuple slot
+# each name comes from.
 MEASURED_USAGE = models.AGUI_RunUsage(
     input_tokens=1,
     output_tokens=2,
@@ -2403,6 +2410,7 @@ MEASURED_USAGE = models.AGUI_RunUsage(
     tool_calls=4,
     final_input_tokens=5,
     resolved_model_name="gpt-4o-2024-11-20",
+    final_output_tokens=6,
 )
 
 

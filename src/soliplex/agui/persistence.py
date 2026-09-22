@@ -554,6 +554,7 @@ class ThreadStorage(agui.ThreadStorage):
         tool_calls: int,
         final_input_tokens: int | None = None,
         resolved_model_name: str | None = None,
+        final_output_tokens: int | None = None,
     ):
         """Save the run usage statistics"""
         async with self.session as session:
@@ -573,6 +574,7 @@ class ThreadStorage(agui.ThreadStorage):
                     tool_calls=tool_calls,
                     final_input_tokens=final_input_tokens,
                     resolved_model_name=resolved_model_name,
+                    final_output_tokens=final_output_tokens,
                 )
             )
 
@@ -893,20 +895,22 @@ class ThreadStorage(agui.ThreadStorage):
 
 
 def _final_request_usage(result):
-    """Usage and model name of the run's last model response.
+    """Input and output tokens, and model name, of the run's last response.
 
     'RunUsage.input_tokens' accumulates across every request a run makes, so
     it answers "what did this run cost", not "how full was the window". The
-    last response's own 'RequestUsage' answers the second question, and its
+    last response's own 'RequestUsage' answers the second question: its
+    input is what the window held when the request went out, and its output
+    is the reply that joins that input in the *next* request. The response's
     'model_name' is what the provider actually served -- a better tokenizer
     key than the configured name, which may be an alias.
 
-    Returns '(None, None)' for a run that never reached the model.
+    Returns '(None, None, None)' for a run that never reached the model.
     """
     all_messages = getattr(result, "all_messages", None)
 
     if all_messages is None:  # pragma: NO COVER - defensive
-        return None, None
+        return None, None, None
 
     for message in reversed(all_messages()):
         message_usage = getattr(message, "usage", None)
@@ -916,10 +920,11 @@ def _final_request_usage(result):
 
         return (
             getattr(message_usage, "input_tokens", None),
+            getattr(message_usage, "output_tokens", None),
             getattr(message, "model_name", None),
         )
 
-    return None, None
+    return None, None, None
 
 
 async def capture_usage_after_stream(
@@ -935,7 +940,9 @@ async def capture_usage_after_stream(
     usage = getattr(result, "usage", None)
 
     if usage is not None:
-        final_input_tokens, resolved_model_name = _final_request_usage(result)
+        final_input_tokens, final_output_tokens, resolved_model_name = (
+            _final_request_usage(result)
+        )
         async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
             the_threads = ThreadStorage(session)
 
@@ -951,6 +958,7 @@ async def capture_usage_after_stream(
                     tool_calls=usage.tool_calls,
                     final_input_tokens=final_input_tokens,
                     resolved_model_name=resolved_model_name,
+                    final_output_tokens=final_output_tokens,
                 )
 
 

@@ -1549,7 +1549,11 @@ def test_roomstats_rejects_naive_last_activity():
 
 
 def test_agui_run_usage_from_tuple_carries_final_request():
-    """'input_tokens' is cumulative; 'final_input_tokens' is the window."""
+    """'input_tokens' is cumulative; the final request is the window.
+
+    Its input is what the window held; its output is the reply the next
+    request adds to that.
+    """
     stats = agui.RunUsageStats(
         input_tokens=5000,
         output_tokens=200,
@@ -1557,6 +1561,7 @@ def test_agui_run_usage_from_tuple_carries_final_request():
         tool_calls=3,
         final_input_tokens=1800,
         resolved_model_name="gpt-4o-2024-11-20",
+        final_output_tokens=120,
     )
 
     found = models.AGUI_RunUsage.from_tuple(stats)
@@ -1564,6 +1569,7 @@ def test_agui_run_usage_from_tuple_carries_final_request():
     assert found.input_tokens == 5000
     assert found.final_input_tokens == 1800
     assert found.resolved_model_name == "gpt-4o-2024-11-20"
+    assert found.final_output_tokens == 120
 
 
 def test_agui_run_usage_from_tuple_wo_final_request():
@@ -1579,3 +1585,4 @@ def test_agui_run_usage_from_tuple_wo_final_request():
 
     assert found.final_input_tokens is None
     assert found.resolved_model_name is None
+    assert found.final_output_tokens is None
