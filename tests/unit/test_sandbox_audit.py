@@ -2,6 +2,7 @@ import pathlib
 from types import SimpleNamespace
 
 import pytest
+from bubble_sandbox import models as bs_models
 
 from soliplex import loggers
 from soliplex import sandbox_audit
@@ -12,11 +13,6 @@ THREAD_ID = "thread-1"
 RUN_ID = "run-1"
 WORKDIR = pathlib.Path("/work/room-1/thread-1/run-1")
 TRANSCRIPT = "/transcripts/room-1/thread-1/run-1/abc123.py"
-VOLUME = "thread"
-
-
-class _Refused(Exception):
-    """Stand-in for the skill's environment-name rejections"""
 
 
 def _state():
@@ -36,14 +32,6 @@ def _record_ref_then_raise(access):
     raise RuntimeError("boom")
 
 
-def _raise_refused(access):
-    raise _Refused
-
-
-def _raise_runtime_error(access):
-    raise RuntimeError("boom")
-
-
 def test_audit_sandbox_exec_records_success(audit_records):
     with sandbox_audit.audit_sandbox_exec(
         _state(),
@@ -52,7 +40,7 @@ def test_audit_sandbox_exec_records_success(audit_records):
     ) as access:
         access.record_workdir(WORKDIR)
         access.record_ref(TRANSCRIPT)
-        access.record_exit_code(0)
+        access.record_result(bs_models.ExecuteResult(exit_code=0))
 
     record = audit_records[-1]
     assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
@@ -91,11 +79,6 @@ def test_audit_sandbox_exec_without_workdir_logs_none(audit_records):
         (0, loggers.AUDIT_OUTCOME_SUCCESS, None),
         (None, loggers.AUDIT_OUTCOME_SUCCESS, None),
         (42, loggers.AUDIT_OUTCOME_ERROR, "exit-code"),
-        (
-            sandbox_audit.TIMEOUT_EXIT_CODE,
-            loggers.AUDIT_OUTCOME_ERROR,
-            "timeout",
-        ),
     ],
 )
 def test_audit_sandbox_exec_records_exit_code(
@@ -110,7 +93,9 @@ def test_audit_sandbox_exec_records_exit_code(
         action=loggers.AUDIT_SANDBOX_ACTION_RUN,
         environment="bare",
     ) as access:
-        access.record_exit_code(w_exit_code)
+        access.record_result(
+            bs_models.ExecuteResult(exit_code=w_exit_code),
+        )
 
     record = audit_records[-1]
     assert record.outcome == exp_outcome
@@ -124,7 +109,6 @@ def test_audit_sandbox_exec_records_failure(audit_records):
             _state(),
             action=loggers.AUDIT_SANDBOX_ACTION_RUN,
             environment="bare",
-            denied_exceptions=(_Refused,),
         ) as access:
             _record_ref_then_raise(access)
 
@@ -139,50 +123,53 @@ def test_audit_sandbox_exec_records_failure(audit_records):
     assert record.exit_code is None
 
 
-def test_audit_sandbox_exec_records_denial(audit_records):
-    """A refusal names no workdir, because none was created"""
-    with pytest.raises(_Refused):
-        with sandbox_audit.audit_sandbox_exec(
-            _state(),
-            action=loggers.AUDIT_SANDBOX_ACTION_RUN,
-            environment="nonesuch",
-            denied_exceptions=(_Refused,),
-        ) as access:
-            _raise_refused(access)
+def test_audit_sandbox_exec_records_timeout(audit_records):
+    with sandbox_audit.audit_sandbox_exec(
+        _state(),
+        action=loggers.AUDIT_SANDBOX_ACTION_RUN,
+        environment="bare",
+    ) as access:
+        access.record_workdir(WORKDIR)
+        access.record_result(
+            bs_models.ExecuteResult(timed_out=True, timeout_seconds=30.0),
+        )
 
     record = audit_records[-1]
-    assert record.action == loggers.AUDIT_SANDBOX_ACTION_RUN
-    assert record.outcome == loggers.AUDIT_OUTCOME_DENIED
-    assert record.workdir is None
-    assert record.environment == "nonesuch"
-    assert record.refs == []
-    assert record.reason == "_Refused"
-
-
-def test_audit_sandbox_list_records_success(audit_records):
-    with sandbox_audit.audit_sandbox_list(_state(), volume=VOLUME) as access:
-        access.record_count(3)
-
-    record = audit_records[-1]
-    assert record.getMessage() == loggers.AUDIT_SANDBOX_VOLUME_LIST
-    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
-    assert record.volume == VOLUME
-    assert record.count == 3
-    assert record.claims == {"preferred_username": USERNAME}
-    assert record.room_id == ROOM_ID
-    assert record.thread_id == THREAD_ID
-    assert record.run_id == RUN_ID
-
-
-def test_audit_sandbox_list_records_failure(audit_records):
-    with pytest.raises(RuntimeError):
-        with sandbox_audit.audit_sandbox_list(
-            _state(), volume=VOLUME
-        ) as access:
-            _raise_runtime_error(access)
-
-    record = audit_records[-1]
-    assert record.getMessage() == loggers.AUDIT_SANDBOX_VOLUME_LIST
     assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
-    assert record.volume == VOLUME
-    assert record.reason == "RuntimeError"
+    assert record.reason == loggers.AUDIT_SANDBOX_REASON_TIMEOUT
+    assert record.timeout_seconds == 30.0
+    assert record.exit_code is None
+
+
+def test_audit_sandbox_exec_records_signal_death(audit_records):
+    with sandbox_audit.audit_sandbox_exec(
+        _state(),
+        action=loggers.AUDIT_SANDBOX_ACTION_RUN,
+        environment="bare",
+    ) as access:
+        access.record_result(bs_models.ExecuteResult(exit_code=-1))
+
+    record = audit_records[-1]
+    assert record.outcome == loggers.AUDIT_OUTCOME_ERROR
+    assert record.reason == loggers.AUDIT_SANDBOX_REASON_EXIT_CODE
+    assert record.exit_code == -1
+
+
+def test_audit_sandbox_exec_records_truncation(audit_records):
+    with sandbox_audit.audit_sandbox_exec(
+        _state(),
+        action=loggers.AUDIT_SANDBOX_ACTION_RUN,
+        environment="bare",
+    ) as access:
+        access.record_result(
+            bs_models.ExecuteResult(
+                stdout="X",
+                exit_code=0,
+                truncated=True,
+                max_output_chars=1,
+            ),
+        )
+
+    record = audit_records[-1]
+    assert record.outcome == loggers.AUDIT_OUTCOME_SUCCESS
+    assert record.truncated is True

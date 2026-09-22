@@ -34,3 +34,36 @@ analysis, and sandbox execution. Because these capabilities require
 room-specific parameters, they are defined using the
 [`skill_configs` stanza](rooms.md#skill-configuration)
 of the room configuration's `skills` entry.
+
+### `bwrap_sandbox`
+
+```yaml
+skills:
+  skill_configs:
+    - kind: "bwrap_sandbox"
+      environment: "pandas-only"
+      execution_timeout_seconds: 60.0
+      max_output_chars: 20000
+```
+
+- `environment` (optional, default `bare`) -- the sandbox environment every
+  execution in this room runs in, named after a subdirectory of the
+  installation's
+  [`environments_path`](installation.md#sandbox-configuration). The model
+  does not select it.
+
+- `execution_timeout_seconds` / `max_output_chars` (optional) -- override
+  the installation's
+  [`sandbox_config`](installation.md#sandbox-configuration) values for this
+  room. Omit either to inherit, which keeps the room following a later
+  change to the installation default.
+
+- `volumes` (optional) -- extra host directories to mount, keyed by the name
+  they take under `/sandbox/volumes`:
+
+  ```yaml
+      volumes:
+        reference:
+          host_path: /srv/reference
+          writable: false
+  ```

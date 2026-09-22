@@ -25,8 +25,6 @@ THE_USER_CLAIMS = {"preferred_username": USER_NAME, "email": EMAIL}
 TEST_ROOM_ID = "test-room-id"
 TEST_THREAD_ID = uuid.uuid4()
 TEST_THREAD_ID_STR = str(TEST_THREAD_ID)
-TEST_RUN_ID = uuid.uuid4()
-TEST_RUN_ID_STR = str(TEST_RUN_ID)
 TEST_FILENAME = "test_file.txt"
 
 URL_PREFIX = "http://test.example.com/api"
@@ -83,33 +81,25 @@ async def test_get_workdirs_room_thread_run_only(
     w_link,
 ):
     sandbox_workdirs_path = sandbox_path / "workdirs"
-    run_path = (
-        sandbox_workdirs_path
-        / TEST_ROOM_ID
-        / TEST_THREAD_ID_STR
-        / TEST_RUN_ID_STR
-    )
+    thread_path = sandbox_workdirs_path / TEST_ROOM_ID / TEST_THREAD_ID_STR
 
     # Note: this is the name of the view function, and not the path
     #       to which it is bound.
-    ROUTE_NAME = "get_workdirs_room_thread_run_filename"
+    ROUTE_NAME = "get_workdirs_room_thread_filename"
 
-    def download_url(name, room_id, thread_id, run_id, filename):
+    def download_url(name, room_id, thread_id, filename):
         assert name == ROUTE_NAME
-        return (
-            f"{URL_PREFIX}/v1/workdir/{room_id}"
-            f"/{thread_id}/{run_id}/{filename}"
-        )
+        return f"{URL_PREFIX}/v1/workdir/{room_id}/{thread_id}/{filename}"
 
     exp_filename_urls = {}
 
     if w_workdir_path:
-        run_path.mkdir(parents=True)
+        thread_path.mkdir(parents=True)
         link_target = sandbox_path / "link-target"
         link_target.write_text("sneaky link points here")
-        (run_path / "ignore_me").mkdir()
+        (thread_path / "ignore_me").mkdir()
         for filename in w_filenames:
-            file_path = run_path / filename
+            file_path = thread_path / filename
             if w_link == "symlink":
                 file_path.symlink_to(link_target)
             elif w_link == "hardlink":
@@ -118,7 +108,6 @@ async def test_get_workdirs_room_thread_run_only(
                     ROUTE_NAME,
                     TEST_ROOM_ID,
                     TEST_THREAD_ID_STR,
-                    TEST_RUN_ID_STR,
                     filename,
                 )
             else:
@@ -127,7 +116,6 @@ async def test_get_workdirs_room_thread_run_only(
                     ROUTE_NAME,
                     TEST_ROOM_ID,
                     TEST_THREAD_ID_STR,
-                    TEST_RUN_ID_STR,
                     filename,
                 )
 
@@ -150,11 +138,10 @@ async def test_get_workdirs_room_thread_run_only(
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
-        found = await workdir_views.get_workdirs_room_thread_run(
+        found = await workdir_views.get_workdirs_room_thread(
             request=request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_STR,
-            run_id=TEST_RUN_ID_STR,
             the_installation=the_installation,
             the_threads=the_threads,
             the_room_authz=the_room_authz,
@@ -163,10 +150,9 @@ async def test_get_workdirs_room_thread_run_only(
         )
 
     if expected is None:
-        assert isinstance(found, models.RunWorkdirFiles)
+        assert isinstance(found, models.ThreadWorkdirFiles)
         assert found.room_id == TEST_ROOM_ID
         assert found.thread_id == TEST_THREAD_ID_STR
-        assert found.run_id == TEST_RUN_ID_STR
 
         if w_workdir_path:
             found_files = {f_up.filename: f_up.url for f_up in found.files}
@@ -184,7 +170,6 @@ async def test_get_workdirs_room_thread_run_only(
     cto.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
         the_installation=the_installation,
         the_threads=the_threads,
         the_room_authz=the_room_authz,
@@ -192,7 +177,7 @@ async def test_get_workdirs_room_thread_run_only(
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(
-        loggers.WORKDIRS_GET_ROOM_THREAD_RUN,
+        loggers.WORKDIRS_GET_ROOM_THREAD,
     )
 
 
@@ -288,7 +273,7 @@ def test__disposition(w_name, expected):
 @mock.patch("soliplex.views.sandbox_workdirs._open_no_symlinks")
 @mock.patch("soliplex.views.agui._check_thread_ownership")
 @mock.patch("fastapi.responses.StreamingResponse")
-async def test_get_workdirs_room_thread_run_filename(
+async def test_get_workdirs_room_thread_filename(
     frsr,
     cto,
     open_no_symlinks,
@@ -303,12 +288,7 @@ async def test_get_workdirs_room_thread_run_filename(
     open_no_symlinks.return_value = (streamer, file_size)
 
     sandbox_workdirs_path = sandbox_path / "workdirs"
-    workdir_path = (
-        sandbox_workdirs_path
-        / TEST_ROOM_ID
-        / TEST_THREAD_ID_STR
-        / TEST_RUN_ID_STR
-    )
+    workdir_path = sandbox_workdirs_path / TEST_ROOM_ID / TEST_THREAD_ID_STR
 
     workdir_path.mkdir(parents=True)
     file_path = workdir_path / TEST_FILENAME
@@ -330,10 +310,9 @@ async def test_get_workdirs_room_thread_run_filename(
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     with expectation as expected:
-        found = await workdir_views.get_workdirs_room_thread_run_filename(
+        found = await workdir_views.get_workdirs_room_thread_filename(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
             filename=TEST_FILENAME,
             the_installation=the_installation,
             the_threads=the_threads,
@@ -360,7 +339,6 @@ async def test_get_workdirs_room_thread_run_filename(
     cto.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,
-        run_id=TEST_RUN_ID_STR,
         the_installation=the_installation,
         the_threads=the_threads,
         the_room_authz=the_room_authz,
@@ -368,5 +346,5 @@ async def test_get_workdirs_room_thread_run_filename(
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(
-        loggers.WORKDIRS_GET_ROOM_THREAD_RUN_FILE,
+        loggers.WORKDIRS_GET_ROOM_THREAD_FILE,
     )

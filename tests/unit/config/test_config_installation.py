@@ -418,6 +418,20 @@ workdirs_path: "{SANDBOX_WORKDIRS_PATH}"
 transcripts_path: "{SANDBOX_TRANSCRIPTS_PATH}"
 """
 
+SANDBOX_EXECUTION_TIMEOUT_SECONDS = 66.0
+SANDBOX_MAX_OUTPUT_CHARS = 1234
+
+W_LIMITS_SANDBOX_CONFIG_KW = {
+    "_environments_path": SANDBOX_ENVIRONMENTS_PATH,
+    "execution_timeout_seconds": SANDBOX_EXECUTION_TIMEOUT_SECONDS,
+    "max_output_chars": SANDBOX_MAX_OUTPUT_CHARS,
+}
+W_LIMITS_SANDBOX_CONFIG_YAML = f"""\
+environments_path: "{SANDBOX_ENVIRONMENTS_PATH}"
+execution_timeout_seconds: {SANDBOX_EXECUTION_TIMEOUT_SECONDS}
+max_output_chars: {SANDBOX_MAX_OUTPUT_CHARS}
+"""
+
 W_SANDBOX_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "sandbox_config": config_installation.SandboxConfig(
@@ -1072,6 +1086,10 @@ def test_resolve_environment_entry(
             W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_YAML,
             W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_KW.copy(),
         ),
+        (
+            W_LIMITS_SANDBOX_CONFIG_YAML,
+            W_LIMITS_SANDBOX_CONFIG_KW.copy(),
+        ),
     ],
 )
 def test_sandboxconfig_from_yaml(
@@ -1104,6 +1122,7 @@ def test_sandboxconfig_from_yaml(
         WO_WORKDIRS_PATH_SANDBOX_CONFIG_KW.copy(),
         W_WORKDIRS_PATH_SANDBOX_CONFIG_KW.copy(),
         W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_KW.copy(),
+        W_LIMITS_SANDBOX_CONFIG_KW.copy(),
     ],
 )
 def test_sandboxconfig_as_yaml(temp_dir, w_kw):
@@ -1122,6 +1141,15 @@ def test_sandboxconfig_as_yaml(temp_dir, w_kw):
 
     if "_transcripts_path" in w_kw:
         expected["transcripts_path"] = str(temp_dir / SANDBOX_TRANSCRIPTS_PATH)
+
+    expected["execution_timeout_seconds"] = w_kw.get(
+        "execution_timeout_seconds",
+        config_installation.DEFAULT_EXECUTION_TIMEOUT_SECONDS,
+    )
+    expected["max_output_chars"] = w_kw.get(
+        "max_output_chars",
+        config_installation.DEFAULT_MAX_OUTPUT_CHARS,
+    )
 
     found = inst.as_yaml
 
@@ -1155,6 +1183,7 @@ def _round_trip_sandbox_config(config_path, config_dict, reload_path=None):
         WO_WORKDIRS_PATH_SANDBOX_CONFIG_YAML,
         W_WORKDIRS_PATH_SANDBOX_CONFIG_YAML,
         W_TRANSCRIPTS_PATH_SANDBOX_CONFIG_YAML,
+        W_LIMITS_SANDBOX_CONFIG_YAML,
     ],
 )
 def test_sandboxconfig_as_yaml_round_trips(temp_dir, config_yaml):
@@ -3839,3 +3868,19 @@ def test__load_dotenv_w_non_ascii(temp_dir):
     found = config_installation.InstallationConfig._load_dotenv(dotenv_path)
 
     assert found == {"SOME_SECRET": NON_ASCII_PROSE}
+
+
+def test_sandboxconfig_limit_defaults(temp_dir):
+    """A config that names no limits inherits the installation defaults."""
+    inst = config_installation.SandboxConfig(
+        _environments_path=SANDBOX_ENVIRONMENTS_PATH,
+        _config_path=temp_dir / "installation.yaml",
+    )
+
+    assert (
+        inst.execution_timeout_seconds
+        == config_installation.DEFAULT_EXECUTION_TIMEOUT_SECONDS
+    )
+    assert (
+        inst.max_output_chars == config_installation.DEFAULT_MAX_OUTPUT_CHARS
+    )

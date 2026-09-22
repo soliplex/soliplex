@@ -19,7 +19,8 @@ dependencies = [
     "aiosqlite",
     "alembic >= 1.18.4, < 1.19",
     "authlib",
-    "bubble-sandbox >= 0.12.0, < 0.13",
+    "bubble-sandbox >= 0.13.0, < 0.14",
+    "packaging",
     "cryptography >= 50.0.0",  # PYSEC-2026-3552
     "fastapi",
     "fastmcp >= 4.0.2, < 5.0",
@@ -241,3 +242,9 @@ name = "ruff"
 type = "exec"
 executable = "ruff"
 options = "check --fix REVISION_SCRIPT_FILENAME"
+
+# 'bubble-sandbox' 0.13.0 is not released. This points at a local
+# checkout, becomes a git reference once that branch is pushed, and is
+# removed once the release lands.
+[tool.uv.sources]
+bubble-sandbox = { path = "../bubble-sandbox", editable = true }

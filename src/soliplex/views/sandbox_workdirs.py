@@ -35,30 +35,27 @@ ATTACHMENT_PREFIX = "attachment; filename*=UTF-8''"
 
 
 @soliplex_views_util.logfire_span(
-    "GET /v1/workdirs/{room_id}/thread/{thread_id}/{run_id}",
+    "GET /v1/workdirs/{room_id}/thread/{thread_id}",
 )
-@router.get("/v1/workdirs/{room_id}/thread/{thread_id}/{run_id}")
-async def get_workdirs_room_thread_run(
+@router.get("/v1/workdirs/{room_id}/thread/{thread_id}")
+async def get_workdirs_room_thread(
     request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
-    run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui.ThreadStorage = depend_the_threads,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
-) -> models.RunWorkdirFiles:
-    """Return a list of files uploaded to the thread"""
+) -> models.ThreadWorkdirFiles:
+    """Return the files the thread's sandbox workspace holds"""
     thread_id = str(thread_id)
-    run_id = str(run_id)
 
-    the_logger.debug(loggers.WORKDIRS_GET_ROOM_THREAD_RUN)
+    the_logger.debug(loggers.WORKDIRS_GET_ROOM_THREAD)
 
     await soliplex_views_agui._check_thread_ownership(
         room_id=room_id,
         thread_id=thread_id,
-        run_id=run_id,
         the_installation=the_installation,
         the_threads=the_threads,
         the_room_authz=the_room_authz,
@@ -74,26 +71,24 @@ async def get_workdirs_room_thread_run(
             detail="Sandbox workdirs not configured",
         )
 
-    run_dir = pathlib.Path(workdirs_path) / room_id / thread_id / run_id
+    thread_dir = pathlib.Path(workdirs_path) / room_id / thread_id
     filename_urls = {}
 
-    if run_dir.is_dir():
-        for file_or_sub in run_dir.glob("*"):
+    if thread_dir.is_dir():
+        for file_or_sub in thread_dir.glob("*"):
             if not file_or_sub.is_symlink() and file_or_sub.is_file():
                 filename = file_or_sub.name
                 filename_urls[filename] = request.url_for(
                     # View function name, not the route path.
-                    "get_workdirs_room_thread_run_filename",
+                    "get_workdirs_room_thread_filename",
                     room_id=room_id,
                     thread_id=thread_id,
-                    run_id=run_id,
                     filename=filename,
                 )
 
-    return models.RunWorkdirFiles(
+    return models.ThreadWorkdirFiles(
         room_id=room_id,
         thread_id=thread_id,
-        run_id=run_id,
         files=[
             models.WorkdirFile(
                 filename=key,
@@ -141,16 +136,14 @@ def _disposition(file_path: pathlib.Path) -> str:
 
 
 @soliplex_views_util.logfire_span(
-    "GET "
-    "/v1/workdirs/{room_id}/thread/{thread_id}/run/{run_id}/file/{filename}"
+    "GET /v1/workdirs/{room_id}/thread/{thread_id}/file/{filename}"
 )
 @router.get(
-    "/v1/workdirs/{room_id}/thread/{thread_id}/run/{run_id}/file/{filename}",
+    "/v1/workdirs/{room_id}/thread/{thread_id}/file/{filename}",
 )
-async def get_workdirs_room_thread_run_filename(
+async def get_workdirs_room_thread_filename(
     room_id: str,
     thread_id: pydantic.UUID4,
-    run_id: pydantic.UUID4,
     filename: str,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui.ThreadStorage = depend_the_threads,
@@ -158,21 +151,19 @@ async def get_workdirs_room_thread_run_filename(
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> responses.StreamingResponse:
-    """Return a file uploaded to the thread.
+    """Return a file from the thread's sandbox workspace.
 
     In order to prevent an agent-created symlink from exposing a file
     not in the workdir, this view returns a streaming response, rather
     than using `fastapi`s 'FileResponse-from-filename' affordance.
     """
     thread_id = str(thread_id)
-    run_id = str(run_id)
 
-    the_logger.debug(loggers.WORKDIRS_GET_ROOM_THREAD_RUN_FILE)
+    the_logger.debug(loggers.WORKDIRS_GET_ROOM_THREAD_FILE)
 
     await soliplex_views_agui._check_thread_ownership(
         room_id=room_id,
         thread_id=thread_id,
-        run_id=run_id,
         the_installation=the_installation,
         the_threads=the_threads,
         the_room_authz=the_room_authz,
@@ -188,9 +179,9 @@ async def get_workdirs_room_thread_run_filename(
             detail="Sandbox workdirs not configured",
         )
 
-    run_dir = pathlib.Path(workdirs_path) / room_id / thread_id / run_id
+    thread_dir = pathlib.Path(workdirs_path) / room_id / thread_id
 
-    file_path = run_dir / filename
+    file_path = thread_dir / filename
 
     streamer, size = _open_no_symlinks(file_path)
 

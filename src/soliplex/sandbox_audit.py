@@ -4,26 +4,17 @@ import typing
 
 from soliplex import loggers
 
-# 'bubble_sandbox' cuts a slow execution off and *returns* normally, with
-# this sentinel in place of a real exit status, so a timeout reaches the
-# auditor as an ordinary result rather than an exception.
-TIMEOUT_EXIT_CODE = -1
-
 
 class _SandboxExecRecorder:
-    """Carries what an execution reports back to the surrounding audit.
-
-    The wrapped tool calls ``record_workdir`` once it has created the
-    per-run working directory, ``record_ref`` with each transcript path it
-    writes, and ``record_exit_code`` with the status the execution ended
-    with.  A call refused before any of that happens records none of them,
-    which is why a denied record names no workdir: none was created.
-    """
+    """Carries what an execution reports back to the surrounding audit."""
 
     def __init__(self):
         self.workdir: pathlib.Path | None = None
         self.refs: list[str] = []
         self.exit_code: int | None = None
+        self.timed_out: bool = False
+        self.timeout_seconds: float | None = None
+        self.truncated: bool = False
 
     @property
     def logged_workdir(self) -> str | None:
@@ -35,18 +26,25 @@ class _SandboxExecRecorder:
     def record_ref(self, ref: str):
         self.refs.append(ref)
 
-    def record_exit_code(self, exit_code: int | None):
-        self.exit_code = exit_code
+    def record_result(self, result):
+        self.exit_code = result.exit_code
+        self.timed_out = result.timed_out
+        self.timeout_seconds = result.timeout_seconds
+        self.truncated = result.truncated
 
 
-class _SandboxVolumeListRecorder:
-    """Carries how many uploaded files a volume listing disclosed."""
+class _SandboxImageReadRecorder:
+    """Carries what a read disclosed: which mount, how much, what type."""
 
     def __init__(self):
-        self.count: int = 0
+        self.volume: str = ""
+        self.byte_count: int = 0
+        self.media_type: str = ""
 
-    def record_count(self, count: int):
-        self.count = count
+    def record_image(self, volume: str, data: bytes, media_type: str):
+        self.volume = volume
+        self.byte_count = len(data)
+        self.media_type = media_type
 
 
 def _audit_log(deps: typing.Any) -> loggers.SandboxExecAuditLog:
@@ -61,58 +59,25 @@ def _audit_log(deps: typing.Any) -> loggers.SandboxExecAuditLog:
     )
 
 
-def _exit_reason(exit_code: int) -> str:
-    if exit_code == TIMEOUT_EXIT_CODE:
-        return loggers.AUDIT_SANDBOX_REASON_TIMEOUT
-
-    return loggers.AUDIT_SANDBOX_REASON_EXIT_CODE
-
-
 @contextlib.contextmanager
 def audit_sandbox_exec(
     deps: typing.Any,
     *,
     action: str,
     environment: str | None,
-    denied_exceptions: tuple[type[BaseException], ...] = (),
 ):
-    """Bracket a sandbox ``run`` / ``run_python`` tool body, emitting one
-    ``sandbox-exec`` data-change record.
+    """Bracket a ``run`` / ``run_python`` tool body, emitting one
+    ``sandbox-exec`` record.
 
-    Actor identity and run correlation are taken directly from the room
-    agent dependencies.  ``action`` is the audit action ('run' /
-    'run-python').  ``denied_exceptions`` are the types that mean the call
-    was refused rather than attempted; the caller names them so this module
-    need not import the skill which raises them.
-
-    Yields a recorder the tool feeds as it goes: the working directory whose
-    data the execution may change (logged as a string), each saved command /
-    script transcript path, and the status the execution ended with.  The
-    command / script body itself is never logged.
-
-    The outcome follows what the body did.  One of ``denied_exceptions`` is
-    recorded as 'denied', any other exception as 'error' -- reason being the
-    exception type, never its message -- and both are re-raised.  Otherwise
-    the exit status decides: a non-zero one is an 'error' naming either the
-    timeout sentinel or an ordinary bad exit.  A status of None means the
-    body never reported one, an execution that did not happen, and is no
-    more an error than a clean zero.
+    Yields a recorder the tool feeds with the working directory, each
+    transcript path, and the result.  The command and script bodies are
+    never logged.
     """
     audit = _audit_log(deps)
     recorder = _SandboxExecRecorder()
 
     try:
         yield recorder
-    # Ahead of 'Exception': a refusal is raised as one of its subclasses.
-    except denied_exceptions as exc:
-        audit.execute_denied(
-            action,
-            recorder.logged_workdir,
-            environment,
-            recorder.refs,
-            type(exc).__name__,
-        )
-        raise
     except Exception as exc:
         audit.execute_failed(
             action,
@@ -121,17 +86,34 @@ def audit_sandbox_exec(
             recorder.refs,
             type(exc).__name__,
             exit_code=recorder.exit_code,
+            truncated=recorder.truncated,
+            timeout_seconds=recorder.timeout_seconds,
         )
         raise
 
-    if recorder.exit_code:  # neither a clean zero nor an absent status
+    bounds = {
+        "exit_code": recorder.exit_code,
+        "truncated": recorder.truncated,
+        "timeout_seconds": recorder.timeout_seconds,
+    }
+
+    if recorder.timed_out:
         audit.execute_failed(
             action,
             recorder.logged_workdir,
             environment,
             recorder.refs,
-            _exit_reason(recorder.exit_code),
-            exit_code=recorder.exit_code,
+            loggers.AUDIT_SANDBOX_REASON_TIMEOUT,
+            **bounds,
+        )
+    elif recorder.exit_code:  # neither a clean zero nor an absent status
+        audit.execute_failed(
+            action,
+            recorder.logged_workdir,
+            environment,
+            recorder.refs,
+            loggers.AUDIT_SANDBOX_REASON_EXIT_CODE,
+            **bounds,
         )
     else:
         audit.executed(
@@ -139,26 +121,25 @@ def audit_sandbox_exec(
             recorder.logged_workdir,
             environment,
             recorder.refs,
-            exit_code=recorder.exit_code,
+            **bounds,
         )
 
 
 @contextlib.contextmanager
-def audit_sandbox_list(deps: typing.Any, *, volume: str):
-    """Bracket the sandbox ``list_volume_files`` tool body, emitting one
-    ``sandbox volume list`` disclosure record.
-
-    Yields a recorder whose ``record_count`` the tool calls with the number
-    of uploaded files it disclosed.  The names themselves are never logged:
-    the record answers which volume was read, and how much came back.
-    """
+def audit_sandbox_read_image(deps: typing.Any, *, path: str):
+    """Bracket the ``read_image`` tool body, emitting one record."""
     audit = _audit_log(deps)
-    recorder = _SandboxVolumeListRecorder()
+    recorder = _SandboxImageReadRecorder()
 
     try:
         yield recorder
     except Exception as exc:
-        audit.volume_list_failed(volume, type(exc).__name__)
+        audit.image_read_failed(path, type(exc).__name__)
         raise
 
-    audit.volume_listed(volume, recorder.count)
+    audit.image_read(
+        path,
+        recorder.volume,
+        byte_count=recorder.byte_count,
+        media_type=recorder.media_type,
+    )

@@ -16,6 +16,7 @@ from soliplex import tools
 from soliplex.config import agents as config_agents
 from soliplex.config import installation as config_installation
 from soliplex.config import tools as config_tools
+from soliplex.skills import bwrap_sandbox
 
 SYSTEM_PROMPT = "You are a test"
 MODEL_SETTINGS = {"temperature": 0.875}
@@ -520,3 +521,36 @@ def test_get_agent_from_configs_w_python_kind(w_room_capabilities):
         mcp_client_toolset_configs=mcpcts_configs,
         **kwargs,
     )
+
+
+@pytest.mark.parametrize("multimodal", [False, True])
+@mock.patch("soliplex.config.agents.get_model_from_config")
+@mock.patch("pydantic_ai.Agent")
+def test_get_default_agent_gates_sandbox_read_image(
+    agent_klass,
+    gmfc,
+    multimodal,
+):
+    agent_config = mock.create_autospec(config_agents.AgentConfig)
+    agent_config.kind = "default"
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.model_settings = None
+    agent_config.retries = 3
+    agent_config.capabilities = []
+    agent_config.multimodal = multimodal
+
+    capability = bwrap_sandbox.create_bwrap_sandbox_capability()
+    capability_config = mock.Mock(
+        capabilities=[capability],
+        rag_db_paths={},
+    )
+
+    agents.get_default_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs={},
+        mcp_client_toolset_configs={},
+        capability_config=capability_config,
+    )
+
+    assert capability.multimodal is multimodal
+    assert ("read_image" in capability.get_toolset().tools) is multimodal

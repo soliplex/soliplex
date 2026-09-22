@@ -1,17 +1,25 @@
 from __future__ import annotations  # forward refs in typing decls
 
+import contextlib
 import dataclasses
+import io
 import json
+import os
 import pathlib
+import stat
+import tempfile
 import typing
 import uuid
 
+import packaging.requirements as packaging_requirements
 import pydantic_ai
 import skills_ref
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
 from bubble_sandbox import sandbox as bs_sandbox
+from PIL import Image as PIL_Image
 from pydantic_ai import capabilities as ai_capabilities
+from pydantic_ai import messages as ai_messages
 from pydantic_ai import toolsets as ai_toolests
 
 from soliplex import loggers
@@ -20,7 +28,9 @@ from soliplex import sandbox_audit
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from soliplex.config import installation as config_installation
 
-VolumeName = typing.Literal["thread"] | typing.Literal["room"]
+# Applied when neither the installation nor the room sets a limit.
+DEFAULT_EXECUTION_TIMEOUT_SECONDS = 30.0
+DEFAULT_MAX_OUTPUT_CHARS = 10_000
 
 _HERE = pathlib.Path(__file__)
 SKILL_PROPERTIES = skills_ref.read_properties(str(_HERE.parent))
@@ -33,213 +43,130 @@ SANDBOX_VOLUMES_PATH = SKILL_PROPERTIES.metadata["sandbox_volumes_path"]
 SANDBOX_WORKDIR_PATH = SKILL_PROPERTIES.metadata["sandbox_workdir_path"]
 
 
-LIST_ENVIRONMENTS_DESCRIPTION = """
-Return a list of information about available sandbox environments
-
-Call this tool before the first ``run`` or ``run_python`` of a turn: \
-their ``environment_name`` argument accepts nothing but the names \
-returned here.
-
-Each entry will contain these fields:
-- 'name' (string) pass this value to the ``run`` and ``run_python`` \
-tools to run the tool in the environment.
-- 'description' (string) describes the purposes for which the environment is \
-configured.
-- 'dependencies' (list of string): names of Python projects on which the \
-environment depends.
-"""
-
-AllowedEnvironments = list[str] | None
+NO_OUTPUT = "The command produced no output."
 
 
-async def skill_list_environments(
+def _plural(count: int, noun: str) -> str:
+    return noun if count == 1 else f"{noun}s"
+
+
+def format_execute_result(
+    result: bs_models.ExecuteResult,
     *,
-    bwrap_sandbox: bs_sandbox.BwrapSandbox,
-    allowed_environments: AllowedEnvironments = None,
-) -> list[bs_models.EnvironmentInfo]:
-    candidates = bwrap_sandbox.config.list_environments()
-    if allowed_environments is not None:
-        return [env for env in candidates if env.name in allowed_environments]
-    else:
-        return candidates
-
-
-def format_execute_result(result: bs_models.ExecuteResult) -> str:
+    persistent: bool = True,
+) -> str:
     """Render an execution's result as the text the agent sees.
 
-    A non-zero status is called out in the text because the agent reads
-    only this string; the status itself reaches the audit record from the
-    result the tool keeps hold of.
+    'persistent' says whether a file written under the workspace outlives
+    the call, which decides what the model can be told to do about a limit
+    it cannot raise.
     """
-    output = result.output
+    if result.timed_out:
+        if persistent:
+            remedy = (
+                "narrow the input, or split the task and write intermediate "
+                f"results under '{SANDBOX_WORKDIR_PATH}'"
+            )
+        else:
+            remedy = (
+                "narrow the input -- nothing written survives the command, "
+                "so the work cannot be split across runs"
+            )
+
+        return (
+            f"The sandbox stopped this run after {result.timeout_seconds} "
+            f"seconds. That limit is fixed; do less work per run: {remedy}."
+        )
+
+    streams = [
+        f"{name}:\n{stream}"
+        for name, stream in (
+            ("stdout", result.stdout),
+            ("stderr", result.stderr),
+        )
+        if stream
+    ]
+
+    output = "\n\n".join(streams) if streams else NO_OUTPUT
+
     if result.truncated:
-        output += "\n\n... (output truncated)"
+        if persistent:
+            remedy = (
+                "write the full detail to a file under "
+                f"'{SANDBOX_WORKDIR_PATH}' and tell the user its name"
+            )
+        else:
+            remedy = (
+                "print a shorter summary instead -- a file written here "
+                "does not survive the command"
+            )
+
+        output += (
+            f"\n\n... (truncated at {result.max_output_chars} "
+            f"{_plural(result.max_output_chars, 'character')} per stream; "
+            f"{remedy})"
+        )
 
     if result.exit_code is not None and result.exit_code != 0:
         return f"Command failed (exit code {result.exit_code}):\n{output}"
 
-    return str(output)
-
-
-class UnknownEnvironment(pydantic_ai.ModelRetry):
-    def __init__(self, name, choices):
-        self.name = name
-        self.choices = choices
-        c_list = ", ".join(repr(name) for name in choices)
-        super().__init__(
-            f"{name!r} is not an available sandbox environment. "
-            "Environment names cannot be guessed or copied from examples: "
-            "call 'list_environments' and pass one of the names it returns. "
-            f"Available environments: {c_list}."
-        )
-
-
-class NoEnvironmentsConfigured(pydantic_ai.ToolFailed):
-    def __init__(self, name):
-        self.name = name
-        super().__init__(
-            f"{name!r} is not an available sandbox environment, "
-            "and this room has none configured. "
-            "Tell the user the sandbox skill is not configured."
-        )
-
-
-# 'check_environment_name' rejections refuse the call rather than
-# failing the sandbox, so they audit as 'denied'.
-ENVIRONMENT_DENIALS = (UnknownEnvironment, NoEnvironmentsConfigured)
-
-
-async def check_environment_name(
-    *,
-    bwrap_sandbox: bs_sandbox.BwrapSandbox,
-    environment_name: str | None,
-    allowed_environments: AllowedEnvironments = None,
-) -> None:
-    """Reject an 'environment_name' the model invented, before anything runs.
-
-    Guards 'run' / 'run_python' against a name the model guessed rather than
-    read from a 'list_environments' result. Without it, an unknown name
-    aborts the whole agent run, and a name which exists but is *not* in
-    'allowed_environments' runs anyway -- 'allowed_environments' otherwise
-    only filters what 'list_environments' reports.
-
-    The two failures differ in whether the model can do anything about them,
-    so they are reported differently. A name outside the choices is fixable
-    by calling 'list_environments' and passing one of them, which is what
-    'ModelRetry' asks for (and matches how 'pydantic_ai' itself reports an
-    unknown *tool* name). A room with no environments at all is the
-    operator's to fix: 'ToolFailed' shows the model a failed call to report
-    rather than one to retry, and spends none of the tool's retry budget.
-
-    'None' passes through unchecked: it selects the environment the skill was
-    configured with, which is the operator's choice rather than the model's.
-    """
-    if environment_name is None:
-        return
-
-    available = [
-        env.name
-        for env in await skill_list_environments(
-            bwrap_sandbox=bwrap_sandbox,
-            allowed_environments=allowed_environments,
-        )
-    ]
-
-    if environment_name in available:
-        return
-
-    if not available:
-        raise NoEnvironmentsConfigured(name=environment_name)
-
-    raise UnknownEnvironment(
-        name=environment_name,
-        choices=available,
-    )
-
-
-def _environment_label(environment_name):
-    """Name the environment a run asked for, without leaking host paths.
-
-    'bubble_sandbox' builds its messages from the resolved filesystem path
-    ("Environment not found: PosixPath('/app/sandbox/environments/...')"),
-    which is meaningless inside the sandbox and not something to put in
-    front of the model. The requested name says the same thing.
-    """
-    if environment_name is None:
-        return "the environment this room uses by default"
-    return f"the {environment_name!r} environment"
-
-
-class EnvironmentMissing(pydantic_ai.ToolFailed):
-    def __init__(self, environment_name):
-        self.environment_name = environment_name
-        super().__init__(
-            f"The sandbox cannot run: {_environment_label(environment_name)} "
-            "is not installed on this server. Report this to the user as a "
-            "sandbox configuration problem; retrying will not fix it."
-        )
-
-
-class EnvironmentNotBuilt(pydantic_ai.ToolFailed):
-    def __init__(self, environment_name):
-        self.environment_name = environment_name
-        super().__init__(
-            f"The sandbox cannot run: {_environment_label(environment_name)} "
-            "is installed but its Python virtualenv is missing. Report this "
-            "to the user as a sandbox configuration problem; retrying will "
-            "not fix it."
-        )
-
-
-class EnvironmentNameInvalid(pydantic_ai.ToolFailed):
-    def __init__(self, environment_name):
-        self.environment_name = environment_name
-        super().__init__(
-            f"The sandbox cannot run: {_environment_label(environment_name)} "
-            "is not a usable environment name. Report this to the user as a "
-            "sandbox configuration problem; retrying will not fix it."
-        )
+    return output
 
 
 class SandboxUnavailable(pydantic_ai.ToolFailed):
-    def __init__(self, environment_name, reason):
-        self.environment_name = environment_name
+    """The sandbox could not be started, for a reason only an operator
+    can fix."""
+
+    def __init__(self, environment, reason):
+        self.environment = environment
         self.reason = reason
         super().__init__(
-            "The sandbox could not be started in "
-            f"{_environment_label(environment_name)}: {reason}. Report this "
-            "to the user; retrying will not fix it."
+            f"The sandbox could not be started in the {environment!r} "
+            f"environment: {reason}. Report this to the user as a sandbox "
+            "configuration problem; retrying will not fix it."
         )
 
 
-# 'bubble_sandbox' reports a bad environment name with 'ValueError' and
-# 'FileNotFoundError' subclasses, not 'RuntimeError'; letting one escape
-# aborts the agent run (soliplex#1306) instead of handing the model an
-# error it can act on.
+class WorkspacePathBlocked(pydantic_ai.ModelRetry):
+    def __init__(self, path):
+        self.path = path
+        super().__init__(
+            f"'{SANDBOX_WORKDIR_PATH}/{path}' could not be written: "
+            "something in the workspace is in the way. Remove it with "
+            "'run', then try again."
+        )
+
+
+# Anything 'bubble_sandbox' raises that the model should see as a
+# failed call rather than an aborted run.
 EXECUTION_ERRORS = (
     RuntimeError,
     OSError,
     bs_config.InvalidEnvironmentName,
+    bs_sandbox.InvalidScriptPath,
+)
+
+
+# 'bubble_sandbox' reports these against a host path, which means nothing
+# inside the sandbox.
+_EXECUTION_ERROR_REASONS = (
+    (bs_config.EnvironmentNotFound, "it is not installed on this server"),
+    (
+        bs_config.EnvironmentNotInitialized,
+        "its Python virtualenv is missing",
+    ),
+    (bs_config.InvalidEnvironmentName, "its name is not usable"),
 )
 
 
 def translate_execution_error(exc, *, environment_name):
-    """Return the error the model should see for a failed sandbox start.
+    """Return the error the model should see for a failed sandbox start."""
+    if isinstance(exc, bs_sandbox.InvalidScriptPath):
+        return WorkspacePathBlocked(exc.script_path)
 
-    Every case here is the operator's to fix rather than the model's --
-    'check_environment_name' has already rejected any name the model could
-    have chosen differently -- so each maps to a 'ToolFailed' subclass: the
-    model sees a failed call to report, spends none of the tool's retry
-    budget, and is told plainly that retrying will not help.
-    """
-    if isinstance(exc, bs_config.EnvironmentNotFound):
-        return EnvironmentMissing(environment_name)
-
-    if isinstance(exc, bs_config.EnvironmentNotInitialized):
-        return EnvironmentNotBuilt(environment_name)
-
-    if isinstance(exc, bs_config.InvalidEnvironmentName):
-        return EnvironmentNameInvalid(environment_name)
+    for klass, reason in _EXECUTION_ERROR_REASONS:
+        if isinstance(exc, klass):
+            return SandboxUnavailable(environment_name, reason)
 
     return SandboxUnavailable(environment_name, str(exc))
 
@@ -247,77 +174,19 @@ def translate_execution_error(exc, *, environment_name):
 RUN_DESCRIPTION = f"""\
 Run a shell command inside the bubblewrap sandbox.
 
-IMPORTANT: Prefer the ``run_python`` tool for anything that parses, \
-filters, or aggregates data. Use this tool for quick inspection of an \
-input file -- checking its size, type, or first few lines before \
-writing a script against it.
+Prefer ``run_python`` for anything that parses, filters, or aggregates \
+data.  Use this to inspect an input before writing a script against it.
 
-## Usage
-- To run a command needing shell features (pipes, redirection, ``&&``), \
-pass ``command`` as a single string; it is run via "sh -c".
-- Otherwise pass ``command`` as a list of strings: the executable name \
-or path first, then one element per argument. This form needs no \
-quoting and is the safer default.
-- ``environment_name`` selects the environment to run in. Pass only a \
-``name`` that ``list_environments`` returned in this conversation -- \
-never a guessed name, a package name, or a name copied from an example. \
-Omit it to use the configured default.
-- ``timeout`` caps the run in seconds; omit it to use the configured \
-default.
-- Paths must be absolute and sandbox-visible: read inputs from \
-'{SANDBOX_VOLUMES_PATH}/thread/' or '{SANDBOX_VOLUMES_PATH}/room/', \
-and write only under '{SANDBOX_WORKDIR_PATH}'. Host paths do not exist \
-inside the sandbox.
-- Quote any path containing spaces when using the string form.
-- When running several independent commands, make separate ``run`` \
-calls in a single response (parallel execution).
-
-## Debugging
-- Read the FULL error output when a command fails -- the root cause is \
-often in the middle of a traceback, not the last line.
-- Change one thing at a time; do not make multiple speculative fixes.
-- If the same approach fails 3 times, STOP and report the error rather \
-than retrying.
+- Pass ``command`` as a single string to get shell features (pipes, \
+redirection, ``&&``); it runs via "sh -c", and paths with spaces need \
+quoting.
+- Pass it as a list of strings -- executable first, then one element per \
+argument -- to avoid quoting altogether.
+- Paths are absolute and sandbox-visible: inputs under \
+'{SANDBOX_VOLUMES_PATH}/', writes under '{SANDBOX_WORKDIR_PATH}'.  Host \
+paths do not exist inside the sandbox.
+- Independent commands can go in separate ``run`` calls in one response.
 """
-
-
-LIST_VOLUME_FILES_DESCRIPTION = f"""\
-Return the sandbox paths of the files in a sandbox volume.
-
-Each entry is an absolute path as seen from inside the sandbox (for \
-example '{SANDBOX_VOLUMES_PATH}/thread/orders.csv'), so it can be passed \
-straight to the ``run`` and ``run_python`` tools. Returns an empty \
-list when the volume holds no files or is not configured.
-"""
-
-
-async def skill_list_volume_files(
-    *,
-    volume: VolumeName,
-    room_upload_path: pathlib.Path | None,
-    thread_upload_path: pathlib.Path | None,
-) -> list[str]:
-
-    def _list_volume_files(volume_path: pathlib.Path | None) -> list[str]:
-        if volume_path is None:
-            return []
-
-        # Report the path the sandbox sees, not the host path: the volume
-        # is bind-mounted at '{SANDBOX_VOLUMES_PATH}/<volume>', so the host
-        # path is both meaningless inside the sandbox and not something
-        # to leak into the prompt.
-        return [
-            f"{SANDBOX_VOLUMES_PATH}/{volume}/{sub.name}"
-            for sub in sorted(volume_path.glob("*"))
-            if sub.is_file()
-        ]
-
-    if volume == "thread":
-        return _list_volume_files(thread_upload_path)
-    elif volume == "room":
-        return _list_volume_files(room_upload_path)
-    else:
-        return []
 
 
 async def skill_run(
@@ -360,39 +229,17 @@ async def skill_run(
 
 
 RUN_PYTHON_DESCRIPTION = f"""\
-Execute a Python script in the sandbox environment.
+Execute a Python script inside the bubblewrap sandbox.
 
-IMPORTANT: The ``script`` parameter must be valid Python source code. \
-Do NOT pass shell commands — use the ``run`` tool for those.
+``script`` is Python source, not a shell command; use ``run`` for those.
 
-## Usage
-- Pass a complete, self-contained Python script as the ``script`` string.
-- The script runs via the Python interpreter built into the chosen \
-environment, with access to its pre-installed packages.
-- Call ``list_environments`` first to discover available environments \
-and their installed packages. ``environment_name`` must be one of the \
-``name`` values it returned -- never a guessed name, a package name, or \
-a name copied from an example. Omit it to use the configured default.
-- ``timeout`` caps the run in seconds; omit it to use the configured \
-default.
-- Print results to stdout — the output is captured and returned.
-- Use absolute paths (e.g. ``{SANDBOX_WORKDIR_PATH}/data.csv``) when \
-reading or writing files.
-- Inputs under '{SANDBOX_VOLUMES_PATH}/thread/' and \
-'{SANDBOX_VOLUMES_PATH}/room/' are read-only; write only under \
-'{SANDBOX_WORKDIR_PATH}'. Host paths do not exist inside the sandbox.
-
-## Debugging
-- Read the FULL error output when a script fails — the root cause is \
-often in the middle of a traceback, not the last line.
-- Fix one thing at a time — don't make multiple speculative fixes.
-- If something fails 3 times with the same approach, STOP and try a \
-completely different strategy.
-
-## Safety
-- Be careful not to introduce command injection vulnerabilities.
-- Be careful with destructive commands (`rm -rf`, `drop table`, etc.) — \
-verify the target path/object before executing.
+- Pass a complete, self-contained script as one string.
+- It runs under the Python this room configures, with that \
+environment's packages.
+- Print results to stdout.  Both streams are captured and returned.
+- Paths are absolute and sandbox-visible: inputs under \
+'{SANDBOX_VOLUMES_PATH}/', writes under '{SANDBOX_WORKDIR_PATH}'.  Host \
+paths do not exist inside the sandbox.
 """
 
 
@@ -402,6 +249,7 @@ async def skill_run_python(
     script: str,
     environment_name: str | None = None,
     workdir: pathlib.Path | None = None,
+    script_path: str = bs_sandbox.DEFAULT_SCRIPT_PATH,
     timeout: float | None = None,  # seconds
     extra_volumes: bs_models.VolumeMap = None,
 ) -> bs_models.ExecuteResult:
@@ -420,6 +268,7 @@ async def skill_run_python(
             script=script,
             environment_name=environment_name,
             workdir=workdir,
+            script_path=script_path,
             timeout=timeout,
             extra_volumes=extra_volumes,
         )
@@ -466,17 +315,16 @@ def get_workdir(
     workdirs_path: pathlib.Path | None,
     room_id: str | None,
     thread_id: str | None,
-    run_id: str | None,
 ):
+    """Return the thread's sandbox workspace, creating it if need be."""
     if (
         workdirs_path is not None
         and room_id is not None
         and thread_id is not None
-        and run_id is not None
     ):
         workdir = _check_subdirs(
             workdirs_path,
-            [room_id, str(thread_id), str(run_id)],
+            [room_id, str(thread_id)],
         )
         workdir.mkdir(parents=True, exist_ok=True)
         return workdir
@@ -523,19 +371,29 @@ def get_extra_volumes(
     return result
 
 
+# Below the workspace root, which the download endpoint does not serve.
+EXECUTIONS_SUBDIR = ".soliplex/executions"
+
+
+def script_snapshot_path(run_id: str, call_id: uuid.UUID) -> str:
+    """Return the workspace path 'run_python' keeps its source at."""
+    return f"{EXECUTIONS_SUBDIR}/script-{run_id}-{call_id}.py"
+
+
 def write_transcript(
     transcripts_path: pathlib.Path | None,
     room_id: str | None,
     thread_id: str | None,
     run_id: str | None,
     *,
+    call_id: uuid.UUID,
     content: str,
     suffix: str,
 ) -> str | None:
     """Save a command / script transcript for auditing; return its host path.
 
-    Written under '<transcripts_path>/<room_id>/<thread_id>/<run_id>/' with a
-    UUID-based filename and owner-only ('0600') permissions. This directory is
+    Written under '<transcripts_path>/<room_id>/<thread_id>/<run_id>/' named
+    for 'call_id', with owner-only ('0600') permissions. This directory is
     never mounted into the sandbox, so executed code cannot read or tamper
     with the saved transcript. Returns 'None' (writing nothing) when no
     'transcripts_path' is configured.
@@ -551,7 +409,7 @@ def write_transcript(
             [room_id, str(thread_id), str(run_id)],
         )
         run_dir.mkdir(parents=True, exist_ok=True)
-        target = run_dir / f"{uuid.uuid4()}{suffix}"
+        target = run_dir / f"{call_id}{suffix}"
         target.write_text(content, encoding="utf-8")
         target.chmod(0o600)
 
@@ -560,14 +418,353 @@ def write_transcript(
         return None
 
 
+class UnreadablePath(pydantic_ai.ModelRetry):
+    def __init__(self, path, reason):
+        self.path = path
+        self.reason = reason
+        super().__init__(
+            f"Cannot read {path!r}: {reason}. Check the path with 'run', "
+            "for example 'ls'."
+        )
+
+
+class ImageTooLarge(pydantic_ai.ToolFailed):
+    def __init__(self, path, size, limit, *, persistent: bool = True):
+        self.path = path
+        self.size = size
+        self.limit = limit
+
+        if persistent:
+            remedy = (
+                "Write a smaller copy under "
+                f"'{SANDBOX_WORKDIR_PATH}' and read that instead."
+            )
+        else:
+            remedy = (
+                "This room keeps no workspace between commands, so it "
+                "cannot be resized and read back; tell the user."
+            )
+
+        super().__init__(
+            f"{path!r} is {size} bytes, over the {limit}-byte limit for an "
+            f"image. {remedy}"
+        )
+
+
+# One vision placeholder is rendered per 'BinaryContent', so a format the
+# server cannot decode would leave the model's processor counting one more
+# image than it was sent.
+IMAGE_MEDIA_TYPES = {
+    "PNG": "image/png",
+    "JPEG": "image/jpeg",
+    "WEBP": "image/webp",
+    "GIF": "image/gif",
+}
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+
+
+class NotAnImage(pydantic_ai.ToolFailed):
+    def __init__(self, path, reason):
+        self.path = path
+        self.reason = reason
+        super().__init__(
+            f"{path!r} is not an image this room can show: {reason}. "
+            f"Supported formats: {', '.join(sorted(IMAGE_MEDIA_TYPES))}."
+        )
+
+
+def decode_image(path: str, data: bytes) -> ai_messages.BinaryContent:
+    """Return 'data' as image content, or raise if it is not one."""
+    try:
+        # 'formats' keeps every other decoder plugin from being handed
+        # these bytes at all, rather than judging what one returned.
+        with PIL_Image.open(
+            io.BytesIO(data),
+            formats=tuple(IMAGE_MEDIA_TYPES),
+        ) as image:
+            image.verify()
+            image_format = image.format
+    except Exception as exc:
+        raise NotAnImage(path, "it could not be decoded") from exc
+
+    return ai_messages.BinaryContent(
+        data=data,
+        media_type=IMAGE_MEDIA_TYPES[image_format],
+    )
+
+
+def image_label(path: str) -> str:
+    """Introduce an image so the model does not read it as the user's.
+
+    ``ToolReturn.content`` reaches the model as a user-role message, where
+    an unlabelled image is indistinguishable from an attachment.  The
+    label says how the image arrived, not who it came from: a thread
+    volume holds the user's own uploads.
+    """
+    return (
+        f"Returned by the read_image tool at your request, from {path} in "
+        "the sandbox. This is tool output, not a new user message."
+    )
+
+
+def _relative_parts(base: pathlib.Path, path: str) -> tuple[str, ...]:
+    pure = pathlib.PurePosixPath(path)
+
+    if pure.is_absolute():
+        try:
+            pure = pure.relative_to(pathlib.PurePosixPath(base))
+        except ValueError:
+            raise UnreadablePath(path, f"it is not under {base}") from None
+
+    parts = tuple(part for part in pure.parts if part != ".")
+
+    if not parts or ".." in parts:
+        raise UnreadablePath(path, "it does not name a file in the sandbox")
+
+    return parts
+
+
+def read_beneath(
+    root: pathlib.Path,
+    path: str,
+    limit: int,
+    *,
+    persistent: bool = True,
+) -> bytes:
+    """Read 'path' under 'root', opening no component through a symlink.
+
+    Sandboxed code owns everything below 'root', so each component is
+    opened relative to the last with 'O_NOFOLLOW': a symlink anywhere
+    along the way fails the read rather than redirecting it.
+    """
+    parts = _relative_parts(root, path)
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+
+    try:
+        dir_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    except OSError:
+        raise UnreadablePath(path, "the workspace is not readable") from None
+
+    opened = [dir_fd]
+
+    try:
+        for part in parts[:-1]:
+            try:
+                dir_fd = os.open(part, flags | os.O_DIRECTORY, dir_fd=dir_fd)
+            except OSError:
+                raise UnreadablePath(
+                    path, f"{part!r} is not a directory in the sandbox"
+                ) from None
+
+            opened.append(dir_fd)
+
+        try:
+            fd = os.open(parts[-1], flags, dir_fd=dir_fd)
+        except OSError:
+            raise UnreadablePath(path, "there is no such file") from None
+
+        opened.append(fd)
+
+        stat_result = os.fstat(fd)
+
+        if not stat.S_ISREG(stat_result.st_mode):
+            raise UnreadablePath(path, "it is not a regular file")
+
+        if stat_result.st_size > limit:
+            raise ImageTooLarge(
+                path,
+                stat_result.st_size,
+                limit,
+                persistent=persistent,
+            )
+
+        with open(fd, "rb", closefd=False) as handle:
+            return handle.read(limit)
+    finally:
+        for fd in opened:
+            os.close(fd)
+
+
+WORKDIR_VOLUME_NAME = "work"
+
+
+def resolve_sandbox_path(
+    path: str,
+    *,
+    workdir: pathlib.Path | None,
+    volumes: bs_models.VolumeMap,
+) -> tuple[pathlib.Path, str]:
+    """Map a sandbox path to its host root and the part below it."""
+    pure = pathlib.PurePosixPath(path)
+    workdir_root = pathlib.PurePosixPath(SANDBOX_WORKDIR_PATH)
+    volumes_root = pathlib.PurePosixPath(SANDBOX_VOLUMES_PATH)
+
+    if pure.is_relative_to(workdir_root):
+        if workdir is None:
+            raise UnreadablePath(path, "this room keeps no workspace")
+
+        rest = pure.relative_to(workdir_root).parts
+
+        if rest:
+            return workdir, str(pathlib.PurePosixPath(*rest))
+
+    elif pure.is_relative_to(volumes_root):
+        rest = pure.relative_to(volumes_root).parts
+
+        if len(rest) > 1:
+            volume = volumes.get(rest[0])
+
+            if volume is not None and volume.host_path is not None:
+                return volume.host_path, str(pathlib.PurePosixPath(*rest[1:]))
+
+    raise UnreadablePath(path, "it does not name a file in the sandbox")
+
+
+READ_IMAGE_DESCRIPTION = f"""\
+Read an image from the sandbox so you can look at it.
+
+``ls`` and ``cat`` return text, so this is the only way to see a chart \
+the sandbox drew or a picture it was given.
+
+- ``path`` is an absolute sandbox path, under '{SANDBOX_WORKDIR_PATH}' or \
+'{SANDBOX_VOLUMES_PATH}/'.
+- Use it when the picture is what you need to answer.  An image the user \
+asked for, and will download, does not need reading back.
+"""
+
+
+def effective_volumes(
+    static: bs_models.VolumeMap | None,
+    runtime: bs_models.VolumeMap | None,
+) -> bs_models.VolumeMap:
+    """Return the volume map the sandbox will mount, runtime over static."""
+    return (static or {}) | (runtime or {})
+
+
+def _downloadable_count(directory: pathlib.Path | None) -> int:
+    """Count what the workdir endpoint serves: top-level regular files."""
+    if directory is None or not directory.is_dir():
+        return 0
+
+    return sum(
+        1
+        for entry in directory.glob("*")
+        if not entry.is_symlink() and entry.is_file()
+    )
+
+
+def _file_count(volume: bs_models.VolumeInfo) -> int:
+    return _downloadable_count(volume.host_path)
+
+
+def _count_phrase(count: int) -> str:
+    if not count:
+        return "empty"
+
+    return f"{count} file" if count == 1 else f"{count} files"
+
+
+def _dependency_names(dependencies: list[str]) -> list[str]:
+    """Return the project name of each requirement string."""
+    names = []
+
+    for dependency in dependencies:
+        try:
+            names.append(packaging_requirements.Requirement(dependency).name)
+        except packaging_requirements.InvalidRequirement:
+            names.append(dependency)
+
+    return names
+
+
+@contextlib.contextmanager
+def workspace(
+    workdirs_path: pathlib.Path | None,
+    room_id: str | None,
+    thread_id: str | None,
+):
+    """Yield the directory to mount read-write, and whether it survives.
+
+    Without 'workdirs_path' the call gets a temporary directory, discarded
+    when it returns.
+    """
+    workdir = get_workdir(workdirs_path, room_id, thread_id)
+
+    if workdir is not None:
+        yield workdir, True
+        return
+
+    with tempfile.TemporaryDirectory(
+        ignore_cleanup_errors=True,
+    ) as temporary:
+        yield pathlib.Path(temporary), False
+
+
+def render_mount_table(
+    *,
+    workdir: pathlib.Path | None,
+    persistent: bool = True,
+    volumes: bs_models.VolumeMap,
+    dependencies: list[str],
+) -> str:
+    """Return the per-request description of what the sandbox mounts."""
+    if persistent:
+        workdir_note = (
+            f"{_count_phrase(_downloadable_count(workdir))}, "
+            "kept for this thread"
+        )
+    else:
+        workdir_note = "discarded after each command"
+
+    rows = [(SANDBOX_WORKDIR_PATH, "read-write", workdir_note)]
+    rows.extend(
+        (
+            f"{SANDBOX_VOLUMES_PATH}/{name}",
+            "read-write" if volume.writable else "read-only",
+            _count_phrase(_file_count(volume)),
+        )
+        for name, volume in sorted(volumes.items())
+    )
+
+    width = max(len(path) for path, _, _ in rows)
+    table = "\n".join(
+        f"  {path:<{width}}  {access:<10}  {note}"
+        for path, access, note in rows
+    )
+
+    if persistent:
+        preamble = (
+            "Sandbox: no network. Files you write at the top level of "
+            f"{SANDBOX_WORKDIR_PATH} are downloadable by the user -- name "
+            "the file when you write one. Files from earlier turns are "
+            "still there; do not assume they are current, and do not "
+            "delete or overwrite them unless the task calls for it."
+        )
+    else:
+        preamble = (
+            f"Sandbox: no network. {SANDBOX_WORKDIR_PATH} is discarded "
+            "when each command ends, so nothing written there survives "
+            "into the next one, and the user cannot fetch it. Report "
+            "everything that matters in your reply."
+        )
+
+    lines = [preamble, "", table]
+
+    names = _dependency_names(dependencies)
+    if names:
+        lines.extend(["", f"Python packages: {', '.join(names)}"])
+
+    return "\n".join(lines)
+
+
 def create_sandbox_toolset(
     *,
     id: str | None = None,
-    default_environment: str = "bare",
-    allowed_environments: AllowedEnvironments = None,
+    environment: str = "bare",
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
+    multimodal: bool = False,
     installation_config: config_installation.InstallationConfig | None = None,
 ) -> ai_toolests.FunctionToolset:
     """Create a sandbox toolset for shell / script execution.
@@ -578,7 +775,8 @@ def create_sandbox_toolset(
     Args:
         id: Optional unique ID for the toolset.
 
-        default_environment: name of default configured environment
+        environment: name of the configured environment every execution
+            runs in.  The model does not choose it.
 
         sandbox_config: bubble_sandbox configuration
 
@@ -590,8 +788,8 @@ def create_sandbox_toolset(
             up to this many times. Defaults to 1.
 
     Returns:
-        FunctionToolset with these tools:
-        'list_environments, 'list_volume_files', 'run' and 'run_python'.
+        FunctionToolset with 'run' and 'run_python', plus 'read_image'
+        when 'multimodal' says the room's model accepts images.
     """
     if sandbox_config is None:
         sandbox_config = bs_config.Config()
@@ -615,190 +813,159 @@ def create_sandbox_toolset(
         volumes = {}
 
     bwrap_sandbox = bs_sandbox.BwrapSandbox(
-        default_environment=default_environment,
+        default_environment=environment,
         config=sandbox_config,
         volumes=volumes,
     )
 
     toolset = ai_toolests.FunctionToolset(id=id, max_retries=max_retries)
 
-    @toolset.tool(description=LIST_ENVIRONMENTS_DESCRIPTION)
-    async def list_environments(
-        ctx: pydantic_ai.RunContext,
-    ) -> list[bs_models.EnvironmentInfo]:
-        return await skill_list_environments(
-            bwrap_sandbox=bwrap_sandbox,
-            allowed_environments=allowed_environments,
-        )
-
-    @toolset.tool(description=LIST_VOLUME_FILES_DESCRIPTION)
-    async def list_volume_files(
-        ctx: pydantic_ai.RunContext,
-        volume: VolumeName,
-    ) -> list[str]:
+    async def _execute(ctx, *, action, content, suffix, run_in):
         deps = ctx.deps
 
-        with sandbox_audit.audit_sandbox_list(deps, volume=volume) as access:
-            if installation_config is None:
-                found = []
+        with (
+            sandbox_audit.audit_sandbox_exec(
+                deps,
+                action=action,
+                environment=environment,
+            ) as access,
+            workspace(
+                workdirs_path,
+                deps.room_id,
+                deps.thread_id,
+            ) as (workdir, persistent),
+        ):
+            access.record_workdir(workdir)
 
-            else:
-                room_id = deps.room_id
-                thread_id = deps.thread_id
+            extra_volumes = get_extra_volumes(
+                rooms_upload_path,
+                threads_upload_path,
+                deps.room_id,
+                deps.thread_id,
+            )
 
-                found = await skill_list_volume_files(
-                    volume=volume,
-                    room_upload_path=(
-                        _check_subdirs(rooms_upload_path, [room_id])
-                        if (
-                            rooms_upload_path is not None
-                            and room_id is not None
-                        )
-                        else None
-                    ),
-                    thread_upload_path=(
-                        _check_subdirs(threads_upload_path, [thread_id])
-                        if (
-                            threads_upload_path is not None
-                            and thread_id is not None
-                        )
-                        else None
-                    ),
-                )
+            call_id = uuid.uuid4()
 
-            # The count, never the names: the record says a disclosure
-            # happened and how big it was.
-            access.record_count(len(found))
+            ref = write_transcript(
+                transcripts_path,
+                deps.room_id,
+                deps.thread_id,
+                deps.run_id,
+                call_id=call_id,
+                content=content,
+                suffix=suffix,
+            )
+            if ref is not None:
+                access.record_ref(ref)
 
-            return found
+            result = await run_in(
+                workdir=workdir,
+                extra_volumes=extra_volumes,
+                call_id=call_id,
+            )
+            access.record_result(result)
+
+            return format_execute_result(result, persistent=persistent)
 
     @toolset.tool(description=RUN_DESCRIPTION)
     async def run(
         ctx: pydantic_ai.RunContext,
         command: str | list[str],
-        environment_name: str | None = None,
-        timeout: float | None = None,  # seconds
     ) -> str:
-        deps = ctx.deps
-
-        with sandbox_audit.audit_sandbox_exec(
-            deps,
-            action=loggers.AUDIT_SANDBOX_ACTION_RUN,
-            environment=environment_name,
-            denied_exceptions=ENVIRONMENT_DENIALS,
-        ) as access:
-            # Inside the audit context, and ahead of 'get_workdir': a
-            # refused call leaves a record, and creates no working
-            # directory to name in it.
-            await check_environment_name(
-                bwrap_sandbox=bwrap_sandbox,
-                environment_name=environment_name,
-                allowed_environments=allowed_environments,
-            )
-
-            workdir = get_workdir(
-                workdirs_path,
-                deps.room_id,
-                deps.thread_id,
-                deps.run_id,
-            )
-            access.record_workdir(workdir)
-
-            extra_volumes = get_extra_volumes(
-                rooms_upload_path,
-                threads_upload_path,
-                deps.room_id,
-                deps.thread_id,
-            )
-
-            ref = write_transcript(
-                transcripts_path,
-                deps.room_id,
-                deps.thread_id,
-                deps.run_id,
-                content=(
-                    command
-                    if isinstance(command, str)
-                    else json.dumps(command)
-                ),
-                suffix=".txt",
-            )
-            if ref is not None:
-                access.record_ref(ref)
-
-            result = await skill_run(
+        async def run_in(*, workdir, extra_volumes, call_id):
+            return await skill_run(
                 bwrap_sandbox=bwrap_sandbox,
                 command=command,
-                environment_name=environment_name,
+                environment_name=environment,
                 workdir=workdir,
-                timeout=timeout,
                 extra_volumes=extra_volumes,
             )
-            access.record_exit_code(result.exit_code)
 
-            return format_execute_result(result)
+        return await _execute(
+            ctx,
+            action=loggers.AUDIT_SANDBOX_ACTION_RUN,
+            content=(
+                command if isinstance(command, str) else json.dumps(command)
+            ),
+            suffix=".txt",
+            run_in=run_in,
+        )
 
     @toolset.tool(description=RUN_PYTHON_DESCRIPTION)
     async def run_python(
         ctx: pydantic_ai.RunContext,
         script: str,
-        environment_name: str | None = None,
-        timeout: float | None = None,  # seconds
     ) -> str:
-        deps = ctx.deps
+        run_id = ctx.deps.run_id
 
-        with sandbox_audit.audit_sandbox_exec(
-            deps,
-            action=loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
-            environment=environment_name,
-            denied_exceptions=ENVIRONMENT_DENIALS,
-        ) as access:
-            # Inside the audit context, and ahead of 'get_workdir': a
-            # refused call leaves a record, and creates no working
-            # directory to name in it.
-            await check_environment_name(
-                bwrap_sandbox=bwrap_sandbox,
-                environment_name=environment_name,
-                allowed_environments=allowed_environments,
-            )
-
-            workdir = get_workdir(
-                workdirs_path,
-                deps.room_id,
-                deps.thread_id,
-                deps.run_id,
-            )
-            access.record_workdir(workdir)
-
-            extra_volumes = get_extra_volumes(
-                rooms_upload_path,
-                threads_upload_path,
-                deps.room_id,
-                deps.thread_id,
-            )
-
-            ref = write_transcript(
-                transcripts_path,
-                deps.room_id,
-                deps.thread_id,
-                deps.run_id,
-                content=script,
-                suffix=".py",
-            )
-            if ref is not None:
-                access.record_ref(ref)
-
-            result = await skill_run_python(
+        async def run_in(*, workdir, extra_volumes, call_id):
+            return await skill_run_python(
                 bwrap_sandbox=bwrap_sandbox,
                 script=script,
-                environment_name=environment_name,
+                environment_name=environment,
                 workdir=workdir,
-                timeout=timeout,
+                script_path=script_snapshot_path(run_id, call_id),
                 extra_volumes=extra_volumes,
             )
-            access.record_exit_code(result.exit_code)
 
-            return format_execute_result(result)
+        return await _execute(
+            ctx,
+            action=loggers.AUDIT_SANDBOX_ACTION_RUN_PYTHON,
+            content=script,
+            suffix=".py",
+            run_in=run_in,
+        )
+
+    if multimodal:
+
+        @toolset.tool(description=READ_IMAGE_DESCRIPTION)
+        async def read_image(
+            ctx: pydantic_ai.RunContext,
+            path: str,
+        ) -> ai_messages.ToolReturn:
+            deps = ctx.deps
+
+            with sandbox_audit.audit_sandbox_read_image(
+                deps, path=path
+            ) as access:
+                workdir = get_workdir(
+                    workdirs_path,
+                    deps.room_id,
+                    deps.thread_id,
+                )
+                mounted = effective_volumes(
+                    volumes,
+                    get_extra_volumes(
+                        rooms_upload_path,
+                        threads_upload_path,
+                        deps.room_id,
+                        deps.thread_id,
+                    ),
+                )
+                root, relative = resolve_sandbox_path(
+                    path,
+                    workdir=workdir,
+                    volumes=mounted,
+                )
+                volume_name = (
+                    WORKDIR_VOLUME_NAME
+                    if root == workdir
+                    else pathlib.PurePosixPath(path).parts[3]
+                )
+
+                data = read_beneath(
+                    root,
+                    relative,
+                    MAX_IMAGE_BYTES,
+                    persistent=workdir is not None,
+                )
+                content = decode_image(path, data)
+                access.record_image(volume_name, data, content.media_type)
+
+                return ai_messages.ToolReturn(
+                    return_value=f"Read {path}.",
+                    content=[image_label(path), content],
+                )
 
     return toolset
 
@@ -812,24 +979,75 @@ def _instructions() -> str:
 
 @dataclasses.dataclass
 class SandboxCapability(ai_capabilities.AbstractCapability[typing.Any]):
-    default_environment: str = "bare"
-    allowed_environments: AllowedEnvironments = None
+    environment: str = "bare"
     sandbox_config: bs_config.Config | None = None
     volumes: bs_models.VolumeMap | None = None
     max_retries: int = 1
+    multimodal: bool = False
     installation_config: typing.Any = None
 
-    def get_instructions(self) -> str:
-        return _instructions()
+    def get_instructions(self) -> list[typing.Any]:
+        return [_instructions(), self.runtime_instructions]
+
+    def _dependencies(self) -> list[str]:
+        sandbox_config = self.sandbox_config or bs_config.Config()
+        i_config = self.installation_config
+
+        if i_config is not None and i_config.sandbox_config is not None:
+            sandbox_config = sandbox_config.model_copy(
+                update={
+                    "environments_pathname": (
+                        i_config.sandbox_config.environments_path
+                    )
+                }
+            )
+
+        for info in sandbox_config.list_environments():
+            if info.name == self.environment:
+                return list(info.dependencies)
+
+        return []
+
+    async def runtime_instructions(self, ctx: pydantic_ai.RunContext) -> str:
+        deps = ctx.deps
+        i_config = self.installation_config
+
+        if i_config is None:
+            workdirs_path = rooms_upload_path = threads_upload_path = None
+        else:
+            workdirs_path = i_config.sandbox_config.workdirs_path
+            rooms_upload_path = i_config.rooms_upload_path
+            threads_upload_path = i_config.threads_upload_path
+
+        workdir = get_workdir(
+            workdirs_path,
+            deps.room_id,
+            deps.thread_id,
+        )
+
+        return render_mount_table(
+            workdir=workdir,
+            persistent=workdir is not None,
+            volumes=effective_volumes(
+                self.volumes,
+                get_extra_volumes(
+                    rooms_upload_path,
+                    threads_upload_path,
+                    deps.room_id,
+                    deps.thread_id,
+                ),
+            ),
+            dependencies=self._dependencies(),
+        )
 
     def get_toolset(self) -> ai_toolests.FunctionToolset:
         return create_sandbox_toolset(
             id=self.id,
-            default_environment=self.default_environment,
-            allowed_environments=self.allowed_environments,
+            environment=self.environment,
             sandbox_config=self.sandbox_config,
             volumes=self.volumes,
             max_retries=self.max_retries,
+            multimodal=self.multimodal,
             installation_config=self.installation_config,
         )
 
@@ -837,11 +1055,11 @@ class SandboxCapability(ai_capabilities.AbstractCapability[typing.Any]):
 def create_bwrap_sandbox_capability(
     id: str | None = None,
     *,
-    default_environment: str = "bare",
-    allowed_environments: AllowedEnvironments = None,
+    environment: str = "bare",
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
+    multimodal: bool = False,
     installation_config: config_installation.InstallationConfig | None = None,
     defer_loading: bool = False,
 ) -> SandboxCapability:
@@ -849,10 +1067,10 @@ def create_bwrap_sandbox_capability(
         id=id or SKILL_PROPERTIES.name,
         description=SKILL_PROPERTIES.description.strip(),
         defer_loading=defer_loading,
-        default_environment=default_environment,
-        allowed_environments=allowed_environments,
+        environment=environment,
         sandbox_config=sandbox_config,
         volumes=volumes,
         max_retries=max_retries,
+        multimodal=multimodal,
         installation_config=installation_config,
     )
