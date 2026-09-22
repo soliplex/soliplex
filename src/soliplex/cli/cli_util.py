@@ -7,6 +7,7 @@ import os
 import pathlib
 from logging import config as logging_config
 
+import sqlalchemy as sa
 import typer
 from rich import console
 from sqlalchemy.ext import asyncio as sqla_asyncio
@@ -34,6 +35,21 @@ CLI_LOG_CONFIG_OPTION = typer.Option(
         "output."
     ),
 )
+
+
+UNPARSEABLE_DBURI = "<unparseable DBURI>"
+
+
+def redacted_dburi(dburi: str) -> str:
+    """``dburi`` with its password masked, for printing.
+
+    A DBURI too malformed to parse is replaced wholesale, since its text
+    may still hold the password.
+    """
+    try:
+        return sa.engine.make_url(dburi).render_as_string(hide_password=True)
+    except sa.exc.ArgumentError:
+        return UNPARSEABLE_DBURI
 
 
 def installation_config_path(installation_path: pathlib.Path) -> pathlib.Path:

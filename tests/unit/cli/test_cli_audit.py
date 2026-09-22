@@ -2670,6 +2670,8 @@ _HEAD = "head-revision"
 
 _DB_STATES = cli_audit.alembic_migrations.DatabaseState
 
+_POLICY = config_installation.MigrationPolicy
+
 
 def _report(**kwargs):
     """A 'DatabaseReport' with the boilerplate filled in."""
@@ -2852,6 +2854,98 @@ def test__database_findings_reports_a_stamp_needing_a_downgrade():
         "newer: "
     )
     assert cli_util.AUTHZ not in found["databases"]
+
+
+@pytest.mark.parametrize(
+    "state, revision, policy, expected",
+    [
+        # With no policy the next writable open deals with both of these.
+        (_DB_STATES.STAMPED, "older", None, False),
+        (_DB_STATES.EMPTY, None, None, False),
+        # With one, nothing here will.
+        (_DB_STATES.STAMPED, "older", _POLICY.EXPLICIT, True),
+        (_DB_STATES.EMPTY, None, _POLICY.DISABLED, True),
+        # Nothing is owed at head, whatever the policy says.
+        (_DB_STATES.STAMPED, _HEAD, _POLICY.DISABLED, False),
+    ],
+)
+def test_database_report_migration_owed(state, revision, policy, expected):
+    report = _report(state=state, revision=revision, policy=policy)
+
+    assert report.migration_owed is expected
+
+
+@pytest.mark.parametrize(
+    "state, revision, policy, expected",
+    [
+        (
+            _DB_STATES.EMPTY,
+            None,
+            _POLICY.EXPLICIT,
+            "ERROR: not created; 'migration_policy' is 'explicit'",
+        ),
+        (
+            _DB_STATES.STAMPED,
+            "older",
+            _POLICY.DISABLED,
+            f"ERROR: behind head (older -> {_HEAD}); 'migration_policy' is",
+        ),
+    ],
+)
+def test__database_summary_under_a_policy(state, revision, policy, expected):
+    report = _report(state=state, revision=revision, policy=policy)
+
+    found = cli_audit._database_summary(report)
+
+    assert found.startswith(expected)
+
+
+def test__database_findings_reports_a_migration_the_policy_holds():
+    reports = {
+        cli_util.AGUI: _report(
+            name=cli_util.AGUI,
+            state=_DB_STATES.STAMPED,
+            revision="older",
+            policy=_POLICY.EXPLICIT,
+        ),
+        cli_util.AUTHZ: _report(state=_DB_STATES.STAMPED, revision=_HEAD),
+    }
+
+    found = cli_audit._database_findings(reports)
+
+    assert (
+        "soliplex-cli database upgrade"
+        in (found["databases"][cli_util.AGUI]["migration_owed"])
+    )
+    assert cli_util.AUTHZ not in found["databases"]
+
+
+@pytest.mark.parametrize(
+    "policy, migration_dburi, expected",
+    [
+        # Most deployments configure neither, and get no extra lines.
+        (None, None, []),
+        (
+            _POLICY.DISABLED,
+            None,
+            ["migration policy: disabled"],
+        ),
+        (
+            _POLICY.EXPLICIT,
+            "postgresql://owner:swordfish@db/authz",
+            [
+                "migration policy: explicit",
+                "migration dburi: postgresql://owner:***@db/authz",
+            ],
+        ),
+    ],
+)
+def test__database_config_lines(policy, migration_dburi, expected):
+    report = _report(policy=policy, migration_dburi=migration_dburi)
+
+    found = cli_audit._database_config_lines(report)
+
+    assert found == expected
 
 
 def test__database_reports_returns_the_cached_probe(ctx, the_installation):

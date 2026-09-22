@@ -199,6 +199,21 @@ def test__configure_cli_logging_noop_when_already_configured(
     assert audit_logger.propagate is saved_propagate
 
 
+def test_redacted_dburi_masks_the_password():
+    found = cli_util.redacted_dburi("postgresql://owner:swordfish@db/agui")
+
+    assert "swordfish" not in found
+    assert "owner" in found
+
+
+def test_redacted_dburi_refuses_an_unparseable_dburi():
+    # Nothing of it is shown: the text that would not parse may still hold
+    # the password this is here to keep off a terminal.
+    found = cli_util.redacted_dburi("postgres, but with a typo")
+
+    assert found == cli_util.UNPARSEABLE_DBURI
+
+
 def _installation_at(write_installation, *, ram=False, **stanzas):
     """An installation whose two databases are this test's own.
 

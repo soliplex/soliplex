@@ -557,6 +557,37 @@ def test_migration_policy_reads_the_authorization_fields():
     assert found is POLICY.DISABLED
 
 
+@pytest.mark.parametrize(
+    "database, attribute",
+    [
+        (AGUI, "thread_persistence_migration_dburi"),
+        (AUTHZ, "authorization_migration_dburi"),
+    ],
+)
+def test_configured_migration_dburi_when_one_is_configured(
+    database, attribute
+):
+    installation = _installation(**{attribute: "postgresql://owner@/db"})
+
+    found = alembic_migrations.configured_migration_dburi(
+        installation, database
+    )
+
+    assert found == "postgresql://owner@/db"
+
+
+@pytest.mark.parametrize("database", [AGUI, AUTHZ])
+def test_configured_migration_dburi_does_not_fall_back(database):
+    # Unlike 'migration_dburi', which stands the runtime URI in here.
+    installation = _installation()
+
+    found = alembic_migrations.configured_migration_dburi(
+        installation, database
+    )
+
+    assert found is None
+
+
 def test_migration_dburis_covers_both_databases():
     installation = _installation(
         authorization_migration_dburi="postgresql://owner@/authz",

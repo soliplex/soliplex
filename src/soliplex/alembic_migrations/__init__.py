@@ -395,6 +395,15 @@ def migration_dburi(installation, database: str) -> str:
     return getattr(installation, _SYNC_DBURI_FOR[database])
 
 
+def configured_migration_dburi(installation, database: str) -> str | None:
+    """The stanza's ``migration_dburi``, or ``None`` when it sets none.
+
+    Unlike :func:`migration_dburi`, this does not fall back to the runtime
+    URI: it answers whether a separate credential was configured.
+    """
+    return getattr(installation, _MIGRATION_DBURI_FOR[database])
+
+
 def migration_policy(installation, database: str):
     """The migration policy in force for ``database``.
 
