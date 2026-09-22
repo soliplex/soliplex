@@ -197,12 +197,27 @@ A value which is neither policy name is an error, reported when the policy
 is read.  Absence means automatic migration, so an unrecognized value must
 not fall through to it.
 
-**Not yet enforced at runtime.**  `soliplex-cli database` honors both
-values today.  The automatic migration on a writable open does not yet
-consult them: a server started against a database which is still behind
-head will try to migrate it with the runtime credential, and fail as it
-always did, rather than reporting that a migration is owed.  Migrate
-before starting it.
+### What a policy refuses
+
+Both values are enforced wherever soliplex would otherwise migrate on its
+own: the server's startup, and every `soliplex-cli` command which opens a
+database for writing.  The refusal names the remedy under `explicit`
+(`soliplex-cli database upgrade`) and deliberately names no command under
+`disabled`, where migrating belongs to another service entirely.
+
+A policy bites only when a migration is actually owed.  A database already
+at the revision this release expects starts normally under any policy,
+which is what lets a service configured `disabled` run against a current
+database without knowing or caring.
+
+One consequence is worth planning for: **a database under a policy does not
+get its schema built on first use.**  Ordinarily the first writable open
+creates the tables; under `explicit` or `disabled` it refuses instead, so a
+newly created database has to be initialized with
+`soliplex-cli database upgrade` before the server is started against it.
+Reading is unaffected -- `soliplex-cli audit databases` creates and migrates
+nothing, so it keeps working, and reporting that a migration is owed is
+exactly its job.
 
 ## Interpolation
 

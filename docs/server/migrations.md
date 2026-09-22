@@ -12,11 +12,15 @@ command has to be told which installation it is working on:
 ```
 
 The revision tree lives inside the `soliplex` package, at
-`src/soliplex/alembic_migrations/`, so it ships in the wheel: soliplex runs
-these revisions itself, on every writable open, which is how a database it
-creates ends up stamped. A deployment can therefore migrate from its own
-image, with no source checkout. `env.py` is a shim over
-`soliplex.alembic_migrations`, where that logic and its tests live.
+`src/soliplex/alembic_migrations/`, so it ships in the wheel.
+
+A deployment can therefore migrate from its own image, with no source
+checkout. `env.py` is a shim over `soliplex.alembic_migrations`, where
+that logic and its tests live.
+
+Unless a [`migration_policy`](../config/dburis.md#migrations) is configured
+otherwise, soliplex runs these revisions itself, on every writable open:
+this migration is how a database it creates ends up stamped.
 
 ## Migrating a deployment
 

@@ -26,6 +26,7 @@ from soliplex.config import installation as config_installation
 
 AGUI = alembic_migrations.AGUI
 AUTHZ = alembic_migrations.AUTHZ
+POLICY = config_installation.MigrationPolicy
 
 
 def _dburis(tmp_path: pathlib.Path) -> dict[str, str]:
@@ -215,12 +216,14 @@ def test_downgrade_offline_writes_one_sql_file_per_database(
 # --------------------------------------------------------------------------
 # ensure_current_connection: the core, on a connection the caller owns
 # --------------------------------------------------------------------------
-def _ensure_on(dburi, database, *, sole_writer=True):
+
+
+def _ensure_on(dburi, database, *, sole_writer=True, policy=None):
     engine = sa.create_engine(dburi)
     try:
         with engine.begin() as connection:
             alembic_migrations.ensure_current_connection(
-                connection, database, sole_writer=sole_writer
+                connection, database, sole_writer=sole_writer, policy=policy
             )
     finally:
         engine.dispose()
@@ -244,12 +247,17 @@ def test_ensure_current_connection_is_a_no_op_at_head(tmp_path):
     upgrade.assert_not_called()
 
 
-def test_ensure_current_connection_refuses_an_unstamped_database(tmp_path):
+@pytest.mark.parametrize("policy", [None, POLICY.EXPLICIT, POLICY.DISABLED])
+def test_ensure_current_connection_refuses_an_unstamped_database(
+    tmp_path, policy
+):
+    # Reported under every policy: which role may migrate is a separate
+    # question from a database whose history cannot be known.
     dburis = _dburis(tmp_path)
     _create_all_unstamped(dburis[AUTHZ], authz_schema.metadata)
 
     with pytest.raises(alembic_migrations.UnstampedDatabase) as exc_info:
-        _ensure_on(dburis[AUTHZ], AUTHZ)
+        _ensure_on(dburis[AUTHZ], AUTHZ, policy=policy)
 
     assert exc_info.value.names == (AUTHZ,)
     assert _revision(dburis[AUTHZ]) is None
@@ -276,18 +284,21 @@ def _stamp(dburi: str, revision: str) -> None:
 _FROM_THE_FUTURE = "ffffffffffff"
 
 
+@pytest.mark.parametrize("policy", [None, POLICY.EXPLICIT, POLICY.DISABLED])
 @pytest.mark.parametrize("sole_writer", [True, False])
 def test_ensure_current_connection_refuses_a_newer_stamp(
-    tmp_path, sole_writer
+    tmp_path, sole_writer, policy
 ):
-    # Rolling the code back without downgrading first: no number of
-    # stopped writers helps, so 'sole_writer' must not change the outcome.
+    # Rolling the code back without downgrading first: neither stopped
+    # writers nor a policy helps, so neither may change the outcome.
     dburis = _dburis(tmp_path)
     alembic_migrations.upgrade("head", dburis=dburis)
     _stamp(dburis[AUTHZ], _FROM_THE_FUTURE)
 
     with pytest.raises(alembic_migrations.DowngradeRequired) as exc_info:
-        _ensure_on(dburis[AUTHZ], AUTHZ, sole_writer=sole_writer)
+        _ensure_on(
+            dburis[AUTHZ], AUTHZ, sole_writer=sole_writer, policy=policy
+        )
 
     error = exc_info.value
     assert error.names == (AUTHZ,)
@@ -297,6 +308,61 @@ def test_ensure_current_connection_refuses_a_newer_stamp(
     # holding that revision can move this database.
     assert _revision(dburis[AUTHZ]) == _FROM_THE_FUTURE
     assert "alembic" not in str(error)
+
+
+@pytest.mark.parametrize(
+    "policy, expected",
+    [
+        (POLICY.EXPLICIT, alembic_migrations.ExplicitMigrationRequired),
+        (POLICY.DISABLED, alembic_migrations.MigrationsDisabled),
+    ],
+)
+def test_ensure_current_connection_refuses_under_a_policy(
+    tmp_path, policy, expected
+):
+    # The database is empty, so a migration is owed; the configuration
+    # says this process is not the one to run it.
+    dburis = _dburis(tmp_path)
+
+    with pytest.raises(expected) as exc_info:
+        _ensure_on(dburis[AGUI], AGUI, policy=policy)
+
+    assert exc_info.value.names == (AGUI,)
+    assert _revision(dburis[AGUI]) is None
+
+
+@pytest.mark.parametrize(
+    "policy, expected",
+    [
+        (POLICY.EXPLICIT, alembic_migrations.ExplicitMigrationRequired),
+        (POLICY.DISABLED, alembic_migrations.MigrationsDisabled),
+    ],
+)
+def test_ensure_current_connection_policy_outranks_the_writer_gate(
+    tmp_path, policy, expected
+):
+    # Stopping the other writers is not the remedy when the configuration
+    # says this process never migrates, so 'MigrationRequired' -- which
+    # says exactly that -- must not be what comes back.
+    dburis = _dburis(tmp_path)
+
+    with pytest.raises(expected):
+        _ensure_on(dburis[AGUI], AGUI, sole_writer=False, policy=policy)
+
+
+@pytest.mark.parametrize("policy", [POLICY.EXPLICIT, POLICY.DISABLED])
+def test_ensure_current_connection_at_head_ignores_the_policy(
+    tmp_path, policy
+):
+    # Nothing is owed, so nothing is refused: this is what lets a service
+    # configured 'disabled' start normally against a current database.
+    dburis = _dburis(tmp_path)
+    alembic_migrations.upgrade(dburis=dburis)
+
+    with mock.patch.object(alembic_migrations, "upgrade") as upgrade:
+        _ensure_on(dburis[AUTHZ], AUTHZ, policy=policy)
+
+    upgrade.assert_not_called()
 
 
 def test_ensure_current_connection_refuses_when_not_sole_writer(tmp_path):
@@ -315,7 +381,7 @@ async def test_ensure_current_engine_migrates_through_the_engine(tmp_path):
     engine = sqla_asyncio.create_async_engine(dburi)
 
     await alembic_migrations.ensure_current_engine(
-        engine, AGUI, sole_writer=True
+        engine, AGUI, sole_writer=True, policy=None
     )
 
     async with engine.connect() as connection:
@@ -324,6 +390,20 @@ async def test_ensure_current_engine_migrates_through_the_engine(tmp_path):
         )
     await engine.dispose()
     assert revision == alembic_migrations.head_revision()
+
+
+@pytest.mark.asyncio
+async def test_ensure_current_engine_forwards_the_policy(tmp_path):
+    # The refusal has to survive the trip through 'run_sync'.
+    dburi = f"sqlite+aiosqlite:///{tmp_path / 'agui.sqlite'}"
+    engine = sqla_asyncio.create_async_engine(dburi)
+
+    with pytest.raises(alembic_migrations.ExplicitMigrationRequired):
+        await alembic_migrations.ensure_current_engine(
+            engine, AGUI, sole_writer=True, policy=POLICY.EXPLICIT
+        )
+
+    await engine.dispose()
 
 
 @pytest.mark.parametrize(
@@ -393,8 +473,6 @@ def test_split_chain_refuses_a_revision_this_tree_lacks():
 # --------------------------------------------------------------------------
 # migration_dburi / migration_policy: which credential, and whether at all
 # --------------------------------------------------------------------------
-_POLICY = config_installation.MigrationPolicy
-
 # The six properties the resolvers read; an 'Installation' and the
 # 'InstallationConfig' it wraps both answer to exactly these.
 _INSTALLATION_ATTRS = {
@@ -450,12 +528,12 @@ def test_migration_dburi_prefers_the_configured_one(database, attribute):
     [
         # The dev-mode default: nothing configured, nothing implied.
         (None, None, None),
-        (None, _POLICY.EXPLICIT, _POLICY.EXPLICIT),
-        (None, _POLICY.DISABLED, _POLICY.DISABLED),
+        (None, POLICY.EXPLICIT, POLICY.EXPLICIT),
+        (None, POLICY.DISABLED, POLICY.DISABLED),
         # A configured credential with no policy implies 'explicit'.
-        ("postgresql://owner@/db", None, _POLICY.EXPLICIT),
-        ("postgresql://owner@/db", _POLICY.EXPLICIT, _POLICY.EXPLICIT),
-        ("postgresql://owner@/db", _POLICY.DISABLED, _POLICY.DISABLED),
+        ("postgresql://owner@/db", None, POLICY.EXPLICIT),
+        ("postgresql://owner@/db", POLICY.EXPLICIT, POLICY.EXPLICIT),
+        ("postgresql://owner@/db", POLICY.DISABLED, POLICY.DISABLED),
     ],
 )
 def test_migration_policy(configured, policy, expected):
@@ -471,12 +549,12 @@ def test_migration_policy(configured, policy, expected):
 
 def test_migration_policy_reads_the_authorization_fields():
     installation = _installation(
-        authorization_migration_policy=_POLICY.DISABLED,
+        authorization_migration_policy=POLICY.DISABLED,
     )
 
     found = alembic_migrations.migration_policy(installation, AUTHZ)
 
-    assert found is _POLICY.DISABLED
+    assert found is POLICY.DISABLED
 
 
 def test_migration_dburis_covers_both_databases():

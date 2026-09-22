@@ -236,7 +236,15 @@ database at a time, and four situations:
   `DowngradeRequired`. The code was rolled back without downgrading its
   databases first, and this release cannot move them: the revisions between
   its head and that stamp exist only in the newer release's tree. Checked
-  *before* the sole-writer gate, because stopping writers cannot help.
+  *before* the sole-writer gate, because stopping writers cannot help;
+- behind head, with a `migration_policy` in force -- raises
+  `ExplicitMigrationRequired` or `MigrationsDisabled`. The caller resolves
+  the policy with `migration_policy()` and passes it as the required
+  `policy=` keyword; `_POLICY_REFUSAL` maps it to the refusal. Also checked
+  before the sole-writer gate, and for the same shape of reason: when the
+  configuration says this process never migrates, stopping the other
+  writers is not the remedy. Nothing is refused for a database already at
+  head, so a `disabled` service starts normally against a current one.
 
 Alongside those: `head_revision()`, `database_state()`, `upgrade()` /
 `downgrade()` (named databases; `sql=True` emits `<database>.sql` instead
@@ -274,8 +282,9 @@ CLI there fails with `No 'script_location' key found in configuration`. A
 deployment migrates through soliplex's own writable open, or through the
 `soliplex-cli database` group (`status` / `upgrade` / `downgrade`, in
 `cli/database.py`), both of which set `script_location` from the package
-directory. That group is the sole consumer of `migration_dburi` /
-`migration_policy`; the automatic path does not yet consult the policy.
+directory. That group is the sole consumer of `migration_dburi`; the
+`migration_policy` is enforced in both places, by `ensure_current_*` (see
+below).
 
 - The DB URIs come from the installation config rather than from any alembic
   config file, so `-x soliplex.installation_path=` is mandatory; without it

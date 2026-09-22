@@ -1493,8 +1493,10 @@ has taken that job away from the application role -- the schema owned by
 an administrative role, the application granted only DML -- and for anyone
 who would rather migrate at a chosen moment than at the next restart.
 That separation is configured by `migration_dburi` and `migration_policy`
-(see [SQLAlchemy DBURIs](../config/dburis.md#migrations)), and this group
-is their only consumer.
+(see [SQLAlchemy DBURIs](../config/dburis.md#migrations)). This group is
+the only consumer of the credential; the policy binds everywhere, so a
+database it covers is refused by the server's startup and by every other
+writable command rather than migrated with the runtime credential.
 
 It also works where the `alembic` CLI does not. Alembic reads
 `script_location` from a source checkout's `pyproject.toml`, which no

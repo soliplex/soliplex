@@ -1469,14 +1469,15 @@ def mcp_apps():
 # Engines / open_engines
 # --------------------------------------------------------------------------
 def _memory_installation():
-    """An installation whose two databases are throwaway and in memory."""
-    return mock.Mock(
-        thread_persistence_async_dburi=(
-            config_installation.ASYNC_MEMORY_ENGINE_URL
-        ),
-        authorization_async_dburi=(
-            config_installation.ASYNC_MEMORY_ENGINE_URL
-        ),
+    """An installation whose two databases are throwaway and in memory.
+
+    A real 'InstallationConfig' rather than a double: its defaults already
+    are what this needs -- both DBURIs in memory, no migration policy --
+    and it keeps answering correctly as 'open_engines' reads more of it,
+    where a double has to be taught each new property by hand.
+    """
+    return installation.Installation(
+        config_installation.InstallationConfig(id="open-engines-testcase")
     )
 
 
@@ -1556,6 +1557,51 @@ async def test_open_engines_honors_multiple_writers(w_multiple_writers):
         call.kwargs["sole_writer"]
         for call in ensure_current_engine.call_args_list
     ] == [not w_multiple_writers] * 2
+
+
+def _policy_installation(policy):
+    """An in-memory installation whose stanzas both carry ``policy``."""
+    return installation.Installation(
+        config_installation.InstallationConfig(
+            id="open-engines-testcase",
+            _thread_persistence_migration_policy=policy,
+            _authorization_migration_policy=policy,
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_open_engines_passes_the_policy():
+    the_installation = _policy_installation("explicit")
+
+    with mock.patch.object(
+        alembic_migrations, "ensure_current_engine"
+    ) as ensure_current_engine:
+        async with installation.open_engines(
+            the_installation=the_installation,
+            multiple_writers=False,
+            no_auth_mode=False,
+        ):
+            pass
+
+    assert [
+        call.kwargs["policy"] for call in ensure_current_engine.call_args_list
+    ] == [config_installation.MigrationPolicy.EXPLICIT] * 2
+
+
+@pytest.mark.asyncio
+async def test_open_engines_refuses_under_a_policy():
+    # The server does not migrate for a deployment which has handed its
+    # schema to another role; it refuses, and says which tool does.
+    the_installation = _policy_installation("explicit")
+
+    with pytest.raises(alembic_migrations.ExplicitMigrationRequired):
+        async with installation.open_engines(
+            the_installation=the_installation,
+            multiple_writers=False,
+            no_auth_mode=False,
+        ):
+            pass  # pragma: NO COVER -- the refusal precedes the body
 
 
 @pytest.mark.asyncio

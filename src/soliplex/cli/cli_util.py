@@ -138,10 +138,17 @@ async def open_db(
     definition the sole writer. The migration runs through the engine
     returned here, which is what makes an in-memory database work at all.
 
+    Where the installation's 'migration_policy' requires that migrations
+    must use the explicit migration tool, we refuse to migrate here, just
+    as when starting the server: commands which use this utility are
+    *not* part of the migration tool.
+
     'allow_ram' admits an in-memory database, whose contents die with the
     command; without it, such a DBURI ends the command, since its work
-    would be thrown away. 'must_exist' is for a reader: nothing is created
-    or migrated, and a database with no schema raises
+    would be thrown away.
+
+    The 'must_exist' branch passes here because it never creates or
+    migrates a database: for this branch a database with no schema raises
     'DatabaseNotCreated'.
     """
     dburi = async_dburi(the_installation, db_type)
@@ -155,7 +162,12 @@ async def open_db(
             await _require_existing_schema(engine, db_type)
         else:
             await alembic_migrations.ensure_current_engine(
-                engine, db_type, sole_writer=True
+                engine,
+                db_type,
+                sole_writer=True,
+                policy=alembic_migrations.migration_policy(
+                    the_installation, db_type
+                ),
             )
     except BaseException:
         await engine.dispose()

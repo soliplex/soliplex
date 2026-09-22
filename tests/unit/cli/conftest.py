@@ -6,6 +6,7 @@ import re
 import shutil
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from soliplex import alembic_migrations
@@ -155,3 +156,52 @@ def scratch_installation(_installation_template) -> ScratchInstallation:
 @pytest.fixture
 def cli_runner() -> CliRunner:
     return CliRunner()
+
+
+def _db_stanza(db_path: pathlib.Path, **extra) -> dict:
+    return {
+        "sync_dburi": sqlite_dburi(db_path),
+        "async_dburi": sqlite_dburi(db_path, "+aiosqlite"),
+        **extra,
+    }
+
+
+@pytest.fixture
+def write_installation(tmp_path):
+    """Write a minimal installation, and hand back its path.
+
+    Two database stanzas and an id, and nothing else: the code under test
+    here reads the configuration rather than the rooms, completions or
+    OIDC beside it. Building that configuration for real, instead of
+    doubling it, is what keeps these tests honest as more of it is read --
+    a double has to be taught each new property by hand, and answers a
+    'Mock' until it is.
+
+    'agui' / 'authz' add sub-keys to the corresponding stanza, e.g.
+    'authz={"migration_policy": "disabled"}'. 'in_memory' omits both
+    stanzas, leaving the in-memory defaults.
+    """
+
+    def _write(*, agui=None, authz=None, in_memory=False):
+        config = {"id": "cli-testcase"}
+        if not in_memory:
+            config["thread_persistence_db"] = _db_stanza(
+                tmp_path / "agui.sqlite", **(agui or {})
+            )
+            config["authorization_db"] = _db_stanza(
+                tmp_path / "authz.sqlite", **(authz or {})
+            )
+        path = tmp_path / "installation.yaml"
+        path.write_text(yaml.safe_dump(config), encoding="utf-8")
+        return path
+
+    return _write
+
+
+@pytest.fixture
+def cli_dburis(tmp_path) -> dict[str, str]:
+    """The two sync DBURIs 'write_installation' names."""
+    return {
+        alembic_migrations.AGUI: sqlite_dburi(tmp_path / "agui.sqlite"),
+        alembic_migrations.AUTHZ: sqlite_dburi(tmp_path / "authz.sqlite"),
+    }
