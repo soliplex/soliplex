@@ -75,8 +75,15 @@ METADATA = {
     AUTHZ: authz_schema.metadata,
 }
 
-# The one-off repair for databases built before stamping existed.
+# The one-off repair for databases built before stamping existed. The
+# script ships in the source tree, not in a deployment image, so anything
+# naming it says where it comes from.
 BOOTSTRAP_ISSUE = "https://github.com/soliplex/soliplex/issues/1367"
+BOOTSTRAP_SCRIPT = "scripts/bootstrap_alembic_version.py"
+BOOTSTRAP_REMEDY = (
+    f"Apply '{BOOTSTRAP_SCRIPT}' (from a soliplex checkout) once, per "
+    f"{BOOTSTRAP_ISSUE}"
+)
 
 logger = logging.getLogger("alembic.env")
 
@@ -102,9 +109,8 @@ class UnstampedDatabase(MigrationError):
         which = ", ".join(self.names)
         super().__init__(
             f"{which}: tables are present but {VERSION_TABLE} is empty, so "
-            "this database was created by soliplex 0.81 or earlier. Apply "
-            f"the one-off bootstrap script once, per {BOOTSTRAP_ISSUE}, and "
-            "then start soliplex again."
+            "this database was created by soliplex 0.81 or earlier. "
+            f"{BOOTSTRAP_REMEDY}, and then start soliplex again."
         )
 
 
@@ -384,10 +390,7 @@ def migration_dburi(installation, database: str) -> str:
     """The DBURI to migrate ``database`` through.
 
     The configured ``migration_dburi`` when there is one, else the runtime
-    ``sync_dburi``. A deployment whose application role also owns its
-    schema -- SQLite, a ``soliplex-template`` stack, a default PostgreSQL
-    one -- configures no second credential and gets exactly today's
-    behaviour.
+    ``sync_dburi``.
     """
     configured = getattr(installation, _MIGRATION_DBURI_FOR[database])
     if configured is not None:
@@ -399,7 +402,7 @@ def configured_migration_dburi(installation, database: str) -> str | None:
     """The stanza's ``migration_dburi``, or ``None`` when it sets none.
 
     Unlike :func:`migration_dburi`, this does not fall back to the runtime
-    URI: it answers whether a separate credential was configured.
+    URI: it returns *only* the separate credential, if configured, or None.
     """
     return getattr(installation, _MIGRATION_DBURI_FOR[database])
 
@@ -407,11 +410,7 @@ def configured_migration_dburi(installation, database: str) -> str | None:
 def migration_policy(installation, database: str):
     """The migration policy in force for ``database``.
 
-    A configured ``migration_dburi`` with no ``migration_policy`` implies
-    ``EXPLICIT``. That is not merely a convenient default: the migration
-    tool is the only consumer of that credential, so configuring one while
-    leaving the automatic path in charge would name a credential nothing
-    reads.
+    ``migration_dburi`` without ``migration_policy`` implies ``EXPLICIT``.
     """
     policy = getattr(installation, _MIGRATION_POLICY_FOR[database])
     if policy is None:
@@ -421,8 +420,10 @@ def migration_policy(installation, database: str):
 
 
 def migration_dburis(installation) -> dict[str, str]:
-    """The DBURI to migrate each database through (see
-    :func:`migration_dburi`)."""
+    """The DBURI to migrate each database through
+
+    (see :func:`migration_dburi`).
+    """
     return {
         name: migration_dburi(installation, name) for name in DATABASE_NAMES
     }

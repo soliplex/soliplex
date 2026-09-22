@@ -38,7 +38,8 @@ Checking whether your databases need bootstrapping
 Use the ``--dry-run`` flag to test first, always::
 
   # inside the deployment's own image (resolves both DBURIs from the
-  # installation config, using the soliplex that is installed there)
+  # installation config -- the migration ones where configured -- using
+  # the soliplex that is installed there)
   python scripts/bootstrap_alembic_version.py \
       --installation-path /environment --dry-run
 
@@ -57,9 +58,9 @@ If the ``--dry-run`` report shows that the stamps are missing:
 
 - Run the same command without the ``--dry-run`` flag to apply the stamp.
 
-- Confirm if desired from a ``soliplex`` checkout using::
+- Confirm if desired using::
 
-    uv run alembic -x soliplex.installation_path=<path> current
+    soliplex-cli database status <installation-path>
 
 Checking the fingerprinting
 ---------------------------
@@ -83,9 +84,17 @@ issue above.
 Prerequisites
 -------------
 
-Both modes use the **sync** DBURI, so a sync driver has to be importable;
+Both modes use a **sync** DBURI, so a sync driver has to be importable;
 the PEP 723 dependencies above cover PostgreSQL and SQLite when invoked via
 ``uv run``.
+
+Stamping writes ``CREATE TABLE alembic_version``. Where a deployment has
+given the schema to an administrative role, that DDL is refused to the
+application role, so ``--installation-path`` uses each stanza's
+``migration_dburi`` when one is configured, falling back to its
+``sync_dburi``. Passing ``--agui-dburi`` / ``--authz-dburi`` names the
+credential directly, and is the mode to use when soliplex is not importable
+at all.
 
 Finding your databases
 ----------------------
@@ -347,25 +356,36 @@ def for_release(release: str) -> Fingerprint:
 
 
 def installation_dburis(installation_path: pathlib.Path) -> dict[str, str]:
-    """Both sync DBURIs, read via the soliplex that is installed here."""
+    """The DBURI to stamp each database through, read via the installed
+    soliplex.
+
+    Each is the stanza's ``migration_dburi`` where one is configured, and
+    its runtime ``sync_dburi`` where none is. Stamping writes ``CREATE
+    TABLE alembic_version``, which an application role granted only DML is
+    refused.
+
+    ``installation_path`` may be the YAML file or the directory holding
+    it. Only the installation config is loaded, not the rooms, completions
+    or OIDC beside it, so an unrelated broken config cannot block a
+    bootstrap.
+    """
     try:
-        from soliplex.cli import cli_util
+        from soliplex import alembic_migrations
     except ImportError as exc:  # pragma: no cover - depends on the host
         raise InstallationUnavailable(exc) from exc
 
     try:
-        the_installation = cli_util.get_installation(installation_path)
+        i_config = alembic_migrations.load_installation_config(
+            installation_path
+        )
     except Exception as exc:
         raise InstallationUnavailable(exc) from exc
 
-    return {
-        AGUI: the_installation.thread_persistence_sync_dburi,
-        AUTHZ: the_installation.authorization_sync_dburi,
-    }
+    return alembic_migrations.migration_dburis(i_config)
 
 
 def resolve_dburis(args: argparse.Namespace) -> dict[str, str]:
-    """The two sync DBURIs, from explicit flags or the installation."""
+    """The two DBURIs to stamp through, from flags or the installation."""
     explicit = {AGUI: args.agui_dburi, AUTHZ: args.authz_dburi}
     if all(explicit.values()):
         return explicit
@@ -739,7 +759,7 @@ def run(args: argparse.Namespace) -> int:
 
     print()
     print("Both databases now have a baseline. Apply the migrations with:")
-    print("  alembic -x soliplex.installation_path=<path> upgrade head")
+    print("  soliplex-cli database upgrade <installation-path>")
     return 0
 
 

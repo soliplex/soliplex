@@ -11,6 +11,7 @@ import sqlalchemy as sa
 import typer
 import yaml
 
+from soliplex import alembic_migrations
 from soliplex import authz
 from soliplex import installation
 from soliplex import models
@@ -2668,7 +2669,7 @@ def test__missing_ollama_models_skips_responsiveness_by_default(
 # --------------------------------------------------------------------------
 _HEAD = "head-revision"
 
-_DB_STATES = cli_audit.alembic_migrations.DatabaseState
+_DB_STATES = alembic_migrations.DatabaseState
 
 _POLICY = config_installation.MigrationPolicy
 
@@ -2769,7 +2770,7 @@ def test__database_summary(state, revision, error, expected):
         assert found == f"ERROR: unreachable: {error}"
     else:
         assert found.startswith("ERROR: ")
-        assert cli_audit.BOOTSTRAP_SCRIPT in found
+        assert alembic_migrations.BOOTSTRAP_SCRIPT in found
 
 
 def test__database_summary_for_a_stamp_needing_a_downgrade():
@@ -2810,7 +2811,7 @@ def test__database_findings_reports_an_unstamped_database():
     found = cli_audit._database_findings(reports)
 
     assert (
-        cli_audit.BOOTSTRAP_SCRIPT
+        alembic_migrations.BOOTSTRAP_SCRIPT
         in (found["databases"][cli_util.AGUI]["unstamped"])
     )
     assert cli_util.AUTHZ not in found["databases"]

@@ -157,18 +157,14 @@ Two named values; absence is the third state:
 | `explicit` | only `soliplex-cli database upgrade` migrates |
 | `disabled` | nothing migrates this database from this configuration |
 
-Configuring a `migration_dburi` and leaving `migration_policy` unset
-implies `explicit`.  That is not merely a convenient default: the
-migration tool is the only consumer of that credential, so configuring one
-while leaving the automatic path in charge would name a credential nothing
-reads.
+Configuring `migration_dburi` without a `migration_policy` implies `explicit`.
 
-`disabled` earns its own value rather than folding into `explicit`,
-because it is what lets a single `installation.yaml` serve services
-running as different roles: the server resolves `disabled`, and whatever
-runs the migration resolves `explicit`.  The whole value may be a single
-`env:` marker instead of a literal, and Compose already gives each service
-its own environment:
+Configuring `disabled` allows sharing a single `installation.yaml` between
+services running as different roles: one service resolves `disabled`, while
+another (the one which runs the migration) resolves `explicit`.
+
+The whole value may be a single `env:` marker instead of a literal, wired
+via the compose service environment and the installation config:
 
 ```yaml
 authorization_db:

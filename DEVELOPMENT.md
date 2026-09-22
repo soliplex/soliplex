@@ -362,10 +362,11 @@ uv run soliplex-cli database upgrade <installation-path>
 uv run soliplex-cli database downgrade <installation-path> <revision>
 ```
 
-That group is the sole consumer of `migration_dburi`
+That group reads `migration_dburi`
 (see [docs/config/dburis.md](docs/config/dburis.md)): it migrates as the
 schema's owner rather than as the application role, and refuses a database
-whose policy is `disabled`. The `migration_policy` itself binds more
+whose policy is `disabled`. `scripts/bootstrap_alembic_version.py` reads it
+too, for the same reason -- stamping needs `CREATE TABLE`. The `migration_policy` itself binds more
 widely: `ensure_current_connection` consults it, so the server's startup
 and every writable CLI open refuse too, rather than migrating with the
 runtime credential.

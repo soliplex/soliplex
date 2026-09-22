@@ -1130,14 +1130,10 @@ def _invalid_completions(
     return errors
 
 
-# The one-off repair for a database built before soliplex stamped one.
-BOOTSTRAP_SCRIPT = "scripts/bootstrap_alembic_version.py"
-
 _UNSTAMPED = (
     f"tables are present but '{alembic_migrations.VERSION_TABLE}' is empty, "
-    "so this database was created by soliplex 0.81 or earlier. Apply "
-    f"'{BOOTSTRAP_SCRIPT}' once, per "
-    f"{alembic_migrations.BOOTSTRAP_ISSUE}"
+    "so this database was created by soliplex 0.81 or earlier. "
+    f"{alembic_migrations.BOOTSTRAP_REMEDY}"
 )
 
 _DOWNGRADE_REQUIRED = (

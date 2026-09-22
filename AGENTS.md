@@ -282,9 +282,9 @@ CLI there fails with `No 'script_location' key found in configuration`. A
 deployment migrates through soliplex's own writable open, or through the
 `soliplex-cli database` group (`status` / `upgrade` / `downgrade`, in
 `cli/database.py`), both of which set `script_location` from the package
-directory. That group is the sole consumer of `migration_dburi`; the
-`migration_policy` is enforced in both places, by `ensure_current_*` (see
-below).
+directory. `migration_dburi` is read only by the deliberate tools -- that
+group, and `scripts/bootstrap_alembic_version.py`; the `migration_policy`
+is enforced in both places, by `ensure_current_*` (see below).
 
 - The DB URIs come from the installation config rather than from any alembic
   config file, so `-x soliplex.installation_path=` is mandatory; without it
