@@ -293,28 +293,12 @@ wheels = [
 [[package]]
 name = "bubble-sandbox"
 version = "0.12.0"
-source = { editable = "../bubble-sandbox" }
+source = { git = "https://github.com/ggozad/bubble-sandbox.git?rev=ea48ba0502e9a281508c325c39c2ecc11048c1e8#ea48ba0502e9a281508c325c39c2ecc11048c1e8" }
 dependencies = [
     { name = "pydantic-ai-backend" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "typer" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic-ai-backend" },
-    { name = "pydantic-settings", specifier = ">=2.0" },
-    { name = "pyyaml" },
-    { name = "typer" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
 ]
 
 [[package]]
@@ -3292,7 +3276,7 @@ requires-dist = [
     { name = "aiosqlite" },
     { name = "alembic", specifier = ">=1.18.4,<1.19" },
     { name = "authlib" },
-    { name = "bubble-sandbox", editable = "../bubble-sandbox" },
+    { name = "bubble-sandbox", git = "https://github.com/ggozad/bubble-sandbox.git?rev=ea48ba0502e9a281508c325c39c2ecc11048c1e8" },
     { name = "certifi", specifier = ">=2025.11.12" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "fakeredis", specifier = "!=2.35.0" },

@@ -243,8 +243,7 @@ type = "exec"
 executable = "ruff"
 options = "check --fix REVISION_SCRIPT_FILENAME"
 
-# 'bubble-sandbox' 0.13.0 is not released. This points at a local
-# checkout, becomes a git reference once that branch is pushed, and is
-# removed once the release lands.
-[tool.uv.sources]
-bubble-sandbox = { path = "../bubble-sandbox", editable = true }
+# Remove this override after bubble-sandbox 0.13.0 is released.
+[tool.uv.sources.bubble-sandbox]
+git = "https://github.com/ggozad/bubble-sandbox.git"
+rev = "ea48ba0502e9a281508c325c39c2ecc11048c1e8"
