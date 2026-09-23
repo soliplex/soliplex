@@ -11,10 +11,9 @@ These apply to all `soliplex-cli` subcommands:
 ## A Note on Renamed Commands
 
 Several subcommands were renamed and regrouped after the `0.62.x` release.
-The previous flat names (`check-config`, `list-secrets`, `pull-models`,
-etc.) are preserved as hidden aliases so existing scripts continue to
-work, but new scripts should use the grouped form documented below.
-See [Deprecated Command Names](#deprecated-command-names) at the bottom
+The previous flat names (`list-secrets`, `pull-models`, etc.) were kept
+as hidden aliases until `0.83`, which removed all of them except
+`check-config`. See [Renamed Commands](#renamed-commands) at the bottom
 of this page for the full mapping.
 
 ## A Note on Migration Failures
@@ -278,8 +277,8 @@ The `audit` group bundles read-only validation and listing commands —
 each one inspects some aspect of an installation configuration without
 mutating state. Run `soliplex-cli audit --help` for the full list.
 
-This group replaces the deprecated flat `check-config` / `list-*`
-commands; see [Deprecated Command Names](#deprecated-command-names).
+This group replaces the flat `check-config` / `list-*` commands; see
+[Renamed Commands](#renamed-commands).
 
 **Tolerant of missing environment variables.** All `audit` subcommands
 load the installation in an audit-only mode that swallows
@@ -514,8 +513,7 @@ soliplex-cli audit installation example/
 List the secrets declared in the installation configuration and report
 whether each one resolves. Useful for auditing a configuration — e.g.,
 confirming that every secret listed in the YAML has at least one working
-source — without exposing the values themselves. (Replaces the
-deprecated `soliplex-cli list-secrets`.)
+source — without exposing the values themselves.
 
 ```bash
 soliplex-cli audit [OPTIONS] secrets [INSTALLATION_CONFIG_PATH]
@@ -581,8 +579,7 @@ List the environment variables declared in the installation configuration
 along with their resolved values. Useful for confirming that the values
 Soliplex will see at runtime match your expectations, and — with
 `--verbose` — for diagnosing *why* a particular value was chosen when
-multiple sources are configured. (Replaces the deprecated
-`soliplex-cli list-environment`.)
+multiple sources are configured.
 
 ```bash
 soliplex-cli audit [OPTIONS] environment [-v] [INSTALLATION_CONFIG_PATH]
@@ -675,8 +672,7 @@ List the OIDC authentication providers declared in the installation
 configuration, and validate that each one converts cleanly to its
 runtime model. Useful for confirming which providers will be offered on
 the login screen and what server URLs Soliplex will contact for token
-validation. (Replaces the deprecated
-`soliplex-cli list-oidc-auth-providers`.)
+validation.
 
 ```bash
 soliplex-cli audit [OPTIONS] oidc [INSTALLATION_CONFIG_PATH]
@@ -740,8 +736,7 @@ List the rooms declared in the installation configuration, along with
 their names, descriptions, the AG-UI feature names each room aggregates
 (checked against the
 [AG-UI feature registry](../config/agui.md)), and any RAG databases
-they reference (including a live document count for each). (Replaces
-the deprecated `soliplex-cli list-rooms`.)
+they reference (including a live document count for each).
 
 ```bash
 soliplex-cli audit [OPTIONS] rooms [INSTALLATION_CONFIG_PATH]
@@ -1143,8 +1138,7 @@ List the OpenAI-compatible completion endpoints declared in the
 installation configuration, and validate that each one converts cleanly
 to its runtime model. Each completion exposes a Soliplex agent as a
 `/v1/chat/completions`-style endpoint so that existing OpenAI-client
-code can talk to it unchanged. (Replaces the deprecated
-`soliplex-cli list-completions`.)
+code can talk to it unchanged.
 
 ```bash
 soliplex-cli audit [OPTIONS] completions [INSTALLATION_CONFIG_PATH]
@@ -1267,7 +1261,6 @@ run two complementary validation passes against them: (1) for each
 configured `skill_config`, surface any errors recorded at load time;
 (2) for each `SKILL.md`-bearing directory found under the configured
 filesystem skills paths, run the full `skills_ref` validator.
-(Replaces the deprecated `soliplex-cli list-skills`.)
 
 ```bash
 soliplex-cli audit [OPTIONS] skills [INSTALLATION_CONFIG_PATH]
@@ -1779,9 +1772,8 @@ by email — is stored as `$[?$.email == "..."]`, mirroring how
 `room-authz` ACL entries store their discriminators. The subcommands
 below read from and modify that table directly.
 
-This group replaces the deprecated flat `list-admin-users` /
-`add-admin-user` / `clear-admin-users` commands; see
-[Deprecated Command Names](#deprecated-command-names).
+This group replaces the flat `list-admin-users` / `add-admin-user` /
+`clear-admin-users` commands; see [Renamed Commands](#renamed-commands).
 
 These subcommands only make sense against a *persistent* authorization
 database (configured via `authorization_db` in the installation
@@ -1842,8 +1834,7 @@ All six commands share the following conventions:
 ### `admin-users list`
 
 Dump the current set of admin users from the installation's
-authorization database without changing anything. (Replaces the
-deprecated `soliplex-cli list-admin-users`.)
+authorization database without changing anything.
 
 ```bash
 soliplex-cli admin-users list [OPTIONS] [INSTALLATION_CONFIG_PATH]
@@ -1867,8 +1858,7 @@ soliplex-cli admin-users list example/installation.yaml \
 ### `admin-users add`
 
 Insert a new admin entry into the installation's authorization database
-and then dump the resulting list. (Replaces the deprecated
-`soliplex-cli add-admin-user`.)
+and then dump the resulting list.
 
 ```bash
 soliplex-cli admin-users add [OPTIONS] INSTALLATION_CONFIG_PATH [EMAIL]
@@ -2002,8 +1992,7 @@ soliplex-cli admin-users delete \
 ### `admin-users clear`
 
 Remove **every** row from the installation's admin-user table, then
-dump the (now empty) list. (Replaces the deprecated
-`soliplex-cli clear-admin-users`.)
+dump the (now empty) list.
 
 ```bash
 soliplex-cli admin-users clear [OPTIONS] [INSTALLATION_CONFIG_PATH]
@@ -2152,8 +2141,8 @@ described above. The subcommands below read from and modify the per-room
 authorization policy stored in the installation's authorization
 database.
 
-This group replaces the deprecated flat `show-room-authz` command;
-see [Deprecated Command Names](#deprecated-command-names).
+This group replaces the flat `show-room-authz` command; see
+[Renamed Commands](#renamed-commands).
 
 ### The Model in One Paragraph
 
@@ -2259,7 +2248,6 @@ All eight commands share the following:
 ### `room-authz show`
 
 Dump the current `RoomPolicy` for a single room without changing it.
-(Replaces the deprecated `soliplex-cli show-room-authz`.)
 
 ```bash
 soliplex-cli room-authz show [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
@@ -2886,8 +2874,8 @@ The `ollama` group bundles subcommands that interact with Ollama servers
 referenced by the installation. Currently a single subcommand,
 `ollama pull`.
 
-This group replaces the deprecated flat `pull-models` command; see
-[Deprecated Command Names](#deprecated-command-names).
+This group replaces the flat `pull-models` command; see
+[Renamed Commands](#renamed-commands).
 
 ### Group Options
 
@@ -2905,8 +2893,7 @@ Scan the installation for every Ollama model referenced by its agents,
 completions, or tools, and pull each model onto the corresponding Ollama
 server via that server's REST API. Intended to preload a fresh Ollama
 deployment so that the first user-facing request against Soliplex
-doesn't have to wait for a cold-start model download. (Replaces the
-deprecated `soliplex-cli pull-models`.)
+doesn't have to wait for a cold-start model download.
 
 ```bash
 soliplex-cli ollama pull [OPTIONS] [INSTALLATION_CONFIG_PATH]
@@ -3184,28 +3171,29 @@ Snapshot the schemas to a file for client-side code generation:
 soliplex-cli agui-feature-schemas example/ > agui-features.json
 ```
 
-## Deprecated Command Names
+## Renamed Commands
 
-Prior releases exposed each subcommand as a flat top-level name
-(`check-config`, `list-secrets`, `pull-models`, etc.). Those names are
-preserved as **hidden aliases** — existing scripts continue to work — but
-they no longer appear in `soliplex-cli --help` and may be removed in a
-future major release. New scripts should use the grouped form.
+Releases up to `0.62.x` exposed each subcommand as a flat top-level name.
+Later releases kept those names as **hidden aliases** (absent from
+`soliplex-cli --help`) until `0.83`, which removed all of them except
+`check-config`, which still works but prints a deprecation warning on
+stderr. A script still using a removed name fails with `No such command`;
+switch it to the grouped form.
 
-| Deprecated                    | Use instead                |
-|-------------------------------|----------------------------|
-| `check-config`                | `audit` (or `audit all`)   |
-| `list-secrets`                | `audit secrets`            |
-| `list-environment`            | `audit environment`        |
-| `list-oidc-auth-providers`    | `audit oidc`               |
-| `list-rooms`                  | `audit rooms`              |
-| `list-completions`            | `audit completions`        |
-| `list-skills`                 | `audit skills`             |
-| `list-admin-users`            | `admin-users list`         |
-| `add-admin-user`              | `admin-users add`          |
-| `clear-admin-users`           | `admin-users clear`        |
-| `show-room-authz`             | `room-authz show`          |
-| `pull-models`                 | `ollama pull`              |
+| Old name                   | Use instead              | Status                   |
+|----------------------------|--------------------------|--------------------------|
+| `check-config`             | `audit` (or `audit all`) | hidden alias, deprecated |
+| `list-secrets`             | `audit secrets`          | removed                  |
+| `list-environment`         | `audit environment`      | removed                  |
+| `list-oidc-auth-providers` | `audit oidc`             | removed                  |
+| `list-rooms`               | `audit rooms`            | removed                  |
+| `list-completions`         | `audit completions`      | removed                  |
+| `list-skills`              | `audit skills`           | removed                  |
+| `list-admin-users`         | `admin-users list`       | removed                  |
+| `add-admin-user`           | `admin-users add`        | removed                  |
+| `clear-admin-users`        | `admin-users clear`      | removed                  |
+| `show-room-authz`          | `room-authz show`        | removed                  |
+| `pull-models`              | `ollama pull`            | removed                  |
 
 The `serve --add-admin-user` option is unrelated to this rename: it has
 been **removed**, and passing it now fails with a non-zero exit pointing

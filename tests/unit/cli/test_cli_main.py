@@ -4,9 +4,12 @@ import json
 from unittest import mock
 
 import pytest
+import typer
+from typer import main as typer_main
 
 from soliplex import alembic_migrations
 from soliplex import secrets
+from soliplex.cli import audit
 from soliplex.cli import main as cli_main
 from soliplex.config import installation as config_installation
 
@@ -92,6 +95,47 @@ def test_shell(cli_runner, scratch_installation):
 
     assert result.exit_code == 0
     interact.assert_called_once()
+
+
+# --------------------------------------------------------------------------
+# Hidden, deprecated aliases
+# --------------------------------------------------------------------------
+@mock.patch("soliplex.cli.main.typer.echo")
+def test__deprecated_alias(echo):
+    func = mock.Mock(spec_set=())
+    alias = cli_main._deprecated_alias("old-name", "new name", func)
+
+    found = alias("arg", kwarg="value")
+
+    assert found is func.return_value
+    func.assert_called_once_with("arg", kwarg="value")
+    echo.assert_called_once_with(mock.ANY, err=True)
+    assert alias.__wrapped__ is func
+
+
+def test__hidden_alias():
+    the_cli = typer.Typer()
+    func = mock.Mock(spec_set=())
+
+    with mock.patch.object(cli_main, "the_cli", the_cli):
+        cli_main._hidden_alias("old-name", "new name", func)
+
+    (command,) = the_cli.registered_commands
+    assert command.name == "old-name"
+    assert command.hidden
+    assert command.callback.__wrapped__ is func
+
+
+def test_check_config_alias_takes_audit_all_params():
+    audit_all = typer_main.get_command(audit.app).commands["all"]
+
+    check_config = typer_main.get_command(cli_main.the_cli).commands[
+        "check-config"
+    ]
+
+    assert [param.name for param in check_config.params] == [
+        param.name for param in audit_all.params
+    ]
 
 
 # --------------------------------------------------------------------------
