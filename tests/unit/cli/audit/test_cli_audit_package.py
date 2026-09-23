@@ -168,6 +168,7 @@ def test_audit_all(
     _audit_environment_section.assert_called_once_with(ctx, installation_path)
     _audit_oidc_section.assert_called_once_with(ctx, installation_path)
     _audit_rooms_section.assert_called_once_with(ctx, installation_path)
+    _audit_databases_section.assert_called_once_with(ctx, installation_path)
     _audit_admin_users_section.assert_called_once_with(ctx, installation_path)
     _audit_room_authz_section.assert_called_once_with(ctx, installation_path)
     _audit_completions_section.assert_called_once_with(ctx, installation_path)

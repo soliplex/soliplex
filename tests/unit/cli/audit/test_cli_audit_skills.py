@@ -45,11 +45,11 @@ def test__find_skill_paths(
         if has_skill:
             (sub / "SKILL.md").write_text("")
 
-    found = list(audit_skills._find_skill_paths(to_search))
-
     expected = [
         to_search if name == "." else to_search / name for name in exp_yields
     ]
+
+    found = list(audit_skills._find_skill_paths(to_search))
 
     assert found == expected
 

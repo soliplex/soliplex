@@ -10,9 +10,9 @@ from soliplex.cli.audit import _common as audit_common
 @pytest.mark.parametrize("w_quiet", [False, True])
 @mock.patch("soliplex.cli.audit._common.the_console")
 def test__quiet_console_funcs(the_console, w_quiet):
-    found = audit_common._quiet_console_funcs(w_quiet)
-
-    (f_line, f_rule, f_print, f_print_exception) = found
+    f_line, f_rule, f_print, f_print_exception = (
+        audit_common._quiet_console_funcs(w_quiet)
+    )
 
     if w_quiet:
         assert f_line is audit_common._noop

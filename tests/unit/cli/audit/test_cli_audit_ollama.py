@@ -9,11 +9,7 @@ from soliplex import installation
 from soliplex.cli.audit import ollama as audit_ollama
 
 CHAT_ROLE = installation.ProviderRole.CHAT
-
-
 EMBEDDING_ROLE = installation.ProviderRole.EMBEDDING
-
-
 RERANKING_ROLE = installation.ProviderRole.RERANKING
 
 
@@ -121,17 +117,17 @@ def test__missing_ollama_models_compares_available_to_required(
 
     rest_api_cls.side_effect = lambda url: instances[url]
 
-    found = audit_ollama._missing_ollama_models(the_installation)
-
-    assert found == exp_errors
-
-    # Only URLs with a required-model set should have triggered an
+    # Only URLs with a required-model set should trigger an
     # 'all_models' call.
     expected_calls = [
         mock.call(url)
         for url, models in w_provider_info.get("ollama", {}).items()
         if models
     ]
+
+    found = audit_ollama._missing_ollama_models(the_installation)
+
+    assert found == exp_errors
     assert rest_api_cls.call_args_list == expected_calls
 
 

@@ -15,11 +15,7 @@ from soliplex.config import installation as config_installation
 # The 'databases' section: state of the 'agui' / 'authz' pair
 # --------------------------------------------------------------------------
 _HEAD = "head-revision"
-
-
 _DB_STATES = alembic_migrations.DatabaseState
-
-
 _POLICY = config_installation.MigrationPolicy
 
 
@@ -68,7 +64,9 @@ def _pair_installation(the_installation, tmp_path):
 def test_database_report_behind_head(state, revision, known, error, expected):
     report = _report(state=state, revision=revision, known=known, error=error)
 
-    assert report.behind_head is expected
+    found = report.behind_head
+
+    assert found is expected
 
 
 @pytest.mark.parametrize(
@@ -85,125 +83,9 @@ def test_database_report_behind_head(state, revision, known, error, expected):
 def test_database_report_downgrade_required(state, revision, known, expected):
     report = _report(state=state, revision=revision, known=known)
 
-    assert report.downgrade_required is expected
+    found = report.downgrade_required
 
-
-@pytest.mark.parametrize(
-    "state, revision, error, expected",
-    [
-        (_DB_STATES.STAMPED, _HEAD, None, f"OK ({_HEAD})"),
-        (
-            _DB_STATES.STAMPED,
-            "older",
-            None,
-            f"behind head (older -> {_HEAD})",
-        ),
-        (
-            _DB_STATES.EMPTY,
-            None,
-            None,
-            "not created (the next writable open creates it)",
-        ),
-        (None, None, "OperationalError: refused", None),
-        (_DB_STATES.UNSTAMPED, None, None, None),
-    ],
-)
-def test__database_summary(state, revision, error, expected):
-    report = _report(state=state, revision=revision, error=error)
-
-    found = audit_databases._database_summary(report)
-
-    if expected is not None:
-        assert found == expected
-    elif error is not None:
-        assert found == f"ERROR: unreachable: {error}"
-    else:
-        assert found.startswith("ERROR: ")
-        assert alembic_migrations.BOOTSTRAP_SCRIPT in found
-
-
-def test__database_summary_for_a_stamp_needing_a_downgrade():
-    report = _report(state=_DB_STATES.STAMPED, revision="newer", known=False)
-
-    found = audit_databases._database_summary(report)
-
-    assert found.startswith("ERROR: newer: ")
-    assert "downgrade has to come from" in found
-    # Deliberately suggests no command: the revisions needed to move this
-    # database are not in this release, so none can be run here.
-    assert "alembic" not in found
-
-
-def test__database_findings_reports_an_unreachable_database():
-    reports = {
-        cli_util.AGUI: _report(
-            name=cli_util.AGUI, state=_DB_STATES.STAMPED, revision=_HEAD
-        ),
-        cli_util.AUTHZ: _report(error="OperationalError: refused"),
-    }
-
-    found = audit_databases._database_findings(reports)
-
-    assert found == {
-        "databases": {
-            cli_util.AUTHZ: {"unreachable": "OperationalError: refused"}
-        }
-    }
-
-
-def test__database_findings_reports_an_unstamped_database():
-    reports = {
-        cli_util.AGUI: _report(name=cli_util.AGUI, state=_DB_STATES.UNSTAMPED),
-        cli_util.AUTHZ: _report(state=_DB_STATES.STAMPED, revision=_HEAD),
-    }
-
-    found = audit_databases._database_findings(reports)
-
-    assert (
-        alembic_migrations.BOOTSTRAP_SCRIPT
-        in (found["databases"][cli_util.AGUI]["unstamped"])
-    )
-    assert cli_util.AUTHZ not in found["databases"]
-
-
-@pytest.mark.parametrize(
-    "state, revision",
-    [
-        # At head, and behind head: neither is a finding, because the next
-        # writable open migrates a database that is behind.
-        (_DB_STATES.STAMPED, _HEAD),
-        (_DB_STATES.STAMPED, "older"),
-        (_DB_STATES.EMPTY, None),
-    ],
-)
-def test__database_findings_stays_quiet(state, revision):
-    reports = {
-        name: _report(name=name, state=state, revision=revision)
-        for name in (cli_util.AGUI, cli_util.AUTHZ)
-    }
-
-    found = audit_databases._database_findings(reports)
-
-    assert found == {}
-
-
-def test__database_findings_reports_a_stamp_needing_a_downgrade():
-    reports = {
-        cli_util.AGUI: _report(
-            name=cli_util.AGUI,
-            state=_DB_STATES.STAMPED,
-            revision="newer",
-            known=False,
-        ),
-        cli_util.AUTHZ: _report(state=_DB_STATES.STAMPED, revision=_HEAD),
-    }
-
-    found = audit_databases._database_findings(reports)
-
-    assert found["databases"][cli_util.AGUI]["downgrade_required"].startswith(
-        "newer: "
-    )
-    assert cli_util.AUTHZ not in found["databases"]
+    assert found is expected
 
 
 @pytest.mark.parametrize(
@@ -222,80 +104,51 @@ def test__database_findings_reports_a_stamp_needing_a_downgrade():
 def test_database_report_migration_owed(state, revision, policy, expected):
     report = _report(state=state, revision=revision, policy=policy)
 
-    assert report.migration_owed is expected
+    found = report.migration_owed
+
+    assert found is expected
 
 
-@pytest.mark.parametrize(
-    "state, revision, policy, expected",
-    [
-        (
-            _DB_STATES.EMPTY,
-            None,
-            _POLICY.EXPLICIT,
-            "ERROR: not created; 'migration_policy' is 'explicit'",
-        ),
-        (
-            _DB_STATES.STAMPED,
-            "older",
-            _POLICY.DISABLED,
-            f"ERROR: behind head (older -> {_HEAD}); 'migration_policy' is",
-        ),
-    ],
-)
-def test__database_summary_under_a_policy(state, revision, policy, expected):
-    report = _report(state=state, revision=revision, policy=policy)
-
-    found = audit_databases._database_summary(report)
-
-    assert found.startswith(expected)
-
-
-def test__database_findings_reports_a_migration_the_policy_holds():
-    reports = {
-        cli_util.AGUI: _report(
-            name=cli_util.AGUI,
-            state=_DB_STATES.STAMPED,
-            revision="older",
-            policy=_POLICY.EXPLICIT,
-        ),
-        cli_util.AUTHZ: _report(state=_DB_STATES.STAMPED, revision=_HEAD),
-    }
-
-    found = audit_databases._database_findings(reports)
-
-    assert (
-        "soliplex-cli database upgrade"
-        in (found["databases"][cli_util.AGUI]["migration_owed"])
+def test__probe_database_reads_a_migrated_database(the_installation, tmp_path):
+    # Driven against real files: the probe has to agree with what alembic
+    # actually wrote, which a mocked connection could not show.
+    the_installation, paths = _pair_installation(the_installation, tmp_path)
+    alembic_migrations.upgrade(
+        "head",
+        dburis={name: f"sqlite:///{path}" for name, path in paths.items()},
     )
-    assert cli_util.AUTHZ not in found["databases"]
+
+    state, revision = asyncio.run(
+        audit_databases._probe_database(the_installation, cli_util.AUTHZ)
+    )
+
+    assert state is _DB_STATES.STAMPED
+    assert revision == alembic_migrations.head_revision()
 
 
-@pytest.mark.parametrize(
-    "policy, migration_dburi, expected",
-    [
-        # Most deployments configure neither, and get no extra lines.
-        (None, None, []),
-        (
-            _POLICY.DISABLED,
-            None,
-            ["migration policy: disabled"],
-        ),
-        (
-            _POLICY.EXPLICIT,
-            "postgresql://owner:swordfish@db/authz",
-            [
-                "migration policy: explicit",
-                "migration dburi: postgresql://owner:***@db/authz",
-            ],
-        ),
-    ],
-)
-def test__database_config_lines(policy, migration_dburi, expected):
-    report = _report(policy=policy, migration_dburi=migration_dburi)
+def test__probe_database_reads_an_unstamped_database(
+    the_installation, tmp_path
+):
+    the_installation, paths = _pair_installation(the_installation, tmp_path)
+    alembic_migrations.upgrade(
+        "head",
+        dburis={name: f"sqlite:///{path}" for name, path in paths.items()},
+    )
+    engine = sa.create_engine(f"sqlite:///{paths[cli_util.AUTHZ]}")
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                sa.text(f"DROP TABLE {alembic_migrations.VERSION_TABLE}")
+            )
+    finally:
+        engine.dispose()
 
-    found = audit_databases._database_config_lines(report)
+    state, revision = asyncio.run(
+        audit_databases._probe_database(the_installation, cli_util.AUTHZ)
+    )
 
-    assert found == expected
+    assert state is _DB_STATES.UNSTAMPED
+    assert revision is None
 
 
 def test__database_reports_returns_the_cached_probe(ctx, the_installation):
@@ -366,46 +219,195 @@ def test__database_reports_records_an_unreachable_database(
     assert all(report.state is None for report in found.values())
 
 
-def test__probe_database_reads_a_migrated_database(the_installation, tmp_path):
-    # Driven against real files: the probe has to agree with what alembic
-    # actually wrote, which a mocked connection could not show.
-    the_installation, paths = _pair_installation(the_installation, tmp_path)
-    alembic_migrations.upgrade(
-        "head",
-        dburis={name: f"sqlite:///{path}" for name, path in paths.items()},
+@pytest.mark.parametrize(
+    "state, revision, error, expected",
+    [
+        (_DB_STATES.STAMPED, _HEAD, None, f"OK ({_HEAD})"),
+        (
+            _DB_STATES.STAMPED,
+            "older",
+            None,
+            f"behind head (older -> {_HEAD})",
+        ),
+        (
+            _DB_STATES.EMPTY,
+            None,
+            None,
+            "not created (the next writable open creates it)",
+        ),
+        (None, None, "OperationalError: refused", None),
+        (_DB_STATES.UNSTAMPED, None, None, None),
+    ],
+)
+def test__database_summary(state, revision, error, expected):
+    report = _report(state=state, revision=revision, error=error)
+
+    found = audit_databases._database_summary(report)
+
+    if expected is not None:
+        assert found == expected
+    elif error is not None:
+        assert found == f"ERROR: unreachable: {error}"
+    else:
+        assert found.startswith("ERROR: ")
+        assert alembic_migrations.BOOTSTRAP_SCRIPT in found
+
+
+def test__database_summary_for_a_stamp_needing_a_downgrade():
+    report = _report(state=_DB_STATES.STAMPED, revision="newer", known=False)
+
+    found = audit_databases._database_summary(report)
+
+    assert found.startswith("ERROR: newer: ")
+    assert "downgrade has to come from" in found
+    # Deliberately suggests no command: the revisions needed to move this
+    # database are not in this release, so none can be run here.
+    assert "alembic" not in found
+
+
+@pytest.mark.parametrize(
+    "state, revision, policy, expected",
+    [
+        (
+            _DB_STATES.EMPTY,
+            None,
+            _POLICY.EXPLICIT,
+            "ERROR: not created; 'migration_policy' is 'explicit'",
+        ),
+        (
+            _DB_STATES.STAMPED,
+            "older",
+            _POLICY.DISABLED,
+            f"ERROR: behind head (older -> {_HEAD}); 'migration_policy' is",
+        ),
+    ],
+)
+def test__database_summary_under_a_policy(state, revision, policy, expected):
+    report = _report(state=state, revision=revision, policy=policy)
+
+    found = audit_databases._database_summary(report)
+
+    assert found.startswith(expected)
+
+
+@pytest.mark.parametrize(
+    "policy, migration_dburi, expected",
+    [
+        # Most deployments configure neither, and get no extra lines.
+        (None, None, []),
+        (
+            _POLICY.DISABLED,
+            None,
+            ["migration policy: disabled"],
+        ),
+        (
+            _POLICY.EXPLICIT,
+            "postgresql://owner:swordfish@db/authz",
+            [
+                "migration policy: explicit",
+                "migration dburi: postgresql://owner:***@db/authz",
+            ],
+        ),
+    ],
+)
+def test__database_config_lines(policy, migration_dburi, expected):
+    report = _report(policy=policy, migration_dburi=migration_dburi)
+
+    found = audit_databases._database_config_lines(report)
+
+    assert found == expected
+
+
+def test__database_findings_reports_an_unreachable_database():
+    reports = {
+        cli_util.AGUI: _report(
+            name=cli_util.AGUI, state=_DB_STATES.STAMPED, revision=_HEAD
+        ),
+        cli_util.AUTHZ: _report(error="OperationalError: refused"),
+    }
+
+    found = audit_databases._database_findings(reports)
+
+    assert found == {
+        "databases": {
+            cli_util.AUTHZ: {"unreachable": "OperationalError: refused"}
+        }
+    }
+
+
+def test__database_findings_reports_an_unstamped_database():
+    reports = {
+        cli_util.AGUI: _report(name=cli_util.AGUI, state=_DB_STATES.UNSTAMPED),
+        cli_util.AUTHZ: _report(state=_DB_STATES.STAMPED, revision=_HEAD),
+    }
+
+    found = audit_databases._database_findings(reports)
+
+    assert (
+        alembic_migrations.BOOTSTRAP_SCRIPT
+        in (found["databases"][cli_util.AGUI]["unstamped"])
     )
+    assert cli_util.AUTHZ not in found["databases"]
 
-    state, revision = asyncio.run(
-        audit_databases._probe_database(the_installation, cli_util.AUTHZ)
+
+def test__database_findings_reports_a_stamp_needing_a_downgrade():
+    reports = {
+        cli_util.AGUI: _report(
+            name=cli_util.AGUI,
+            state=_DB_STATES.STAMPED,
+            revision="newer",
+            known=False,
+        ),
+        cli_util.AUTHZ: _report(state=_DB_STATES.STAMPED, revision=_HEAD),
+    }
+
+    found = audit_databases._database_findings(reports)
+
+    assert found["databases"][cli_util.AGUI]["downgrade_required"].startswith(
+        "newer: "
     )
-
-    assert state is _DB_STATES.STAMPED
-    assert revision == alembic_migrations.head_revision()
+    assert cli_util.AUTHZ not in found["databases"]
 
 
-def test__probe_database_reads_an_unstamped_database(
-    the_installation, tmp_path
-):
-    the_installation, paths = _pair_installation(the_installation, tmp_path)
-    alembic_migrations.upgrade(
-        "head",
-        dburis={name: f"sqlite:///{path}" for name, path in paths.items()},
+def test__database_findings_reports_a_migration_the_policy_holds():
+    reports = {
+        cli_util.AGUI: _report(
+            name=cli_util.AGUI,
+            state=_DB_STATES.STAMPED,
+            revision="older",
+            policy=_POLICY.EXPLICIT,
+        ),
+        cli_util.AUTHZ: _report(state=_DB_STATES.STAMPED, revision=_HEAD),
+    }
+
+    found = audit_databases._database_findings(reports)
+
+    assert (
+        "soliplex-cli database upgrade"
+        in (found["databases"][cli_util.AGUI]["migration_owed"])
     )
-    engine = sa.create_engine(f"sqlite:///{paths[cli_util.AUTHZ]}")
-    try:
-        with engine.begin() as connection:
-            connection.execute(
-                sa.text(f"DROP TABLE {alembic_migrations.VERSION_TABLE}")
-            )
-    finally:
-        engine.dispose()
+    assert cli_util.AUTHZ not in found["databases"]
 
-    state, revision = asyncio.run(
-        audit_databases._probe_database(the_installation, cli_util.AUTHZ)
-    )
 
-    assert state is _DB_STATES.UNSTAMPED
-    assert revision is None
+@pytest.mark.parametrize(
+    "state, revision",
+    [
+        # At head, and behind head: neither is a finding, because the next
+        # writable open migrates a database that is behind.
+        (_DB_STATES.STAMPED, _HEAD),
+        (_DB_STATES.STAMPED, "older"),
+        (_DB_STATES.EMPTY, None),
+    ],
+)
+def test__database_findings_stays_quiet(state, revision):
+    reports = {
+        name: _report(name=name, state=state, revision=revision)
+        for name in (cli_util.AGUI, cli_util.AUTHZ)
+    }
+
+    found = audit_databases._database_findings(reports)
+
+    assert found == {}
 
 
 # _audit_databases_section: ui only

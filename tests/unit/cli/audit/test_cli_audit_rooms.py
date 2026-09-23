@@ -202,8 +202,6 @@ def test__iter_room_rag_candidates(w_agent_rag, skills_and_rag, tools_and_rag):
     }
     room_config.tool_configs = tool_configs
 
-    found = list(audit_rooms._iter_room_rag_candidates(room_config))
-
     expected = []
     if w_agent_rag:
         expected.append(("agent", room_config.agent_config))
@@ -213,6 +211,8 @@ def test__iter_room_rag_candidates(w_agent_rag, skills_and_rag, tools_and_rag):
     for t_name, is_rag in tools_and_rag:
         if is_rag:
             expected.append((f"tool:{t_name}", tool_configs[t_name]))
+
+    found = list(audit_rooms._iter_room_rag_candidates(room_config))
 
     assert found == expected
 
@@ -378,7 +378,9 @@ def test__invalid_room_rag_dbs_w_deferred_database(
     the_installation._config.room_configs = {"r1": room_cfg}
     iter_candidates.side_effect = [[("skill:rag", _DeferringRagCfg())]]
 
-    assert audit_rooms._invalid_room_rag_dbs(the_installation) == {}
+    found = audit_rooms._invalid_room_rag_dbs(the_installation)
+
+    assert found == {}
 
 
 @mock.patch("soliplex.cli.audit.rooms._iter_room_rag_candidates")

@@ -57,11 +57,6 @@ def test__iter_quiz_configs(
 
     the_installation._config.quizzes_paths = quizzes_paths
 
-    found = sorted(
-        audit_quizzes._iter_quiz_configs(the_installation),
-        key=lambda t: (str(t[0]), str(t[1])),
-    )
-
     expected = sorted(
         [
             (
@@ -74,6 +69,11 @@ def test__iter_quiz_configs(
             )
             for dir_name, f_name in exp_yields
         ],
+        key=lambda t: (str(t[0]), str(t[1])),
+    )
+
+    found = sorted(
+        audit_quizzes._iter_quiz_configs(the_installation),
         key=lambda t: (str(t[0]), str(t[1])),
     )
 

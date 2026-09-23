@@ -17,37 +17,16 @@ A_CONFIG_PATH = pathlib.Path("/tmp/installation.yaml")
 # Interpolation findings
 # ---------------------------------------------------------------------------
 _SECRET = config_interp.MarkerKind.SECRET
-
-
 _ENVIRONMENT = config_interp.MarkerKind.ENVIRONMENT
-
-
 _BOTH = config_interp.MarkerKind.BOTH
-
-
 _EMBEDDED = config_interp.MarkerArity.EMBEDDED
-
-
 _SEQUENCE = config_interp.ValueShape.SEQUENCE
-
-
 _MAPPING = config_interp.ValueShape.MAPPING
-
-
 _UNDECLARED = audit_interpolation._InterpolationFindingCode.UNDECLARED_NAME
-
-
 _IGNORED = audit_interpolation._InterpolationFindingCode.IGNORED_MARKER
-
-
 _WRONG_KIND = audit_interpolation._InterpolationFindingCode.WRONG_KIND
-
-
 _INTERP_CFG_NAME = f"{__name__}._InterpCfg"
-
-
 _DERIVED_CFG_NAME = f"{__name__}._DerivedInterpCfg"
-
 
 _DECLARED = audit_interpolation._InterpolationDeclarations(
     secrets=frozenset({"KNOWN_SECRET"}),
@@ -320,6 +299,25 @@ def test__iter_field_strings(w_value, exp_strings):
 
 
 @pytest.mark.parametrize(
+    "w_field_name, w_value, exp_holds",
+    [
+        # No default at all.
+        ("required", "secret:KNOWN_SECRET", False),
+        ("env_default", "env:MISSING_ENV", True),
+        ("env_default", "env:OTHER_MISSING", False),
+    ],
+)
+def test__holds_declared_default(w_field_name, w_value, exp_holds):
+    config = _DefaultMarkerCfg(
+        **{"required": "secret:KNOWN_SECRET", w_field_name: w_value}
+    )
+
+    found = audit_interpolation._holds_declared_default(config, w_field_name)
+
+    assert found is exp_holds
+
+
+@pytest.mark.parametrize(
     "w_field_name, w_value, exp_findings",
     [
         # A declared-literal field is never reported.
@@ -456,62 +454,6 @@ def test__field_interpolation_findings(w_field_name, w_value, exp_findings):
 
 
 @pytest.mark.parametrize(
-    "w_class, exp_findings",
-    [
-        (
-            _InterpCfg,
-            [
-                _finding(),
-                _finding(
-                    code=_IGNORED,
-                    field_name="unannotated",
-                    config_key="unannotated",
-                ),
-            ],
-        ),
-        (
-            _DerivedInterpCfg,
-            [
-                _finding(
-                    config_type=_DERIVED_CFG_NAME,
-                ),
-            ],
-        ),
-    ],
-)
-def test__config_interpolation_findings(w_class, exp_findings):
-    config = w_class(
-        secret_whole="secret:MISSING",
-        unannotated="secret:MISSING",
-    )
-
-    found = audit_interpolation._config_interpolation_findings(
-        config, _DECLARED
-    )
-
-    assert found == exp_findings
-
-
-@pytest.mark.parametrize(
-    "w_field_name, w_value, exp_holds",
-    [
-        # No default at all.
-        ("required", "secret:KNOWN_SECRET", False),
-        ("env_default", "env:MISSING_ENV", True),
-        ("env_default", "env:OTHER_MISSING", False),
-    ],
-)
-def test__holds_declared_default(w_field_name, w_value, exp_holds):
-    config = _DefaultMarkerCfg(
-        **{"required": "secret:KNOWN_SECRET", w_field_name: w_value}
-    )
-
-    found = audit_interpolation._holds_declared_default(config, w_field_name)
-
-    assert found is exp_holds
-
-
-@pytest.mark.parametrize(
     "w_field_name, w_value, exp_findings",
     [
         # A stock placeholder default is the framework's, not a typo.
@@ -554,6 +496,43 @@ def test__field_interpolation_findings_w_declared_default(
         )
         for exp in exp_findings
     ]
+
+
+@pytest.mark.parametrize(
+    "w_class, exp_findings",
+    [
+        (
+            _InterpCfg,
+            [
+                _finding(),
+                _finding(
+                    code=_IGNORED,
+                    field_name="unannotated",
+                    config_key="unannotated",
+                ),
+            ],
+        ),
+        (
+            _DerivedInterpCfg,
+            [
+                _finding(
+                    config_type=_DERIVED_CFG_NAME,
+                ),
+            ],
+        ),
+    ],
+)
+def test__config_interpolation_findings(w_class, exp_findings):
+    config = w_class(
+        secret_whole="secret:MISSING",
+        unannotated="secret:MISSING",
+    )
+
+    found = audit_interpolation._config_interpolation_findings(
+        config, _DECLARED
+    )
+
+    assert found == exp_findings
 
 
 def test__iter_installation_interpolation_configs():
