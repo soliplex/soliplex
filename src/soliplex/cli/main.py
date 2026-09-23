@@ -21,6 +21,12 @@ from soliplex.cli import ollama
 from soliplex.cli import room_authz
 from soliplex.cli import serve
 from soliplex.cli import types
+from soliplex.cli.audit import completions as audit_completions
+from soliplex.cli.audit import environment as audit_environment
+from soliplex.cli.audit import oidc as audit_oidc
+from soliplex.cli.audit import rooms as audit_rooms
+from soliplex.cli.audit import secrets as audit_secrets
+from soliplex.cli.audit import skills as audit_skills
 from soliplex.config import installation as config_installation
 
 the_cli = typer.Typer(
@@ -72,12 +78,12 @@ def _hidden_alias(name, func):
 
 _hidden_alias("pull-models", ollama.pull_models)
 _hidden_alias("check-config", audit.audit_all)
-_hidden_alias("list-secrets", audit.audit_secrets)
-_hidden_alias("list-environment", audit.audit_environment)
-_hidden_alias("list-oidc-auth-providers", audit.audit_oidc_auth_providers)
-_hidden_alias("list-rooms", audit.audit_rooms)
-_hidden_alias("list-completions", audit.audit_completions)
-_hidden_alias("list-skills", audit.audit_skills)
+_hidden_alias("list-secrets", audit_secrets.audit_secrets)
+_hidden_alias("list-environment", audit_environment.audit_environment)
+_hidden_alias("list-oidc-auth-providers", audit_oidc.audit_oidc_auth_providers)
+_hidden_alias("list-rooms", audit_rooms.audit_rooms)
+_hidden_alias("list-completions", audit_completions.audit_completions)
+_hidden_alias("list-skills", audit_skills.audit_skills)
 _hidden_alias("list-admin-users", admin_users.list_admin_users)
 _hidden_alias("clear-admin-users", admin_users.clear_admin_users)
 _hidden_alias("add-admin-user", admin_users.add_admin_user)

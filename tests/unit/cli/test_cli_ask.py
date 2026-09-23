@@ -26,7 +26,7 @@ def _invoke(cli_runner, scratch_installation, *args):
     # 'ask.app' has a single command, which Typer promotes to the top
     # level, so the command name is not part of the invocation. Testing
     # the module's own 'app' (rather than 'cli.main') mirrors the other
-    # CLI suites, e.g. 'test_cli_audit.py' invoking 'audit.app'.
+    # CLI suites, e.g. 'test_cli_audit_package.py' invoking 'audit.app'.
     return cli_runner.invoke(
         cli_ask.app,
         [str(scratch_installation.path), *args],
