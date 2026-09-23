@@ -246,4 +246,4 @@ options = "check --fix REVISION_SCRIPT_FILENAME"
 # Remove this override after bubble-sandbox 0.13.0 is released.
 [tool.uv.sources.bubble-sandbox]
 git = "https://github.com/ggozad/bubble-sandbox.git"
-rev = "ea48ba0502e9a281508c325c39c2ecc11048c1e8"
+rev = "a754e90aeba669438f2af0d79571eb2d99015edd"

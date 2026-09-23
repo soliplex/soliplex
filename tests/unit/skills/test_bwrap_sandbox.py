@@ -157,6 +157,8 @@ def i_config(
     return mock.create_autospec(
         config_installation.InstallationConfig,
         sandbox_config=s_config,
+        sandbox_workdirs_path=s_config.workdirs_path,
+        sandbox_transcripts_path=s_config.transcripts_path,
         rooms_upload_path=rooms_upload_path,
         threads_upload_path=threads_upload_path,
     )
@@ -214,7 +216,7 @@ def test_format_execute_result_w_timeout():
         _result(timed_out=True, timeout_seconds=30.0)
     )
 
-    assert "30.0 seconds" in found
+    assert "after 30 seconds" in found
     assert "less work" in found
     assert found != ""
 
@@ -1131,7 +1133,7 @@ async def test_create_sandbox_toolset_audits_timeout(
     ):
         found = await tool.function(ctx=ctx_w_deps, **w_arg)
 
-    assert "30.0 seconds" in found
+    assert "after 30 seconds" in found
 
     record = audit_records[-1]
     assert record.action == w_action
@@ -1188,6 +1190,14 @@ def test_script_snapshot_path():
     assert found == (f".soliplex/executions/script-{RUN_ID_STR}-{call_id}.py")
     # Not at the workspace root, which the download listing serves.
     assert "/" in found
+
+
+def test_script_snapshot_path_wo_run_id():
+    call_id = uuid.uuid4()
+
+    found = skills_bwrap_sandbox.script_snapshot_path(None, call_id)
+
+    assert found == f".soliplex/executions/script-{call_id}.py"
 
 
 def test_write_transcript_uses_the_call_id(transcripts_path):
@@ -1413,6 +1423,22 @@ async def test_capability_instructions_wo_installation_config(ctx_w_deps):
     found = await runtime(ctx_w_deps)
 
     assert SANDBOX_WORKDIR_PATH in found
+
+
+@pytest.mark.anyio
+async def test_capability_wo_installation_sandbox_config(ctx_w_deps):
+    i_config = config_installation.InstallationConfig(id="testing")
+    assert i_config.sandbox_config is None
+    capability = skills_bwrap_sandbox.create_bwrap_sandbox_capability(
+        installation_config=i_config,
+    )
+
+    toolset = capability.get_toolset()
+    _static, runtime = capability.get_instructions()
+    found = await runtime(ctx_w_deps)
+
+    assert set(toolset.tools) == {"run", "run_python"}
+    assert "discarded after each command" in found
 
 
 @pytest.mark.anyio
@@ -1651,7 +1677,7 @@ def test_resolve_sandbox_path_w_the_workdir(temp_dir):
         volumes={},
     )
 
-    assert found == (temp_dir, "plot.png")
+    assert found == (temp_dir, "plot.png", "work")
 
 
 def test_resolve_sandbox_path_w_a_volume(temp_dir):
@@ -1661,7 +1687,7 @@ def test_resolve_sandbox_path_w_a_volume(temp_dir):
         volumes={"room": _volume(temp_dir)},
     )
 
-    assert found == (temp_dir, "figures/a.png")
+    assert found == (temp_dir, "figures/a.png", "room")
 
 
 @pytest.mark.parametrize(
@@ -1792,7 +1818,7 @@ def test_format_execute_result_timeout_remedy_follows_the_workspace(
         persistent=w_persistent,
     )
 
-    assert "30.0 seconds" in found
+    assert "after 30 seconds" in found
     assert (SANDBOX_WORKDIR_PATH in found) is w_persistent
 
 

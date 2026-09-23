@@ -74,7 +74,7 @@ def format_execute_result(
             )
 
         return (
-            f"The sandbox stopped this run after {result.timeout_seconds} "
+            f"The sandbox stopped this run after {result.timeout_seconds:g} "
             f"seconds. That limit is fixed; do less work per run: {remedy}."
         )
 
@@ -375,9 +375,10 @@ def get_extra_volumes(
 EXECUTIONS_SUBDIR = ".soliplex/executions"
 
 
-def script_snapshot_path(run_id: str, call_id: uuid.UUID) -> str:
+def script_snapshot_path(run_id: str | None, call_id: uuid.UUID) -> str:
     """Return the workspace path 'run_python' keeps its source at."""
-    return f"{EXECUTIONS_SUBDIR}/script-{run_id}-{call_id}.py"
+    stem = f"{run_id}-{call_id}" if run_id is not None else str(call_id)
+    return f"{EXECUTIONS_SUBDIR}/script-{stem}.py"
 
 
 def write_transcript(
@@ -593,8 +594,9 @@ def resolve_sandbox_path(
     *,
     workdir: pathlib.Path | None,
     volumes: bs_models.VolumeMap,
-) -> tuple[pathlib.Path, str]:
-    """Map a sandbox path to its host root and the part below it."""
+) -> tuple[pathlib.Path, str, str]:
+    """Map a sandbox path to its host root, the part below it, and the
+    name of the mount it is in."""
     pure = pathlib.PurePosixPath(path)
     workdir_root = pathlib.PurePosixPath(SANDBOX_WORKDIR_PATH)
     volumes_root = pathlib.PurePosixPath(SANDBOX_VOLUMES_PATH)
@@ -606,7 +608,11 @@ def resolve_sandbox_path(
         rest = pure.relative_to(workdir_root).parts
 
         if rest:
-            return workdir, str(pathlib.PurePosixPath(*rest))
+            return (
+                workdir,
+                str(pathlib.PurePosixPath(*rest)),
+                WORKDIR_VOLUME_NAME,
+            )
 
     elif pure.is_relative_to(volumes_root):
         rest = pure.relative_to(volumes_root).parts
@@ -615,7 +621,11 @@ def resolve_sandbox_path(
             volume = volumes.get(rest[0])
 
             if volume is not None and volume.host_path is not None:
-                return volume.host_path, str(pathlib.PurePosixPath(*rest[1:]))
+                return (
+                    volume.host_path,
+                    str(pathlib.PurePosixPath(*rest[1:])),
+                    rest[0],
+                )
 
     raise UnreadablePath(path, "it does not name a file in the sandbox")
 
@@ -797,12 +807,13 @@ def create_sandbox_toolset(
     if installation_config is not None:
         i_config = installation_config
         s_config = i_config.sandbox_config
-        sandbox_config.environments_pathname = s_config.environments_path
-        workdirs_path = s_config.workdirs_path
+        if s_config is not None:
+            sandbox_config.environments_pathname = s_config.environments_path
+        workdirs_path = i_config.sandbox_workdirs_path
 
         threads_upload_path = i_config.threads_upload_path
         rooms_upload_path = i_config.rooms_upload_path
-        transcripts_path = s_config.transcripts_path
+        transcripts_path = i_config.sandbox_transcripts_path
     else:
         workdirs_path = None
         threads_upload_path = None
@@ -942,15 +953,10 @@ def create_sandbox_toolset(
                         deps.thread_id,
                     ),
                 )
-                root, relative = resolve_sandbox_path(
+                root, relative, volume_name = resolve_sandbox_path(
                     path,
                     workdir=workdir,
                     volumes=mounted,
-                )
-                volume_name = (
-                    WORKDIR_VOLUME_NAME
-                    if root == workdir
-                    else pathlib.PurePosixPath(path).parts[3]
                 )
 
                 data = read_beneath(
@@ -1015,7 +1021,7 @@ class SandboxCapability(ai_capabilities.AbstractCapability[typing.Any]):
         if i_config is None:
             workdirs_path = rooms_upload_path = threads_upload_path = None
         else:
-            workdirs_path = i_config.sandbox_config.workdirs_path
+            workdirs_path = i_config.sandbox_workdirs_path
             rooms_upload_path = i_config.rooms_upload_path
             threads_upload_path = i_config.threads_upload_path
 
