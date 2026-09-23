@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import code
+import functools
 import json
 import pathlib
 import sys
@@ -21,12 +22,6 @@ from soliplex.cli import ollama
 from soliplex.cli import room_authz
 from soliplex.cli import serve
 from soliplex.cli import types
-from soliplex.cli.audit import completions as audit_completions
-from soliplex.cli.audit import environment as audit_environment
-from soliplex.cli.audit import oidc as audit_oidc
-from soliplex.cli.audit import rooms as audit_rooms
-from soliplex.cli.audit import secrets as audit_secrets
-from soliplex.cli.audit import skills as audit_skills
 from soliplex.config import installation as config_installation
 
 the_cli = typer.Typer(
@@ -64,30 +59,40 @@ def app(
     ),
 ):
     """soliplex CLI - RAG system"""
-    # Hidden audit aliases (check-config, list-secrets, ...) skip the
-    # audit group's _audit_callback, so ctx.obj would otherwise be None
-    # when those commands try to read ctx.obj["quiet"].
+    # The hidden 'check-config' alias skips the audit group's
+    # _audit_callback, so ctx.obj would otherwise be None when it tries
+    # to read ctx.obj["quiet"].
     ctx.ensure_object(dict)
     ctx.obj.setdefault("quiet", False)
 
 
+def _deprecated_alias(name, replacement, func):
+    """Return 'func' wrapped to warn on stderr that 'name' is deprecated.
+
+    The wrapper keeps 'func''s signature, from which Typer builds the
+    command's arguments and options.
+    """
+
+    @functools.wraps(func)
+    def alias(*args, **kwargs):
+        typer.echo(
+            f"Warning: 'soliplex-cli {name}' is deprecated; "
+            f"use 'soliplex-cli {replacement}' instead.",
+            err=True,
+        )
+        return func(*args, **kwargs)
+
+    return alias
+
+
 # Hidden backward-compatibility aliases
-def _hidden_alias(name, func):
-    the_cli.command(name=name, hidden=True)(func)
+def _hidden_alias(name, replacement, func):
+    the_cli.command(name=name, hidden=True)(
+        _deprecated_alias(name, replacement, func)
+    )
 
 
-_hidden_alias("pull-models", ollama.pull_models)
-_hidden_alias("check-config", audit.audit_all)
-_hidden_alias("list-secrets", audit_secrets.audit_secrets)
-_hidden_alias("list-environment", audit_environment.audit_environment)
-_hidden_alias("list-oidc-auth-providers", audit_oidc.audit_oidc_auth_providers)
-_hidden_alias("list-rooms", audit_rooms.audit_rooms)
-_hidden_alias("list-completions", audit_completions.audit_completions)
-_hidden_alias("list-skills", audit_skills.audit_skills)
-_hidden_alias("list-admin-users", admin_users.list_admin_users)
-_hidden_alias("clear-admin-users", admin_users.clear_admin_users)
-_hidden_alias("add-admin-user", admin_users.add_admin_user)
-_hidden_alias("show-room-authz", room_authz.show_room_authz)
+_hidden_alias("check-config", "audit", audit.audit_all)
 
 the_cli.add_typer(serve.app)
 the_cli.add_typer(ask.app)

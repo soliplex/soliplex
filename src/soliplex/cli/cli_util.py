@@ -239,9 +239,9 @@ async def _authz_session(the_installation, command: str, **open_kwargs):
     connection is released deterministically rather than leaking until
     garbage collection.
     """
-    # Safety net: the hidden 'add-admin-user' / 'show-room-authz' / ...
-    # aliases bypass the group callbacks, so silence audit output here unless
-    # a callback already configured it.
+    # Safety net: the hidden 'check-config' alias bypasses the group
+    # callbacks, so silence audit output here unless a callback already
+    # configured it.
     _configure_cli_logging()
     engine = await open_db(
         the_installation, AUTHZ, command=command, **open_kwargs
