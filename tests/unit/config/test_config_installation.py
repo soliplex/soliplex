@@ -102,7 +102,7 @@ W_FULL_META_INSTALLATION_CONFIG_KW = {
                 config_klass=config_skills.HR_RAG_SkillConfig
             ),
             config_meta.SkillConfigMeta(
-                config_klass=config_skills.HR_Analysis_SkillConfig
+                config_klass=config_skills.BwrapSandboxSkillConfig
             ),
         ],
         "agent_capability_types": [
@@ -148,7 +148,7 @@ meta:
       wrapper_klass: "soliplex.config.tools.NoArgsMCPWrapper"
   skill_configs:
       - "soliplex.config.skills.HR_RAG_SkillConfig"
-      - "soliplex.config.skills.HR_Analysis_SkillConfig"
+      - "soliplex.config.skills.BwrapSandboxSkillConfig"
   agent_capability_types:
       - "_test_metaconfig.DummyAgentCapability"
   agent_configs:

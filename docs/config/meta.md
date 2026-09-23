@@ -121,9 +121,6 @@ meta:
   - name: "rag"
     model_klass: "haiku.rag.capabilities.rag.RAGState"
     source: "server"
-  - name: "analysis"
-    model_klass: "haiku.rag.capabilities.analysis.AnalysisState"
-    source: "server"
   - name: "citation_policy"
     model_klass: "haiku.rag.capabilities.policy.CitationPolicyState"
     source: "server"
@@ -265,7 +262,6 @@ though we configured explicitly:
 meta:
   skill_configs:
   - "soliplex.config.skills.HR_RAG_SkillConfig"
-  - "soliplex.config.skills.HR_Analysis_SkillConfig"
   - "soliplex.config.skills.HR_EvidenceCompaction_SkillConfig"
   - "soliplex.config.skills.HR_CitationPolicy_SkillConfig"
   - "soliplex.config.skills.BwrapSandboxSkillConfig"

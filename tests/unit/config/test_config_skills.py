@@ -7,7 +7,6 @@ import pydantic
 import pytest
 from bubble_sandbox import models as bs_models
 from haiku.rag import config as hr_config
-from haiku.rag.capabilities import analysis as hr_analysis
 from haiku.rag.capabilities import rag as hr_rag
 
 from soliplex.capabilities import filesystem as cap_fs
@@ -98,28 +97,12 @@ def test_filesystem_skill_config_from_invalid_path(temp_dir):
     assert "Invalid filesystem capability" in config.description
 
 
-@pytest.mark.parametrize(
-    "config_class, capability_class, state_namespace",
-    [
-        (
-            config_skills.HR_RAG_SkillConfig,
-            hr_rag.RAGCapability,
-            hr_rag.STATE_NAMESPACE,
-        ),
-        (
-            config_skills.HR_Analysis_SkillConfig,
-            hr_analysis.AnalysisCapability,
-            hr_analysis.STATE_NAMESPACE,
-        ),
-    ],
-)
 def test_haiku_rag_capability_config(
     temp_dir,
     installation_config,
-    config_class,
-    capability_class,
-    state_namespace,
 ):
+    config_class = config_skills.HR_RAG_SkillConfig
+    state_namespace = hr_rag.STATE_NAMESPACE
     db_path = temp_dir / "rag.lancedb"
     db_path.mkdir()
     config_path = temp_dir / "room.yaml"
@@ -133,7 +116,7 @@ def test_haiku_rag_capability_config(
     )
 
     capability = config.capability
-    assert isinstance(capability, capability_class)
+    assert isinstance(capability, hr_rag.RAGCapability)
     assert [ref.location for ref in capability.scope.databases] == [db_path]
     assert capability.defer_loading is False
 
@@ -187,19 +170,12 @@ def _rag_databases_yaml(config_class, wiki_path):
     }
 
 
-@pytest.mark.parametrize(
-    "config_class",
-    [
-        config_skills.HR_RAG_SkillConfig,
-        config_skills.HR_Analysis_SkillConfig,
-    ],
-)
 def test_haiku_rag_capability_config_w_rag_databases(
     temp_dir,
     installation_config,
-    config_class,
 ):
     """Named databases become one capability covering them all"""
+    config_class = config_skills.HR_RAG_SkillConfig
     papers = temp_dir / "papers.lancedb"
     papers.mkdir()
     wiki = temp_dir / "wiki.lancedb"
@@ -229,18 +205,11 @@ def test_haiku_rag_capability_config_w_rag_databases(
     }
 
 
-@pytest.mark.parametrize(
-    "config_class",
-    [
-        config_skills.HR_RAG_SkillConfig,
-        config_skills.HR_Analysis_SkillConfig,
-    ],
-)
 def test_haiku_rag_capability_config_w_rag_databases_round_trips(
     temp_dir,
     installation_config,
-    config_class,
 ):
+    config_class = config_skills.HR_RAG_SkillConfig
     wiki = temp_dir / "wiki.lancedb"
     wiki.mkdir()
     (temp_dir / "papers.lancedb").mkdir()
@@ -326,20 +295,13 @@ def _round_trip_hr_skill(
     return original, reloaded
 
 
-@pytest.mark.parametrize(
-    "config_class",
-    [
-        config_skills.HR_RAG_SkillConfig,
-        config_skills.HR_Analysis_SkillConfig,
-    ],
-)
 @pytest.mark.parametrize("w_stem", [False, True])
 def test_haiku_rag_capability_config_as_yaml_round_trips(
     temp_dir,
     installation_config,
-    config_class,
     w_stem,
 ):
+    config_class = config_skills.HR_RAG_SkillConfig
     db_path = temp_dir / "example.lancedb"
     db_path.mkdir()
     config_dict = {"kind": config_class.kind}
@@ -381,20 +343,13 @@ def test_haiku_rag_capability_config_wraps_yaml_errors(
 @pytest.mark.parametrize(
     "w_yaml, exp_defer_loading", _defer_loading_states(False)
 )
-@pytest.mark.parametrize(
-    "config_class",
-    [
-        config_skills.HR_RAG_SkillConfig,
-        config_skills.HR_Analysis_SkillConfig,
-    ],
-)
 def test_haiku_rag_capability_config_defer_loading(
     temp_dir,
     installation_config,
-    config_class,
     w_yaml,
     exp_defer_loading,
 ):
+    config_class = config_skills.HR_RAG_SkillConfig
     db_path = temp_dir / "rag.lancedb"
     db_path.mkdir()
     config = config_class.from_yaml(

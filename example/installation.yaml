@@ -31,16 +31,16 @@ meta:
   # their 'name'
   #
   # By default, 'haiku.rag' skills register two features ('rag' and
-  # 'analysis'), just as if we configured here:
+  # 'citation_policy'), just as if we configured here:
   #
   # agui_features:
   #
   # - name: "rag"
-  #   model_klass: "haiku.rag.skills.rag.RAGState"
+  #   model_klass: "haiku.rag.capabilities.rag.RAGState"
   #   source: "server"
   #
-  # - name: "analysis"
-  #   model_klass: "haiku.rag.skills.analysis.AnalysisState"
+  # - name: "citation_policy"
+  #   model_klass: "haiku.rag.capabilities.policy.CitationPolicyState"
   #   source: "server"
   #------------------------------------------------------------------------
 
@@ -71,14 +71,12 @@ meta:
   # Register skill configuration types so that they can be referenced by
   # their 'kind'
   #
-  # 'soliplex.config.skills.HR_RAG_SkillConfig',
-  # 'soliplex.config.skills.HR_Analysis_SkillConfig', and
+  # 'soliplex.config.skills.HR_RAG_SkillConfig' and
   # 'soliplex.config.skills.BwrapSandboxSkillConfig'
   # are registered by default, just as if we configured here:
   #
   # skill_configs:
   # - "soliplex.config.skills.HR_RAG_SkillConfig"
-  # - "soliplex.config.skills.HR_Analysis_SkillConfig"
   # - "soliplex.config.skills.BwrapSandboxSkillConfig"
   #------------------------------------------------------------------------
 
