@@ -807,30 +807,31 @@ def installation_config_w_skill(installation_config):
         (BARE_ROOM_CONFIG_KW.copy(), ()),
         (
             W_NON_HR_SKILLS_ROOM_CONFIG_KW.copy(),
-            [],
+            (),
         ),
         (
             W_HR_SKILLS_ROOM_CONFIG_KW.copy(),
-            [
+            (
                 # from 'skills' via local config
                 hr_rag.STATE_NAMESPACE,
-            ],
+            ),
         ),
         (
             W_NON_HR_TOOLS_ROOM_CONFIG_KW.copy(),
-            [
+            (
                 # from 'tool_configs'
                 TOOL_AGUI_FEATURE_NAME,
-            ],
+            ),
         ),
         (
             FULL_ROOM_CONFIG_KW.copy(),
-            [
-                # from 'agent_config'
-                AGUI_FEATURE_NAME,
+            (
+                # sorted, not in source order
                 # from 'room_config'
                 EXTRA_AGUI_FEATURE_NAME,
-            ],
+                # from 'agent_config'
+                AGUI_FEATURE_NAME,
+            ),
         ),
     ],
 )
@@ -853,7 +854,7 @@ def test_roomconfig_agui_feature_names(
 
     found = room_config.agui_feature_names
 
-    assert set(found) == set(expected)
+    assert found == expected
 
 
 @pytest.mark.parametrize("w_existing", [False, True])

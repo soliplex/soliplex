@@ -242,6 +242,7 @@ class RoomConfig:
 
     @property
     def agui_feature_names(self) -> tuple[str]:
+        """The feature names from every source, deduplicated and sorted."""
         agent_features = set(self.agent_config.agui_feature_names)
         room_features = set(self._agui_feature_names)
         tool_features = set()
@@ -254,7 +255,9 @@ class RoomConfig:
             skill_features |= set(skill_config.agui_feature_names)
 
         return tuple(
-            agent_features | tool_features | skill_features | room_features
+            sorted(
+                agent_features | tool_features | skill_features | room_features
+            )
         )
 
     @property
