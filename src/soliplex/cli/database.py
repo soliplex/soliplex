@@ -142,21 +142,6 @@ class MigrationStatus:
         return alembic_migrations.split_chain(self.revision)
 
 
-def _probe(name: str, dburi: str):
-    """Read one database's state, creating and migrating nothing."""
-    engine = alembic_migrations.engine_for(name, dburi)
-    try:
-        with engine.connect() as connection:
-            return (
-                alembic_migrations.database_state(
-                    connection, alembic_migrations.METADATA[name]
-                ),
-                alembic_migrations.current_revision(connection),
-            )
-    finally:
-        engine.dispose()
-
-
 def _status(i_config, name: str, *, probe: bool = True) -> MigrationStatus:
     """One database's status, reporting rather than raising.
 
@@ -174,7 +159,7 @@ def _status(i_config, name: str, *, probe: bool = True) -> MigrationStatus:
         return MigrationStatus(name=name, dburi=dburi, policy=policy)
 
     try:
-        state, revision = _probe(name, dburi)
+        state, revision = cli_util.probe_database(name, dburi)
     except Exception as exc:
         return MigrationStatus(
             name=name,

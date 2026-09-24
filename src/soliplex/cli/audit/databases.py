@@ -9,6 +9,7 @@ from soliplex import alembic_migrations
 from soliplex.cli import cli_util
 from soliplex.cli import types
 from soliplex.cli.audit import _common as audit_common
+from soliplex.cli.audit import installation as audit_installation
 from soliplex.config import installation as config_installation
 
 _UNSTAMPED = (
@@ -40,6 +41,12 @@ _MIGRATION_OWED = {
 }
 
 
+# Which configured DBURI a report probed, named by its config key.
+PROBED_ASYNC = "async_dburi"
+PROBED_MIGRATION = "migration_dburi"
+PROBED_SYNC = "sync_dburi"
+
+
 _SEE_DATABASES = (
     "SKIPPED: authorization database unreachable "
     "(reported under 'Configured databases')"
@@ -63,6 +70,7 @@ class DatabaseReport:
     error: str | None = None
     policy: config_installation.MigrationPolicy | None = None
     migration_dburi: str | None = None
+    probed: str = PROBED_ASYNC
 
     @property
     def stamped(self) -> bool:
@@ -96,19 +104,30 @@ class DatabaseReport:
         )
 
 
-def _inspect_database(connection, db_type: str):
-    return (
-        alembic_migrations.database_state(
-            connection, alembic_migrations.METADATA[db_type]
-        ),
-        alembic_migrations.current_revision(connection),
+def _probe_target(i_config, db_type: str) -> tuple[str, str]:
+    """Return ``(dburi, probed)`` naming the DBURI to probe.
+
+    The runtime async DBURI, unless it is the in-memory default.  Otherwise
+    the migration DBURI: the configured 'migration_dburi', else the runtime
+    sync DBURI.
+    """
+    dburi = cli_util.async_dburi(i_config, db_type)
+    if dburi != config_installation.ASYNC_MEMORY_ENGINE_URL:
+        return dburi, PROBED_ASYNC
+
+    configured = alembic_migrations.configured_migration_dburi(
+        i_config, db_type
     )
+    if configured is not None:
+        return configured, PROBED_MIGRATION
+
+    return alembic_migrations.migration_dburi(i_config, db_type), PROBED_SYNC
 
 
-async def _probe_database(the_installation, db_type: str):
+async def _probe_database(i_config, db_type: str):
     """Read one database's state without creating or migrating anything."""
     engine = await cli_util.open_db(
-        the_installation,
+        i_config,
         db_type,
         command="audit databases",
         allow_ram=True,
@@ -116,18 +135,38 @@ async def _probe_database(the_installation, db_type: str):
     )
     try:
         async with engine.connect() as connection:
-            return await connection.run_sync(_inspect_database, db_type)
+            return await connection.run_sync(
+                cli_util.inspect_database, db_type
+            )
     finally:
         await engine.dispose()
 
 
-def _database_reports(ctx, the_installation) -> dict:
+def _probe(i_config, db_type: str, dburi: str, probed: str):
+    """``(state, revision)`` for one database, over the DBURI 'probed' names.
+
+    The async DBURI is read through an async engine, the others through a
+    sync one.
+
+    Raises:
+
+    - 'cli_util.DatabaseNotCreated' when the async DBURI's database has no
+      schema.
+    """
+    if probed == PROBED_ASYNC:
+        return asyncio.run(_probe_database(i_config, db_type))
+    return cli_util.probe_database(db_type, dburi)
+
+
+def _database_reports(ctx, i_config) -> dict:
     """Probe both databases once per invocation, caching on ``ctx.obj``.
 
     Every section that needs a database's state shares this, so an
     unreachable DBURI costs one connection attempt per run rather than one
     per section -- which matters when reaching it means waiting for a
     connect timeout.
+
+    ``i_config`` is the installation's 'InstallationConfig'.
     """
     cached = ctx.obj.get("database_reports")
     if cached is not None:
@@ -136,23 +175,21 @@ def _database_reports(ctx, the_installation) -> dict:
     head = alembic_migrations.head_revision()
     reports = {}
     for db_type in alembic_migrations.DATABASE_NAMES:
+        dburi, probed = _probe_target(i_config, db_type)
         configured = {
             "name": db_type,
-            "dburi": cli_util.async_dburi(the_installation, db_type),
+            "dburi": dburi,
+            "probed": probed,
             "head": head,
-            "policy": alembic_migrations.migration_policy(
-                the_installation, db_type
-            ),
+            "policy": alembic_migrations.migration_policy(i_config, db_type),
             "migration_dburi": (
                 alembic_migrations.configured_migration_dburi(
-                    the_installation, db_type
+                    i_config, db_type
                 )
             ),
         }
         try:
-            state, revision = asyncio.run(
-                _probe_database(the_installation, db_type)
-            )
+            state, revision = _probe(i_config, db_type, dburi, probed)
         except cli_util.DatabaseNotCreated:
             reports[db_type] = DatabaseReport(
                 **configured,
@@ -201,12 +238,17 @@ def _database_summary(report: DatabaseReport) -> str:
 def _database_config_lines(report: DatabaseReport) -> list[str]:
     """The migration settings configured for one database, if any.
 
-    Nothing is printed for a deployment which configures neither.
+    Nothing is printed for a deployment which configures neither.  The
+    migration DBURI is left out when it is the one probed, which the
+    report's first line already shows.
     """
     lines = []
     if report.policy is not None:
         lines.append(f"migration policy: {report.policy}")
-    if report.migration_dburi is not None:
+    if (
+        report.migration_dburi is not None
+        and report.probed != PROBED_MIGRATION
+    ):
         shown = cli_util.redacted_dburi(report.migration_dburi)
         lines.append(f"migration dburi: {shown}")
     return lines
@@ -247,16 +289,17 @@ def _audit_databases_section(
 ) -> dict:  # pragma NO COVER UI ONLY
     """Print the databases section (rule header + one line per database)."""
     quiet = ctx.obj["quiet"]
-    the_installation = audit_common._get_installation(ctx, installation_path)
+    i_config = audit_common._get_installation_config(ctx, installation_path)
     tc_line, tc_rule, tc_print, _ = audit_common._quiet_console_funcs(quiet)
 
     tc_line()
     tc_rule("Configured databases")
     tc_line()
 
-    reports = _database_reports(ctx, the_installation)
+    reports = _database_reports(ctx, i_config)
     for report in reports.values():
-        tc_print(f"- {report.name}: {cli_util.redacted_dburi(report.dburi)}")
+        shown = cli_util.redacted_dburi(report.dburi)
+        tc_print(f"- {report.name}: {shown} ({report.probed})")
         for line in _database_config_lines(report):
             tc_print(f"  {line}")
         tc_print(f"  {_database_summary(report)}")
@@ -266,7 +309,9 @@ def _audit_databases_section(
     # database: this section has already reported it.
     ctx.obj["databases_audited"] = True
 
-    return _database_findings(reports)
+    warning_errors = audit_installation._audit_config_warnings(ctx, tc_print)
+
+    return _database_findings(reports) | warning_errors
 
 
 def audit_databases(

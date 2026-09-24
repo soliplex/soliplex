@@ -114,7 +114,7 @@ def _audit_room_authz_section(
     tc_rule("Configured rooms by authorization state")
     tc_line()
 
-    report = audit_databases._database_reports(ctx, the_installation)[
+    report = audit_databases._database_reports(ctx, the_installation._config)[
         cli_util.AUTHZ
     ]
     if report.error is not None:

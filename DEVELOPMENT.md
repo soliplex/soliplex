@@ -422,7 +422,11 @@ command at hand -- `alembic_migrations` itself knows nothing about RAM
 databases.
 
 `audit` is deliberately *not* in that list: it only reads, and reports an
-uncreated database as "nothing configured" rather than creating one. Nor
+uncreated database as "nothing configured" rather than creating one.
+`audit databases` loads only the installation config, as the `database`
+group does, and probes the runtime async DBURI when one is configured,
+else the migration DBURI over a sync engine -- so it works against a
+migration-only configuration too. Nor
 is the `database` group, which opens a sync engine on the migration DBURI
 itself: it must not create or migrate anything just to report, and the
 credential it uses is not the one `open_db` would reach for.

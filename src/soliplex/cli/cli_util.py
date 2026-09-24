@@ -132,6 +132,29 @@ async def _require_existing_schema(engine, db_type: str) -> None:
         raise DatabaseNotCreated(db_type)
 
 
+def inspect_database(connection, db_type: str):
+    """``(state, revision)`` for one database, read over ``connection``."""
+    return (
+        alembic_migrations.database_state(
+            connection, alembic_migrations.METADATA[db_type]
+        ),
+        alembic_migrations.current_revision(connection),
+    )
+
+
+def probe_database(db_type: str, dburi: str):
+    """``(state, revision)`` for one database, over a sync engine.
+
+    Creates and migrates nothing.
+    """
+    engine = alembic_migrations.engine_for(db_type, dburi)
+    try:
+        with engine.connect() as connection:
+            return inspect_database(connection, db_type)
+    finally:
+        engine.dispose()
+
+
 async def open_db(
     the_installation,
     db_type: str,

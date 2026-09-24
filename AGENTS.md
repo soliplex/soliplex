@@ -260,9 +260,12 @@ migration and the engine's lifetime: `installation.open_engines` (for
 policy an in-memory DBURI needs -- `alembic_migrations` knows nothing about
 RAM databases. `audit` is a reader: it passes `must_exist=True`, so nothing
 is created or migrated, and reports an uncreated database as "nothing
-configured". The `database` group goes through neither: it opens a sync
-engine on the migration DBURI itself, because reporting must create and
-migrate nothing, and the credential it uses is not `open_db`'s.
+configured". `audit databases` probes the runtime async DBURI that way when
+one is configured, and otherwise the migration DBURI over a sync engine,
+through the `cli_util.probe_database` the `database` group uses. The
+`database` group goes through neither: it opens a sync engine on the
+migration DBURI itself, because reporting must create and migrate nothing,
+and the credential it uses is not `open_db`'s.
 
 ```bash
 # Upgrade both databases
@@ -283,8 +286,10 @@ deployment migrates through soliplex's own writable open, or through the
 `soliplex-cli database` group (`status` / `upgrade` / `downgrade`, in
 `cli/database.py`), both of which set `script_location` from the package
 directory. `migration_dburi` is read only by the deliberate tools -- that
-group, and `scripts/bootstrap_alembic_version.py`; the `migration_policy`
-is enforced in both places, by `ensure_current_*` (see below).
+group, and `scripts/bootstrap_alembic_version.py` -- and, to report on it,
+by `audit databases` when no runtime async DBURI is configured; the
+`migration_policy` is enforced in both places, by `ensure_current_*` (see
+below).
 
 - The DB URIs come from the installation config rather than from any alembic
   config file, so `-x soliplex.installation_path=` is mandatory; without it
@@ -292,7 +297,8 @@ is enforced in both places, by `ensure_current_*` (see below).
   `load_installation_config()`, which is `load_installation()` plus
   `resolve_environment()` -- all the DBURIs depend on, and nothing more, so
   an unrelated broken room or OIDC config cannot block a migration. The
-  `database` CLI group loads its config the same way, for the same reason
+  `database` CLI group and `audit databases` load their config the same
+  way, for the same reason
 - In-process callers pass either an explicit `{name: dburi}` mapping or a
   live `connection` and the `database` it belongs to through
   `config.attributes`. The connection form is what lets an in-memory

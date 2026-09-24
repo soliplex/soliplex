@@ -80,7 +80,7 @@ def _audit_admin_users_section(
     tc_rule("Configured admin users")
     tc_line()
 
-    report = audit_databases._database_reports(ctx, the_installation)[
+    report = audit_databases._database_reports(ctx, the_installation._config)[
         cli_util.AUTHZ
     ]
     if report.error is not None:

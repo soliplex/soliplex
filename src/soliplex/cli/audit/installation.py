@@ -44,6 +44,29 @@ def _config_warnings(records) -> dict:
     return {}
 
 
+def _audit_config_warnings(
+    ctx: typer.Context,
+    tc_print,
+) -> dict:  # pragma NO COVER UI ONLY
+    """Print and return the config-warning findings, once per invocation.
+
+    Whichever section runs first reports the warnings recorded under
+    ``ctx.obj["config_warnings"]``; later sections return no findings.
+    """
+    if ctx.obj.get("config_warnings_audited"):
+        return {}
+
+    ctx.obj["config_warnings_audited"] = True
+    errors = _config_warnings(ctx.obj.get("config_warnings", ()))
+
+    for finding in errors.get("config_warnings", ()):
+        tc_print()
+        tc_print(f"WARNING: {finding['category']}")
+        tc_print(textwrap.indent(finding["message"].rstrip(), "  "))
+
+    return errors
+
+
 def _audit_installation_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
@@ -64,11 +87,7 @@ def _audit_installation_section(
     else:
         tc_print("OK")
 
-    warning_errors = _config_warnings(ctx.obj.get("config_warnings", ()))
-    for finding in warning_errors.get("config_warnings", ()):
-        tc_print()
-        tc_print(f"WARNING: {finding['category']}")
-        tc_print(textwrap.indent(finding["message"].rstrip(), "  "))
+    warning_errors = _audit_config_warnings(ctx, tc_print)
 
     interpolation_errors = (
         audit_interpolation._invalid_installation_interpolations(

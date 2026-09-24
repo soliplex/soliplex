@@ -866,6 +866,12 @@ persistence) and `authz` (authorization), against the Alembic revision tree
 this release ships. Nothing is created, migrated or stamped: a database
 with no schema is reported as such rather than built.
 
+Only the installation configuration itself is loaded -- no OIDC, room,
+completion, quiz or skill configs -- just as for the
+[`database`](#database) group. So this also works against a cut-down,
+migration-only configuration holding just secrets and the two database
+stanzas.
+
 ```bash
 soliplex-cli audit [OPTIONS] databases [INSTALLATION_CONFIG_PATH]
 ```
@@ -889,17 +895,28 @@ from the migration tool's side.
 One entry per database, under a `Configured databases` rule:
 
 ```text
-- agui: postgresql://soliplex:***@db.example.net/soliplex_agui
+- agui: postgresql+psycopg://soliplex:***@db.example.net/soliplex_agui (async_dburi)
   migration policy: explicit
   migration dburi: postgresql://owner:***@db.example.net/soliplex_agui
   OK (a1c7d3e90b42)
 ```
 
-The first line is the runtime DBURI, with its password masked. The
-`migration policy` and `migration dburi` lines appear only for a database
-which configures them (see
+The first line is the DBURI probed, with its password masked, followed by
+the configuration key it came from:
+
+- `async_dburi` -- the runtime DBURI the server uses, which also checks
+  the runtime role's access. Probed whenever it is configured.
+- `migration_dburi` -- the schema owner's DBURI, probed when no runtime
+  async DBURI is configured (e.g. in a migration-only configuration).
+- `sync_dburi` -- the runtime sync DBURI, probed when neither of the
+  others is configured.
+
+The `migration policy` and `migration dburi` lines appear only for a
+database which configures them (see
 [SQLAlchemy DBURIs](../config/dburis.md#migrations)); a deployment which
-has not separated the schema owner from the application role sees neither.
+has not separated the schema owner from the application role sees
+neither. The `migration dburi` line is left out when it is the DBURI
+probed.
 
 The last line is the state:
 
@@ -936,11 +953,18 @@ any findings are emitted as JSON, keyed by database name:
 The finding keys are `unreachable`, `unstamped`, `downgrade_required` and
 `migration_owed`.
 
+Run on its own, the section also reports any Python warning raised while
+loading the configuration, exactly as
+[`audit installation`](#audit-installation) does (JSON key
+`config_warnings`). Under `audit all` those are reported once, in the
+installation section.
+
 #### Exit Status
 
 - `0` — every database is current, or is behind head (or uncreated) with
   no policy preventing the next writable open from dealing with it.
-- `1` — at least one finding above.
+- `1` — at least one finding above, or (run on its own) a warning raised
+  while loading the configuration.
 
 #### Examples
 

@@ -251,6 +251,44 @@ async def _revision_of(engine):
         return await connection.run_sync(alembic_migrations.current_revision)
 
 
+@mock.patch.object(alembic_migrations, "current_revision")
+@mock.patch.object(alembic_migrations, "database_state")
+def test_inspect_database(database_state, current_revision):
+    connection = mock.Mock(spec_set=())
+
+    found = cli_util.inspect_database(connection, cli_util.AUTHZ)
+
+    assert found == (
+        database_state.return_value,
+        current_revision.return_value,
+    )
+    database_state.assert_called_once_with(
+        connection, alembic_migrations.METADATA[cli_util.AUTHZ]
+    )
+    current_revision.assert_called_once_with(connection)
+
+
+@pytest.mark.parametrize(
+    "w_migrated, exp_state",
+    [
+        (False, alembic_migrations.DatabaseState.EMPTY),
+        (True, alembic_migrations.DatabaseState.STAMPED),
+    ],
+)
+def test_probe_database(tmp_path, w_migrated, exp_state):
+    dburi = f"sqlite:///{tmp_path / 'authz.sqlite'}"
+    if w_migrated:
+        alembic_migrations.upgrade("head", dburis={cli_util.AUTHZ: dburi})
+
+    state, revision = cli_util.probe_database(cli_util.AUTHZ, dburi)
+
+    assert state is exp_state
+    if w_migrated:
+        assert revision == alembic_migrations.head_revision()
+    else:
+        assert revision is None
+
+
 @pytest.mark.anyio
 @mock.patch("soliplex.cli.cli_util.the_console")
 async def test_open_db_rejects_a_ram_dburi_by_default(
