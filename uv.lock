@@ -3159,8 +3159,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -3247,6 +3247,16 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
+[package.optional-dependencies]
+postgres = [
+    { name = "asyncpg" },
+    { name = "psycopg" },
+]
+postgres-binary = [
+    { name = "asyncpg" },
+    { name = "psycopg", extra = ["binary"] },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "anyio" },
@@ -3261,10 +3271,6 @@ dev = [
 docs = [
     { name = "zensical" },
 ]
-postgres = [
-    { name = "asyncpg" },
-    { name = "psycopg", extra = ["binary"] },
-]
 tui = [
     { name = "textual" },
     { name = "textual-fspicker" },
@@ -3278,6 +3284,8 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.14.2,<3.15" },
     { name = "aiosqlite" },
     { name = "alembic", specifier = ">=1.18.4,<1.19" },
+    { name = "asyncpg", marker = "extra == 'postgres'" },
+    { name = "asyncpg", marker = "extra == 'postgres-binary'" },
     { name = "authlib" },
     { name = "bubble-sandbox", specifier = ">=0.12.0,<0.13" },
     { name = "certifi", specifier = ">=2025.11.12" },
@@ -3295,6 +3303,8 @@ requires-dist = [
     { name = "logfire", extras = ["fastapi"] },
     { name = "mcp", specifier = ">=1.27.2" },
     { name = "pillow", specifier = ">=12.3.0,<12.4" },
+    { name = "psycopg", marker = "extra == 'postgres'" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres-binary'" },
     { name = "pyasn1", specifier = ">=0.6.4" },
     { name = "pydantic-ai-slim", extras = ["google"], specifier = ">=2.40.0,<3.0" },
     { name = "pydantic-settings", specifier = ">=2.14.2,<2.15" },
@@ -3308,6 +3318,7 @@ requires-dist = [
     { name = "starlette", specifier = ">=1.3.1" },
     { name = "uvicorn", extras = ["standard"] },
 ]
+provides-extras = ["postgres", "postgres-binary"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3321,10 +3332,6 @@ dev = [
     { name = "soliplex-skills", specifier = ">=0.6" },
 ]
 docs = [{ name = "zensical", specifier = ">=0.0.43" }]
-postgres = [
-    { name = "asyncpg" },
-    { name = "psycopg", extras = ["binary"] },
-]
 tui = [
     { name = "textual" },
     { name = "textual-fspicker" },

@@ -372,6 +372,10 @@ See `pyproject.toml` for authoritative version constraints.
 - FastMCP -- Model Context Protocol
 - ag-ui-protocol -- AG-UI event protocol
 - SQLModel / aiosqlite -- database ORM
+- psycopg / asyncpg -- PostgreSQL drivers, as the `postgres` and
+  `postgres-binary` extras only.  Nothing in `src/` or the unit suite
+  imports them (`tests/unit/test_packaging.py` guards the metadata), so
+  never add a driver import or a test needing one
 - haiku-skills -- Haiku skills framework
 
 ## Entry Points

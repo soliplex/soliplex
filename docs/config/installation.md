@@ -207,7 +207,7 @@ AG-UI threads, runs, events, etc.
 One DBURI is for sync usage, e.g.  within console scripts.  Examples:
 
 - `sqlite://`
-- `postgresql+psycopg2://user:<password>@dbhost/dbname`
+- `postgresql+psycopg://user:<password>@dbhost/dbname`
 
 ### Asynchronous DBURI
 
@@ -223,6 +223,10 @@ Dialects known to work include:
 
 - [`aiosqlite`](https://aiosqlite.omnilib.dev/en/stable/index.html)
 - [`asyncpg`](https://magicstack.github.io/asyncpg/current/)
+
+The PostgreSQL drivers (`psycopg`, `asyncpg`) are not installed with
+Soliplex; install the `postgres` or `postgres-binary` extra (see
+[Installing the PostgreSQL drivers](dburis.md#installing-the-postgresql-drivers)).
 
 ### Default configuration
 
@@ -252,7 +256,7 @@ secrets:
 ...
 
 thread_persistence_db:
-  sync_dburi: "postgresql+psycopg2://user:secret:MY_DBURI_SECRET@dbhost/dbname"
+  sync_dburi: "postgresql+psycopg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
   async_dburi: "postgresql+asyncpg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
 ```
 

@@ -32,6 +32,15 @@ uv sync --group dev
 cp .env.example .env
 ```
 
+The PostgreSQL drivers are not installed by default:  no unit test needs
+one, and SQLite serves the example configurations.  To point a dev server
+at a real PostgreSQL, add the extra whose driver needs nothing from the
+host:
+
+```bash
+uv sync --group dev --extra postgres-binary
+```
+
 Run all Python commands through `uv run` so they use the project
 environment.
 

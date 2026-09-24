@@ -32,7 +32,8 @@ all possible SQLAlchemy engines.  Known to work:
 
 - [Postgres](https://docs.sqlalchemy.org/en/20/core/engines.html#postgresql)
   via the [`asyncpg`](https://pypi.org/project/asyncpg/)
-  async dialect
+  async dialect, with [`psycopg`](https://www.psycopg.org/psycopg3/)
+  (`postgresql+psycopg://`) for the sync DBURIs
 
 Untested:
 
@@ -50,6 +51,34 @@ Untested:
 - [Microsolt SQL Server](https://docs.sqlalchemy.org/en/20/dialects/mssql.html)
   via the [`aioodbc`](https://docs.sqlalchemy.org/en/20/dialects/mssql.html#module-sqlalchemy.dialects.mssql.aioodbc)
   async dialect
+
+## Installing the PostgreSQL drivers
+
+Soliplex installs only the SQLite drivers.  SQLAlchemy imports a driver
+when a DBURI names it, so an installation using PostgreSQL must install
+the drivers itself, through one of two extras:
+
+| Extra | Installs | libpq / OpenSSL used | Needs on the host |
+| --- | --- | --- | --- |
+| `soliplex[postgres]` | `psycopg`, `asyncpg` | the host's own libpq, and so the host's OpenSSL | libpq (e.g. Debian's `libpq5`); no compiler |
+| `soliplex[postgres-binary]` | `psycopg[binary]`, `asyncpg` | copies bundled in the `psycopg-binary` wheel | nothing |
+
+- **`postgres`** suits container images and FIPS hosts:  every
+  `postgresql+psycopg://` connection goes through the system's libpq and
+  OpenSSL, which the image's own package updates and FIPS configuration
+  cover.  Setting `PSYCOPG_IMPL=python` in such an image pins psycopg to
+  that implementation:  it keeps using the system libpq even if a
+  `psycopg-binary` wheel is later installed alongside (psycopg otherwise
+  prefers the binary one), and fails at import if libpq is missing.
+
+- **`postgres-binary`** suits development, and hosts without libpq:
+  nothing but the wheels is needed.
+
+Either extra installs `asyncpg` for `postgresql+asyncpg://`, which uses
+Python's own `ssl` module rather than libpq.
+
+A DBURI naming a driver that is not installed fails when its engine is
+created, e.g. `ModuleNotFoundError: No module named 'psycopg'`.
 
 ## `thread_persistence_db`
 

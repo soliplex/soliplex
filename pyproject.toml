@@ -49,6 +49,24 @@ dependencies = [
     "certifi >= 2025.11.12",
 ]
 
+# Database drivers are not dependencies:  soliplex imports none of them,
+# and SQLAlchemy loads one only when a DBURI names it.  An installation
+# using PostgreSQL picks one of these (see 'docs/config/dburis.md').
+[project.optional-dependencies]
+# psycopg's pure-Python implementation, over the host's own libpq (and so
+# the host's OpenSSL):  for containers and FIPS hosts.  Needs 'libpq5' (or
+# equivalent) installed; no compiler.
+postgres = [
+    "psycopg",  # synchronous access
+    "asyncpg",  # async access
+]
+# psycopg with its own bundled libpq and OpenSSL:  nothing needed on the
+# host, e.g. for development.
+postgres-binary = [
+    "psycopg[binary]",  # synchronous access
+    "asyncpg",          # async access
+]
+
 [project.scripts]
 soliplex-cli = "soliplex.cli.main:main"
 soliplex-tui = "soliplex.tui.cli:the_cli"
@@ -67,10 +85,6 @@ dev = [
 ]
 docs = [
     "zensical>=0.0.43",
-]
-postgres = [
-    "psycopg[binary]",  # synchronous access
-    "asyncpg",          # async access
 ]
 tui = [
     "textual",
