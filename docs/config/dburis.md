@@ -31,8 +31,13 @@ all possible SQLAlchemy engines.  Known to work:
   async dialect
 
 - [Postgres](https://docs.sqlalchemy.org/en/20/core/engines.html#postgresql)
-  via the [`asyncpg`](https://pypi.org/project/asyncpg/)
-  async dialect
+  via [`psycopg`](https://www.psycopg.org/psycopg3/), whose
+  `postgresql+psycopg://` DBURIs serve both the sync and the async
+  engines (see [below](#installing-the-postgresql-driver))
+
+- [Postgres](https://docs.sqlalchemy.org/en/20/core/engines.html#postgresql)
+  via the [`asyncpg`](https://pypi.org/project/asyncpg/) async dialect
+  (`postgresql+asyncpg://`), installed separately
 
 Untested:
 
@@ -50,6 +55,33 @@ Untested:
 - [Microsolt SQL Server](https://docs.sqlalchemy.org/en/20/dialects/mssql.html)
   via the [`aioodbc`](https://docs.sqlalchemy.org/en/20/dialects/mssql.html#module-sqlalchemy.dialects.mssql.aioodbc)
   async dialect
+
+## Installing the PostgreSQL driver
+
+Soliplex installs only the SQLite drivers.  To use PostgreSQL, install one
+of two extras, each providing [`psycopg`](https://www.psycopg.org/psycopg3/):
+
+| Extra | libpq / OpenSSL used | Needs on the host |
+| --- | --- | --- |
+| `soliplex[postgres]` | the host's own | libpq (e.g. Debian's `libpq5`) |
+| `soliplex[postgres-binary]` | bundled in the `psycopg-binary` wheel | nothing |
+
+Use `postgres` for container images and FIPS hosts, where the OS's
+package updates and FIPS configuration cover libpq and OpenSSL; setting
+`PSYCOPG_IMPL=python` there keeps psycopg on the system libpq even if a
+`psycopg-binary` wheel is installed alongside.  Use `postgres-binary` for
+development, and for hosts without libpq.
+
+The same `postgresql+psycopg://` DBURI serves both `sync_dburi` and
+`async_dburi`.  Name the driver explicitly:  a bare `postgresql://` means
+`psycopg2`, which neither extra installs, and a DBURI naming a driver
+that is not installed fails with `ModuleNotFoundError` when its engine is
+created.
+
+On Windows, psycopg's async mode cannot run on the event loop Python uses
+there by default.  Use `postgresql+asyncpg://` for the `async_dburi`
+instead, installing [`asyncpg`](https://pypi.org/project/asyncpg/)
+yourself.
 
 ## `thread_persistence_db`
 
@@ -77,8 +109,8 @@ password is defined as a [secret](secrets.md) named `"POSTGRES_PASSWORD"`:
 
 ```yaml
 thread_persistence_db:
-  sync_dburi: "postgresql://soliplex:secret:POSTGRES_PASSWORD@/soliplex_threads"
-  async_dburi: "postgresql+asyncpg://soliplex:secret:POSTGRES_PASSWORD@/soliplex_threads"
+  sync_dburi: "postgresql+psycopg://soliplex:secret:POSTGRES_PASSWORD@/soliplex_threads"
+  async_dburi: "postgresql+psycopg://soliplex:secret:POSTGRES_PASSWORD@/soliplex_threads"
 ```
 
 ## `authorization_db`
@@ -108,8 +140,8 @@ password is defined as a [secret](secrets.md) named `"POSTGRES_PASSWORD"`:
 
 ```yaml
 authorization_db:
-  sync_dburi: "postgresql://soliplex:secret:POSTGRES_PASSWORD@/soliplex_authorization"
-  async_dburi: "postgresql+asyncpg://soliplex:secret:POSTGRES_PASSWORD@/soliplex_authorization"
+  sync_dburi: "postgresql+psycopg://soliplex:secret:POSTGRES_PASSWORD@/soliplex_authorization"
+  async_dburi: "postgresql+psycopg://soliplex:secret:POSTGRES_PASSWORD@/soliplex_authorization"
 ```
 
 ## Migrations
@@ -133,9 +165,9 @@ sync URL is needed, because Alembic's online mode is synchronous.
 
 ```yaml
 authorization_db:
-  sync_dburi: "postgresql://soliplex:secret:APP_PASSWORD@/soliplex_authz"
-  async_dburi: "postgresql+asyncpg://soliplex:secret:APP_PASSWORD@/soliplex_authz"
-  migration_dburi: "postgresql://owner:secret:OWNER_PASSWORD@/soliplex_authz"
+  sync_dburi: "postgresql+psycopg://soliplex:secret:APP_PASSWORD@/soliplex_authz"
+  async_dburi: "postgresql+psycopg://soliplex:secret:APP_PASSWORD@/soliplex_authz"
+  migration_dburi: "postgresql+psycopg://owner:secret:OWNER_PASSWORD@/soliplex_authz"
 ```
 
 When it is absent, migrations use `sync_dburi`, which is exactly what
@@ -168,9 +200,9 @@ via the compose service environment and the installation config:
 
 ```yaml
 authorization_db:
-  sync_dburi: "postgresql://soliplex:secret:APP_PASSWORD@/soliplex_authz"
-  async_dburi: "postgresql+asyncpg://soliplex:secret:APP_PASSWORD@/soliplex_authz"
-  migration_dburi: "postgresql://owner:secret:OWNER_PASSWORD@/soliplex_authz"
+  sync_dburi: "postgresql+psycopg://soliplex:secret:APP_PASSWORD@/soliplex_authz"
+  async_dburi: "postgresql+psycopg://soliplex:secret:APP_PASSWORD@/soliplex_authz"
+  migration_dburi: "postgresql+psycopg://owner:secret:OWNER_PASSWORD@/soliplex_authz"
   migration_policy: "env:SOLIPLEX_MIGRATION_POLICY"
 ```
 
@@ -223,8 +255,8 @@ from the installation configuration's environment.  E.g:
 
 ```yaml
 authorization_db:
-  sync_dburi: "postgresql://env:SOLIPLEX_AUTHZ_USER:secret:POSTGRES_PASSWORD@/env:SOLIPLEX_AUTHZ_DBNAME"
-  async_dburi: "postgresql+asyncpg://env:SOLIPLEX_AUTHZ_USER:secret:POSTGRES_PASSWORD@/env:SOLIPLEX_AUTHZ_DBNAME"
+  sync_dburi: "postgresql+psycopg://env:SOLIPLEX_AUTHZ_USER:secret:POSTGRES_PASSWORD@/env:SOLIPLEX_AUTHZ_DBNAME"
+  async_dburi: "postgresql+psycopg://env:SOLIPLEX_AUTHZ_USER:secret:POSTGRES_PASSWORD@/env:SOLIPLEX_AUTHZ_DBNAME"
 ```
 
 ## Deprecated spelling

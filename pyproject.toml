@@ -49,6 +49,24 @@ dependencies = [
     "certifi >= 2025.11.12",
 ]
 
+# Database drivers are not dependencies:  soliplex imports none of them,
+# and SQLAlchemy loads one only when a DBURI names it.  An installation
+# using PostgreSQL picks one of these (see 'docs/config/dburis.md').
+# psycopg serves both the sync and the async DBURIs
+# ('postgresql+psycopg://').
+[project.optional-dependencies]
+# psycopg's pure-Python implementation, over the host's own libpq (and so
+# the host's OpenSSL):  for containers and FIPS hosts.  Needs 'libpq5' (or
+# equivalent) installed; no compiler.
+postgres = [
+    "psycopg",
+]
+# psycopg with its own bundled libpq and OpenSSL:  nothing needed on the
+# host, e.g. for development.
+postgres-binary = [
+    "psycopg[binary]",
+]
+
 [project.scripts]
 soliplex-cli = "soliplex.cli.main:main"
 soliplex-tui = "soliplex.tui.cli:the_cli"
@@ -67,10 +85,6 @@ dev = [
 ]
 docs = [
     "zensical>=0.0.43",
-]
-postgres = [
-    "psycopg[binary]",  # synchronous access
-    "asyncpg",          # async access
 ]
 tui = [
     "textual",
@@ -103,6 +117,7 @@ omit = [
     "scripts/lint_textio.py",   # runs its own '--self-test' during lint
     "scripts/lint_interpolation.py",  # ditto
     "scripts/lint_alembic_chain.py",  # ditto
+    "scripts/lint_postgres_drivers.py",  # ditto
     # Run-once deployment repair (issue #1367), applied by hand against a
     # live database and verified there; like a migration script, it is not
     # exercised by the unit suite.
