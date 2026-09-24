@@ -293,16 +293,12 @@ wheels = [
 [[package]]
 name = "bubble-sandbox"
 version = "0.12.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/ggozad/bubble-sandbox.git?rev=a754e90aeba669438f2af0d79571eb2d99015edd#a754e90aeba669438f2af0d79571eb2d99015edd" }
 dependencies = [
     { name = "pydantic-ai-backend" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "typer" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d3/a4/47a761f37727019e0275492625bd76b76ff38dce26b788c12f62ae42482b/bubble_sandbox-0.12.0.tar.gz", hash = "sha256:09c23a43280178abfde4c5af72d78512dc2af589c9ea5952e1ea3f4911e11ddd", size = 9465, upload-time = "2026-08-21T15:40:02.07Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/b1/e7024115be4bea5dae14e42d22de72c713e952ad502f4e246dce3d7667a7/bubble_sandbox-0.12.0-py3-none-any.whl", hash = "sha256:0814c0dc1b462b198ede67d0c96b09a0ca90e8ec07d282ac53ce2555906f6ffa", size = 11455, upload-time = "2026-08-21T15:40:01.142Z" },
 ]
 
 [[package]]
@@ -3159,8 +3155,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -3232,6 +3228,7 @@ dependencies = [
     { name = "jwcrypto" },
     { name = "logfire", extra = ["fastapi"] },
     { name = "mcp" },
+    { name = "packaging" },
     { name = "pillow" },
     { name = "pyasn1" },
     { name = "pydantic-ai-slim", extra = ["google"] },
@@ -3279,7 +3276,7 @@ requires-dist = [
     { name = "aiosqlite" },
     { name = "alembic", specifier = ">=1.18.4,<1.19" },
     { name = "authlib" },
-    { name = "bubble-sandbox", specifier = ">=0.12.0,<0.13" },
+    { name = "bubble-sandbox", git = "https://github.com/ggozad/bubble-sandbox.git?rev=a754e90aeba669438f2af0d79571eb2d99015edd" },
     { name = "certifi", specifier = ">=2025.11.12" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "fakeredis", specifier = "!=2.35.0" },
@@ -3294,6 +3291,7 @@ requires-dist = [
     { name = "jwcrypto" },
     { name = "logfire", extras = ["fastapi"] },
     { name = "mcp", specifier = ">=1.27.2" },
+    { name = "packaging" },
     { name = "pillow", specifier = ">=12.3.0,<12.4" },
     { name = "pyasn1", specifier = ">=0.6.4" },
     { name = "pydantic-ai-slim", extras = ["google"], specifier = ">=2.40.0,<3.0" },

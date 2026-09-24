@@ -19,7 +19,8 @@ dependencies = [
     "aiosqlite",
     "alembic >= 1.18.4, < 1.19",
     "authlib",
-    "bubble-sandbox >= 0.12.0, < 0.13",
+    "bubble-sandbox >= 0.13.0, < 0.14",
+    "packaging",
     "cryptography >= 50.0.0",  # PYSEC-2026-3552
     "fastapi",
     "fastmcp >= 4.0.2, < 5.0",
@@ -242,3 +243,8 @@ name = "ruff"
 type = "exec"
 executable = "ruff"
 options = "check --fix REVISION_SCRIPT_FILENAME"
+
+# Remove this override after bubble-sandbox 0.13.0 is released.
+[tool.uv.sources.bubble-sandbox]
+git = "https://github.com/ggozad/bubble-sandbox.git"
+rev = "a754e90aeba669438f2af0d79571eb2d99015edd"

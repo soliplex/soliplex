@@ -513,9 +513,7 @@ def test_skill_from_config_w_bwssc(bwrap_sandbox_skill_config):
     assert found.description == bwrap_sandbox_skill_config.description
     assert found.state_type_schema is None
     assert found.state_namespace is None
-    assert found.extra_parameters == {
-        "default_environment": "bare",
-    }
+    assert found.extra_parameters == {"environment": "bare"}
 
 
 def test_skill_from_config_without_extra_parameters():

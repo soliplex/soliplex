@@ -369,9 +369,10 @@ class BwrapSandboxSkillConfig:
     _config_path: pathlib.Path | None = None
 
     id: str | None = None
-    default_environment: str = "bare"
-    allowed_environments: bwrap_sandbox.AllowedEnvironments = None
-    sandbox_config: bs_config.Config = None
+    environment: str = "bare"
+    # Unset means "whatever the installation says", not its value today.
+    execution_timeout_seconds: float | None = None
+    max_output_chars: int | None = None
     volumes: bs_models.VolumeMap = _default_dict_field()
     defer_loading: bool = False
 
@@ -386,10 +387,6 @@ class BwrapSandboxSkillConfig:
             config_dict.pop("kind", None)
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
-            config_dict["sandbox_config"] = bs_config.Config(
-                config_file_path=config_path,
-                **config_dict.pop("sandbox_config", {}),
-            )
             config_dict["volumes"] = {
                 key: bs_models.VolumeInfo(**value)
                 for key, value in config_dict.pop("volumes", {}).items()
@@ -402,12 +399,39 @@ class BwrapSandboxSkillConfig:
                 config_dict,
             ) from exc
 
+    def _limit(self, name: str, fallback: typing.Any) -> typing.Any:
+        """Resolve one limit: the room's, else the installation's."""
+        override = getattr(self, name)
+        if override is not None:
+            return override
+
+        i_config = self._installation_config
+        s_config = i_config.sandbox_config if i_config is not None else None
+
+        if s_config is None:
+            return fallback
+
+        return getattr(s_config, name)
+
+    @property
+    def sandbox_config(self) -> bs_config.Config:
+        return bs_config.Config(
+            config_file_path=self._config_path,
+            execution_timeout_seconds=self._limit(
+                "execution_timeout_seconds",
+                bwrap_sandbox.DEFAULT_EXECUTION_TIMEOUT_SECONDS,
+            ),
+            max_output_chars=self._limit(
+                "max_output_chars",
+                bwrap_sandbox.DEFAULT_MAX_OUTPUT_CHARS,
+            ),
+        )
+
     @property
     def capability(self) -> bwrap_sandbox.SandboxCapability:
         return bwrap_sandbox.create_bwrap_sandbox_capability(
             id=self.id,
-            default_environment=self.default_environment,
-            allowed_environments=self.allowed_environments,
+            environment=self.environment,
             sandbox_config=self.sandbox_config,
             volumes=self.volumes,
             installation_config=self._installation_config,
@@ -418,22 +442,17 @@ class BwrapSandboxSkillConfig:
     def as_yaml(self) -> dict:
         result = {
             "kind": self.kind,
-            "default_environment": self.default_environment,
+            "environment": self.environment,
             "defer_loading": self.defer_loading,
         }
         if self.id is not None:
             result["id"] = self.id
-        if self.allowed_environments is not None:
-            result["allowed_environments"] = self.allowed_environments
-        if self.sandbox_config is not None:
-            config = self.sandbox_config
-            result["sandbox_config"] = {
-                "environments_pathname": config.environments_pathname,
-                "execution_timeout_seconds": (
-                    config.execution_timeout_seconds
-                ),
-                "max_output_chars": config.max_output_chars,
-            }
+        if self.execution_timeout_seconds is not None:
+            result["execution_timeout_seconds"] = (
+                self.execution_timeout_seconds
+            )
+        if self.max_output_chars is not None:
+            result["max_output_chars"] = self.max_output_chars
         if self.volumes:
             result["volumes"] = {
                 key: {
@@ -446,10 +465,7 @@ class BwrapSandboxSkillConfig:
 
     @property
     def extra_parameters(self) -> dict[str, typing.Any]:
-        result = {"default_environment": self.default_environment}
-        if self.allowed_environments is not None:
-            result["allowed_environments"] = self.allowed_environments
-        return result
+        return {"environment": self.environment}
 
 
 @dataclasses.dataclass(kw_only=True)

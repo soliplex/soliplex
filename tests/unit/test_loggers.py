@@ -888,73 +888,6 @@ def test_sandbox_execute_failed(audit_records, w_reason, w_exit_code):
     )
 
 
-@pytest.mark.parametrize(
-    "w_reason", ["UnknownEnvironment", "NoEnvironmentsConfigured"]
-)
-def test_sandbox_execute_denied(audit_records, w_reason):
-    """A refused call names no workdir: none was created"""
-    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
-
-    wrapper.execute_denied(
-        loggers.AUDIT_SANDBOX_ACTION_RUN,
-        None,
-        "nonesuch",
-        [],
-        w_reason,
-    )
-
-    _assert_audit_record(
-        audit_records[-1],
-        message=loggers.AUDIT_SANDBOX_EXEC,
-        levelno=logging.ERROR,
-        outcome=loggers.AUDIT_OUTCOME_DENIED,
-        scope=SCOPE_SANDBOX_EXEC,
-        fields={
-            "claims": CLAIMS,
-            "action": loggers.AUDIT_SANDBOX_ACTION_RUN,
-            "workdir": None,
-            "environment": "nonesuch",
-            "refs": [],
-            "reason": w_reason,
-        },
-    )
-
-
-@pytest.mark.parametrize("w_count", [0, 3])
-def test_sandbox_volume_listed(audit_records, w_count):
-    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
-
-    wrapper.volume_listed("thread", w_count)
-
-    _assert_audit_record(
-        audit_records[-1],
-        message=loggers.AUDIT_SANDBOX_VOLUME_LIST,
-        levelno=logging.INFO,
-        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
-        scope=SCOPE_SANDBOX_EXEC,
-        fields={"claims": CLAIMS, "volume": "thread", "count": w_count},
-    )
-
-
-def test_sandbox_volume_list_failed(audit_records):
-    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
-
-    wrapper.volume_list_failed("room", "SandboxPathEscape")
-
-    _assert_audit_record(
-        audit_records[-1],
-        message=loggers.AUDIT_SANDBOX_VOLUME_LIST,
-        levelno=logging.ERROR,
-        outcome=loggers.AUDIT_OUTCOME_ERROR,
-        scope=SCOPE_SANDBOX_EXEC,
-        fields={
-            "claims": CLAIMS,
-            "volume": "room",
-            "reason": "SandboxPathEscape",
-        },
-    )
-
-
 # --- RoomUploadAuditLog --------------------------------------------------
 
 
@@ -1083,5 +1016,52 @@ def test_room_agent_run_failed(audit_records):
             "thread_id": "t1",
             "run_id": "u1",
             "reason": "boom",
+        },
+    )
+
+
+def test_sandbox_image_read(audit_records):
+    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
+
+    wrapper.image_read(
+        "/sandbox/work/plot.png",
+        "work",
+        byte_count=77,
+        media_type="image/png",
+    )
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SANDBOX_EXEC,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_SANDBOX_EXEC,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_SANDBOX_ACTION_READ_IMAGE,
+            "path": "/sandbox/work/plot.png",
+            "volume": "work",
+            "byte_count": 77,
+            "media_type": "image/png",
+        },
+    )
+
+
+def test_sandbox_image_read_failed(audit_records):
+    wrapper = loggers.SandboxExecAuditLog(claims=CLAIMS)
+
+    wrapper.image_read_failed("/sandbox/work/nope.png", "UnreadablePath")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_SANDBOX_EXEC,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_SANDBOX_EXEC,
+        fields={
+            "claims": CLAIMS,
+            "action": loggers.AUDIT_SANDBOX_ACTION_READ_IMAGE,
+            "path": "/sandbox/work/nope.png",
+            "reason": "UnreadablePath",
         },
     )

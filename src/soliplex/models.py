@@ -665,10 +665,9 @@ class WorkdirFile(pydantic.BaseModel):
     url: pydantic.HttpUrl
 
 
-class RunWorkdirFiles(pydantic.BaseModel):
+class ThreadWorkdirFiles(pydantic.BaseModel):
     room_id: str
     thread_id: str
-    run_id: str
     files: list[WorkdirFile]
 
 

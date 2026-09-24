@@ -42,8 +42,8 @@ UPLOADS_GET_ROOM_THREAD_FILE = "uploads get room thread file"
 UPLOADS_POST_ROOM = "uploads post room"
 UPLOADS_POST_ROOM_THREAD = "uploads post room thread"
 
-WORKDIRS_GET_ROOM_THREAD_RUN = "workdirs get room thread run"
-WORKDIRS_GET_ROOM_THREAD_RUN_FILE = "workdirs get room thread run file"
+WORKDIRS_GET_ROOM_THREAD = "workdirs get room thread"
+WORKDIRS_GET_ROOM_THREAD_FILE = "workdirs get room thread file"
 
 AUTHN_LOGGER_NAME = "soliplex.authn"
 AUTHN_NO_AUTH_MODE = "soliplex server in no-auth mode"
@@ -166,21 +166,19 @@ AUDIT_RAG_ACTION_CHUNK_VIZ = "chunk-viz"
 AUDIT_RAG_ACTION_DOC_LIST = "doc-list"
 
 # sandbox-exec audit events (data change): the room agent's sandbox skill
-# executes code against a per-run, writable working directory.
+# executes code against the thread's writable working directory, or reads
+# an image out of a mount.
 AUDIT_SANDBOX_EXEC = "sandbox exec"
 
-# sandbox-exec 'action' values: which tool drove the execution.
+# sandbox-exec 'action' values: which tool made the record.
 AUDIT_SANDBOX_ACTION_RUN = "run"
 AUDIT_SANDBOX_ACTION_RUN_PYTHON = "run-python"
+AUDIT_SANDBOX_ACTION_READ_IMAGE = "read-image"
 
 # sandbox-exec 'reason' values for a non-zero exit: the sandbox cut the
 # execution off, or the code itself ended badly.
 AUDIT_SANDBOX_REASON_TIMEOUT = "timeout"
 AUDIT_SANDBOX_REASON_EXIT_CODE = "exit-code"
-
-# sandbox volume-list audit events (disclosure): the sandbox skill tells
-# the agent which uploaded files a volume holds.
-AUDIT_SANDBOX_VOLUME_LIST = "sandbox volume list"
 
 # room-upload audit events: an admin (privileged) adds shared reference
 # material to a room, changing what the room's agent and members can access.
@@ -631,25 +629,11 @@ class RAGAccessAuditLog(AuditLogWrapper):
 
 
 class SandboxExecAuditLog(AuditLogWrapper):
-    """Record the sandbox skill's executions and volume listings.
+    """Record the sandbox skill's executions and image reads.
 
-    Each ``run`` / ``run_python`` invocation is one data-change event: the
-    room agent's sandbox skill executes code against the run's writable
-    working directory. The command and script bodies are deliberately not
-    recorded inline (size / content leakage); the record captures the
-    'action' (which tool ran), the 'workdir' whose data the execution may
-    have changed, the 'environment' it ran in, 'refs' -- the host paths of
-    the saved command / script transcripts (empty when transcripts are not
-    configured) -- and the 'exit_code' the execution ended with.
-
-    An execution refused for naming an unavailable environment is recorded
-    as 'denied': nothing ran, so it carries no exit code, and its 'workdir'
-    is None because none was created.
-
-    ``list_volume_files`` discloses the names of a volume's uploaded files
-    to the agent, so it is recorded too, as its own event carrying the
-    'volume' and the 'count' of files disclosed. The names themselves stay
-    out of the record, for the same reason the bodies do.
+    A record names the 'action', the 'workdir' the execution could change,
+    the 'environment' it ran in, 'refs' for the saved transcripts, and how
+    it ended.  Command and script bodies are never recorded inline.
     """
 
     def __init__(self, claims: dict[str, typing.Any], **extra):
@@ -666,6 +650,8 @@ class SandboxExecAuditLog(AuditLogWrapper):
         refs: typing.Any,
         *,
         exit_code: int | None = None,
+        truncated: bool = False,
+        timeout_seconds: float | None = None,
     ):
         self._succeeded(
             AUDIT_SANDBOX_EXEC,
@@ -674,6 +660,8 @@ class SandboxExecAuditLog(AuditLogWrapper):
             environment=environment,
             refs=refs,
             exit_code=exit_code,
+            truncated=truncated,
+            timeout_seconds=timeout_seconds,
         )
 
     def execute_failed(
@@ -685,6 +673,8 @@ class SandboxExecAuditLog(AuditLogWrapper):
         reason: str,
         *,
         exit_code: int | None = None,
+        truncated: bool = False,
+        timeout_seconds: float | None = None,
     ):
         self._failed(
             AUDIT_SANDBOX_EXEC,
@@ -694,36 +684,32 @@ class SandboxExecAuditLog(AuditLogWrapper):
             refs=refs,
             reason=reason,
             exit_code=exit_code,
+            truncated=truncated,
+            timeout_seconds=timeout_seconds,
         )
 
-    def execute_denied(
+    def image_read(
         self,
-        action: str,
-        workdir: str | None,
-        environment: str | None,
-        refs: typing.Any,
-        reason: str,
+        path: str,
+        volume: str,
+        *,
+        byte_count: int,
+        media_type: str,
     ):
-        self._denied(
-            AUDIT_SANDBOX_EXEC,
-            action=action,
-            workdir=workdir,
-            environment=environment,
-            refs=refs,
-            reason=reason,
-        )
-
-    def volume_listed(self, volume: str, count: int):
         self._succeeded(
-            AUDIT_SANDBOX_VOLUME_LIST,
+            AUDIT_SANDBOX_EXEC,
+            action=AUDIT_SANDBOX_ACTION_READ_IMAGE,
+            path=path,
             volume=volume,
-            count=count,
+            byte_count=byte_count,
+            media_type=media_type,
         )
 
-    def volume_list_failed(self, volume: str, reason: str):
+    def image_read_failed(self, path: str, reason: str):
         self._failed(
-            AUDIT_SANDBOX_VOLUME_LIST,
-            volume=volume,
+            AUDIT_SANDBOX_EXEC,
+            action=AUDIT_SANDBOX_ACTION_READ_IMAGE,
+            path=path,
             reason=reason,
         )
 

@@ -45,10 +45,9 @@ TEXT_IO_NAMES = frozenset(
 )
 
 # Qualified calls whose trailing name collides with one above, but which
-# do no text IO at all. 'os.open' is the POSIX 'open(2)' wrapper: it
-# returns an integer file descriptor, takes flags rather than a mode
-# string, and raises 'TypeError' if handed an 'encoding='.
-NOT_TEXT_IO_QUALNAMES = frozenset({"os.open"})
+# do no text IO at all and raise 'TypeError' if handed an 'encoding=':
+# the POSIX 'open(2)' wrapper, and Pillow's decoder entry point.
+NOT_TEXT_IO_QUALNAMES = frozenset({"os.open", "PIL_Image.open"})
 
 
 class Finding(NamedTuple):
@@ -238,6 +237,7 @@ path.write_text(
     data,
     newline="\\n",
 )
+PIL_Image.open(buffer)
 """
 
 SELF_TEST_EXPECTED = [
@@ -253,6 +253,7 @@ SELF_TEST_EXPECTED = [
     Finding("self-test", 18, 18, "fdopen"),
     # Multi-line call: spans lines 21-24.
     Finding("self-test", 21, 24, "write_text"),
+    # 'PIL_Image.open' on line 25 is absent: an exempt qualified name.
 ]
 
 

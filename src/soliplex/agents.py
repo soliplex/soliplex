@@ -17,6 +17,7 @@ from soliplex import models
 from soliplex.capabilities import rag_audit as cap_rag_audit
 from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
+from soliplex.skills import bwrap_sandbox
 
 ToolConfigMap = dict[str, typing.Any]
 
@@ -137,6 +138,12 @@ def get_default_agent_from_configs(
     for capability in capabilities:
         if isinstance(capability, hr_caps_rag.RAGCapability):
             capability.vision = agent_config.multimodal
+
+    # 'read_image' returns an image to the model, so a room whose model
+    # cannot accept one should not see the tool at all.
+    for capability in capabilities:
+        if isinstance(capability, bwrap_sandbox.SandboxCapability):
+            capability.multimodal = agent_config.multimodal
 
     # A hook-only capability is never deferred:  nothing would load it, and
     # its hooks only fire once loaded.

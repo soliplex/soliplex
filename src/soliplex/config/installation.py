@@ -15,6 +15,7 @@ from haiku.rag import config as hr_config
 
 from soliplex import secrets
 from soliplex.capabilities import filesystem as cap_fs
+from soliplex.skills import bwrap_sandbox
 
 from . import _utils
 from . import agents as config_agents
@@ -266,11 +267,20 @@ class EnvironmentSource:
     value: str | None
 
 
+DEFAULT_EXECUTION_TIMEOUT_SECONDS = (
+    bwrap_sandbox.DEFAULT_EXECUTION_TIMEOUT_SECONDS
+)
+DEFAULT_MAX_OUTPUT_CHARS = bwrap_sandbox.DEFAULT_MAX_OUTPUT_CHARS
+
+
 @dataclasses.dataclass
 class SandboxConfig:
     _environments_path: pathlib.Path
     _workdirs_path: pathlib.Path | None = None
     _transcripts_path: pathlib.Path | None = None
+
+    execution_timeout_seconds: float = DEFAULT_EXECUTION_TIMEOUT_SECONDS
+    max_output_chars: int = DEFAULT_MAX_OUTPUT_CHARS
 
     # Set by `from_yaml` factory
     _config_path: pathlib.Path | None = None
@@ -298,6 +308,9 @@ class SandboxConfig:
         if self._transcripts_path is not None:
             result["transcripts_path"] = str(self.transcripts_path)
 
+        result["execution_timeout_seconds"] = self.execution_timeout_seconds
+        result["max_output_chars"] = self.max_output_chars
+
         return result
 
     @property
@@ -315,13 +328,15 @@ class SandboxConfig:
             return None
 
     @property
-    def workdirs_path(self) -> pathlib.Path:
-        """Directory holding "workdirs" for each run
+    def workdirs_path(self) -> pathlib.Path | None:
+        """Directory holding each thread's sandbox workspace
 
-        A workdir will be named with the run ID, with parent directories
-        for the room ID and thread ID.
+        Named with the thread ID, under a directory for the room ID.  The
+        workspace persists across the thread's turns, and the workdirs
+        endpoint serves the files at its top level.
 
-        If not set, the sandox workdir will be a temporary directory.
+        If not set, each command gets a temporary directory instead, which
+        is discarded when it ends and which the endpoint cannot serve.
         """
         if self._config_path is not None and self._workdirs_path is not None:
             return (self._config_path.parent / self._workdirs_path).resolve()
