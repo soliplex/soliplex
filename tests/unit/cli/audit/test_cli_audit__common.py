@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from unittest import mock
 
 import pytest
@@ -67,9 +68,33 @@ def test__get_installation(
     if w_already:
         assert found is already
         get_installation.assert_not_called()
+        assert "config_warnings" not in ctx.obj
     else:
         assert found is get_installation.return_value
         get_installation.assert_called_once_with(
             installation_path,
             auditing=True,
         )
+        assert ctx.obj["config_warnings"] == []
+
+
+@mock.patch("soliplex.cli.cli_util.get_installation")
+def test__get_installation_records_warnings(
+    get_installation,
+    ctx,
+    installation_path,
+):
+    def warn_and_load(*args, **kwargs):
+        warnings.warn("old stanza", DeprecationWarning, stacklevel=1)
+        warnings.warn("odd value", UserWarning, stacklevel=1)
+        return mock.sentinel.installation
+
+    get_installation.side_effect = warn_and_load
+
+    found = audit_common._get_installation(ctx, installation_path)
+
+    assert found is mock.sentinel.installation
+    assert [record.category for record in ctx.obj["config_warnings"]] == [
+        DeprecationWarning,
+        UserWarning,
+    ]

@@ -487,12 +487,29 @@ OK
 If `models.Installation.from_config(...)` raises, the `OK` is replaced
 by `ERROR: <message>`.
 
+Any Python warning raised while loading the configuration -- for
+example, the `DeprecationWarning` for a configuration stanza slated for
+removal -- follows as a finding of its own, naming the warning's
+category:
+
+```text
+WARNING: DeprecationWarning
+  The 'authorization_dburi' installation configuration stanza is deprecated,
+  ...
+```
+
+Python hides `DeprecationWarning` by default, so this section is where an
+operator sees them.
+
 #### Exit Status
 
-- `0` — the installation config rendered as a model.
-- `1` — model construction raised. In `--quiet` mode, the error is
-  printed as JSON (under the key `installation_model`) on stdout before
-  exit.
+- `0` — the installation config rendered as a model, and loading it
+  raised no warnings.
+- `1` — model construction raised, or loading the configuration raised
+  a warning. In `--quiet` mode, the findings are printed as JSON on
+  stdout before exit: the model error under the key
+  `installation_model`, and the warnings under `config_warnings`, as a
+  list of `{"category": ..., "message": ...}` objects.
 
 #### Examples
 

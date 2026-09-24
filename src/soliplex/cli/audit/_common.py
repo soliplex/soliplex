@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import warnings
 
 import typer
 
@@ -43,9 +44,18 @@ def _get_installation(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
 ) -> installation.Installation:
-    """Load the installation once per invocation, caching on ``ctx.obj``."""
+    """Load the installation once per invocation, caching on ``ctx.obj``.
+
+    Every warning raised while loading is recorded under
+    ``ctx.obj["config_warnings"]``.
+    """
     cached = ctx.obj.get("the_installation")
     if cached is None:
-        cached = cli_util.get_installation(installation_path, auditing=True)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            cached = cli_util.get_installation(
+                installation_path, auditing=True
+            )
         ctx.obj["the_installation"] = cached
+        ctx.obj["config_warnings"] = caught
     return cached
