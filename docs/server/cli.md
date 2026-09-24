@@ -897,7 +897,7 @@ One entry per database, under a `Configured databases` rule:
 ```text
 - agui: postgresql+psycopg://soliplex:***@db.example.net/soliplex_agui (async_dburi)
   migration policy: explicit
-  migration dburi: postgresql://owner:***@db.example.net/soliplex_agui
+  migration dburi: postgresql+psycopg://owner:***@db.example.net/soliplex_agui
   OK (a1c7d3e90b42)
 ```
 

@@ -215,18 +215,19 @@ The other DBURI is for async usage, e.g. within the Soliplex server
 process.  Examples:
 
 - `sqlite+aiosqlite://`
-- `postgresql+asyncpg://user:<password>@dbhost/dbname`
+- `postgresql+psycopg://user:<password>@dbhost/dbname`
 
 This DBURI must be compatible with SQLAlchemy's [asyncio extension](
 https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html).
 Dialects known to work include:
 
 - [`aiosqlite`](https://aiosqlite.omnilib.dev/en/stable/index.html)
+- [`psycopg`](https://www.psycopg.org/psycopg3/)
 - [`asyncpg`](https://magicstack.github.io/asyncpg/current/)
 
-The PostgreSQL drivers (`psycopg`, `asyncpg`) are not installed with
-Soliplex; install the `postgres` or `postgres-binary` extra (see
-[Installing the PostgreSQL drivers](dburis.md#installing-the-postgresql-drivers)).
+The PostgreSQL driver (`psycopg`) is not installed with Soliplex; install
+the `postgres` or `postgres-binary` extra (see
+[Installing the PostgreSQL driver](dburis.md#installing-the-postgresql-driver)).
 
 ### Default configuration
 
@@ -257,7 +258,7 @@ secrets:
 
 thread_persistence_db:
   sync_dburi: "postgresql+psycopg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
-  async_dburi: "postgresql+asyncpg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
+  async_dburi: "postgresql+psycopg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
 ```
 
 ## OIDC Auth Provider Paths
