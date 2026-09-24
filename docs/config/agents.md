@@ -123,6 +123,43 @@ agent:
 - `model_settings`: a mapping, whose keys are determined by
   the `provider_type` above (see below).
 
+  Setting `thinking` here is **deprecated**:  use `thinking_default`
+  below, which a client can also read and override for a single run.
+  It still takes effect, and warns.
+
+- `thinking_default` (a string, default unset):  how hard the model
+  thinks when a run asks for nothing.  One of `off`, `minimal`, `low`,
+  `medium`, `high`, `xhigh`.  Unset asserts nothing, leaving the model
+  whatever it does by default.
+
+  ```yaml
+  thinking_default: "low"
+  ```
+
+- `thinking_levels` (a list of strings, default unset):  the levels
+  this model accepts, from the same set.  Declaring it says the model
+  reasons, and is the *complete* set offered to a client:  a level
+  absent from the list is never sent, `off` included.
+
+  Leave it unset for any model Pydantic AI recognises -- it resolves
+  the answer from the model itself, which is right far more often than
+  a hand-maintained list.  Declare it only for a model that reasons but
+  is not resolved:  one served under a name no family matches, or one
+  whose ladder does not use these names.
+
+  The levels a model accepts are decided by its chat template, which is
+  shipped with the weights and is the only authority on the matter.
+  They differ:  Qwen3.8 takes `xhigh`, `medium` and `low`, and rejects
+  `high`; gpt-oss takes `low`, `medium` and `high`.  A level the
+  template rejects fails the run, which is why declaring a wrong list
+  is worse than declaring none.
+
+  ```yaml
+  # Qwen3.8's own ladder, which does not include 'high' or 'off'.
+  thinking_levels: ["low", "medium", "xhigh"]
+  thinking_default: "medium"
+  ```
+
 - `retries` (an integer, default `3`):  number of retries for LLM calls
   on recoverable errors.
 

@@ -6,6 +6,7 @@ import functools
 import pathlib
 import re
 import typing
+import warnings
 from collections import abc
 
 from pydantic_ai import capabilities as ai_capabilities
@@ -69,6 +70,18 @@ class UnknownCapability(KeyError):
         )
 
 
+class UnknownThinkingLevel(ValueError):
+    def __init__(self, name, level, _config_path=None):
+        self.name = name
+        self.level = level
+        self._config_path = _config_path
+        super().__init__(
+            f"Unknown thinking level in {name!r}: {level!r} "
+            f"(configured in {_config_path}); "
+            f"one of {list(THINKING_LEVELS)}"
+        )
+
+
 class UnknownAgentConfigKind(KeyError):
     def __init__(self, kind, _config_path=None):
         self.kind = kind
@@ -93,6 +106,52 @@ class LLMProviderType(enum.StrEnum):
     OLLAMA = "ollama"
     GOOGLE = "google"
     VLLM = "vllm"
+
+
+#
+#   How hard a model is asked to think, lowest first.  These are the
+#   levels a client may offer; 'off' is Pydantic AI's 'thinking=False',
+#   and the rest are its effort names verbatim.
+#
+#   The ladder is not universal.  Which rungs a model accepts is decided
+#   by its chat template, which is shipped with the weights and is the
+#   only authority on the matter:  Qwen3.8 takes 'xhigh', 'medium' and
+#   'low' and rejects 'high'; gpt-oss takes 'low', 'medium' and 'high'.
+#   A rung the template rejects fails the run, so what a room offers is
+#   resolved per model rather than assumed.
+#
+class ThinkingLevelName(enum.StrEnum):
+    OFF = "off"
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    XHIGH = "xhigh"
+
+
+THINKING_OFF = ThinkingLevelName.OFF
+THINKING_LEVELS = tuple(ThinkingLevelName)
+
+
+THINKING_IN_MODEL_SETTINGS_DEPRECATION = """\
+Setting 'thinking' in an agent's 'model_settings' is deprecated, and will
+stop being honored in a future release (configured in {config_path}).
+Use the 'thinking_default' agent configuration property instead, which a
+client can also read and override per run.
+"""
+
+
+def as_thinking_level(level: str | None) -> ai_settings.ThinkingLevel | None:
+    """Render one of 'THINKING_LEVELS' as Pydantic AI spells it.
+
+    'off' is 'False' there -- a value, not an absence -- while 'None'
+    stays None, meaning nothing is asserted and the model's own default
+    applies.
+    """
+    if level is None:
+        return None
+
+    return False if level == THINKING_OFF else level
 
 
 def _apply_agent_config_template(
@@ -189,6 +248,21 @@ class AgentConfig:
 
     model_settings: ai_settings.ModelSettings = None
 
+    # How hard this agent's model thinks when a run asks for nothing
+    # else.  One of 'THINKING_LEVELS', or None to assert nothing and
+    # leave the model its own default.
+    thinking_default: str = None
+
+    # The levels this model's chat template accepts, for a model whose
+    # capability Pydantic AI does not resolve -- a self-hosted one it
+    # has no family for, or one it excludes because its ladder does not
+    # match the usual names.  Declaring this says the model reasons,
+    # and is the complete set a client may offer:  a level absent from
+    # it is never sent, including 'off'.  Left unset, the model's
+    # resolved profile decides, which is right for every model Pydantic
+    # AI knows.
+    thinking_levels: list[str] = None
+
     # The model's context window, in tokens. Pydantic AI already knows
     # it for hosted models; a local or OpenAI-compatible provider does
     # not report one, so a room served that way declares it here or
@@ -217,6 +291,24 @@ class AgentConfig:
     def __post_init__(self, system_prompt):
         if system_prompt is not None:
             self._system_prompt_text = system_prompt
+
+        # A level nothing accepts fails the run it is sent on, and says
+        # nothing about where it came from. Reject it at load instead.
+        if self.thinking_default is not None:
+            if self.thinking_default not in THINKING_LEVELS:
+                raise UnknownThinkingLevel(
+                    "thinking_default",
+                    self.thinking_default,
+                    self._config_path,
+                )
+
+        for level in self.thinking_levels or ():
+            if level not in THINKING_LEVELS:
+                raise UnknownThinkingLevel(
+                    "thinking_levels",
+                    level,
+                    self._config_path,
+                )
 
     @classmethod
     def _check_kind(cls, kind):
@@ -252,6 +344,14 @@ class AgentConfig:
 
             pm_settings = config_dict.pop("model_settings", None)
             if pm_settings is not None:
+                if "thinking" in pm_settings:
+                    warnings.warn(
+                        THINKING_IN_MODEL_SETTINGS_DEPRECATION.format(
+                            config_path=str(config_path),
+                        ),
+                        category=DeprecationWarning,
+                        stacklevel=2,
+                    )
                 config_dict["model_settings"] = ai_settings.ModelSettings(
                     **pm_settings
                 )
@@ -351,6 +451,8 @@ class AgentConfig:
             "retries": self.retries,
             "system_prompt": prompt,
             "model_settings": self.model_settings,
+            "thinking_default": self.thinking_default,
+            "thinking_levels": self.thinking_levels,
             "context_window": self.context_window,
             "multimodal": self.multimodal,
             "provider_type": str(self.provider_type),
@@ -507,6 +609,14 @@ def _profile_kw(agent_config: AgentConfig, *, openai_compat: bool) -> dict:
     if agent_config.context_window is not None:
         profile["context_window"] = agent_config.context_window
 
+    if agent_config.thinking_levels:
+        # Declaring the levels says the model reasons, and that has to
+        # reach the profile to mean anything:  Pydantic AI discards a
+        # thinking setting for a model whose profile does not claim
+        # support, without an error, so a declaration that stopped at
+        # the configuration would change nothing at all.
+        profile["supports_thinking"] = True
+
     return {"profile": profile} if profile else {}
 
 
@@ -537,6 +647,75 @@ def get_context_window_from_config(
         return None
 
     return model.context_window
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ThinkingSupport:
+    """What a room may offer for how hard its model thinks."""
+
+    levels: tuple[str, ...]
+    """Offerable levels, lowest first; a subset of 'THINKING_LEVELS'.
+
+    The complete set:  a level absent from it is one this model is not
+    known to accept, and is never sent.  'off' is absent for a model
+    that cannot stop reasoning.
+    """
+
+    default: str | None
+    """What the room asks for when a run asks for nothing."""
+
+
+def get_thinking_from_config(
+    *,
+    agent_config: AgentConfig,
+) -> ThinkingSupport | None:
+    """Return what this agent's model offers, or None for no control.
+
+    None covers three cases that all mean the same thing to a client:
+    a model that does not reason, one nothing can resolve a capability
+    for, and a configuration no model can be built from.  In each, a
+    level would be discarded on the way to the wire, so offering one
+    would promise something that does not happen.
+
+    A declared 'thinking_levels' answers without building anything:  it
+    exists precisely for the models this resolution cannot serve.
+    """
+    if agent_config.thinking_levels:
+        return ThinkingSupport(
+            levels=tuple(agent_config.thinking_levels),
+            default=agent_config.thinking_default,
+        )
+
+    if agent_config.llm_model_name is None:
+        return None
+
+    try:
+        model = get_model_from_config(agent_config=agent_config)
+    except ai_exceptions.UserError:
+        return None
+
+    profile = model.profile
+    always_enabled = bool(profile.get("thinking_always_enabled", False))
+
+    if not (profile.get("supports_thinking", False) or always_enabled):
+        return None
+
+    # 'minimal' is not a rung everywhere:  where it is missing Pydantic
+    # AI quietly sends 'low' instead, so offering it would be a control
+    # that does nothing.
+    has_minimal = profile.get("openai_supports_minimal_reasoning_effort", True)
+
+    levels = tuple(
+        level
+        for level in THINKING_LEVELS
+        if not (level == THINKING_OFF and always_enabled)
+        and not (level == "minimal" and not has_minimal)
+    )
+
+    return ThinkingSupport(
+        levels=levels,
+        default=agent_config.thinking_default,
+    )
 
 
 def get_model_from_config(
