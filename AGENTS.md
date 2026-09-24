@@ -74,6 +74,11 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
 - `lint-textio-self-test` -- run `scripts/lint_textio.py --self-test` when
   that script itself changes, so a check gone blind fails loudly instead of
   passing by finding nothing
+- `lint-postgres-drivers` -- keep the PostgreSQL drivers optional: none in
+  the base dependencies or the `dev` group, the `postgres` /
+  `postgres-binary` extras intact, and no driver imported from
+  `src/soliplex/` or `tests/unit/`; `scripts/lint_postgres_drivers.py`,
+  stdlib-only (plus `lint-postgres-drivers-self-test`, as above)
 - `actionlint` -- lint GitHub Actions workflow files
 - `check-toml` / `check-yaml` -- validate TOML and YAML syntax
 - `gitleaks` -- scan for committed secrets
@@ -374,8 +379,9 @@ See `pyproject.toml` for authoritative version constraints.
 - SQLModel / aiosqlite -- database ORM
 - psycopg / asyncpg -- PostgreSQL drivers, as the `postgres` and
   `postgres-binary` extras only.  Nothing in `src/` or the unit suite
-  imports them (`tests/unit/test_packaging.py` guards the metadata), so
-  never add a driver import or a test needing one
+  imports them (`scripts/lint_postgres_drivers.py` guards both the
+  extras and the imports), so never add a driver import or a test
+  needing one
 - haiku-skills -- Haiku skills framework
 
 ## Entry Points

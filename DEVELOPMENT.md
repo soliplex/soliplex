@@ -145,6 +145,14 @@ The configured hooks (see `.pre-commit-config.yaml`) enforce:
   a check that has silently stopped matching anything would otherwise pass
   by finding no violations, so it runs before the check proper (in CI too
   -- see `.github/workflows/python-lint.yaml`).
+- **lint-postgres-drivers** -- keep the PostgreSQL drivers optional.
+  Downstream projects depend on the `postgres` / `postgres-binary` extras,
+  and no unit test needs a driver, so nothing else notices a driver
+  becoming a base (or `dev`) dependency, an extra being renamed, or
+  `postgres` switching to the bundled libpq; it also rejects a driver
+  import in `src/soliplex/` or `tests/unit/`.  See
+  `scripts/lint_postgres_drivers.py`, with its own
+  **lint-postgres-drivers-self-test** hook.
 - **actionlint** -- lint GitHub Actions workflow files.
 - **check-toml** / **check-yaml** -- validate TOML and YAML syntax.
 - **gitleaks** -- scan for committed secrets.

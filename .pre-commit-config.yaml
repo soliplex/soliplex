@@ -78,6 +78,19 @@ repos:
         language: system
         pass_filenames: false
         files: ^scripts/lint_interpolation\.py$
+      - id: lint-postgres-drivers
+        name: lint PostgreSQL drivers stay optional
+        entry: uv run python scripts/lint_postgres_drivers.py --verbose
+        language: system
+        pass_filenames: false
+        # The extras, and anything which could come to import a driver.
+        files: ^pyproject\.toml$|^src/soliplex/.*\.py$|^tests/unit/.*\.py$
+      - id: lint-postgres-drivers-self-test
+        name: lint PostgreSQL drivers stay optional (self-test)
+        entry: uv run python scripts/lint_postgres_drivers.py --self-test
+        language: system
+        pass_filenames: false
+        files: ^scripts/lint_postgres_drivers\.py$
 
   - repo: https://github.com/jackdewinter/pymarkdown
     rev: v0.9.36
