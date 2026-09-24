@@ -1,6 +1,8 @@
 import contextlib
 import dataclasses
+import logging
 import sqlite3
+import warnings
 from unittest import mock
 
 import fastapi
@@ -1663,6 +1665,51 @@ async def test_open_engines_disposes_on_the_way_out(w_refusal):
     assert disposed == [True]
 
 
+def _warning_message(message, category):
+    return warnings.WarningMessage(
+        message=category(message),
+        category=category,
+        filename="config.py",
+        lineno=1,
+    )
+
+
+@pytest.mark.parametrize(
+    "w_records, exp_args",
+    [
+        ([], []),
+        (
+            [
+                _warning_message("old stanza", DeprecationWarning),
+                _warning_message("odd value", UserWarning),
+            ],
+            [
+                ("DeprecationWarning", "old stanza"),
+                ("UserWarning", "odd value"),
+            ],
+        ),
+    ],
+)
+def test__log_config_warnings(caplog, w_records, exp_args):
+    the_installation = mock.create_autospec(installation.Installation)
+    caplog.set_level(logging.WARNING, logger=loggers.SOLIPLEX_LOGGER_NAME)
+
+    installation._log_config_warnings(the_installation, w_records)
+
+    found = [
+        record
+        for record in caplog.records
+        if record.name == loggers.SOLIPLEX_LOGGER_NAME
+    ]
+    assert [record.levelno for record in found] == [logging.WARNING] * len(
+        exp_args
+    )
+    assert [record.msg for record in found] == [
+        loggers.INSTALLATION_CONFIG_WARNING
+    ] * len(exp_args)
+    assert [record.args for record in found] == exp_args
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_max_age", [7200, "7200"])
 @pytest.mark.parametrize(
@@ -1684,6 +1731,7 @@ async def test_open_engines_disposes_on_the_way_out(w_refusal):
 @pytest.mark.parametrize("w_multiple_writers", [None, False, True])
 @mock.patch("soliplex.alembic_migrations.ensure_current_engine")
 @mock.patch("soliplex.loggers.ProcessLifetimeAuditLog")
+@mock.patch("soliplex.installation._log_config_warnings")
 @mock.patch("soliplex.installation.add_no_auth_user_as_admin")
 @mock.patch("soliplex.installation.apply_logfire_configuration")
 @mock.patch("soliplex.config.secrets.resolve_secrets")
@@ -1699,6 +1747,7 @@ async def test_lifespan(
     srs,
     alc,
     anauaa,
+    lcw,
     plal_klass,
     ensure_current_engine,
     mcp_apps,
@@ -1736,6 +1785,9 @@ async def test_lifespan(
         logging_config=w_ic_logging_config,
         thread_persistence_async_dburi=ASYNC_ENGINE_URL,
         authorization_async_dburi=ASYNC_ENGINE_URL,
+    )
+    i_config.reload_configurations.side_effect = lambda: warnings.warn(
+        "old stanza", DeprecationWarning, stacklevel=1
     )
     load_installation.return_value = i_config
     app = mock.create_autospec(fastapi.FastAPI)
@@ -1797,6 +1849,12 @@ root:
     ]
 
     i_config.reload_configurations.assert_called_once_with()
+    # The warning raised while loading is handed on for logging.
+    ((lcw_installation, lcw_records),) = [
+        call.args for call in lcw.call_args_list
+    ]
+    assert lcw_installation is the_installation
+    assert [record.category for record in lcw_records] == [DeprecationWarning]
     i_config.resolve_environment.assert_called_once_with()
     i_config.resolve_app_routers.assert_called_once_with()
 

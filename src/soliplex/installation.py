@@ -764,6 +764,24 @@ async def open_engines(
         await engines.dispose_engines()
 
 
+def _log_config_warnings(the_installation, records):
+    """Log each warning recorded while loading the installation config.
+
+    ``records`` holds 'warnings.WarningMessage' instances.
+    """
+    the_logger = loggers.LogWrapper(
+        loggers.SOLIPLEX_LOGGER_NAME,
+        the_installation,
+    )
+
+    for record in records:
+        the_logger.warning(
+            loggers.INSTALLATION_CONFIG_WARNING,
+            record.category.__name__,
+            str(record.message),
+        )
+
+
 async def lifespan(
     app: fastapi.FastAPI,
     *,
@@ -772,16 +790,18 @@ async def lifespan(
     log_config_file: str = None,
     multiple_writers: bool = False,
 ):
-    i_config = config_installation.load_installation(installation_path)
+    with warnings.catch_warnings(record=True) as config_warnings:
+        warnings.simplefilter("always")
+        i_config = config_installation.load_installation(installation_path)
 
-    if no_auth_mode:
-        del i_config.oidc_paths[:]
+        if no_auth_mode:
+            del i_config.oidc_paths[:]
 
-    i_config.reload_configurations()
-    the_installation = Installation(i_config)
-    the_installation.resolve_secrets()
-    the_installation.resolve_environment()
-    the_installation.resolve_app_routers()
+        i_config.reload_configurations()
+        the_installation = Installation(i_config)
+        the_installation.resolve_secrets()
+        the_installation.resolve_environment()
+        the_installation.resolve_app_routers()
 
     config_routing.add_registered_routers(app)
 
@@ -803,6 +823,7 @@ async def lifespan(
 
     # Logging is now configured, so the audit log reaches its handlers.
     audit_log = loggers.ProcessLifetimeAuditLog()
+    _log_config_warnings(the_installation, config_warnings)
     audit_log.server_starting()
 
     # Extract room configs FBO mcp_server.setup_mcp_for_rooms
