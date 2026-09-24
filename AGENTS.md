@@ -74,6 +74,18 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
 - `lint-textio-self-test` -- run `scripts/lint_textio.py --self-test` when
   that script itself changes, so a check gone blind fails loudly instead of
   passing by finding nothing
+- `lint-alembic-chain` -- migrate empty databases from base and compare
+  them with what the models create, so a model change without a revision
+  (or a revision the models don't match) fails; runs when
+  `src/soliplex/{agui,authz}/schema.py` or anything under
+  `src/soliplex/alembic_migrations/` changes;
+  `scripts/lint_alembic_chain.py` (plus `lint-alembic-chain-self-test`,
+  as above)
+- `lint-interpolation` -- reject a property in `src/soliplex/config/`
+  which resolves `secret:` / `env:` markers by hand instead of declaring
+  the contract on the field for `interpolation.resolve_field`, leaving the
+  field invisible to `soliplex-cli audit`; `scripts/lint_interpolation.py`,
+  stdlib-only (plus `lint-interpolation-self-test`, as above)
 - `lint-postgres-drivers` -- keep the PostgreSQL drivers optional: none in
   the base dependencies or the `dev` group, the `postgres` /
   `postgres-binary` extras intact, and no driver imported from

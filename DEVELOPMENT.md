@@ -145,6 +145,22 @@ The configured hooks (see `.pre-commit-config.yaml`) enforce:
   a check that has silently stopped matching anything would otherwise pass
   by finding no violations, so it runs before the check proper (in CI too
   -- see `.github/workflows/python-lint.yaml`).
+- **lint-alembic-chain** -- check that the alembic revisions reproduce
+  the models: it migrates empty SQLite databases from base and compares
+  them structurally with what the models create, so a model changed
+  without a revision fails here rather than in a deployment. Runs when
+  `src/soliplex/{agui,authz}/schema.py` or anything under
+  `src/soliplex/alembic_migrations/` changes. See
+  `scripts/lint_alembic_chain.py`, with its own
+  **lint-alembic-chain-self-test** hook, which stops one revision short of
+  head and requires the comparison to report a difference.
+- **lint-interpolation** -- reject a property in `src/soliplex/config/`
+  that resolves `secret:` / `env:` markers by hand (`get_secret`,
+  `interpolate_environment`, ...) instead of declaring the contract on the
+  field and resolving it through `interpolation.resolve_field`; such a
+  field is invisible to `soliplex-cli audit`. See
+  `scripts/lint_interpolation.py`, with its own
+  **lint-interpolation-self-test** hook.
 - **lint-postgres-drivers** -- keep the PostgreSQL drivers optional.
   Downstream projects depend on the `postgres` / `postgres-binary` extras,
   and no unit test needs a driver, so nothing else notices a driver
