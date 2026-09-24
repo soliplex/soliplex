@@ -4,6 +4,7 @@ import dataclasses
 import functools
 import pathlib
 import typing
+import warnings
 from unittest import mock
 
 import pytest
@@ -1156,6 +1157,8 @@ def test_agentconfig_as_yaml(
         "provider_type": agent_config_kw.get("provider_type", "ollama"),
         "provider_base_url": agent_config_kw.get("provider_base_url"),
         "provider_key": agent_config_kw.get("provider_key"),
+        "thinking_default": agent_config_kw.get("thinking_default"),
+        "thinking_levels": agent_config_kw.get("thinking_levels"),
         "agui_feature_names": agent_config_kw.get("agui_feature_names", ()),
     } | exp_cap
 
@@ -1656,6 +1659,9 @@ def test_get_model_from_config(
     agent_config.model_settings = w_model_settings
     agent_config.context_window = w_context_window
     agent_config.provider_type = provider_type
+    # Autospec hands back a Mock for anything unset, and a Mock is
+    # truthy -- which '_profile_kw' would read as declared levels.
+    agent_config.thinking_levels = None
     # A copy, so the assertions below compare against what was
     # configured rather than against anything the code did to it.
     agent_config.llm_provider_kw = dict(llm_provider_kw)
@@ -1825,3 +1831,229 @@ def test_vllm_provider_keeps_the_openai_compatibility_flag():
     assert profile["openai_chat_supports_multiple_system_messages"] is False
     assert profile["context_window"] == 32768
     assert profile["supports_thinking"] is True
+
+
+#
+#   Thinking level configuration
+#
+
+
+@pytest.mark.parametrize(
+    "level, expected",
+    [
+        (None, None),
+        ("off", False),
+        ("low", "low"),
+        ("xhigh", "xhigh"),
+    ],
+)
+def test_as_thinking_level(level, expected):
+    assert config_agents.as_thinking_level(level) is expected
+
+
+@pytest.mark.parametrize(
+    "agent_kw, bad_name",
+    [
+        (dict(thinking_default="enthusiastic"), "thinking_default"),
+        (dict(thinking_levels=["low", "sideways"]), "thinking_levels"),
+    ],
+)
+def test_agentconfig_rejects_an_unknown_thinking_level(agent_kw, bad_name):
+    """A level nothing accepts is caught at load, not at run time.
+
+    Sent on a run it would fail it, from inside a chat template, which
+    says nothing about which configuration file to go and fix.
+    """
+    with pytest.raises(config_agents.UnknownThinkingLevel) as exc_info:
+        config_agents.AgentConfig(id=AGENT_ID, **agent_kw)
+
+    assert exc_info.value.name == bad_name
+
+
+def test_agentconfig_accepts_every_level_it_publishes():
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        thinking_levels=list(config_agents.THINKING_LEVELS),
+        thinking_default=config_agents.THINKING_OFF,
+    )
+
+    assert agent_config.thinking_default == "off"
+
+
+def test_agentconfig_from_yaml_deprecates_thinking_in_model_settings(
+    installation_config,
+    temp_dir,
+):
+    config_path = temp_dir / "room_config.yaml"
+
+    with pytest.warns(DeprecationWarning, match="thinking_default"):
+        agent_config = config_agents.AgentConfig.from_yaml(
+            installation_config,
+            config_path,
+            {
+                "id": AGENT_ID,
+                "model_settings": {"thinking": "low"},
+            },
+        )
+
+    # Deprecated, not ignored:  what it did before, it still does.
+    assert agent_config.model_settings["thinking"] == "low"
+
+
+def test_agentconfig_from_yaml_allows_other_model_settings(
+    installation_config,
+    temp_dir,
+):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        agent_config = config_agents.AgentConfig.from_yaml(
+            installation_config,
+            temp_dir / "room_config.yaml",
+            {"id": AGENT_ID, "model_settings": {"temperature": 0.5}},
+        )
+
+    assert agent_config.model_settings["temperature"] == 0.5
+
+
+def test_profile_kw_declares_support_for_declared_levels():
+    """The declaration has to reach the profile to mean anything.
+
+    Pydantic AI drops a thinking setting for a model whose profile
+    does not claim support, so a declaration that stopped at the
+    configuration would change nothing at all.
+    """
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="Qwen/Qwen3.8-27B",
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+        thinking_levels=["low", "medium", "xhigh"],
+    )
+
+    profile = config_agents.get_model_from_config(
+        agent_config=agent_config,
+    ).profile
+
+    assert profile["supports_thinking"] is True
+
+
+def _agent_config_with_profile(monkeypatch, profile):
+    """An agent config whose model resolves to 'profile'."""
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+    )
+    monkeypatch.setattr(
+        config_agents,
+        "get_model_from_config",
+        lambda *, agent_config: mock.Mock(profile=profile),
+    )
+    return agent_config
+
+
+@pytest.mark.parametrize(
+    "profile, expected_levels",
+    [
+        # Nothing claims support: no control at all.
+        ({}, None),
+        ({"supports_thinking": False}, None),
+        # The ordinary case.
+        (
+            {"supports_thinking": True},
+            ("off", "minimal", "low", "medium", "high", "xhigh"),
+        ),
+        # A model that cannot stop reasoning is not offered 'off',
+        # and still reports the rest.
+        (
+            {"thinking_always_enabled": True},
+            ("minimal", "low", "medium", "high", "xhigh"),
+        ),
+        # Where 'minimal' is missing Pydantic AI quietly sends 'low',
+        # so offering it would be a control that does nothing.
+        (
+            {
+                "supports_thinking": True,
+                "openai_supports_minimal_reasoning_effort": False,
+            },
+            ("off", "low", "medium", "high", "xhigh"),
+        ),
+    ],
+)
+def test_get_thinking_from_config_resolves_the_profile(
+    monkeypatch,
+    profile,
+    expected_levels,
+):
+    agent_config = _agent_config_with_profile(monkeypatch, profile)
+
+    support = config_agents.get_thinking_from_config(
+        agent_config=agent_config,
+    )
+
+    if expected_levels is None:
+        assert support is None
+    else:
+        assert support.levels == expected_levels
+        assert support.default is None
+
+
+def test_get_thinking_from_config_prefers_the_declaration(monkeypatch):
+    """A declaration answers without building a model at all.
+
+    It exists for the models this resolution cannot serve, so it must
+    not be overridden by what the resolution would have said.
+    """
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+        thinking_levels=["low", "xhigh"],
+        thinking_default="low",
+    )
+
+    get_model_from_config = mock.Mock()
+    monkeypatch.setattr(
+        config_agents,
+        "get_model_from_config",
+        get_model_from_config,
+    )
+
+    support = config_agents.get_thinking_from_config(
+        agent_config=agent_config,
+    )
+
+    assert support.levels == ("low", "xhigh")
+    assert support.default == "low"
+    get_model_from_config.assert_not_called()
+
+
+def test_get_thinking_from_config_without_a_model():
+    """An agent template with no model offers nothing."""
+    agent_config = config_agents.AgentConfig(id=AGENT_ID)
+
+    assert (
+        config_agents.get_thinking_from_config(agent_config=agent_config)
+        is None
+    )
+
+
+def test_get_thinking_from_config_unbuildable(monkeypatch):
+    """A configuration no model can be built from offers nothing.
+
+    The same bargain 'get_context_window_from_config' strikes: listing
+    a room is not the moment to fail over a missing provider key.
+    """
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="gpt-4o",
+        provider_type="openai",
+    )
+
+    assert (
+        config_agents.get_thinking_from_config(agent_config=agent_config)
+        is None
+    )
