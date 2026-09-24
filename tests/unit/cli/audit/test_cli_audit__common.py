@@ -6,6 +6,7 @@ from unittest import mock
 import pytest
 
 from soliplex.cli.audit import _common as audit_common
+from soliplex.config import installation as config_installation
 
 
 @pytest.mark.parametrize("w_quiet", [False, True])
@@ -94,6 +95,69 @@ def test__get_installation_records_warnings(
     found = audit_common._get_installation(ctx, installation_path)
 
     assert found is mock.sentinel.installation
+    assert [record.category for record in ctx.obj["config_warnings"]] == [
+        DeprecationWarning,
+        UserWarning,
+    ]
+
+
+@mock.patch("soliplex.config.installation.load_installation")
+def test__get_installation_config_returns_the_cached_config(
+    load_installation,
+    ctx,
+    installation_path,
+):
+    ctx.obj["the_installation_config"] = mock.sentinel.i_config
+
+    found = audit_common._get_installation_config(ctx, installation_path)
+
+    assert found is mock.sentinel.i_config
+    load_installation.assert_not_called()
+    assert "config_warnings" not in ctx.obj
+
+
+@pytest.mark.parametrize("w_missing_env", [False, True])
+@mock.patch("soliplex.config.installation.load_installation")
+def test__get_installation_config(
+    load_installation,
+    ctx,
+    installation_path,
+    w_missing_env,
+):
+    i_config = load_installation.return_value
+    if w_missing_env:
+        i_config.resolve_environment.side_effect = (
+            config_installation.MissingEnvVars("MISSING", [ValueError("nope")])
+        )
+
+    found = audit_common._get_installation_config(ctx, installation_path)
+
+    assert found is i_config
+    load_installation.assert_called_once_with(installation_path)
+    i_config.resolve_environment.assert_called_once_with()
+    assert ctx.obj["the_installation_config"] is i_config
+    assert ctx.obj["config_warnings"] == []
+
+
+@mock.patch("soliplex.config.installation.load_installation")
+def test__get_installation_config_records_warnings(
+    load_installation,
+    ctx,
+    installation_path,
+):
+    def warn_and_load(*args, **kwargs):
+        warnings.warn("old stanza", DeprecationWarning, stacklevel=1)
+        return i_config
+
+    i_config = mock.Mock(spec_set=["resolve_environment"])
+    i_config.resolve_environment.side_effect = lambda: warnings.warn(
+        "odd value", UserWarning, stacklevel=1
+    )
+    load_installation.side_effect = warn_and_load
+
+    found = audit_common._get_installation_config(ctx, installation_path)
+
+    assert found is i_config
     assert [record.category for record in ctx.obj["config_warnings"]] == [
         DeprecationWarning,
         UserWarning,

@@ -109,6 +109,34 @@ def test_database_report_migration_owed(state, revision, policy, expected):
     assert found is expected
 
 
+_RT_ASYNC = "postgresql+psycopg://runtime@db/authz"
+_RT_SYNC = "postgresql://runtime@db/authz"
+_OWNER = "postgresql://owner@db/authz"
+_RAM_ASYNC = config_installation.ASYNC_MEMORY_ENGINE_URL
+
+
+@pytest.mark.parametrize(
+    "w_async, w_migration, exp_target",
+    [
+        (_RT_ASYNC, None, (_RT_ASYNC, audit_databases.PROBED_ASYNC)),
+        (_RT_ASYNC, _OWNER, (_RT_ASYNC, audit_databases.PROBED_ASYNC)),
+        (_RAM_ASYNC, _OWNER, (_OWNER, audit_databases.PROBED_MIGRATION)),
+        (_RAM_ASYNC, None, (_RT_SYNC, audit_databases.PROBED_SYNC)),
+    ],
+)
+def test__probe_target(w_async, w_migration, exp_target):
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig,
+        authorization_async_dburi=w_async,
+        authorization_sync_dburi=_RT_SYNC,
+        authorization_migration_dburi=w_migration,
+    )
+
+    found = audit_databases._probe_target(i_config, cli_util.AUTHZ)
+
+    assert found == exp_target
+
+
 def test__probe_database_reads_a_migrated_database(the_installation, tmp_path):
     # Driven against real files: the probe has to agree with what alembic
     # actually wrote, which a mocked connection could not show.
@@ -119,7 +147,9 @@ def test__probe_database_reads_a_migrated_database(the_installation, tmp_path):
     )
 
     state, revision = asyncio.run(
-        audit_databases._probe_database(the_installation, cli_util.AUTHZ)
+        audit_databases._probe_database(
+            the_installation._config, cli_util.AUTHZ
+        )
     )
 
     assert state is _DB_STATES.STAMPED
@@ -144,18 +174,49 @@ def test__probe_database_reads_an_unstamped_database(
         engine.dispose()
 
     state, revision = asyncio.run(
-        audit_databases._probe_database(the_installation, cli_util.AUTHZ)
+        audit_databases._probe_database(
+            the_installation._config, cli_util.AUTHZ
+        )
     )
 
     assert state is _DB_STATES.UNSTAMPED
     assert revision is None
 
 
+@pytest.mark.parametrize(
+    "w_probed, exp_async",
+    [
+        (audit_databases.PROBED_ASYNC, True),
+        (audit_databases.PROBED_MIGRATION, False),
+        (audit_databases.PROBED_SYNC, False),
+    ],
+)
+@mock.patch.object(cli_util, "probe_database")
+@mock.patch.object(
+    audit_databases, "_probe_database", new_callable=mock.AsyncMock
+)
+def test__probe(probe_async, probe_sync, w_probed, exp_async):
+    found = audit_databases._probe(
+        mock.sentinel.i_config, cli_util.AUTHZ, "the-dburi", w_probed
+    )
+
+    if exp_async:
+        assert found is probe_async.return_value
+        probe_async.assert_awaited_once_with(
+            mock.sentinel.i_config, cli_util.AUTHZ
+        )
+        probe_sync.assert_not_called()
+    else:
+        assert found is probe_sync.return_value
+        probe_sync.assert_called_once_with(cli_util.AUTHZ, "the-dburi")
+        probe_async.assert_not_called()
+
+
 def test__database_reports_returns_the_cached_probe(ctx, the_installation):
     already = {"agui": object()}
     ctx.obj["database_reports"] = already
 
-    found = audit_databases._database_reports(ctx, the_installation)
+    found = audit_databases._database_reports(ctx, the_installation._config)
 
     assert found is already
 
@@ -173,13 +234,36 @@ def test__database_reports_probes_and_caches(
         (_DB_STATES.UNSTAMPED, None),
     ]
 
-    found = audit_databases._database_reports(ctx, the_installation)
+    found = audit_databases._database_reports(ctx, the_installation._config)
 
     assert found[cli_util.AGUI].state is _DB_STATES.STAMPED
     assert found[cli_util.AGUI].revision == _HEAD
     assert found[cli_util.AUTHZ].state is _DB_STATES.UNSTAMPED
     assert all(report.head == _HEAD for report in found.values())
     assert ctx.obj["database_reports"] is found
+
+
+@mock.patch.object(alembic_migrations, "head_revision")
+@mock.patch.object(audit_databases, "_probe")
+@mock.patch.object(audit_databases, "_probe_target")
+def test__database_reports_records_the_probed_dburi(
+    probe_target, probe, head_revision, ctx
+):
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    head_revision.return_value = _HEAD
+    probe_target.return_value = (_OWNER, audit_databases.PROBED_MIGRATION)
+    probe.return_value = (_DB_STATES.STAMPED, _HEAD)
+
+    found = audit_databases._database_reports(ctx, i_config)
+
+    assert [(report.dburi, report.probed) for report in found.values()] == [
+        (_OWNER, audit_databases.PROBED_MIGRATION),
+        (_OWNER, audit_databases.PROBED_MIGRATION),
+    ]
+    assert probe.call_args_list == [
+        mock.call(i_config, db_type, _OWNER, audit_databases.PROBED_MIGRATION)
+        for db_type in alembic_migrations.DATABASE_NAMES
+    ]
 
 
 @mock.patch.object(alembic_migrations, "head_revision")
@@ -192,7 +276,7 @@ def test__database_reports_maps_an_uncreated_database_to_empty(
     head_revision.return_value = _HEAD
     probe.side_effect = cli_util.DatabaseNotCreated("authz")
 
-    found = audit_databases._database_reports(ctx, the_installation)
+    found = audit_databases._database_reports(ctx, the_installation._config)
 
     assert [report.state for report in found.values()] == [
         _DB_STATES.EMPTY,
@@ -211,7 +295,7 @@ def test__database_reports_records_an_unreachable_database(
     head_revision.return_value = _HEAD
     probe.side_effect = RuntimeError("refused")
 
-    found = audit_databases._database_reports(ctx, the_installation)
+    found = audit_databases._database_reports(ctx, the_installation._config)
 
     assert all(
         report.error == "RuntimeError: refused" for report in found.values()
@@ -316,6 +400,18 @@ def test__database_config_lines(policy, migration_dburi, expected):
     found = audit_databases._database_config_lines(report)
 
     assert found == expected
+
+
+def test__database_config_lines_omits_the_probed_migration_dburi():
+    report = _report(
+        policy=_POLICY.EXPLICIT,
+        migration_dburi=_OWNER,
+        probed=audit_databases.PROBED_MIGRATION,
+    )
+
+    found = audit_databases._database_config_lines(report)
+
+    assert found == ["migration policy: explicit"]
 
 
 def test__database_findings_reports_an_unreachable_database():

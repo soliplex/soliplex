@@ -119,7 +119,8 @@ alx downgrade <the older release's head revision>   # from a checkout
 
 `soliplex-cli database status` and `soliplex-cli audit databases` both
 report the condition, so it surfaces there rather than at the next
-restart.
+restart. Both load only the installation config, so either runs from a
+migration service holding a cut-down, migration-only configuration.
 
 ## Cheat Sheet
 
