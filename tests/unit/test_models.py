@@ -651,6 +651,63 @@ def test_defaultagent_from_config_carries_context_window(
     gcwfc.assert_called_once_with(agent_config=agent_config)
 
 
+@pytest.mark.parametrize(
+    "support, expected",
+    [
+        (None, None),
+        (
+            config_agents.ThinkingSupport(
+                levels=("low", "medium"),
+                default="low",
+            ),
+            {"levels": ["low", "medium"], "default": "low"},
+        ),
+    ],
+)
+def test_agentthinking_from_support(support, expected):
+    """No support means no block, which means no control in a client.
+
+    A level sent to a model that reports none is discarded on the way
+    to the wire, so offering one would promise something that does not
+    happen.
+    """
+    found = models.AgentThinking.from_support(support)
+
+    if expected is None:
+        assert found is None
+    else:
+        assert found.model_dump() == expected
+
+
+@mock.patch("soliplex.config.agents.get_thinking_from_config")
+def test_defaultagent_from_config_carries_thinking(
+    gtfc,
+    installation_config,
+):
+    """Resolved once with the room, like the context window.
+
+    Which levels a model accepts belongs to its chat template, so a
+    client cannot work it out from the model name and is told instead.
+    """
+    gtfc.return_value = config_agents.ThinkingSupport(
+        levels=("off", "low", "high"),
+        default="low",
+    )
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        system_prompt=AGENT_PROMPT,
+        _installation_config=installation_config,
+        provider_type=config_agents.LLMProviderType.VLLM,
+        provider_base_url=AGENT_BASE_URL,
+    )
+
+    agent_model = models.DefaultAgent.from_config(agent_config)
+
+    assert agent_model.thinking.levels == ["off", "low", "high"]
+    assert agent_model.thinking.default == "low"
+    gtfc.assert_called_once_with(agent_config=agent_config)
+
+
 def test_aguifeature_from_config(the_agui_feature):
     feature_model = models.AGUI_Feature.from_config(the_agui_feature)
 
