@@ -62,6 +62,12 @@ soliplex-cli serve example/minimal.yaml --log-config example/logging.yaml
 2026-02-09T18:16:40|INFO|uvicorn.error|Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 ```
 
+During startup, the server logs each Python warning raised while loading
+the installation configuration (e.g., the `DeprecationWarning` for a
+configuration stanza slated for removal) as a `WARNING` record on the
+`soliplex` logger, which `soliplex-cli audit installation` also reports
+as a finding.
+
 ## CLI Audit Logging
 
 Privileged `soliplex-cli` operations (the `admin-users` and `room-authz`

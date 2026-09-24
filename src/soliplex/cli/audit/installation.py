@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import textwrap
+
 import typer
 
 from soliplex import installation
@@ -22,6 +24,26 @@ def _invalid_installation(
     return errors
 
 
+def _config_warnings(records) -> dict:
+    """Return a finding for each warning recorded while loading the config.
+
+    ``records`` holds the ``warnings.WarningMessage`` instances which
+    '_common._get_installation' records.
+    """
+    findings = [
+        {
+            "category": record.category.__name__,
+            "message": str(record.message),
+        }
+        for record in records
+    ]
+
+    if findings:
+        return {"config_warnings": findings}
+
+    return {}
+
+
 def _audit_installation_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
@@ -42,6 +64,12 @@ def _audit_installation_section(
     else:
         tc_print("OK")
 
+    warning_errors = _config_warnings(ctx.obj.get("config_warnings", ()))
+    for finding in warning_errors.get("config_warnings", ()):
+        tc_print()
+        tc_print(f"WARNING: {finding['category']}")
+        tc_print(textwrap.indent(finding["message"].rstrip(), "  "))
+
     interpolation_errors = (
         audit_interpolation._invalid_installation_interpolations(
             the_installation,
@@ -51,7 +79,7 @@ def _audit_installation_section(
         tc_print, interpolation_errors
     )
 
-    return errors | interpolation_errors
+    return errors | warning_errors | interpolation_errors
 
 
 def audit_installation(
