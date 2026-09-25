@@ -18,6 +18,7 @@ from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import google as google_providers
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
+from pydantic_ai.providers import vllm as vllm_providers
 
 from . import _utils
 from . import exceptions
@@ -91,6 +92,7 @@ class LLMProviderType(enum.StrEnum):
     OPENAI = "openai"
     OLLAMA = "ollama"
     GOOGLE = "google"
+    VLLM = "vllm"
 
 
 def _apply_agent_config_template(
@@ -568,6 +570,19 @@ def get_model_from_config(
             model_name=model_name,
             provider=provider,
             **_profile_kw(agent_config, openai_compat=True),
+            **model_settings_kw,
+        )
+
+    elif agent_config.provider_type == LLMProviderType.VLLM:
+        provider = vllm_providers.VLLMProvider(**provider_kw)
+        return openai_models.OpenAIChatModel(
+            model_name=model_name,
+            provider=provider,
+            # No '_OPENAI_COMPAT_PROFILE' here: the vLLM provider's own
+            # profile already sets that flag, and resolves the model
+            # family from the served name -- which is the whole reason
+            # to prefer it over 'openai' with a base URL.
+            **_profile_kw(agent_config, openai_compat=False),
             **model_settings_kw,
         )
 

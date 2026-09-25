@@ -1,7 +1,4 @@
 import pydantic_ai
-from pydantic_ai.models import openai as openai_models
-from pydantic_ai.providers import ollama as ollama_providers
-from pydantic_ai.providers import openai as openai_providers
 
 from soliplex import models
 from soliplex.config import agents as config_agents
@@ -45,22 +42,18 @@ GUIDELINES:
 
 
 def get_quiz_judge_agent(quiz: config_quizzes.QuizConfig):
-    provider_type = quiz.judge_agent.provider_type
-    llm_provider_kw = quiz.judge_agent.llm_provider_kw
-
-    if provider_type == config_agents.LLMProviderType.OPENAI:
-        model_provider = openai_providers.OpenAIProvider(**llm_provider_kw)
-    else:
-        model_provider = ollama_providers.OllamaProvider(**llm_provider_kw)
-
-    ollama_model = openai_models.OpenAIChatModel(
-        model_name=quiz.judge_agent.llm_model_name,
-        provider=model_provider,
+    # Build the judge's model the way every other agent's is built,
+    # rather than picking a provider here.  Selecting one by hand meant
+    # every provider this function did not name fell through to Ollama,
+    # and that the judge's 'model_settings' -- where its reasoning
+    # control belongs (#1338) -- never reached the model at all.
+    model = config_agents.get_model_from_config(
+        agent_config=quiz.judge_agent,
     )
 
     # Create Pydantic AI agent
     return pydantic_ai.Agent(
-        model=ollama_model,
+        model=model,
         output_type=models.QuizLLMJudgeResponse,
         system_prompt=ANSWER_EQUIVALENCE_RUBRIC,
     )
