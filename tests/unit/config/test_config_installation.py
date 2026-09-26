@@ -3118,78 +3118,308 @@ def test_installationconfig_as_yaml_round_trips_sandbox_config(temp_dir):
     assert found.transcripts_path == expected.transcripts_path
 
 
+def test_installationconfig_oidc_auth_system_configs_wo_existing():
+    i_config = config_installation.InstallationConfig(
+        **BARE_INSTALLATION_CONFIG_KW
+    )
+
+    with mock.patch.object(
+        i_config, "_load_oidc_auth_system_configs"
+    ) as loader:
+        found = i_config.oidc_auth_system_configs
+
+    assert found is loader.return_value
+    assert i_config._oidc_auth_system_configs is loader.return_value
+    loader.assert_called_once_with()
+
+
+TOP_FRONTEND_ORIGIN = "https://top.example.com"
+AUTHSYS_FRONTEND_ORIGIN = "https://authsys.example.com"
+UFOP = config_authsystem.UnlistedFrontendOriginPolicy
+
+
 @pytest.mark.parametrize(
-    "w_pem_path",
+    "top_kw, authsys_kw, exp_pem_path, exp_consent, exp_afo, exp_ufo",
     [
-        test_authsystem.ABSOLUTE_OIDC_CLIENT_PEM_PATH,
-        test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH,
+        pytest.param(
+            {},
+            {},
+            None,
+            None,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="neither",
+        ),
+        pytest.param(
+            {
+                "oidc_client_pem_path": (
+                    test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH
+                ),
+            },
+            {},
+            test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH,
+            None,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="top-pem-rel",
+        ),
+        pytest.param(
+            {
+                "oidc_client_pem_path": (
+                    test_authsystem.ABSOLUTE_OIDC_CLIENT_PEM_PATH
+                ),
+            },
+            {},
+            test_authsystem.ABSOLUTE_OIDC_CLIENT_PEM_PATH,
+            None,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="top-pem-abs",
+        ),
+        pytest.param(
+            {},
+            {
+                "oidc_client_pem_path": (
+                    test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH
+                ),
+            },
+            test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH,
+            None,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="authsys-pem-rel",
+        ),
+        pytest.param(
+            {
+                "oidc_client_pem_path": (
+                    test_authsystem.ABSOLUTE_OIDC_CLIENT_PEM_PATH
+                ),
+            },
+            {
+                "oidc_client_pem_path": (
+                    test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH
+                ),
+            },
+            test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH,
+            None,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="authsys-pem-overrides-top",
+        ),
+        pytest.param(
+            {
+                "consent_template_path": (
+                    test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH
+                ),
+            },
+            {},
+            None,
+            test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="top-consent-rel",
+        ),
+        pytest.param(
+            {
+                "consent_template_path": (
+                    test_authsystem.ABSOLUTE_CONSENT_TEMPLATE_PATH
+                ),
+            },
+            {},
+            None,
+            test_authsystem.ABSOLUTE_CONSENT_TEMPLATE_PATH,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="top-consent-abs",
+        ),
+        pytest.param(
+            {},
+            {
+                "consent_template_path": (
+                    test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH
+                ),
+            },
+            None,
+            test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="authsys-consent-rel",
+        ),
+        pytest.param(
+            {
+                "consent_template_path": (
+                    test_authsystem.ABSOLUTE_CONSENT_TEMPLATE_PATH
+                ),
+            },
+            {
+                "consent_template_path": (
+                    test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH
+                ),
+            },
+            None,
+            test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="authsys-consent-overrides-top",
+        ),
+        pytest.param(
+            {"allowed_frontend_origins": [TOP_FRONTEND_ORIGIN]},
+            {},
+            None,
+            None,
+            [TOP_FRONTEND_ORIGIN],
+            UFOP.CONSENT_REQUIRED,
+            id="top-afo",
+        ),
+        pytest.param(
+            {},
+            {"allowed_frontend_origins": [AUTHSYS_FRONTEND_ORIGIN]},
+            None,
+            None,
+            [AUTHSYS_FRONTEND_ORIGIN],
+            UFOP.CONSENT_REQUIRED,
+            id="authsys-afo",
+        ),
+        pytest.param(
+            {"allowed_frontend_origins": [TOP_FRONTEND_ORIGIN]},
+            {"allowed_frontend_origins": [AUTHSYS_FRONTEND_ORIGIN]},
+            None,
+            None,
+            [AUTHSYS_FRONTEND_ORIGIN],
+            UFOP.CONSENT_REQUIRED,
+            id="authsys-afo-overrides-top",
+        ),
+        pytest.param(
+            {"allowed_frontend_origins": [TOP_FRONTEND_ORIGIN]},
+            {"allowed_frontend_origins": []},
+            None,
+            None,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="authsys-empty-afo-overrides-top",
+        ),
+        pytest.param(
+            {"unlisted_frontend_origin": str(UFOP.DENY_ALL)},
+            {},
+            None,
+            None,
+            [],
+            UFOP.DENY_ALL,
+            id="top-ufo",
+        ),
+        pytest.param(
+            {},
+            {"unlisted_frontend_origin": str(UFOP.DENY_ALL)},
+            None,
+            None,
+            [],
+            UFOP.DENY_ALL,
+            id="authsys-ufo",
+        ),
+        pytest.param(
+            {"unlisted_frontend_origin": str(UFOP.DENY_ALL)},
+            {"unlisted_frontend_origin": str(UFOP.CONSENT_REQUIRED)},
+            None,
+            None,
+            [],
+            UFOP.CONSENT_REQUIRED,
+            id="authsys-ufo-overrides-top",
+        ),
+        pytest.param(
+            {
+                "oidc_client_pem_path": (
+                    test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH
+                ),
+                "consent_template_path": (
+                    test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH
+                ),
+                "allowed_frontend_origins": [TOP_FRONTEND_ORIGIN],
+                "unlisted_frontend_origin": str(UFOP.DENY_ALL),
+            },
+            {},
+            test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH,
+            test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH,
+            [TOP_FRONTEND_ORIGIN],
+            UFOP.DENY_ALL,
+            id="top-all",
+        ),
+        pytest.param(
+            {
+                "oidc_client_pem_path": (
+                    test_authsystem.ABSOLUTE_OIDC_CLIENT_PEM_PATH
+                ),
+                "consent_template_path": (
+                    test_authsystem.ABSOLUTE_CONSENT_TEMPLATE_PATH
+                ),
+                "allowed_frontend_origins": [TOP_FRONTEND_ORIGIN],
+                "unlisted_frontend_origin": str(UFOP.CONSENT_REQUIRED),
+            },
+            {
+                "oidc_client_pem_path": (
+                    test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH
+                ),
+                "consent_template_path": (
+                    test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH
+                ),
+                "allowed_frontend_origins": [],
+                "unlisted_frontend_origin": str(UFOP.DENY_ALL),
+            },
+            test_authsystem.RELATIVE_OIDC_CLIENT_PEM_PATH,
+            test_authsystem.RELATIVE_CONSENT_TEMPLATE_PATH,
+            [],
+            UFOP.DENY_ALL,
+            id="authsys-all-overrides",
+        ),
     ],
 )
-@pytest.mark.parametrize("w_pem", [False, "bare_top", "bare_authsys"])
 @mock.patch("soliplex.config.installation._load_config_yaml")
-def test_installationconfig_oidc_auth_system_configs_wo_existing(
+def test_installationconfig__load_oidc_auth_system_configs(
     lcy,
     temp_dir,
-    w_pem,
-    w_pem_path,
+    top_kw,
+    authsys_kw,
+    exp_pem_path,
+    exp_consent,
+    exp_afo,
+    exp_ufo,
 ):
-    oidc_bare_path = temp_dir / "oidc_bare"
-    # Match source: oidc_path / pem_path
-    exp_oidc_client_pem_path = oidc_bare_path / w_pem_path
+    oidc_path = temp_dir / "oidc"
+    oidc_config = oidc_path / "config.yaml"
 
-    bare_config_yaml = {
-        "auth_systems": [test_authsystem.BARE_AUTHSYSTEM_CONFIG_KW.copy()],
+    lcy.return_value = top_kw | {
+        "auth_systems": [
+            test_authsystem.BARE_AUTHSYSTEM_CONFIG_KW | authsys_kw,
+        ],
     }
-
-    if w_pem == "bare_top":
-        bare_config_yaml["oidc_client_pem_path"] = w_pem_path
-    elif w_pem == "bare_authsys":
-        authsys = bare_config_yaml["auth_systems"][0]
-        authsys["oidc_client_pem_path"] = w_pem_path
-    else:
-        assert not w_pem
-        exp_oidc_client_pem_path = None
-
-    w_scope_config_yaml = {
-        "auth_systems": [test_authsystem.W_SCOPE_AUTHSYSTEM_CONFIG_KW.copy()],
-    }
-
-    lcy.side_effect = [bare_config_yaml, w_scope_config_yaml]
-
-    oidc_bare_path = temp_dir / "oidc_bare"
-    oidc_bare_config = oidc_bare_path / "config.yaml"
-
-    oidc_w_scope_path = temp_dir / "oidc_w_scope"
-    oidc_w_scope_config = oidc_w_scope_path / "config.yaml"
-
-    oidc_bare_kw = test_authsystem.BARE_AUTHSYSTEM_CONFIG_KW.copy()
-    oidc_bare_kw["oidc_client_pem_path"] = exp_oidc_client_pem_path
-    oidc_bare_kw["_config_path"] = oidc_bare_config
-
-    oidc_w_scope_kw = test_authsystem.W_SCOPE_AUTHSYSTEM_CONFIG_KW.copy()
-    oidc_w_scope_kw["oidc_client_pem_path"] = None
-    oidc_w_scope_kw["_config_path"] = oidc_w_scope_config
 
     i_config_kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    i_config_kw["oidc_paths"] = [oidc_bare_path, oidc_w_scope_path]
-
+    i_config_kw["oidc_paths"] = [oidc_path]
     i_config = config_installation.InstallationConfig(**i_config_kw)
+
+    if exp_pem_path is not None:
+        # Match source: oidc_path / pem_path
+        exp_pem_path = oidc_path / exp_pem_path
+
+    if exp_consent is not None:
+        # Match source: oidc_path / pem_path
+        exp_consent = oidc_path / exp_consent
 
     expected = [
         config_authsystem.OIDCAuthSystemConfig(
             _installation_config=i_config,
-            **oidc_bare_kw,
-        ),
-        config_authsystem.OIDCAuthSystemConfig(
-            _installation_config=i_config,
-            **oidc_w_scope_kw,
+            _config_path=oidc_config,
+            oidc_client_pem_path=exp_pem_path,
+            consent_template_path=exp_consent,
+            allowed_frontend_origins=exp_afo,
+            unlisted_frontend_origin=exp_ufo,
+            **test_authsystem.BARE_AUTHSYSTEM_CONFIG_KW,
         ),
     ]
 
-    found = i_config.oidc_auth_system_configs
+    found = i_config._load_oidc_auth_system_configs()
 
-    for f_asc, e_asc in zip(found, expected, strict=True):
-        assert f_asc == e_asc
+    assert found == expected
+    lcy.assert_called_once_with(oidc_config)
 
 
 def test_installationconfig_oidc_auth_system_configs_w_existing():
