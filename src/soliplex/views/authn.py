@@ -426,6 +426,26 @@ async def post_login_system_confirm(
     )
 
 
+def _with_callback_params(return_to: str, params: dict) -> str:
+    """Return 'return_to' with 'params' added to its fragment
+
+    The parameters follow a '?' inside the fragment
+    ('/#/auth/callback?token=...'), where the web client reads them;
+    browsers do not send the fragment to the server.  'return_to' without
+    a fragment gets one ('/#?token=...').  Any query string of
+    'return_to' is kept unchanged.
+    """
+    base, _, fragment = return_to.partition("#")
+    if "?" not in fragment:
+        separator = "?"
+    elif fragment.endswith(("?", "&")):
+        separator = ""
+    else:
+        separator = "&"
+    qs = urllib_parse.urlencode(params)
+    return f"{base}#{fragment}{separator}{qs}"
+
+
 @util.logfire_span("GET /auth/{system}")
 @router.get(
     "/auth/{system}",
@@ -484,26 +504,13 @@ async def get_auth_system(
     refresh_token = tokendict["refresh_token"]
     expires_in = tokendict["expires_in"]
 
-    # Handle hash-based routing (e.g., /#/auth/callback)
-    # Query params must be placed before the hash fragment for Flutter to see
-    # them
-    components = urllib_parse.urlparse(return_to)
-    qs = urllib_parse.urlencode(
+    return_to = _with_callback_params(
+        return_to,
         dict(
             token=access_token,
             refresh_token=refresh_token,
             expires_in=expires_in,
-        )
-    )
-    return_to = urllib_parse.urlunparse(
-        (
-            components.scheme,
-            components.netloc,
-            components.path,
-            components.params,
-            qs,
-            components.fragment,
-        )
+        ),
     )
 
     return responses.RedirectResponse(return_to)
