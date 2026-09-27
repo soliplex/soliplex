@@ -71,7 +71,7 @@ async def test_get_the_unauth_logger(
         (401, authn.JWT_VALIDATION_INVALID_TOKEN),
     ],
 )
-@mock.patch("soliplex.authn.authenticate")
+@mock.patch("soliplex.authn.authenticate", autospec=True)
 async def test_get_the_user_claims(auth_fn, the_installation, code, msg):
     token = object()
     the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
@@ -98,16 +98,17 @@ async def test_get_the_user_claims(auth_fn, the_installation, code, msg):
 
     if expected is None:
         assert found is auth_fn.return_value
-        the_unauth_logger.exception.assert_not_called()
+        the_unauth_logger.error.assert_not_called()
     else:
         assert expected.value.status_code == code
         assert expected.value.detail == msg
-        the_unauth_logger.exception.assert_called_once_with(
+        the_unauth_logger.error.assert_called_once_with(
             loggers.AUTHN_GET_USER_CLAIMS_FAILED,
         )
 
     auth_fn.assert_called_once_with(
         the_installation=the_installation,
+        logger=the_unauth_logger,
         token=token,
     )
 

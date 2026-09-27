@@ -159,10 +159,168 @@ W_REL_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML = f"""
     consent_template_path: "{RELATIVE_CONSENT_TEMPLATE_PATH}"
 """
 
+AZP_TEST = "test-azp"
+W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "_accepted_azp_list": [AZP_TEST]
+}
+W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    accepted_azp_list:
+      - "{AZP_TEST}"
+"""
+
+AUTHSYSTEM_ISSUER = "https://example.com/auth/issuer"
+W_ISSUER_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "_issuer": AUTHSYSTEM_ISSUER,
+}
+W_ISSUER_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    issuer: "{AUTHSYSTEM_ISSUER}"
+"""
+
+RQ_CLAIM_TYP = "Bearer"
+W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "required_claims": {
+        "typ": RQ_CLAIM_TYP,
+    }
+}
+W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    required_claims:
+      typ: "{RQ_CLAIM_TYP}"
+"""
+
 W_ERROR_AUTHSYSTM_CONFIG_YAML = f"""
 {BARE_AUTHSYSTEM_CONFIG_YAML}
     unknown: "BOGUS"
 """
+
+
+@pytest.mark.parametrize(
+    "w__aal, exp_aal",
+    [
+        (None, [AUTHSYSTEM_CLIENT_ID]),
+        (["test-one", "test-two"], ["test-one", "test-two"]),
+    ],
+)
+def test_authsystem_accepted_azp_list(installation_config, w__aal, exp_aal):
+    inst = config_authsystem.OIDCAuthSystemConfig(
+        **BARE_AUTHSYSTEM_CONFIG_KW,
+        _accepted_azp_list=w__aal,
+    )
+
+    found = inst.accepted_azp_list
+
+    assert found == exp_aal
+
+
+@pytest.mark.parametrize(
+    "w__iss, exp_iss",
+    [
+        (None, AUTHSYSTEM_SERVER_URL),
+        (AUTHSYSTEM_ISSUER, AUTHSYSTEM_ISSUER),
+    ],
+)
+def test_authsystem_issuer(installation_config, w__iss, exp_iss):
+    inst = config_authsystem.OIDCAuthSystemConfig(
+        **BARE_AUTHSYSTEM_CONFIG_KW,
+        _issuer=w__iss,
+    )
+
+    found = inst.issuer
+
+    assert found == exp_iss
+
+
+def test_authsystem_server_metadata_url():
+    inst = config_authsystem.OIDCAuthSystemConfig(**BARE_AUTHSYSTEM_CONFIG_KW)
+
+    assert inst.server_metadata_url == (
+        f"{AUTHSYSTEM_SERVER_URL}/"
+        f"{config_authsystem.WELL_KNOWN_OPENID_CONFIGURATION}"
+    )
+
+
+@pytest.mark.parametrize(
+    "w_config, exp_client_kwargs, exp_secret, w_marker",
+    [
+        (BARE_AUTHSYSTEM_CONFIG_KW.copy(), {}, "", False),
+        (
+            W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW,
+            {},
+            AUTHSYSTEM_CLIENT_SECRET_LIT,
+            False,
+        ),
+        (
+            W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW,
+            {},
+            AUTHSYSTEM_CLIENT_SECRET_SECRET,
+            True,
+        ),
+        (W_SCOPE_AUTHSYSTEM_CONFIG_KW, {"scope": AUTHSYSTEM_SCOPE}, "", False),
+        (
+            W_OIDC_CPP_ABS_CONFIG_KW,
+            {"verify": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS},
+            "",
+            False,
+        ),
+    ],
+)
+def test_authsystem_oauth_client_args(
+    installation_config,
+    temp_dir,
+    w_config,
+    exp_client_kwargs,
+    exp_secret,
+    w_marker,
+):
+    inst = config_authsystem.OIDCAuthSystemConfig(
+        **w_config,
+    )
+    inst._installation_config = installation_config
+    exp_url = (
+        f"{AUTHSYSTEM_SERVER_URL}/"
+        f"{config_authsystem.WELL_KNOWN_OPENID_CONFIGURATION}"
+    )
+
+    icgs = installation_config.get_secret
+
+    found = inst.oauth_client_kwargs
+
+    assert found["name"] == AUTHSYSTEM_ID
+    assert found["server_metadata_url"] == exp_url
+    assert found["client_id"] == AUTHSYSTEM_CLIENT_ID
+    if "verify" in found["client_kwargs"]:
+        exp_client_kwargs.pop("verify")
+        actual_verify = found["client_kwargs"].pop("verify")
+        assert actual_verify.__class__ is ssl.SSLContext
+    assert found["client_kwargs"] == exp_client_kwargs
+
+    if w_marker:
+        assert found["client_secret"] is icgs.return_value
+        icgs.assert_called_once_with(exp_secret)
+    else:
+        # not a 'secret:' reference, so it never reaches 'get_secret'
+        assert found["client_secret"] == exp_secret
+        icgs.assert_not_called()
+
+
+def test_authsystem_oauth_client_args_w_unresolvable_secret(
+    installation_config,
+):
+    """An unresolvable 'secret:' name propagates.
+
+    It was formerly swallowed, handing the raw marker text to the IdP as
+    the client secret.
+    """
+    inst = config_authsystem.OIDCAuthSystemConfig(
+        **W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW,
+    )
+    inst._installation_config = installation_config
+    installation_config.get_secret.side_effect = ValueError("testing")
+
+    with pytest.raises(ValueError, match="testing"):
+        _ = inst.oauth_client_kwargs
 
 
 def test_authsystem_from_yaml_w_error(
@@ -401,6 +559,50 @@ def test_authsystem_from_yaml_w_consent_template(
 
 
 @pytest.mark.parametrize(
+    "config_yaml, exp_config",
+    [
+        (
+            W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_YAML,
+            W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_KW.copy(),
+        ),
+        (
+            W_ISSUER_AUTHSYSTEM_CONFIG_YAML,
+            W_ISSUER_AUTHSYSTEM_CONFIG_KW.copy(),
+        ),
+        (
+            W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_YAML,
+            W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_KW.copy(),
+        ),
+    ],
+)
+def test_authsystem_from_yaml_w_accepted_azp_list_issuer_rq_claims(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    exp_config,
+):
+    config_path = temp_dir / "config.yaml"
+    config_path.write_text(config_yaml)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    expected = config_authsystem.OIDCAuthSystemConfig(
+        _installation_config=installation_config,
+        _config_path=config_path,
+        **exp_config,
+    )
+
+    found = config_authsystem.OIDCAuthSystemConfig.from_yaml(
+        installation_config,
+        config_path,
+        config_dict,
+    )
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
     "w_kw",
     [
         BARE_AUTHSYSTEM_CONFIG_KW.copy(),
@@ -410,6 +612,9 @@ def test_authsystem_from_yaml_w_consent_template(
         W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW.copy(),
         W_OIDC_CPP_REL_CONFIG_KW.copy(),
         W_OIDC_CPP_ABS_CONFIG_KW.copy(),
+        W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_KW.copy(),
+        W_ISSUER_AUTHSYSTEM_CONFIG_KW.copy(),
+        W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_KW.copy(),
     ],
 )
 def test_authsystem_as_yaml(installation_config, temp_dir, w_kw):
@@ -437,6 +642,15 @@ def test_authsystem_as_yaml(installation_config, temp_dir, w_kw):
 
     if "oidc_client_pem_path" in w_kw:
         expected["oidc_client_pem_path"] = str(w_kw["oidc_client_pem_path"])
+
+    if "_accepted_azp_list" in w_kw:
+        expected["accepted_azp_list"] = w_kw["_accepted_azp_list"]
+
+    if "_issuer" in w_kw:
+        expected["issuer"] = w_kw["_issuer"]
+
+    if "required_claims" in w_kw:
+        expected["required_claims"] = w_kw["required_claims"]
 
     found = inst.as_yaml
 
@@ -514,6 +728,9 @@ def _round_trip_authsystem_config(
         W_UFOP_DENY_AUTHSYSTEM_CONFIG_YAML,
         W_ABS_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML,
         W_REL_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML,
+        W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_YAML,
+        W_ISSUER_AUTHSYSTEM_CONFIG_YAML,
+        W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_YAML,
     ],
 )
 def test_authsystem_as_yaml_round_trips(
@@ -528,94 +745,3 @@ def test_authsystem_as_yaml_round_trips(
     )
 
     assert reloaded == original
-
-
-def test_authsystem_server_metadata_url():
-    inst = config_authsystem.OIDCAuthSystemConfig(**BARE_AUTHSYSTEM_CONFIG_KW)
-
-    assert inst.server_metadata_url == (
-        f"{AUTHSYSTEM_SERVER_URL}/"
-        f"{config_authsystem.WELL_KNOWN_OPENID_CONFIGURATION}"
-    )
-
-
-@pytest.mark.parametrize(
-    "w_config, exp_client_kwargs, exp_secret, w_marker",
-    [
-        (BARE_AUTHSYSTEM_CONFIG_KW.copy(), {}, "", False),
-        (
-            W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW,
-            {},
-            AUTHSYSTEM_CLIENT_SECRET_LIT,
-            False,
-        ),
-        (
-            W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW,
-            {},
-            AUTHSYSTEM_CLIENT_SECRET_SECRET,
-            True,
-        ),
-        (W_SCOPE_AUTHSYSTEM_CONFIG_KW, {"scope": AUTHSYSTEM_SCOPE}, "", False),
-        (
-            W_OIDC_CPP_ABS_CONFIG_KW,
-            {"verify": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS},
-            "",
-            False,
-        ),
-    ],
-)
-def test_authsystem_oauth_client_args(
-    installation_config,
-    temp_dir,
-    w_config,
-    exp_client_kwargs,
-    exp_secret,
-    w_marker,
-):
-    inst = config_authsystem.OIDCAuthSystemConfig(
-        **w_config,
-    )
-    inst._installation_config = installation_config
-    exp_url = (
-        f"{AUTHSYSTEM_SERVER_URL}/"
-        f"{config_authsystem.WELL_KNOWN_OPENID_CONFIGURATION}"
-    )
-
-    icgs = installation_config.get_secret
-
-    found = inst.oauth_client_kwargs
-
-    assert found["name"] == AUTHSYSTEM_ID
-    assert found["server_metadata_url"] == exp_url
-    assert found["client_id"] == AUTHSYSTEM_CLIENT_ID
-    if "verify" in found["client_kwargs"]:
-        exp_client_kwargs.pop("verify")
-        actual_verify = found["client_kwargs"].pop("verify")
-        assert actual_verify.__class__ is ssl.SSLContext
-    assert found["client_kwargs"] == exp_client_kwargs
-
-    if w_marker:
-        assert found["client_secret"] is icgs.return_value
-        icgs.assert_called_once_with(exp_secret)
-    else:
-        # not a 'secret:' reference, so it never reaches 'get_secret'
-        assert found["client_secret"] == exp_secret
-        icgs.assert_not_called()
-
-
-def test_authsystem_oauth_client_args_w_unresolvable_secret(
-    installation_config,
-):
-    """An unresolvable 'secret:' name propagates.
-
-    It was formerly swallowed, handing the raw marker text to the IdP as
-    the client secret.
-    """
-    inst = config_authsystem.OIDCAuthSystemConfig(
-        **W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW,
-    )
-    inst._installation_config = installation_config
-    installation_config.get_secret.side_effect = ValueError("testing")
-
-    with pytest.raises(ValueError, match="testing"):
-        _ = inst.oauth_client_kwargs
