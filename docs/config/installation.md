@@ -350,6 +350,19 @@ The `sandbox_config` stanza configures the bubblewrap sandbox that backs the
 `bubble-sandbox` skill (shell / Python execution). Non-absolute paths are
 evaluated relative to the installation directory.
 
+The sandbox needs a host where `bwrap` (bubblewrap) can run: Linux, with
+`bwrap` on the `PATH`, and with unprivileged user namespaces allowed.
+Ubuntu 24.04's AppArmor policy
+(`kernel.apparmor_restrict_unprivileged_userns`) and a container's default
+seccomp profile can each block those namespaces; in a Docker deployment,
+run the backend with a seccomp profile that permits them.
+
+Soliplex checks once per process by running `bwrap` with the sandbox's own
+flags. Where that check fails, a configuration naming the skill still
+loads and passes `soliplex-cli audit`, but a room using it fails to build
+its agent with a `BwrapSandboxUnavailable` error giving the reason, and
+the `sandbox_workdirs` endpoints are not mounted.
+
 ```yaml
 sandbox_config:
     environments_path: ../sandbox/environments

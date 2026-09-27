@@ -4,6 +4,7 @@ from unittest import mock
 
 import fastapi
 import pytest
+from bubble_sandbox import sandbox as bs_sandbox
 
 from soliplex.config import exceptions as config_exc
 from soliplex.config import routing as config_routing
@@ -417,16 +418,38 @@ def test_clearapprouters_apply(patched_app_routers, w_existing):
     assert len(patched_app_routers) == 0
 
 
+@pytest.mark.parametrize(
+    "w_bwrap, exp_names",
+    [
+        (False, config_routing._DEFAULT_ROUTER_NAMES),
+        (
+            True,
+            config_routing._DEFAULT_ROUTER_NAMES
+            | config_routing._BWRAP_ROUTER_NAMES,
+        ),
+    ],
+)
+def test__default_router_names(w_bwrap, exp_names):
+    with mock.patch.object(bs_sandbox, "is_available", return_value=w_bwrap):
+        found = config_routing._default_router_names()
+
+    assert found == exp_names
+
+
+@mock.patch("soliplex.config.routing._default_router_names")
 @mock.patch("soliplex.config._utils._from_dotted_name")
-def test_register_default_routers(fdn, patched_app_routers):
+def test_register_default_routers(fdn, drn, patched_app_routers):
+    drn.return_value = {
+        "one": "some.module.router",
+        "two": "other.module.router",
+    }
+
     config_routing.register_default_routers()
 
-    assert len(patched_app_routers) == len(
-        config_routing._DEFAULT_ROUTER_NAMES
-    )
+    assert len(patched_app_routers) == len(drn.return_value)
 
     for (g_name, r_name), fdn_call in zip(
-        config_routing._DEFAULT_ROUTER_NAMES.items(),
+        drn.return_value.items(),
         fdn.call_args_list,
         strict=True,
     ):

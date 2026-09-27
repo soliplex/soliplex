@@ -2,8 +2,16 @@ import pathlib
 import shutil
 
 import pytest
+from bubble_sandbox import sandbox as bs_sandbox
 
 from soliplex.config import installation as config_installation
+
+# 'register_default_routers' mounts the workdir routes only where the
+# 'bwrap' probe succeeds.
+pytestmark = pytest.mark.skipif(
+    not bs_sandbox.is_available(),
+    reason="'bwrap' cannot run on this host, so the routes are not mounted",
+)
 
 ROOM_ID = "chat"
 

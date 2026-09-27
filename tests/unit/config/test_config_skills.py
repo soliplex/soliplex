@@ -6,6 +6,7 @@ from unittest import mock
 import pydantic
 import pytest
 from bubble_sandbox import models as bs_models
+from bubble_sandbox import sandbox as bs_sandbox
 from haiku.rag import config as hr_config
 from haiku.rag.capabilities import rag as hr_rag
 
@@ -53,6 +54,12 @@ def installation_config(temp_dir):
     config.get_environment.return_value = str(temp_dir)
     config.sandbox_config = None
     return config
+
+
+@pytest.fixture
+def bwrap_available():
+    with mock.patch.object(bs_sandbox, "check_available") as check_available:
+        yield check_available
 
 
 def test_filesystem_skill_config_properties(temp_dir):
@@ -384,7 +391,11 @@ def test_bwrap_sandbox_config_registered_bbb_alias_kind():
     )
 
 
-def test_bwrap_sandbox_config_from_yaml(installation_config, temp_dir):
+def test_bwrap_sandbox_config_from_yaml(
+    installation_config,
+    temp_dir,
+    bwrap_available,
+):
     volume_path = temp_dir / "volume"
     config = config_skills.BwrapSandboxSkillConfig.from_yaml(
         installation_config,
@@ -420,6 +431,29 @@ def test_bwrap_sandbox_config_from_yaml(installation_config, temp_dir):
         "host_path": str(volume_path),
         "writable": False,
     }
+
+
+def test_bwrap_sandbox_config_capability_unavailable(
+    installation_config,
+    temp_dir,
+    bwrap_available,
+):
+    reason = bs_sandbox.BwrapNotFound()
+    bwrap_available.side_effect = reason
+    config_path = temp_dir / "room.yaml"
+    config = config_skills.BwrapSandboxSkillConfig.from_yaml(
+        installation_config,
+        config_path,
+        {"kind": bwrap_sandbox.SKILL_PROPERTIES.name},
+    )
+
+    with pytest.raises(config_skills.BwrapSandboxUnavailable) as raised:
+        _ = config.capability
+
+    assert raised.value.skill_kind == bwrap_sandbox.SKILL_PROPERTIES.name
+    assert raised.value.reason is reason
+    assert raised.value.__cause__ is reason
+    assert raised.value._config_path == config_path
 
 
 def test_bwrap_sandbox_config_minimal(installation_config):
@@ -505,6 +539,7 @@ def test_bwrap_sandbox_config_wraps_yaml_errors(
 def test_bwrap_sandbox_config_defer_loading(
     installation_config,
     temp_dir,
+    bwrap_available,
     w_yaml,
     exp_defer_loading,
 ):
@@ -573,6 +608,7 @@ def test_room_skills_config_rejects_missing_installation_capability(
 def test_room_skills_config_combines_capabilities(
     installation_config,
     temp_dir,
+    bwrap_available,
 ):
     fs_path = temp_dir / SKILL_NAME
     filesystem = config_skills.FilesystemSkillConfig.from_capability(
@@ -1087,7 +1123,11 @@ def test_bwrap_sandbox_config_rejects_removed_keys(
         )
 
 
-def test_bwrap_sandbox_config_wo_room_limits(installation_config, temp_dir):
+def test_bwrap_sandbox_config_wo_room_limits(
+    installation_config,
+    temp_dir,
+    bwrap_available,
+):
     """A room that sets neither limit runs on the module defaults."""
     config = config_skills.BwrapSandboxSkillConfig.from_yaml(
         installation_config,
@@ -1111,7 +1151,11 @@ def test_bwrap_sandbox_config_wo_room_limits(installation_config, temp_dir):
     assert "max_output_chars" not in config.as_yaml
 
 
-def test_bwrap_sandbox_config_w_room_limits(installation_config, temp_dir):
+def test_bwrap_sandbox_config_w_room_limits(
+    installation_config,
+    temp_dir,
+    bwrap_available,
+):
     config = config_skills.BwrapSandboxSkillConfig.from_yaml(
         installation_config,
         temp_dir / "room.yaml",

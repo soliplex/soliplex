@@ -10,6 +10,7 @@ import typing
 import pydantic
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
+from bubble_sandbox import sandbox as bs_sandbox
 from haiku.rag.capabilities import compaction as hr_compaction
 from haiku.rag.capabilities import policy as hr_policy
 from haiku.rag.capabilities import rag as hr_rag
@@ -50,6 +51,23 @@ class InvalidSkillKind(KeyError):
         super().__init__(
             f"Skill kind '{invalid_skill_kind}' unknown; "
             f"available kinds: {list(available_skill_kinds)}; "
+            f"(configured in {_config_path})",
+        )
+
+
+class BwrapSandboxUnavailable(RuntimeError):
+    def __init__(
+        self,
+        *,
+        skill_kind: str,
+        reason: bs_sandbox.SandboxUnavailable,
+        _config_path: pathlib.Path | None,
+    ):
+        self.skill_kind = skill_kind
+        self.reason = reason
+        self._config_path = _config_path
+        super().__init__(
+            f"Skill kind '{skill_kind}' cannot run on this host: {reason} "
             f"(configured in {_config_path})",
         )
 
@@ -424,6 +442,22 @@ class BwrapSandboxSkillConfig:
 
     @property
     def capability(self) -> bwrap_sandbox.SandboxCapability:
+        """Build the sandbox capability.
+
+        Raises:
+
+        - 'BwrapSandboxUnavailable' on a host where 'bwrap' cannot run,
+          as reported by 'bubble_sandbox.sandbox.check_available'.
+        """
+        try:
+            bs_sandbox.check_available()
+        except bs_sandbox.SandboxUnavailable as exc:
+            raise BwrapSandboxUnavailable(
+                skill_kind=self.kind,
+                reason=exc,
+                _config_path=self._config_path,
+            ) from exc
+
         return bwrap_sandbox.create_bwrap_sandbox_capability(
             id=self.id,
             environment=self.environment,
