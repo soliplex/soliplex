@@ -1,6 +1,7 @@
 from __future__ import annotations  # forward refs in typing decls
 
 import dataclasses
+import enum
 import pathlib
 import ssl
 import typing
@@ -12,6 +13,7 @@ from . import interpolation as config_interp
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from . import installation as config_installation
 
+_default_list_field = _utils._default_list_field
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _secret_whole_or_literal_field = config_interp.secret_whole_or_literal_field
 
@@ -21,6 +23,11 @@ _secret_whole_or_literal_field = config_interp.secret_whole_or_literal_field
 # ============================================================================
 
 WELL_KNOWN_OPENID_CONFIGURATION = ".well-known/openid-configuration"
+
+
+class UnlistedFrontendOriginPolicy(enum.StrEnum):
+    CONSENT_REQUIRED = "consent-required"
+    DENY_ALL = "deny-all"
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -36,6 +43,12 @@ class OIDCAuthSystemConfig:
     # literal.  'env:' markers are not honored here.
     client_secret: str = _secret_whole_or_literal_field(default="")
     oidc_client_pem_path: pathlib.Path = None
+    consent_template_path: pathlib.Path = None
+
+    allowed_frontend_origins: list[str] = _default_list_field()
+    unlisted_frontend_origin: UnlistedFrontendOriginPolicy = (
+        UnlistedFrontendOriginPolicy.CONSENT_REQUIRED
+    )
 
     # Set in 'from_yaml' below
     _installation_config: config_installation.InstallationConfig = (
@@ -57,6 +70,18 @@ class OIDCAuthSystemConfig:
         if oidc_client_pem_path is not None:
             config_dict["oidc_client_pem_path"] = (
                 config_path.parent / oidc_client_pem_path
+            )
+
+        consent_template_path = config_dict.pop("consent_template_path", None)
+        if consent_template_path is not None:
+            config_dict["consent_template_path"] = (
+                config_path.parent / consent_template_path
+            )
+
+        ufo = config_dict.pop("unlisted_frontend_origin", None)
+        if ufo is not None:
+            config_dict["unlisted_frontend_origin"] = (
+                UnlistedFrontendOriginPolicy(ufo)
             )
 
         try:
@@ -88,6 +113,19 @@ class OIDCAuthSystemConfig:
         if self.oidc_client_pem_path is not None:
             # Absolutized against the config dir on load.  See #1228.
             result["oidc_client_pem_path"] = str(self.oidc_client_pem_path)
+
+        if self.consent_template_path is not None:
+            # Absolutized against the config dir on load.  See #1228.
+            result["consent_template_path"] = str(self.consent_template_path)
+
+        if self.allowed_frontend_origins:
+            result["allowed_frontend_origins"] = self.allowed_frontend_origins
+
+        if (
+            self.unlisted_frontend_origin
+            is not UnlistedFrontendOriginPolicy.CONSENT_REQUIRED
+        ):
+            result["unlisted_frontend_origin"] = self.unlisted_frontend_origin
 
         return result
 
