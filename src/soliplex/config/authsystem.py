@@ -50,6 +50,59 @@ class OIDCAuthSystemConfig:
         UnlistedFrontendOriginPolicy.CONSENT_REQUIRED
     )
 
+    _accepted_azp_list: list[str] | None = None
+
+    @property
+    def accepted_azp_list(self) -> list[str]:
+        """Accepted values for the 'azp' token claim."""
+        if self._accepted_azp_list is not None:
+            return self._accepted_azp_list
+        else:
+            return [self.client_id]
+
+    _issuer: str | None = None
+
+    @property
+    def issuer(self) -> str:
+        """Expected value for the 'iss' token claim."""
+        if self._issuer is not None:
+            return self._issuer
+        else:
+            return self.server_url
+
+    # Required claims: must match values
+    required_claims: dict[str, str] = _utils._default_dict_field()
+
+    @property
+    def server_metadata_url(self):
+        """URL for discovery of OAuth metadata"""
+        return f"{self.server_url}/{WELL_KNOWN_OPENID_CONFIGURATION}"
+
+    @property
+    def oauth_client_kwargs(self) -> dict:
+        """Registered kwargs for this authsystem's 'ouath' client factory"""
+        client_kwargs = {}
+
+        if self.scope is not None:
+            client_kwargs["scope"] = self.scope
+
+        if self.oidc_client_pem_path is not None:
+            client_kwargs["verify"] = ssl.create_default_context(
+                cafile=self.oidc_client_pem_path
+            )
+
+        client_secret = config_interp.resolve_field(self, "client_secret")
+
+        return {
+            "name": self.id,
+            "server_metadata_url": self.server_metadata_url,
+            "client_id": self.client_id,
+            "client_secret": client_secret,
+            "client_kwargs": client_kwargs,
+            # added by the auth setup
+            # "authorize_state": main.SESSION_SECRET_KEY,
+        }
+
     # Set in 'from_yaml' below
     _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
@@ -83,6 +136,14 @@ class OIDCAuthSystemConfig:
             config_dict["unlisted_frontend_origin"] = (
                 UnlistedFrontendOriginPolicy(ufo)
             )
+
+        aal = config_dict.pop("accepted_azp_list", None)
+        if aal is not None:
+            config_dict["_accepted_azp_list"] = aal
+
+        iss = config_dict.pop("issuer", None)
+        if iss is not None:
+            config_dict["_issuer"] = iss
 
         try:
             return cls(**config_dict)
@@ -127,32 +188,13 @@ class OIDCAuthSystemConfig:
         ):
             result["unlisted_frontend_origin"] = self.unlisted_frontend_origin
 
+        if self._accepted_azp_list is not None:
+            result["accepted_azp_list"] = self._accepted_azp_list
+
+        if self._issuer is not None:
+            result["issuer"] = self._issuer
+
+        if self.required_claims:
+            result["required_claims"] = self.required_claims
+
         return result
-
-    @property
-    def server_metadata_url(self):
-        return f"{self.server_url}/{WELL_KNOWN_OPENID_CONFIGURATION}"
-
-    @property
-    def oauth_client_kwargs(self) -> dict:
-        client_kwargs = {}
-
-        if self.scope is not None:
-            client_kwargs["scope"] = self.scope
-
-        if self.oidc_client_pem_path is not None:
-            client_kwargs["verify"] = ssl.create_default_context(
-                cafile=self.oidc_client_pem_path
-            )
-
-        client_secret = config_interp.resolve_field(self, "client_secret")
-
-        return {
-            "name": self.id,
-            "server_metadata_url": self.server_metadata_url,
-            "client_id": self.client_id,
-            "client_secret": client_secret,
-            "client_kwargs": client_kwargs,
-            # added by the auth setup
-            # "authorize_state": main.SESSION_SECRET_KEY,
-        }

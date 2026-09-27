@@ -1,4 +1,3 @@
-import contextlib
 from unittest import mock
 from urllib import parse as urllib_parse
 
@@ -24,17 +23,6 @@ AUTH_USER_CLAIMS = {
     "family_name": FAMILY_NAME,
     "email": EMAIL,
 }
-
-AUTHSYSTEM_MISS = "authsystem-miss"
-AUTHSYSTEM_CONFIG_MISS = mock.create_autospec(
-    config_authsystem.OIDCAuthSystemConfig,
-    id=AUTHSYSTEM_MISS,
-)
-AUTHSYSTEM_HIT = "authsystem-hit"
-AUTHSYSTEM_CONFIG_HIT = mock.create_autospec(
-    config_authsystem.OIDCAuthSystemConfig,
-    id=AUTHSYSTEM_HIT,
-)
 
 
 REQUEST_URL = "http://test.example.com"
@@ -154,36 +142,6 @@ def raises_httpexc(match, code) -> pytest.raises:
         return exc.status_code == code
 
     return pytest.raises(fastapi.HTTPException, match=match, check=_check)
-
-
-ac_miss_noauth = raises_httpexc(loggers.AUTHN_NO_AUTH_MODE, 404)
-ac_miss_nonesuch = raises_httpexc(loggers.AUTHN_UNKNOWN_AUTHSYSTEM, 404)
-ac_hit = contextlib.nullcontext(AUTHSYSTEM_CONFIG_HIT)
-
-
-@pytest.mark.parametrize(
-    "w_auth_systems, expectation",
-    [
-        ([], ac_miss_noauth),
-        ([AUTHSYSTEM_CONFIG_MISS], ac_miss_nonesuch),
-        ([AUTHSYSTEM_CONFIG_MISS, AUTHSYSTEM_CONFIG_HIT], ac_hit),
-        ([AUTHSYSTEM_CONFIG_HIT], ac_hit),
-    ],
-)
-def test__get_authsystem_config(w_auth_systems, expectation):
-    logger = mock.create_autospec(loggers.LogWrapper)
-    the_installation = mock.create_autospec(installation.Installation)
-    the_installation.oidc_auth_system_configs = w_auth_systems
-
-    with expectation as expected:
-        found = authn_views._get_authsystem_config(
-            the_installation=the_installation,
-            logger=logger,
-            system=AUTHSYSTEM_HIT,
-        )
-
-    if not isinstance(expected, pytest.ExceptionInfo):
-        assert found is expected
 
 
 @pytest.mark.anyio
@@ -487,7 +445,7 @@ def login_asc():
 @pytest.mark.anyio
 @mock.patch("soliplex.views.authn._redirect_to_idp")
 @mock.patch("soliplex.views.authn._classify_return_to")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_get_login_system_malformed(
     _get_authsystem_config,
     _classify_return_to,
@@ -527,7 +485,7 @@ async def test_get_login_system_malformed(
 )
 @mock.patch("soliplex.views.authn._redirect_to_idp")
 @mock.patch("soliplex.views.authn._classify_return_to")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_get_login_system_trusted(
     _get_authsystem_config,
     _classify_return_to,
@@ -576,7 +534,7 @@ async def test_get_login_system_trusted(
 @pytest.mark.anyio
 @mock.patch("soliplex.views.authn._consent_response")
 @mock.patch("soliplex.views.authn._classify_return_to")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_get_login_system_unlisted_denied(
     _get_authsystem_config,
     _classify_return_to,
@@ -609,7 +567,7 @@ async def test_get_login_system_unlisted_denied(
 @pytest.mark.anyio
 @mock.patch("soliplex.views.authn._consent_response")
 @mock.patch("soliplex.views.authn._classify_return_to")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_get_login_system_unlisted_undisplayable(
     _get_authsystem_config,
     _classify_return_to,
@@ -644,7 +602,7 @@ async def test_get_login_system_unlisted_undisplayable(
 @mock.patch("secrets.token_urlsafe", return_value=TEST_CSRF_TOKEN)
 @mock.patch("soliplex.views.authn._consent_response")
 @mock.patch("soliplex.views.authn._classify_return_to")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_get_login_system_unlisted_consent(
     _get_authsystem_config,
     _classify_return_to,
@@ -722,7 +680,7 @@ PENDING = {
 )
 @mock.patch("soliplex.views.authn._consent_response")
 @mock.patch("soliplex.views.authn._redirect_to_idp")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_post_login_system_confirm_invalid(
     _get_authsystem_config,
     _redirect_to_idp,
@@ -754,7 +712,7 @@ async def test_post_login_system_confirm_invalid(
 
 @pytest.mark.anyio
 @mock.patch("soliplex.views.authn._redirect_to_idp")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_post_login_system_confirm_continue(
     _get_authsystem_config,
     _redirect_to_idp,
@@ -794,7 +752,7 @@ async def test_post_login_system_confirm_continue(
 @pytest.mark.anyio
 @mock.patch("soliplex.views.authn._consent_response")
 @mock.patch("soliplex.views.authn._redirect_to_idp")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_post_login_system_confirm_cancel(
     _get_authsystem_config,
     _redirect_to_idp,
@@ -862,7 +820,7 @@ EXP_QS = "token=TOKEN&refresh_token=RTOKEN&expires_in=EXPIRES_IN"
 )
 @mock.patch("soliplex.authn.get_oauth")
 @mock.patch("soliplex.authn.authenticate")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_get_auth_system(
     _get_authsystem_config,
     auth_fn,
@@ -895,7 +853,7 @@ async def test_get_auth_system(
     assert response.headers["location"] == exp_location
     assert request.session == {}
     aat.assert_awaited_once_with(request)
-    auth_fn.assert_called_once_with(the_installation, "TOKEN")
+    auth_fn.assert_called_once_with(the_installation, bound_logger, "TOKEN")
     cc.assert_called_once_with(TEST_SYSTEM)
     bound_logger.debug.assert_called_once_with(loggers.AUTHN_JWT_VALID)
     _get_authsystem_config.assert_called_once_with(
@@ -908,7 +866,7 @@ async def test_get_auth_system(
 
 @pytest.mark.anyio
 @mock.patch("soliplex.authn.get_oauth")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_get_auth_system_wo_session_return_to(
     _get_authsystem_config,
     get_oauth,
@@ -932,7 +890,7 @@ async def test_get_auth_system_wo_session_return_to(
 @pytest.mark.parametrize("w_error", ["aat", "authenticate"])
 @mock.patch("soliplex.authn.get_oauth")
 @mock.patch("soliplex.authn.authenticate")
-@mock.patch("soliplex.views.authn._get_authsystem_config")
+@mock.patch("soliplex.authn._get_authsystem_config")
 async def test_get_auth_system_w_error(
     _get_authsystem_config,
     auth_fn,
@@ -961,7 +919,12 @@ async def test_get_auth_system_w_error(
             the_unauth_logger=the_unauth_logger,
         )
 
-    bound_logger.exception.assert_called_once_with(loggers.AUTHN_JWT_INVALID)
+    if w_error == "aat":
+        bound_logger.exception.assert_called_once_with(
+            loggers.AUTHN_JWT_INVALID
+        )
+    else:  # Details logged by 'authenticate'
+        bound_logger.error.assert_called_once_with(loggers.AUTHN_JWT_INVALID)
 
 
 @pytest.mark.anyio

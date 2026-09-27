@@ -49,10 +49,11 @@ async def get_the_user_claims(
     try:
         return authn_module.authenticate(
             the_installation=the_installation,
+            logger=the_unauth_logger,
             token=token,
         )
     except fastapi.HTTPException:
-        the_unauth_logger.exception(
+        the_unauth_logger.error(  # noqa: TRY400 `authenticate' logged details
             loggers.AUTHN_GET_USER_CLAIMS_FAILED,
         )
         raise
