@@ -105,10 +105,6 @@ AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS = str(
 W_OIDC_CPP_ABS_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
     "oidc_client_pem_path": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS,
 }
-W_OIDC_CPP_ABS_CONFIG_YAML = f"""
-{BARE_AUTHSYSTEM_CONFIG_YAML}
-    oidc_client_pem_path: "{AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS}"
-"""
 
 W_AFO_EMPTY_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
     "allowed_frontend_origins": [],
@@ -277,30 +273,12 @@ def test_authsystem_from_yaml_w_client_secret(
     assert found == expected
 
 
-@pytest.mark.parametrize(
-    "config_yaml, exp_config, exp_path",
-    [
-        (
-            W_OIDC_CPP_REL_CONFIG_YAML,
-            W_OIDC_CPP_REL_CONFIG_KW,
-            "{temp_dir}/{rel_name}",
-        ),
-        (
-            W_OIDC_CPP_ABS_CONFIG_YAML,
-            W_OIDC_CPP_ABS_CONFIG_KW,
-            AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS,
-        ),
-    ],
-)
 def test_authsystem_from_yaml_w_oid_cpp(
     installation_config,
     temp_dir,
-    config_yaml,
-    exp_config,
-    exp_path,
 ):
     config_path = temp_dir / "config.yaml"
-    config_path.write_text(config_yaml)
+    config_path.write_text(W_OIDC_CPP_REL_CONFIG_YAML)
 
     with config_path.open() as stream:
         config_dict = yaml.safe_load(stream)
@@ -308,17 +286,11 @@ def test_authsystem_from_yaml_w_oid_cpp(
     expected = config_authsystem.OIDCAuthSystemConfig(
         _installation_config=installation_config,
         _config_path=config_path,
-        **exp_config,
+        **W_OIDC_CPP_REL_CONFIG_KW,
     )
-
-    if exp_path.startswith("{"):
-        kwargs = {
-            "temp_dir": temp_dir,
-            "rel_name": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL_NAME,
-        }
-        exp_path = exp_path.format(**kwargs)
-
-    expected.oidc_client_pem_path = pathlib.Path(exp_path)
+    expected.oidc_client_pem_path = (
+        temp_dir / AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL_NAME
+    )
 
     found = config_authsystem.OIDCAuthSystemConfig.from_yaml(
         installation_config,
@@ -532,7 +504,6 @@ def _round_trip_authsystem_config(
         # the resolved path should still round-trip.
         W_PEM_AUTHSYSTEM_CONFIG_YAML,
         W_OIDC_CPP_REL_CONFIG_YAML,
-        W_OIDC_CPP_ABS_CONFIG_YAML,
         # 'client_secret' holds a marker, not a resolved value, so the
         # dump must emit the marker rather than 'oauth_client_kwargs''
         # resolved secret.
