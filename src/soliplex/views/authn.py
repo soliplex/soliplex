@@ -107,30 +107,6 @@ def _classify_return_to(
     return ReturnTo.UNLISTED
 
 
-def _get_authsystem_config(
-    *,
-    the_installation: installation.Installation,
-    logger: loggers.LogWrapper,
-    system: str,
-) -> config_authsystem.OIDCAuthSystemConfig:
-    """Return the indicated authsystem config
-
-    Raise a 404 if the system is in no-auth mode, or if the named
-    authsystem config is not found.
-    """
-    msg = loggers.AUTHN_NO_AUTH_MODE
-
-    for config in the_installation.oidc_auth_system_configs:
-        msg = loggers.AUTHN_UNKNOWN_AUTHSYSTEM
-
-        if config.id == system:
-            return config
-
-    logger.error(msg)
-
-    raise fastapi.HTTPException(status_code=404, detail=msg)
-
-
 CONSENT_TEMPLATE_FILENAME = "consent.html.mako"
 _PACKAGED_CONSENT_TEMPLATE = (
     pathlib.Path(__file__).parent / "templates" / CONSENT_TEMPLATE_FILENAME
@@ -313,7 +289,7 @@ async def get_login_system(
     """Initiate token auth flow with the specified OIDC auth provider"""
     bound_logger = the_unauth_logger.bind(oidc_system=system)
 
-    authsystem_config = _get_authsystem_config(
+    authsystem_config = authn._get_authsystem_config(
         the_installation=the_installation,
         logger=bound_logger,
         system=system,
@@ -400,7 +376,7 @@ async def post_login_system_confirm(
     """
     bound_logger = the_unauth_logger.bind(oidc_system=system)
 
-    authsystem_config = _get_authsystem_config(
+    authsystem_config = authn._get_authsystem_config(
         the_installation=the_installation,
         logger=bound_logger,
         system=system,
@@ -468,7 +444,7 @@ async def get_auth_system(
     bound_logger = the_unauth_logger.bind(oidc_system=system)
 
     # For the side effect: 404 if 'system' is unknown or auth is disabled.
-    _get_authsystem_config(
+    authn._get_authsystem_config(
         the_installation=the_installation,
         logger=bound_logger,
         system=system,
@@ -496,9 +472,11 @@ async def get_auth_system(
     access_token = tokendict["access_token"]
 
     try:
-        authn.authenticate(the_installation, access_token)
+        authn.authenticate(the_installation, bound_logger, access_token)
     except fastapi.HTTPException:
-        bound_logger.exception(loggers.AUTHN_JWT_INVALID)
+        bound_logger.error(  # noqa: TRY400 'authenticate' logged details
+            loggers.AUTHN_JWT_INVALID,
+        )
         raise
     else:
         bound_logger.debug(loggers.AUTHN_JWT_VALID)

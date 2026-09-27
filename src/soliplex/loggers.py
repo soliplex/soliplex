@@ -52,9 +52,21 @@ AUTHN_NO_RETURN_TO = "no return_to stored in session"
 AUTHN_UNLISTED_ORIGIN_DENIED = "unlisted frontend origin denied"
 AUTHN_LOGGER_NAME = "soliplex.authn"
 AUTHN_UNKNOWN_AUTHSYSTEM = "unknown auth system"
-AUTHN_JWT_INVALID = "JWT validation failed"
-AUTHN_JWT_VALID = "JWT validation succeeded"
 AUTHN_NO_AUTH_MODE = "system in no-auth mode"
+
+AUTHN_JWT_NOT_SET = "JWT not set"
+AUTHN_JWT_VALID = "JWT validation succeeded"
+AUTHN_JWT_INVALID = "JWT validation failed"
+
+AUTHN_JWT_PARSE_INVALID_ISS = "jwt-parse-inv-iss"
+AUTHN_JWT_PARSE_INVALID_SIG = "jwt-parse-inv-sig"
+AUTHN_JWT_PARSE_REQUIRED_CLAIM = "jwt-parse-req-claim"
+AUTHN_JWT_PARSE_EXPIRED_SIG = "jwt-parse-exp-sig"
+AUTHN_JWT_PARSE_OTHER = "jwt-parse-other"
+
+AUTHN_JWT_BIND_AZP = "jwt-bind-azp"
+AUTHN_JWT_BIND_CLAIM = "jwt-bind-claim"
+
 AUTHN_GET_LOGIN = "get login"
 AUTHN_GET_LOGIN_SYSTEM = "get login system"
 AUTHN_GET_AUTH_SYSTEM = "get auth system"
