@@ -1,1 +1,2 @@
 global-include SKILL.md
+include src/soliplex/views/templates/*.mako

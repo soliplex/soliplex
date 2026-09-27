@@ -1356,19 +1356,35 @@ class InstallationConfig:
             oidc_config = oidc_path / "config.yaml"
             config_yaml = _load_config_yaml(oidc_config)
 
+            top_level_defaults = {}
+
             oidc_client_pem_path = config_yaml.get("oidc_client_pem_path")
+
             if oidc_client_pem_path is not None:
-                oidc_client_pem_path = oidc_path / oidc_client_pem_path
+                top_level_defaults["oidc_client_pem_path"] = (
+                    oidc_path / oidc_client_pem_path
+                )
+
+            consent_template_path = config_yaml.get("consent_template_path")
+
+            if consent_template_path is not None:
+                top_level_defaults["consent_template_path"] = (
+                    oidc_path / consent_template_path
+                )
+
+            afo = config_yaml.get("allowed_frontend_origins")
+            if afo is not None:
+                top_level_defaults["allowed_frontend_origins"] = afo
+
+            ufo = config_yaml.get("unlisted_frontend_origin")
+            if ufo is not None:
+                top_level_defaults["unlisted_frontend_origin"] = ufo
 
             for auth_system_yaml in config_yaml["auth_systems"]:
-                if "oidc_client_pem_path" not in auth_system_yaml:
-                    auth_system_yaml["oidc_client_pem_path"] = (
-                        oidc_client_pem_path
-                    )
                 oas_config = config_authsystem.OIDCAuthSystemConfig.from_yaml(
                     self,
                     oidc_config,
-                    auth_system_yaml,
+                    top_level_defaults | auth_system_yaml,
                 )
                 oas_configs.append(oas_config)
 

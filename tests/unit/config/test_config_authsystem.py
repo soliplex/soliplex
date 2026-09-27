@@ -54,27 +54,26 @@ BARE_AUTHSYSTEM_CONFIG_YAML = f"""
 """
 
 AUTHSYSTEM_SCOPE = "test one two three"
-W_SCOPE_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
-W_SCOPE_AUTHSYSTEM_CONFIG_KW["scope"] = AUTHSYSTEM_SCOPE
+W_SCOPE_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "scope": AUTHSYSTEM_SCOPE,
+}
 W_SCOPE_AUTHSYSTEM_CONFIG_YAML = f"""
 {BARE_AUTHSYSTEM_CONFIG_YAML}
     scope: "{AUTHSYSTEM_SCOPE}"
 """
 
-W_PEM_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
-W_PEM_AUTHSYSTEM_CONFIG_KW["oidc_client_pem_path"] = (
-    ABSOLUTE_OIDC_CLIENT_PEM_PATH
-)
+W_PEM_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "oidc_client_pem_path": ABSOLUTE_OIDC_CLIENT_PEM_PATH,
+}
 W_PEM_AUTHSYSTEM_CONFIG_YAML = f"""
 {BARE_AUTHSYSTEM_CONFIG_YAML}
     oidc_client_pem_path: "{ABSOLUTE_OIDC_CLIENT_PEM_PATH}"
 """
 
 AUTHSYSTEM_CLIENT_SECRET_LIT = "REALLY BIG SECRET"
-W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
-W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW["client_secret"] = (
-    AUTHSYSTEM_CLIENT_SECRET_LIT
-)
+W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "client_secret": AUTHSYSTEM_CLIENT_SECRET_LIT,
+}
 W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_YAML = f"""
 {BARE_AUTHSYSTEM_CONFIG_YAML}
     client_secret: "{AUTHSYSTEM_CLIENT_SECRET_LIT}"
@@ -82,30 +81,19 @@ W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_YAML = f"""
 
 CLIENT_SECRET_NAME = "TEST_OIDC_CLIENT_SECRET"
 AUTHSYSTEM_CLIENT_SECRET_SECRET = f"secret:{CLIENT_SECRET_NAME}"
-W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
-W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW["client_secret"] = (
-    AUTHSYSTEM_CLIENT_SECRET_SECRET
-)
+W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "client_secret": AUTHSYSTEM_CLIENT_SECRET_SECRET,
+}
 W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_YAML = f"""
 {BARE_AUTHSYSTEM_CONFIG_YAML}
     client_secret: "{AUTHSYSTEM_CLIENT_SECRET_SECRET}"
 """
 
-CLIENT_SECRET_ENV_NAME = "TEST_OIDC_CLIENT_SECRET"
-AUTHSYSTEM_CLIENT_SECRET_ENV = f"env:{CLIENT_SECRET_ENV_NAME}"
-W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
-W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_KW["client_secret"] = (
-    AUTHSYSTEM_CLIENT_SECRET_ENV
-)
-W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_YAML = f"""
-{BARE_AUTHSYSTEM_CONFIG_YAML}
-    client_secret: "{AUTHSYSTEM_CLIENT_SECRET_ENV}"
-"""
-
 AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL_NAME = "cacert.pem"
 AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL = "./cacert.pem"
-W_OIDC_CPP_REL_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
-W_OIDC_CPP_REL_KW["oidc_client_pem_path"] = AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL
+W_OIDC_CPP_REL_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "oidc_client_pem_path": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL,
+}
 W_OIDC_CPP_REL_CONFIG_YAML = f"""
 {BARE_AUTHSYSTEM_CONFIG_YAML}
     oidc_client_pem_path: "{AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL}"
@@ -114,11 +102,61 @@ W_OIDC_CPP_REL_CONFIG_YAML = f"""
 AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS = str(
     pathlib.Path(here, "fixtures/cacert.pem")
 )
-W_OIDC_CPP_ABS_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
-W_OIDC_CPP_ABS_KW["oidc_client_pem_path"] = AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS
-W_OIDC_CPP_ABS_CONFIG_YAML = f"""
+W_OIDC_CPP_ABS_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "oidc_client_pem_path": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS,
+}
+
+W_AFO_EMPTY_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "allowed_frontend_origins": [],
+}
+W_AFO_EMPTY_AUTHSYSTEM_CONFIG_YAML = f"""
 {BARE_AUTHSYSTEM_CONFIG_YAML}
-    oidc_client_pem_path: "{AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS}"
+    allowed_frontend_origins: []
+"""
+
+ALLOWED_FRONTEND_ORIGIN = "https://frontend.example.com"
+W_AFO_NONEMPTY_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "allowed_frontend_origins": [ALLOWED_FRONTEND_ORIGIN],
+}
+W_AFO_NONEMPTY_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    allowed_frontend_origins:
+      - "{ALLOWED_FRONTEND_ORIGIN}"
+"""
+
+UFOP = config_authsystem.UnlistedFrontendOriginPolicy
+W_UFOP_CONSENT_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "unlisted_frontend_origin": UFOP.CONSENT_REQUIRED,
+}
+W_UFOP_CONSENT_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    unlisted_frontend_origin: "{UFOP.CONSENT_REQUIRED}"
+"""
+
+W_UFOP_DENY_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "unlisted_frontend_origin": UFOP.DENY_ALL,
+}
+W_UFOP_DENY_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    unlisted_frontend_origin: "{UFOP.DENY_ALL}"
+"""
+
+ABSOLUTE_CONSENT_TEMPLATE_PATH = "/path/to/consent.html.mako"
+W_ABS_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "consent_template_path": ABSOLUTE_CONSENT_TEMPLATE_PATH,
+}
+W_ABS_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    consent_template_path: "{ABSOLUTE_CONSENT_TEMPLATE_PATH}"
+"""
+
+RELATIVE_CONSENT_TEMPLATE_PATH = "./consent.html.mako"
+W_REL_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "consent_template_path": RELATIVE_CONSENT_TEMPLATE_PATH,
+}
+W_REL_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    consent_template_path: "{RELATIVE_CONSENT_TEMPLATE_PATH}"
 """
 
 W_ERROR_AUTHSYSTM_CONFIG_YAML = f"""
@@ -235,41 +273,128 @@ def test_authsystem_from_yaml_w_client_secret(
     assert found == expected
 
 
-@pytest.mark.parametrize(
-    "exp_config, exp_path",
-    [
-        (W_OIDC_CPP_REL_KW, "{temp_dir}/{rel_name}"),
-        (
-            W_OIDC_CPP_ABS_KW,
-            AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS,
-        ),
-    ],
-)
 def test_authsystem_from_yaml_w_oid_cpp(
     installation_config,
     temp_dir,
-    exp_config,
-    exp_path,
 ):
+    config_path = temp_dir / "config.yaml"
+    config_path.write_text(W_OIDC_CPP_REL_CONFIG_YAML)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
     expected = config_authsystem.OIDCAuthSystemConfig(
         _installation_config=installation_config,
-        **exp_config,
+        _config_path=config_path,
+        **W_OIDC_CPP_REL_CONFIG_KW,
     )
-    config_path = expected._config_path = temp_dir / "config.yaml"
-
-    if exp_path.startswith("{"):
-        kwargs = {
-            "temp_dir": temp_dir,
-            "rel_name": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL_NAME,
-        }
-        exp_path = exp_path.format(**kwargs)
-
-    expected.oidc_client_pem_path = pathlib.Path(exp_path)
+    expected.oidc_client_pem_path = (
+        temp_dir / AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_REL_NAME
+    )
 
     found = config_authsystem.OIDCAuthSystemConfig.from_yaml(
         installation_config,
         config_path,
-        exp_config,
+        config_dict,
+    )
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "config_yaml, exp_config, exp_ufo",
+    [
+        (
+            W_AFO_EMPTY_AUTHSYSTEM_CONFIG_YAML,
+            W_AFO_EMPTY_AUTHSYSTEM_CONFIG_KW,
+            UFOP.CONSENT_REQUIRED,
+        ),
+        (
+            W_AFO_NONEMPTY_AUTHSYSTEM_CONFIG_YAML,
+            W_AFO_NONEMPTY_AUTHSYSTEM_CONFIG_KW,
+            UFOP.CONSENT_REQUIRED,
+        ),
+        (
+            W_UFOP_CONSENT_AUTHSYSTEM_CONFIG_YAML,
+            W_UFOP_CONSENT_AUTHSYSTEM_CONFIG_KW,
+            UFOP.CONSENT_REQUIRED,
+        ),
+        (
+            W_UFOP_DENY_AUTHSYSTEM_CONFIG_YAML,
+            W_UFOP_DENY_AUTHSYSTEM_CONFIG_KW,
+            UFOP.DENY_ALL,
+        ),
+    ],
+)
+def test_authsystem_from_yaml_w_afo_ufop(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    exp_config,
+    exp_ufo,
+):
+    config_path = temp_dir / "config.yaml"
+    config_path.write_text(config_yaml)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    expected = config_authsystem.OIDCAuthSystemConfig(
+        _installation_config=installation_config,
+        _config_path=config_path,
+        **exp_config,
+    )
+
+    found = config_authsystem.OIDCAuthSystemConfig.from_yaml(
+        installation_config,
+        config_path,
+        config_dict,
+    )
+
+    assert found == expected
+    assert found.unlisted_frontend_origin is exp_ufo
+
+
+@pytest.mark.parametrize(
+    "config_yaml, exp_config",
+    [
+        (
+            W_ABS_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML,
+            W_ABS_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_KW.copy(),
+        ),
+        (
+            W_REL_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML,
+            W_REL_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_KW.copy(),
+        ),
+    ],
+)
+def test_authsystem_from_yaml_w_consent_template(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    exp_config,
+):
+    config_path = temp_dir / "config.yaml"
+    config_path.write_text(config_yaml)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    exp_config |= {
+        "consent_template_path": config_path.parent
+        / exp_config["consent_template_path"],
+    }
+
+    expected = config_authsystem.OIDCAuthSystemConfig(
+        _installation_config=installation_config,
+        _config_path=config_path,
+        **exp_config,
+    )
+
+    found = config_authsystem.OIDCAuthSystemConfig.from_yaml(
+        installation_config,
+        config_path,
+        config_dict,
     )
 
     assert found == expected
@@ -283,7 +408,8 @@ def test_authsystem_from_yaml_w_oid_cpp(
         W_PEM_AUTHSYSTEM_CONFIG_KW.copy(),
         W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW.copy(),
         W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW.copy(),
-        W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_KW.copy(),
+        W_OIDC_CPP_REL_CONFIG_KW.copy(),
+        W_OIDC_CPP_ABS_CONFIG_KW.copy(),
     ],
 )
 def test_authsystem_as_yaml(installation_config, temp_dir, w_kw):
@@ -317,19 +443,17 @@ def test_authsystem_as_yaml(installation_config, temp_dir, w_kw):
     assert found == expected
 
 
-@pytest.mark.parametrize(
-    "client_secret",
-    [
-        AUTHSYSTEM_CLIENT_SECRET_SECRET,
-        AUTHSYSTEM_CLIENT_SECRET_ENV,
-    ],
-)
 def test_authsystem_as_yaml_emits_client_secret_marker_unresolved(
     installation_config,
     temp_dir,
-    client_secret,
 ):
-    """A 'secret:' / 'env:' marker is dumped as configured, not resolved."""
+    """A 'secret:' marker is dumped as configured, not resolved.
+
+    'env:' markers are not supported: the field is declared as
+    '_secret_whole_or_literal_field(default="")'
+    """
+    client_secret = AUTHSYSTEM_CLIENT_SECRET_SECRET
+
     w_kw = BARE_AUTHSYSTEM_CONFIG_KW.copy()
     w_kw["client_secret"] = client_secret
     inst = config_authsystem.OIDCAuthSystemConfig(
@@ -384,7 +508,12 @@ def _round_trip_authsystem_config(
         # dump must emit the marker rather than 'oauth_client_kwargs''
         # resolved secret.
         W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_YAML,
-        W_CLIENT_SECRET_ENV_AUTHSYSTEM_CONFIG_YAML,
+        W_AFO_EMPTY_AUTHSYSTEM_CONFIG_YAML,
+        W_AFO_NONEMPTY_AUTHSYSTEM_CONFIG_YAML,
+        W_UFOP_CONSENT_AUTHSYSTEM_CONFIG_YAML,
+        W_UFOP_DENY_AUTHSYSTEM_CONFIG_YAML,
+        W_ABS_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML,
+        W_REL_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML,
     ],
 )
 def test_authsystem_as_yaml_round_trips(
@@ -428,7 +557,7 @@ def test_authsystem_server_metadata_url():
         ),
         (W_SCOPE_AUTHSYSTEM_CONFIG_KW, {"scope": AUTHSYSTEM_SCOPE}, "", False),
         (
-            W_OIDC_CPP_ABS_KW,
+            W_OIDC_CPP_ABS_CONFIG_KW,
             {"verify": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS},
             "",
             False,
