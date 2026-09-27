@@ -1,5 +1,6 @@
 import copy
 import importlib.metadata
+import sys
 import types
 from unittest import mock
 
@@ -383,6 +384,7 @@ def test_bwrap_sandbox_config_registered_bbb_alias_kind():
     )
 
 
+@mock.patch.object(bwrap_sandbox, "BWRAP_AVAILABLE", True)
 def test_bwrap_sandbox_config_from_yaml(installation_config, temp_dir):
     volume_path = temp_dir / "volume"
     config = config_skills.BwrapSandboxSkillConfig.from_yaml(
@@ -422,6 +424,26 @@ def test_bwrap_sandbox_config_from_yaml(installation_config, temp_dir):
         "host_path": str(volume_path),
         "writable": False,
     }
+
+
+@mock.patch.object(bwrap_sandbox, "BWRAP_AVAILABLE", False)
+def test_bwrap_sandbox_config_capability_unavailable(
+    installation_config,
+    temp_dir,
+):
+    config_path = temp_dir / "room.yaml"
+    config = config_skills.BwrapSandboxSkillConfig.from_yaml(
+        installation_config,
+        config_path,
+        {"kind": bwrap_sandbox.SKILL_PROPERTIES.name},
+    )
+
+    with pytest.raises(config_skills.BwrapSandboxUnavailable) as raised:
+        _ = config.capability
+
+    assert raised.value.skill_kind == bwrap_sandbox.SKILL_PROPERTIES.name
+    assert raised.value.platform == sys.platform
+    assert raised.value._config_path == config_path
 
 
 def test_bwrap_sandbox_config_minimal(installation_config):
@@ -508,6 +530,7 @@ def test_bwrap_sandbox_config_wraps_yaml_errors(
 @pytest.mark.parametrize(
     "w_yaml, exp_defer_loading", _defer_loading_states(False)
 )
+@mock.patch.object(bwrap_sandbox, "BWRAP_AVAILABLE", True)
 def test_bwrap_sandbox_config_defer_loading(
     installation_config,
     temp_dir,
@@ -576,6 +599,7 @@ def test_room_skills_config_rejects_missing_installation_capability(
     assert isinstance(raised.value.__cause__, config_skills.MissingSkillNames)
 
 
+@mock.patch.object(bwrap_sandbox, "BWRAP_AVAILABLE", True)
 def test_room_skills_config_combines_capabilities(
     installation_config,
     temp_dir,

@@ -6,6 +6,8 @@ import typing
 
 import fastapi
 
+from soliplex.skills import bwrap_sandbox
+
 from . import _utils
 from . import exceptions as config_exc
 
@@ -230,7 +232,6 @@ _DEFAULT_ROUTER_NAMES = {
     "completions": "soliplex.views.completions.router",
     "room_file_uploads": "soliplex.views.room_file_uploads.router",
     "thread_file_uploads": "soliplex.views.thread_file_uploads.router",
-    "sandbox_workdirs": "soliplex.views.sandbox_workdirs.router",
     "installation": "soliplex.views.installation.router",
     "log_ingest": "soliplex.views.log_ingest.router",
     "quizzes": "soliplex.views.quizzes.router",
@@ -239,8 +240,21 @@ _DEFAULT_ROUTER_NAMES = {
 }
 
 
+# Routers serving what the bubblewrap sandbox leaves behind, mounted only
+# where 'bwrap' can run.
+_BWRAP_ROUTER_NAMES = {
+    "sandbox_workdirs": "soliplex.views.sandbox_workdirs.router",
+}
+
+
+def _default_router_names() -> dict[str, str]:
+    if bwrap_sandbox.BWRAP_AVAILABLE:
+        return _DEFAULT_ROUTER_NAMES | _BWRAP_ROUTER_NAMES
+    return dict(_DEFAULT_ROUTER_NAMES)
+
+
 def register_default_routers():
-    for group_name, router_name in _DEFAULT_ROUTER_NAMES.items():
+    for group_name, router_name in _default_router_names().items():
         router = _utils._from_dotted_name(router_name)
         APP_ROUTERS_BY_GROUP_NAME[group_name] = (
             router,

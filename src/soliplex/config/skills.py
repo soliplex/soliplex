@@ -5,6 +5,7 @@ import enum
 import functools
 import importlib.metadata
 import pathlib
+import sys
 import typing
 
 import pydantic
@@ -45,6 +46,24 @@ class InvalidSkillKind(KeyError):
         super().__init__(
             f"Skill kind '{invalid_skill_kind}' unknown; "
             f"available kinds: {list(available_skill_kinds)}; "
+            f"(configured in {_config_path})",
+        )
+
+
+class BwrapSandboxUnavailable(RuntimeError):
+    def __init__(
+        self,
+        *,
+        skill_kind: str,
+        platform: str,
+        _config_path: pathlib.Path | None,
+    ):
+        self.skill_kind = skill_kind
+        self.platform = platform
+        self._config_path = _config_path
+        super().__init__(
+            f"Skill kind '{skill_kind}' needs 'bwrap', which runs only "
+            f"on Linux; not available on platform '{platform}' "
             f"(configured in {_config_path})",
         )
 
@@ -404,6 +423,18 @@ class BwrapSandboxSkillConfig:
 
     @property
     def capability(self) -> bwrap_sandbox.SandboxCapability:
+        """Build the sandbox capability.
+
+        Raises:
+
+        - 'BwrapSandboxUnavailable' on a host where 'bwrap' cannot run.
+        """
+        if not bwrap_sandbox.BWRAP_AVAILABLE:
+            raise BwrapSandboxUnavailable(
+                skill_kind=self.kind,
+                platform=sys.platform,
+                _config_path=self._config_path,
+            )
         return bwrap_sandbox.create_bwrap_sandbox_capability(
             id=self.id,
             default_environment=self.default_environment,

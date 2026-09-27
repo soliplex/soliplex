@@ -350,6 +350,15 @@ The `sandbox_config` stanza configures the bubblewrap sandbox that backs the
 `bubble-sandbox` skill (shell / Python execution). Non-absolute paths are
 evaluated relative to the installation directory.
 
+Bubblewrap runs only on Linux.  Elsewhere, a configuration naming the
+skill still loads and passes `soliplex-cli audit`, but a room using it
+fails to build its agent with a `BwrapSandboxUnavailable` error, and the
+`sandbox_workdirs` endpoints are not mounted.
+
+See: [this comment on
+#1352](https://github.com/soliplex/soliplex/issues/1352#issuecomment-5859775622)
+for notes on a better approach to detecting whether the sandbox can run.
+
 ```yaml
 sandbox_config:
     environments_path: ../sandbox/environments

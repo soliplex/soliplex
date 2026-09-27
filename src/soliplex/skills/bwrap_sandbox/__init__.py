@@ -3,6 +3,7 @@ from __future__ import annotations  # forward refs in typing decls
 import dataclasses
 import json
 import pathlib
+import sys
 import typing
 import uuid
 
@@ -31,6 +32,9 @@ SANDBOX_VOLUMES_PATH = SKILL_PROPERTIES.metadata["sandbox_volumes_path"]
 # Where 'bubble_sandbox' bind-mounts the scratch directory inside the
 # sandbox (see 'bubble_sandbox.sandbox.workdir_sandbox_args').
 SANDBOX_WORKDIR_PATH = SKILL_PROPERTIES.metadata["sandbox_workdir_path"]
+
+# 'bwrap' (bubblewrap) runs only on Linux.
+BWRAP_AVAILABLE = sys.platform == "linux"
 
 
 LIST_ENVIRONMENTS_DESCRIPTION = """
