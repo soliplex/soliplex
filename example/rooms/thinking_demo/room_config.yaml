@@ -1,0 +1,39 @@
+id: "thinking_demo"
+name: "Thinking Demo"
+description: "A plain chat room whose reasoning effort a client can set"
+
+# gpt-oss reasons, and Ollama says so: '/api/tags' reports
+# '"capabilities": ["completion", "tools", "thinking"]' for it, and its
+# OpenAI-compatible endpoint both accepts 'reasoning_effort' and acts on
+# it -- measured against "what is 17 times 23", same answer either way:
+# 'low' spent 19 completion tokens, 'high' spent 129.
+#
+# Pydantic AI resolves a model's profile from its served name and does
+# not consult that capability list, so 'gpt-oss:latest' comes back as a
+# model that does not reason.  A thinking setting for a model whose
+# profile claims no support is discarded before it reaches the wire,
+# with no error, so without the declaration below this room would offer
+# a control that does nothing.  See docs/config/agents.md.
+#
+# The three levels are gpt-oss's own ladder.  It has no 'xhigh' and no
+# 'minimal', and it cannot be turned off: 'reasoning_effort: "none"' is
+# accepted here and reasons anyway (53 completion tokens on the same
+# question), which is why 'off' is not offered.
+agent:
+  id: "thinking_demo"
+  model_name: "gpt-oss:latest"
+  context_window: 8192
+  thinking_levels: ["low", "medium", "high"]
+  thinking_default: "low"
+  system_prompt: |
+    You are a careful assistant.  Work the problem through before
+    answering, and keep the answer itself short.
+
+# Questions whose effort is visible in the answer, so the control can be
+# seen doing something rather than taken on trust.
+suggestions:
+  - "How many keystrokes does it take to type 1 to 100?"
+  - "A bat and ball cost 1.10 together, the bat costs 1.00 more than the ball. What does the ball cost?"
+  - "Plan a 3-day trip to a city with one museum, one hike and one cheap dinner per day"
+
+allow_mcp: false

@@ -172,6 +172,35 @@ class Skill(pydantic.BaseModel):
 ConfiguredSkills = dict[str, Skill]
 
 
+class AgentThinking(pydantic.BaseModel):
+    """How hard this agent's model may be asked to think.
+
+    Absent from an agent whose model is not known to reason, so a
+    client offers a control only where one has an effect:  a level sent
+    to a model that reports no support is discarded on the way to the
+    wire, with no error to show for it.
+    """
+
+    levels: list[str]
+    """Offerable levels, lowest first, and the complete set.
+
+    A client offers these and nothing else.  Which levels a model
+    accepts belongs to its chat template rather than to any catalogue,
+    so a level absent here is one that would fail the run.  'off' is
+    absent for a model that cannot stop reasoning.
+    """
+
+    default: str | None = None
+    """What the room asks for when a run asks for nothing."""
+
+    @classmethod
+    def from_support(cls, support: config_agents.ThinkingSupport | None):
+        if support is None:
+            return None
+
+        return cls(levels=list(support.levels), default=support.default)
+
+
 class DefaultAgent(pydantic.BaseModel):
     id: str
     model_name: str | None
@@ -184,6 +213,10 @@ class DefaultAgent(pydantic.BaseModel):
     # it. Fixed for the life of the process, so a client reads it once
     # with the room rather than asking per thread.
     context_window: int | None = None
+    # What the model offers for how hard it thinks, or null where it
+    # offers nothing. Resolved from the model, so a client reads it
+    # once with the room rather than guessing from the model name.
+    thinking: AgentThinking | None = None
     agui_feature_names: list[str] = pydantic.Field(default_factory=list)
 
     @classmethod
@@ -199,6 +232,11 @@ class DefaultAgent(pydantic.BaseModel):
             provider_key=agent_config.provider_key or "dummy",
             context_window=config_agents.get_context_window_from_config(
                 agent_config=agent_config,
+            ),
+            thinking=AgentThinking.from_support(
+                config_agents.get_thinking_from_config(
+                    agent_config=agent_config,
+                ),
             ),
         )
 

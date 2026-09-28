@@ -21,8 +21,8 @@ Each feature is described by an `AGUI_Feature` dataclass
 
 `soliplex.config.agui.AGUI_FEATURES_BY_NAME` is a module-level
 `dict[str, AGUI_Feature]` that maps each feature's `name` to its
-registration. The registry starts empty and is populated by mutation
-during application startup.
+registration. It is declared with Soliplex's own features already in
+it, and is further populated by mutation during application startup.
 
 The registry is the single source of truth for "which AG-UI features
 does this installation know about?" Code elsewhere in Soliplex (and
@@ -36,13 +36,21 @@ during installation load:
 
 ### 1. Soliplex-Builtin Registrations
 
+`soliplex.config.agui` declares the registry with Soliplex's own
+features already in it.  As of this writing that is `thinking` -- how
+hard a run asks its model to think -- which is the one feature
+registered with `source=client`:  every other travels the other way,
+accumulated by the server and carried back by the client untouched.
+Which levels a given room accepts is *not* part of it; that belongs to
+the model, and the room reports it with the rest of the agent (see
+[Agents](agents.md)).
+
 Importing `soliplex.config.skills` (which happens transitively
-whenever `soliplex.config` is imported) registers Soliplex's own
-built-in features. As of this writing, that includes the RAG and analysis
+whenever `soliplex.config` is imported) then adds the RAG and analysis
 capability state namespaces, registered with `source=server`.
 
-These registrations happen at module-import time and are present
-before any installation YAML is parsed.
+Both happen at module-import time and are present before any
+installation YAML is parsed.
 
 ### 2. The `meta.agui_features` YAML Stanza
 
