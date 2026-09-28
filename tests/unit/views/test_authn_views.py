@@ -826,6 +826,8 @@ TOKENDICT = {
     "expires_in": "EXPIRES_IN",
 }
 EXP_QS = "token=TOKEN&refresh_token=RTOKEN&expires_in=EXPIRES_IN"
+TOKENDICT_W_ID_TOKEN = {**TOKENDICT, "id_token": "IDTOKEN"}
+EXP_QS_W_ID_TOKEN = f"{EXP_QS}&id_token=IDTOKEN"
 
 
 @pytest.mark.anyio
@@ -888,6 +890,44 @@ async def test_get_auth_system(
         system=TEST_SYSTEM,
     )
     the_unauth_logger.bind.assert_called_once_with(oidc_system=TEST_SYSTEM)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "tokendict, exp_location",
+    [
+        pytest.param(TOKENDICT, f"/#?{EXP_QS}", id="wo_id_token"),
+        pytest.param(
+            TOKENDICT_W_ID_TOKEN, f"/#?{EXP_QS_W_ID_TOKEN}", id="w_id_token"
+        ),
+    ],
+)
+@mock.patch("soliplex.authn.get_oauth")
+@mock.patch("soliplex.authn.authenticate")
+@mock.patch("soliplex.authn._get_authsystem_config")
+async def test_get_auth_system_id_token(
+    _get_authsystem_config,
+    auth_fn,
+    get_oauth,
+    the_unauth_logger,
+    tokendict,
+    exp_location,
+):
+    the_installation = mock.create_autospec(installation.Installation)
+    cc = get_oauth.return_value.create_client
+    cc.return_value.authorize_access_token = mock.AsyncMock(
+        return_value=tokendict,
+    )
+    request = _make_request(session={RETURN_TO_KEY: DEFAULT_RETURN_TO})
+
+    response = await authn_views.get_auth_system(
+        request=request,
+        system=TEST_SYSTEM,
+        the_installation=the_installation,
+        the_unauth_logger=the_unauth_logger,
+    )
+
+    assert response.headers["location"] == exp_location
 
 
 @pytest.mark.anyio

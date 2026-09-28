@@ -459,7 +459,9 @@ async def get_auth_system(
 ):
     """Complete the OIDC token auth flow with the specified provider
 
-    On success, redirect to client-specified URL.
+    On success, redirect to client-specified URL, passing 'token',
+    'refresh_token', 'expires_in', and (when the provider returns one)
+    'id_token' as callback parameters.
     """
     bound_logger = the_unauth_logger.bind(oidc_system=system)
 
@@ -504,14 +506,18 @@ async def get_auth_system(
     refresh_token = tokendict["refresh_token"]
     expires_in = tokendict["expires_in"]
 
-    return_to = _with_callback_params(
-        return_to,
-        dict(
-            token=access_token,
-            refresh_token=refresh_token,
-            expires_in=expires_in,
-        ),
+    callback_params = dict(
+        token=access_token,
+        refresh_token=refresh_token,
+        expires_in=expires_in,
     )
+
+    # Absent unless the configured scope includes 'openid'.
+    id_token = tokendict.get("id_token")
+    if id_token is not None:
+        callback_params["id_token"] = id_token
+
+    return_to = _with_callback_params(return_to, callback_params)
 
     return responses.RedirectResponse(return_to)
 
