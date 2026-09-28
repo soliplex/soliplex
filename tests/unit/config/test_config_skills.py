@@ -13,7 +13,6 @@ from haiku.rag.capabilities import rag as hr_rag
 from soliplex.capabilities import filesystem as cap_fs
 from soliplex.config import agui as config_agui
 from soliplex.config import exceptions as config_exc
-from soliplex.config import installation as config_installation
 from soliplex.config import rag as config_rag
 from soliplex.config import skills as config_skills
 from soliplex.skills import bwrap_sandbox
@@ -1133,26 +1132,8 @@ def test_bwrap_sandbox_config_rejects_removed_keys(
         )
 
 
-def _sandbox_installation_config(installation_config, temp_dir, **kw):
-    installation_config.sandbox_config = config_installation.SandboxConfig(
-        _environments_path="environments",
-        _config_path=temp_dir / "installation.yaml",
-        **kw,
-    )
-    return installation_config
-
-
-def test_bwrap_sandbox_config_inherits_installation_limits(
-    installation_config,
-    temp_dir,
-):
-    """A room that sets neither limit runs on the installation's."""
-    _sandbox_installation_config(
-        installation_config,
-        temp_dir,
-        execution_timeout_seconds=66.0,
-        max_output_chars=1234,
-    )
+def test_bwrap_sandbox_config_wo_room_limits(installation_config, temp_dir):
+    """A room that sets neither limit runs on the module defaults."""
     config = config_skills.BwrapSandboxSkillConfig.from_yaml(
         installation_config,
         temp_dir / "room.yaml",
@@ -1160,22 +1141,22 @@ def test_bwrap_sandbox_config_inherits_installation_limits(
     )
 
     sandbox_config = config.capability.sandbox_config
-    assert sandbox_config.execution_timeout_seconds == 66.0
-    assert sandbox_config.max_output_chars == 1234
 
-    # Inherited values are not the room's to record: writing them back
-    # would pin this room to today's installation default.
+    assert (
+        sandbox_config.execution_timeout_seconds
+        == config_skills.DEFAULT_EXECUTION_TIMEOUT_SECONDS
+    )
+    assert (
+        sandbox_config.max_output_chars
+        == config_skills.DEFAULT_MAX_OUTPUT_CHARS
+    )
+    # Defaults are not the room's to record: writing them back would pin
+    # this room to today's default.
     assert "execution_timeout_seconds" not in config.as_yaml
     assert "max_output_chars" not in config.as_yaml
 
 
-def test_bwrap_sandbox_config_room_limits_win(installation_config, temp_dir):
-    _sandbox_installation_config(
-        installation_config,
-        temp_dir,
-        execution_timeout_seconds=66.0,
-        max_output_chars=1234,
-    )
+def test_bwrap_sandbox_config_w_room_limits(installation_config, temp_dir):
     config = config_skills.BwrapSandboxSkillConfig.from_yaml(
         installation_config,
         temp_dir / "room.yaml",
@@ -1187,30 +1168,8 @@ def test_bwrap_sandbox_config_room_limits_win(installation_config, temp_dir):
     )
 
     sandbox_config = config.capability.sandbox_config
+
     assert sandbox_config.execution_timeout_seconds == 5.0
     assert sandbox_config.max_output_chars == 99
-
     assert config.as_yaml["execution_timeout_seconds"] == 5.0
     assert config.as_yaml["max_output_chars"] == 99
-
-
-def test_bwrap_sandbox_config_limits_wo_installation_sandbox_config(
-    installation_config,
-    temp_dir,
-):
-    """No installation sandbox config: the module defaults still apply."""
-    config = config_skills.BwrapSandboxSkillConfig.from_yaml(
-        installation_config,
-        temp_dir / "room.yaml",
-        {"kind": bwrap_sandbox.SKILL_PROPERTIES.name},
-    )
-
-    sandbox_config = config.capability.sandbox_config
-    assert (
-        sandbox_config.execution_timeout_seconds
-        == config_skills.DEFAULT_EXECUTION_TIMEOUT_SECONDS
-    )
-    assert (
-        sandbox_config.max_output_chars
-        == config_skills.DEFAULT_MAX_OUTPUT_CHARS
-    )

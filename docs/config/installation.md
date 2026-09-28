@@ -349,16 +349,6 @@ sandbox_config:
   commands in one run share nothing and the workdirs endpoint has nothing
   to serve.
 
-- `execution_timeout_seconds` (optional, default `30.0`) -- how long one
-  execution may run before it is cut off. A room's sandbox skill config may
-  override it; otherwise the room inherits this value.
-
-- `max_output_chars` (optional, default `10000`) -- how much of each of an
-  execution's output streams reaches the model. Output past it is truncated.
-  Where the model is told to put the rest depends on `workdirs_path`: a file
-  under `/sandbox/work` when that workspace persists, and a printed summary
-  when it does not. A room's sandbox skill config may override it.
-
 - `transcripts_path` (optional) -- root under which each `run` / `run_python`
   execution's command line or Python script is saved (under
   `<room_id>/<thread_id>/<run_id>`, with a UUID-based filename), so that

@@ -52,11 +52,15 @@ skills:
   [`environments_path`](installation.md#sandbox-configuration). The model
   does not select it.
 
-- `execution_timeout_seconds` / `max_output_chars` (optional) -- override
-  the installation's
-  [`sandbox_config`](installation.md#sandbox-configuration) values for this
-  room. Omit either to inherit, which keeps the room following a later
-  change to the installation default.
+- `execution_timeout_seconds` (optional, default `30.0`) -- how long one
+  execution may run before it is cut off.
+
+- `max_output_chars` (optional, default `10000`) -- how much of each of an
+  execution's output streams reaches the model. Output past it is truncated.
+  Where the model is told to put the rest depends on the installation's
+  [`workdirs_path`](installation.md#sandbox-configuration): a file under
+  `/sandbox/work` when that workspace persists, and a printed summary when
+  it does not.
 
 - `volumes` (optional) -- extra host directories to mount, keyed by the name
   they take under `/sandbox/volumes`:

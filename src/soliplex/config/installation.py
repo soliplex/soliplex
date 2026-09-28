@@ -272,11 +272,6 @@ class SandboxConfig:
     _workdirs_path: pathlib.Path | None = None
     _transcripts_path: pathlib.Path | None = None
 
-    execution_timeout_seconds: float = (
-        config_skills.DEFAULT_EXECUTION_TIMEOUT_SECONDS
-    )
-    max_output_chars: int = config_skills.DEFAULT_MAX_OUTPUT_CHARS
-
     # Set by `from_yaml` factory
     _config_path: pathlib.Path | None = None
 
@@ -302,9 +297,6 @@ class SandboxConfig:
             result["workdirs_path"] = str(self.workdirs_path)
         if self._transcripts_path is not None:
             result["transcripts_path"] = str(self.transcripts_path)
-
-        result["execution_timeout_seconds"] = self.execution_timeout_seconds
-        result["max_output_chars"] = self.max_output_chars
 
         return result
 

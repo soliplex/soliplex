@@ -32,7 +32,7 @@ _default_list_field = _utils._default_list_field
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
 
-# Applied when neither the installation nor the room sets a limit.
+# Applied when the room sets no limit.
 DEFAULT_EXECUTION_TIMEOUT_SECONDS = 30.0
 DEFAULT_MAX_OUTPUT_CHARS = 10_000
 
@@ -402,7 +402,7 @@ class BwrapSandboxSkillConfig:
 
     id: str | None = None
     environment: str = "bare"
-    # Unset means "whatever the installation says", not its value today.
+    # Unset means "whatever the default is", not its value today.
     execution_timeout_seconds: float | None = None
     max_output_chars: int | None = None
     volumes: bs_models.VolumeMap = _default_dict_field()
@@ -431,31 +431,21 @@ class BwrapSandboxSkillConfig:
                 config_dict,
             ) from exc
 
-    def _limit(self, name: str, fallback: typing.Any) -> typing.Any:
-        """Resolve one limit: the room's, else the installation's."""
-        override = getattr(self, name)
-        if override is not None:
-            return override
-
-        i_config = self._installation_config
-        s_config = i_config.sandbox_config if i_config is not None else None
-
-        if s_config is None:
-            return fallback
-
-        return getattr(s_config, name)
-
     @property
     def sandbox_config(self) -> bs_config.Config:
+        timeout = self.execution_timeout_seconds
+        max_chars = self.max_output_chars
         return bs_config.Config(
             config_file_path=self._config_path,
-            execution_timeout_seconds=self._limit(
-                "execution_timeout_seconds",
-                DEFAULT_EXECUTION_TIMEOUT_SECONDS,
+            execution_timeout_seconds=(
+                timeout
+                if timeout is not None
+                else DEFAULT_EXECUTION_TIMEOUT_SECONDS
             ),
-            max_output_chars=self._limit(
-                "max_output_chars",
-                DEFAULT_MAX_OUTPUT_CHARS,
+            max_output_chars=(
+                max_chars
+                if max_chars is not None
+                else DEFAULT_MAX_OUTPUT_CHARS
             ),
         )
 
