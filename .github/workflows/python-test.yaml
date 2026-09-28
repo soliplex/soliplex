@@ -69,6 +69,25 @@ jobs:
           uv run py.test -s -n auto 2>&1 \
             | tee unit-tests.log
 
+      # 'bwrap' needs to be installed, and needs the unprivileged user
+      # namespaces that Ubuntu 24.04's AppArmor policy blocks by default.
+      # Otherwise the sandbox probe fails and 'test_sandbox_workdirs.py'
+      # skips rather than exercising the workdir routes.
+      - name: Enable bubblewrap
+        if: runner.os != 'Windows'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # Fail here, with the probe's reason, rather than let the functional
+      # tests that need 'bwrap' skip quietly.
+      - name: Check the sandbox probe
+        if: runner.os != 'Windows'
+        run: >-
+          uv run python -c
+          "from bubble_sandbox import sandbox; sandbox.check_available()"
+
       # Functional tests run serially: they share on-disk state (e.g. the
       # 'sandbox/workdirs' tree, keyed by a constant room id) and
       # module-scoped app fixtures, so xdist workers race each other.
