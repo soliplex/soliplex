@@ -311,18 +311,20 @@ def get_workdir(
     room_id: str | None,
     thread_id: str | None,
 ):
-    """Return the thread's sandbox workspace, creating it if need be."""
+    """Return the path of the thread's sandbox workspace.
+
+    The directory is not created here:  'workspace' creates it when a
+    command first runs.
+    """
     if (
         workdirs_path is not None
         and room_id is not None
         and thread_id is not None
     ):
-        workdir = _check_subdirs(
+        return _check_subdirs(
             workdirs_path,
             [room_id, str(thread_id)],
         )
-        workdir.mkdir(parents=True, exist_ok=True)
-        return workdir
     else:
         return None
 
@@ -550,6 +552,9 @@ def read_beneath(
 
     try:
         dir_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    except FileNotFoundError:
+        # A thread's workspace does not exist until a command runs.
+        raise UnreadablePath(path, "there is no such file") from None
     except OSError:
         raise UnreadablePath(path, "the workspace is not readable") from None
 
@@ -698,12 +703,13 @@ def workspace(
 ):
     """Yield the directory to mount read-write, and whether it survives.
 
-    Without 'workdirs_path' the call gets a temporary directory, discarded
-    when it returns.
+    The thread's workspace is created if need be.  Without 'workdirs_path'
+    the call gets a temporary directory, discarded when it returns.
     """
     workdir = get_workdir(workdirs_path, room_id, thread_id)
 
     if workdir is not None:
+        workdir.mkdir(parents=True, exist_ok=True)
         yield workdir, True
         return
 

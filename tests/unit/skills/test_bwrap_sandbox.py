@@ -518,21 +518,45 @@ def test_get_workdir(
     assert found == expected
 
     if expected is not None:
-        assert expected.is_dir()
+        assert not expected.exists()
 
 
-def test_get_workdir_is_reused_across_runs(workdirs_path):
-    first = skills_bwrap_sandbox.get_workdir(
+def test_workspace_w_workdirs_path(workdirs_path):
+    expected = workdirs_path / ROOM_ID / THREAD_ID_STR
+
+    with skills_bwrap_sandbox.workspace(
         workdirs_path, ROOM_ID, THREAD_ID_STR
-    )
-    (first / "earlier.txt").write_text("kept", encoding="utf-8")
+    ) as (found, persistent):
+        assert found == expected
+        assert found.is_dir()
+        assert persistent
 
-    second = skills_bwrap_sandbox.get_workdir(
+    assert expected.is_dir()
+
+
+def test_workspace_w_existing_workdir(workdirs_path):
+    expected = workdirs_path / ROOM_ID / THREAD_ID_STR
+    expected.mkdir(parents=True)
+    (expected / "earlier.txt").write_text("kept", encoding="utf-8")
+
+    with skills_bwrap_sandbox.workspace(
         workdirs_path, ROOM_ID, THREAD_ID_STR
-    )
+    ) as (found, persistent):
+        assert found == expected
+        assert persistent
 
-    assert second == first
-    assert (second / "earlier.txt").read_text(encoding="utf-8") == "kept"
+    assert (expected / "earlier.txt").read_text(encoding="utf-8") == "kept"
+
+
+def test_workspace_wo_workdirs_path():
+    with skills_bwrap_sandbox.workspace(None, ROOM_ID, THREAD_ID_STR) as (
+        found,
+        persistent,
+    ):
+        assert found.is_dir()
+        assert not persistent
+
+    assert not found.exists()
 
 
 @pytest.mark.parametrize(
@@ -1394,6 +1418,23 @@ async def test_capability_instructions_carry_the_mount_table(
     assert "rules.md" not in found
 
 
+@pytest.mark.anyio
+async def test_capability_instructions_create_no_workspace(
+    ctx_w_deps,
+    i_config,
+    workdirs_path,
+):
+    capability = skills_bwrap_sandbox.create_bwrap_sandbox_capability(
+        installation_config=i_config,
+    )
+    _static, runtime = capability.get_instructions()
+
+    found = await runtime(ctx_w_deps)
+
+    assert "empty, kept for this thread" in found
+    assert not (workdirs_path / ROOM_ID).exists()
+
+
 def test_render_mount_table_w_unparseable_dependency():
     found = skills_bwrap_sandbox.render_mount_table(
         workdir=None,
@@ -1848,11 +1889,47 @@ async def test_read_image_audits_a_refusal(
     assert record.reason == "UnreadablePath"
 
 
-def test_open_beneath_w_an_unreadable_root(temp_dir):
-    with pytest.raises(skills_bwrap_sandbox.UnreadablePath):
+@pytest.mark.anyio
+@mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
+async def test_read_image_wo_workspace_creates_none(
+    bs_klass,
+    ctx_w_deps,
+    i_config,
+    workdirs_path,
+):
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+        installation_config=i_config,
+        multimodal=True,
+    )
+    tool = toolset.tools["read_image"]
+
+    with pytest.raises(skills_bwrap_sandbox.UnreadablePath) as exc_info:
+        await tool.function(
+            ctx=ctx_w_deps,
+            path=f"{SANDBOX_WORKDIR_PATH}/plot.png",
+        )
+
+    assert exc_info.value.reason == "there is no such file"
+    assert not (workdirs_path / ROOM_ID).exists()
+
+
+def test_open_beneath_w_a_missing_root(temp_dir):
+    with pytest.raises(skills_bwrap_sandbox.UnreadablePath) as exc_info:
         skills_bwrap_sandbox.read_beneath(
             temp_dir / "nonesuch", "plot.png", 4096
         )
+
+    assert exc_info.value.reason == "there is no such file"
+
+
+def test_open_beneath_w_an_unreadable_root(temp_dir):
+    not_a_dir = temp_dir / "not-a-dir"
+    not_a_dir.write_text("x", encoding="utf-8")
+
+    with pytest.raises(skills_bwrap_sandbox.UnreadablePath) as exc_info:
+        skills_bwrap_sandbox.read_beneath(not_a_dir, "plot.png", 4096)
+
+    assert exc_info.value.reason == "the workspace is not readable"
 
 
 @pytest.mark.parametrize("w_persistent", [False, True])
