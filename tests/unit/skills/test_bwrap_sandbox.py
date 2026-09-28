@@ -1445,6 +1445,49 @@ def test_render_mount_table_w_unparseable_dependency():
     assert "not a requirement!!" in found
 
 
+def _write_environment(environments_path, name, dependencies):
+    env_dir = environments_path / name
+    (env_dir / ".venv").mkdir(parents=True, exist_ok=True)
+    (env_dir / "pyproject.toml").write_text(
+        f"[project]\nname = {name!r}\ndependencies = {dependencies!r}\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize(
+    "w_environment, expected",
+    [
+        ("analysis", ("pandas>=3",)),
+        ("nonesuch", ()),
+    ],
+)
+def test_environment_dependencies(environments_path, w_environment, expected):
+    _write_environment(environments_path, "analysis", ["pandas>=3"])
+
+    found = skills_bwrap_sandbox.environment_dependencies(
+        environments_path,
+        w_environment,
+    )
+
+    assert found == expected
+
+
+def test_environment_dependencies_is_cached(environments_path):
+    _write_environment(environments_path, "analysis", ["pandas>=3"])
+    skills_bwrap_sandbox.environment_dependencies(
+        environments_path,
+        "analysis",
+    )
+    _write_environment(environments_path, "analysis", ["polars"])
+
+    found = skills_bwrap_sandbox.environment_dependencies(
+        environments_path,
+        "analysis",
+    )
+
+    assert found == ("pandas>=3",)
+
+
 @pytest.mark.parametrize("w_iconfig", [False, True])
 def test_capability_dependencies(environments_path, i_config, w_iconfig):
     env_dir = environments_path / "analysis"

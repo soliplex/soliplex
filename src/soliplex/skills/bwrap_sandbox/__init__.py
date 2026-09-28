@@ -2,6 +2,7 @@ from __future__ import annotations  # forward refs in typing decls
 
 import contextlib
 import dataclasses
+import functools
 import io
 import json
 import os
@@ -695,6 +696,25 @@ def _dependency_names(dependencies: list[str]) -> list[str]:
     return names
 
 
+@functools.lru_cache
+def environment_dependencies(
+    environments_path: pathlib.Path,
+    environment: str,
+) -> tuple[str, ...]:
+    """Return the requirements 'environment' declares, or none if absent.
+
+    Cached for the life of the process: an environment added or changed
+    later is not seen until a restart.
+    """
+    config = bs_config.Config(environments_pathname=str(environments_path))
+
+    for info in config.list_environments():
+        if info.name == environment:
+            return tuple(info.dependencies)
+
+    return ()
+
+
 @contextlib.contextmanager
 def workspace(
     workdirs_path: pathlib.Path | None,
@@ -1017,11 +1037,12 @@ class SandboxCapability(ai_capabilities.AbstractCapability[typing.Any]):
                 }
             )
 
-        for info in sandbox_config.list_environments():
-            if info.name == self.environment:
-                return list(info.dependencies)
-
-        return []
+        return list(
+            environment_dependencies(
+                sandbox_config.environments_path,
+                self.environment,
+            )
+        )
 
     async def runtime_instructions(self, ctx: pydantic_ai.RunContext) -> str:
         deps = ctx.deps
