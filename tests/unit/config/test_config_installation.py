@@ -1144,11 +1144,11 @@ def test_sandboxconfig_as_yaml(temp_dir, w_kw):
 
     expected["execution_timeout_seconds"] = w_kw.get(
         "execution_timeout_seconds",
-        config_installation.DEFAULT_EXECUTION_TIMEOUT_SECONDS,
+        config_skills.DEFAULT_EXECUTION_TIMEOUT_SECONDS,
     )
     expected["max_output_chars"] = w_kw.get(
         "max_output_chars",
-        config_installation.DEFAULT_MAX_OUTPUT_CHARS,
+        config_skills.DEFAULT_MAX_OUTPUT_CHARS,
     )
 
     found = inst.as_yaml
@@ -3879,8 +3879,6 @@ def test_sandboxconfig_limit_defaults(temp_dir):
 
     assert (
         inst.execution_timeout_seconds
-        == config_installation.DEFAULT_EXECUTION_TIMEOUT_SECONDS
+        == config_skills.DEFAULT_EXECUTION_TIMEOUT_SECONDS
     )
-    assert (
-        inst.max_output_chars == config_installation.DEFAULT_MAX_OUTPUT_CHARS
-    )
+    assert inst.max_output_chars == config_skills.DEFAULT_MAX_OUTPUT_CHARS

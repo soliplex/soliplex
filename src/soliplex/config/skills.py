@@ -32,6 +32,11 @@ _default_list_field = _utils._default_list_field
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
 
+# Applied when neither the installation nor the room sets a limit.
+DEFAULT_EXECUTION_TIMEOUT_SECONDS = 30.0
+DEFAULT_MAX_OUTPUT_CHARS = 10_000
+
+
 class InvalidSkillKind(KeyError):
     def __init__(
         self,
@@ -446,11 +451,11 @@ class BwrapSandboxSkillConfig:
             config_file_path=self._config_path,
             execution_timeout_seconds=self._limit(
                 "execution_timeout_seconds",
-                bwrap_sandbox.DEFAULT_EXECUTION_TIMEOUT_SECONDS,
+                DEFAULT_EXECUTION_TIMEOUT_SECONDS,
             ),
             max_output_chars=self._limit(
                 "max_output_chars",
-                bwrap_sandbox.DEFAULT_MAX_OUTPUT_CHARS,
+                DEFAULT_MAX_OUTPUT_CHARS,
             ),
         )
 

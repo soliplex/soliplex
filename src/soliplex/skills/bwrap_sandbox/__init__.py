@@ -28,10 +28,6 @@ from soliplex import sandbox_audit
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
     from soliplex.config import installation as config_installation
 
-# Applied when neither the installation nor the room sets a limit.
-DEFAULT_EXECUTION_TIMEOUT_SECONDS = 30.0
-DEFAULT_MAX_OUTPUT_CHARS = 10_000
-
 _HERE = pathlib.Path(__file__)
 SKILL_PROPERTIES = skills_ref.read_properties(str(_HERE.parent))
 

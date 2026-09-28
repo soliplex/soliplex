@@ -15,7 +15,6 @@ from haiku.rag import config as hr_config
 
 from soliplex import secrets
 from soliplex.capabilities import filesystem as cap_fs
-from soliplex.skills import bwrap_sandbox
 
 from . import _utils
 from . import agents as config_agents
@@ -267,20 +266,16 @@ class EnvironmentSource:
     value: str | None
 
 
-DEFAULT_EXECUTION_TIMEOUT_SECONDS = (
-    bwrap_sandbox.DEFAULT_EXECUTION_TIMEOUT_SECONDS
-)
-DEFAULT_MAX_OUTPUT_CHARS = bwrap_sandbox.DEFAULT_MAX_OUTPUT_CHARS
-
-
 @dataclasses.dataclass
 class SandboxConfig:
     _environments_path: pathlib.Path
     _workdirs_path: pathlib.Path | None = None
     _transcripts_path: pathlib.Path | None = None
 
-    execution_timeout_seconds: float = DEFAULT_EXECUTION_TIMEOUT_SECONDS
-    max_output_chars: int = DEFAULT_MAX_OUTPUT_CHARS
+    execution_timeout_seconds: float = (
+        config_skills.DEFAULT_EXECUTION_TIMEOUT_SECONDS
+    )
+    max_output_chars: int = config_skills.DEFAULT_MAX_OUTPUT_CHARS
 
     # Set by `from_yaml` factory
     _config_path: pathlib.Path | None = None

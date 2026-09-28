@@ -1208,9 +1208,9 @@ def test_bwrap_sandbox_config_limits_wo_installation_sandbox_config(
     sandbox_config = config.capability.sandbox_config
     assert (
         sandbox_config.execution_timeout_seconds
-        == config_installation.DEFAULT_EXECUTION_TIMEOUT_SECONDS
+        == config_skills.DEFAULT_EXECUTION_TIMEOUT_SECONDS
     )
     assert (
         sandbox_config.max_output_chars
-        == config_installation.DEFAULT_MAX_OUTPUT_CHARS
+        == config_skills.DEFAULT_MAX_OUTPUT_CHARS
     )
