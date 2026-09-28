@@ -81,7 +81,7 @@ class OIDCAuthSystemConfig:
     @property
     def oauth_client_kwargs(self) -> dict:
         """Registered kwargs for this authsystem's 'ouath' client factory"""
-        client_kwargs = {}
+        client_kwargs = {"code_challenge_method": "S256"}
 
         if self.scope is not None:
             client_kwargs["scope"] = self.scope
