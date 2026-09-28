@@ -143,7 +143,6 @@ EXECUTION_ERRORS = (
     RuntimeError,
     OSError,
     bs_config.InvalidEnvironmentName,
-    bs_sandbox.InvalidScriptPath,
 )
 
 
@@ -161,8 +160,8 @@ _EXECUTION_ERROR_REASONS = (
 
 def translate_execution_error(exc, *, environment_name):
     """Return the error the model should see for a failed sandbox start."""
-    if isinstance(exc, bs_sandbox.InvalidScriptPath):
-        return WorkspacePathBlocked(exc.script_path)
+    if isinstance(exc, bs_sandbox.ScriptWriteError):
+        return WorkspacePathBlocked(exc.script_name)
 
     for klass, reason in _EXECUTION_ERROR_REASONS:
         if isinstance(exc, klass):
@@ -249,7 +248,7 @@ async def skill_run_python(
     script: str,
     environment_name: str | None = None,
     workdir: pathlib.Path | None = None,
-    script_path: str = bs_sandbox.DEFAULT_SCRIPT_PATH,
+    script_name: str = bs_sandbox.DEFAULT_SCRIPT_NAME,
     timeout: float | None = None,  # seconds
     extra_volumes: bs_models.VolumeMap = None,
 ) -> bs_models.ExecuteResult:
@@ -268,7 +267,7 @@ async def skill_run_python(
             script=script,
             environment_name=environment_name,
             workdir=workdir,
-            script_path=script_path,
+            script_name=script_name,
             timeout=timeout,
             extra_volumes=extra_volumes,
         )
@@ -371,14 +370,26 @@ def get_extra_volumes(
     return result
 
 
-# Below the workspace root, which the download endpoint does not serve.
-EXECUTIONS_SUBDIR = ".soliplex/executions"
+# The download endpoint does not serve workspace files with this prefix.
+SCRIPT_SNAPSHOT_PREFIX = ".soliplex-script-"
 
 
-def script_snapshot_path(run_id: str | None, call_id: uuid.UUID) -> str:
-    """Return the workspace path 'run_python' keeps its source at."""
+def script_snapshot_name(run_id: str | None, call_id: uuid.UUID) -> str:
+    """Return the workspace file name 'run_python' keeps its source at."""
     stem = f"{run_id}-{call_id}" if run_id is not None else str(call_id)
-    return f"{EXECUTIONS_SUBDIR}/script-{stem}.py"
+    return f"{SCRIPT_SNAPSHOT_PREFIX}{stem}.py"
+
+
+def is_downloadable(entry: pathlib.Path) -> bool:
+    """Return whether the workdir endpoint serves 'entry'.
+
+    Only regular files are served, and never a script snapshot.
+    """
+    return (
+        not entry.name.startswith(SCRIPT_SNAPSHOT_PREFIX)
+        and not entry.is_symlink()
+        and entry.is_file()
+    )
 
 
 def write_transcript(
@@ -652,15 +663,11 @@ def effective_volumes(
 
 
 def _downloadable_count(directory: pathlib.Path | None) -> int:
-    """Count what the workdir endpoint serves: top-level regular files."""
+    """Count the top-level files the workdir endpoint serves."""
     if directory is None or not directory.is_dir():
         return 0
 
-    return sum(
-        1
-        for entry in directory.glob("*")
-        if not entry.is_symlink() and entry.is_file()
-    )
+    return sum(1 for entry in directory.glob("*") if is_downloadable(entry))
 
 
 def _file_count(volume: bs_models.VolumeInfo) -> int:
@@ -915,7 +922,7 @@ def create_sandbox_toolset(
                 script=script,
                 environment_name=environment,
                 workdir=workdir,
-                script_path=script_snapshot_path(run_id, call_id),
+                script_name=script_snapshot_name(run_id, call_id),
                 extra_volumes=extra_volumes,
             )
 

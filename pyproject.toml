@@ -242,8 +242,3 @@ name = "ruff"
 type = "exec"
 executable = "ruff"
 options = "check --fix REVISION_SCRIPT_FILENAME"
-
-# Remove this override after bubble-sandbox 0.13.0 is released.
-[tool.uv.sources.bubble-sandbox]
-git = "https://github.com/ggozad/bubble-sandbox.git"
-rev = "a754e90aeba669438f2af0d79571eb2d99015edd"

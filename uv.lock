@@ -292,13 +292,17 @@ wheels = [
 
 [[package]]
 name = "bubble-sandbox"
-version = "0.12.0"
-source = { git = "https://github.com/ggozad/bubble-sandbox.git?rev=a754e90aeba669438f2af0d79571eb2d99015edd#a754e90aeba669438f2af0d79571eb2d99015edd" }
+version = "0.13"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic-ai-backend" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/81/17/5fc524e2a1dc159b9a7e95ab47e7a7923122cae1c2330b334fa5e20d1fa0/bubble_sandbox-0.13.tar.gz", hash = "sha256:45e6fbb6f23286c3ef8cdf95dc7c34f53169835d1ea7e58742f5ea84f2b3e27d", size = 12262, upload-time = "2026-09-28T20:29:28.316Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b4/5f/498a965ebd05d49e2230db3b405c3a383aad3686085ec30d9918cbcf8778/bubble_sandbox-0.13-py3-none-any.whl", hash = "sha256:673394b86a8baa8186a6ca69700818ba9d6ffd44ef5748d34191268cd8e08ba5", size = 14467, upload-time = "2026-09-28T20:29:27.389Z" },
 ]
 
 [[package]]
@@ -3276,7 +3280,7 @@ requires-dist = [
     { name = "aiosqlite" },
     { name = "alembic", specifier = ">=1.18.4,<1.19" },
     { name = "authlib" },
-    { name = "bubble-sandbox", git = "https://github.com/ggozad/bubble-sandbox.git?rev=a754e90aeba669438f2af0d79571eb2d99015edd" },
+    { name = "bubble-sandbox", specifier = ">=0.13.0,<0.14" },
     { name = "certifi", specifier = ">=2025.11.12" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "fakeredis", specifier = "!=2.35.0" },

@@ -98,6 +98,7 @@ async def test_get_workdirs_room_thread_run_only(
         link_target = sandbox_path / "link-target"
         link_target.write_text("sneaky link points here")
         (thread_path / "ignore_me").mkdir()
+        (thread_path / ".soliplex-script-ignore-me.py").write_text("x")
         for filename in w_filenames:
             file_path = thread_path / filename
             if w_link == "symlink":
@@ -348,3 +349,38 @@ async def test_get_workdirs_room_thread_filename(
     the_logger.debug.assert_called_once_with(
         loggers.WORKDIRS_GET_ROOM_THREAD_FILE,
     )
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.views.sandbox_workdirs._open_no_symlinks")
+@mock.patch("soliplex.views.agui._check_thread_ownership")
+async def test_get_workdirs_room_thread_filename_w_script_snapshot(
+    cto,
+    open_no_symlinks,
+    the_threads,
+    sandbox_path,
+):
+    snapshot_name = ".soliplex-script-run-id-call-id.py"
+    sandbox_workdirs_path = sandbox_path / "workdirs"
+    workdir_path = sandbox_workdirs_path / TEST_ROOM_ID / TEST_THREAD_ID_STR
+    workdir_path.mkdir(parents=True)
+    (workdir_path / snapshot_name).write_text("print(1)")
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.sandbox_workdirs_path = str(sandbox_workdirs_path)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with raises_httpexc(code=404, match=f"No workdir file: {snapshot_name}"):
+        await workdir_views.get_workdirs_room_thread_filename(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            filename=snapshot_name,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    open_no_symlinks.assert_not_called()

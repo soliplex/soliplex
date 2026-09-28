@@ -14,6 +14,7 @@ from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex import views
+from soliplex.skills import bwrap_sandbox as skills_bwrap_sandbox
 from soliplex.views import agui as soliplex_views_agui
 from soliplex.views import util as soliplex_views_util
 
@@ -76,7 +77,7 @@ async def get_workdirs_room_thread(
 
     if thread_dir.is_dir():
         for file_or_sub in thread_dir.glob("*"):
-            if not file_or_sub.is_symlink() and file_or_sub.is_file():
+            if skills_bwrap_sandbox.is_downloadable(file_or_sub):
                 filename = file_or_sub.name
                 filename_urls[filename] = request.url_for(
                     # View function name, not the route path.
@@ -156,6 +157,12 @@ async def get_workdirs_room_thread_filename(
     In order to prevent an agent-created symlink from exposing a file
     not in the workdir, this view returns a streaming response, rather
     than using `fastapi`s 'FileResponse-from-filename' affordance.
+
+    Raises:
+
+    - 'fastapi.HTTPException' (404) when sandbox workdirs are not
+      configured, when 'filename' names a 'run_python' script snapshot,
+      or when it names no regular file in the workspace.
     """
     thread_id = str(thread_id)
 
@@ -177,6 +184,12 @@ async def get_workdirs_room_thread_filename(
         raise fastapi.HTTPException(
             status_code=404,
             detail="Sandbox workdirs not configured",
+        )
+
+    if filename.startswith(skills_bwrap_sandbox.SCRIPT_SNAPSHOT_PREFIX):
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=f"No workdir file: {filename}",
         )
 
     thread_dir = pathlib.Path(workdirs_path) / room_id / thread_id

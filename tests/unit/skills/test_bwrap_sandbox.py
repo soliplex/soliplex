@@ -341,7 +341,7 @@ async def test_skill_run_python(ctx_w_deps, bwrap_sandbox):
         script="print('hello')",
         environment_name=None,
         workdir=None,
-        script_path="script.py",
+        script_name="script.py",
         timeout=None,
         extra_volumes=None,
     )
@@ -425,7 +425,7 @@ async def test_skill_run_python_w_extra_args(
     exp_kw = {
         "environment_name": None,
         "workdir": None,
-        "script_path": "script.py",
+        "script_name": "script.py",
         "timeout": None,
         "extra_volumes": None,
     } | w_kw
@@ -898,8 +898,8 @@ async def test_create_sandbox_toolset_run_python(
     }
 
     ((_, found_kw),) = skill_run_python.call_args_list
-    snapshot = found_kw.pop("script_path")
-    assert snapshot.startswith(f"{skills_bwrap_sandbox.EXECUTIONS_SUBDIR}/")
+    snapshot = found_kw.pop("script_name")
+    assert snapshot.startswith(skills_bwrap_sandbox.SCRIPT_SNAPSHOT_PREFIX)
     assert (
         found_kw
         == {
@@ -1182,22 +1182,51 @@ async def test_create_sandbox_toolset_run_audits_failure(
     assert ref_path.read_text(encoding="utf-8") == json.dumps(["/bin/true"])
 
 
-def test_script_snapshot_path():
+def test_script_snapshot_name():
     call_id = uuid.uuid4()
 
-    found = skills_bwrap_sandbox.script_snapshot_path(RUN_ID_STR, call_id)
+    found = skills_bwrap_sandbox.script_snapshot_name(RUN_ID_STR, call_id)
 
-    assert found == (f".soliplex/executions/script-{RUN_ID_STR}-{call_id}.py")
-    # Not at the workspace root, which the download listing serves.
-    assert "/" in found
+    assert found == f".soliplex-script-{RUN_ID_STR}-{call_id}.py"
 
 
-def test_script_snapshot_path_wo_run_id():
+def test_script_snapshot_name_wo_run_id():
     call_id = uuid.uuid4()
 
-    found = skills_bwrap_sandbox.script_snapshot_path(None, call_id)
+    found = skills_bwrap_sandbox.script_snapshot_name(None, call_id)
 
-    assert found == f".soliplex/executions/script-{call_id}.py"
+    assert found == f".soliplex-script-{call_id}.py"
+
+
+def _make_regular(path):
+    path.write_text("x")
+
+
+def _make_symlink(path):
+    target = path.parent / "target.txt"
+    target.write_text("x")
+    path.symlink_to(target)
+
+
+@pytest.mark.parametrize(
+    "w_name, w_make, expected",
+    [
+        ("data.csv", _make_regular, True),
+        (".hidden", _make_regular, True),
+        (".soliplex-script-x.py", _make_regular, False),
+        ("link.txt", _make_symlink, False),
+        ("subdir", pathlib.Path.mkdir, False),
+        ("missing.txt", None, False),
+    ],
+)
+def test_is_downloadable(temp_dir, w_name, w_make, expected):
+    entry = temp_dir / w_name
+    if w_make is not None:
+        w_make(entry)
+
+    found = skills_bwrap_sandbox.is_downloadable(entry)
+
+    assert found is expected
 
 
 def test_write_transcript_uses_the_call_id(transcripts_path):
@@ -1239,8 +1268,8 @@ async def test_run_python_snapshots_the_source_per_call(
     await tool.function(ctx=ctx_w_deps, script="print(1)")
 
     ((_, kwargs),) = skill_run_python.call_args_list
-    script_path = kwargs["script_path"]
-    assert script_path.startswith(f".soliplex/executions/script-{RUN_ID_STR}-")
+    script_name = kwargs["script_name"]
+    assert script_name.startswith(f".soliplex-script-{RUN_ID_STR}-")
 
     (transcript,) = [
         path
@@ -1248,7 +1277,7 @@ async def test_run_python_snapshots_the_source_per_call(
             transcripts_path / ROOM_ID / THREAD_ID_STR / RUN_ID_STR
         ).glob("*.py")
     ]
-    assert transcript.stem in script_path
+    assert transcript.stem in script_name
 
 
 def _volume(host_path=None, writable=False):
@@ -1313,8 +1342,9 @@ def test_render_mount_table_reports_writability(temp_dir):
 
 def test_render_mount_table_counts_downloadable_workdir_files(temp_dir):
     workdir = temp_dir / "work"
-    (workdir / skills_bwrap_sandbox.EXECUTIONS_SUBDIR).mkdir(parents=True)
+    workdir.mkdir()
     (workdir / "report.csv").write_text("x", encoding="utf-8")
+    (workdir / ".soliplex-script-x.py").write_text("x", encoding="utf-8")
     (workdir / "sub").mkdir()
 
     found = skills_bwrap_sandbox.render_mount_table(
@@ -1323,7 +1353,7 @@ def test_render_mount_table_counts_downloadable_workdir_files(temp_dir):
         dependencies=[],
     )
 
-    # Only top-level regular files are downloadable, so only those count.
+    # Only downloadable files count: no subdirectory or script snapshot.
     assert "1 file" in found
     assert SANDBOX_WORKDIR_PATH in found
 
@@ -1495,9 +1525,7 @@ async def test_run_python_reports_a_blocked_snapshot_path(
     toolset = skills_bwrap_sandbox.create_sandbox_toolset()
     tool = toolset.tools["run_python"]
     bs_klass.return_value.execute_python.side_effect = (
-        bs_sandbox.InvalidScriptPath(
-            ".soliplex/executions/script-x.py", "not a directory"
-        )
+        bs_sandbox.CannotBeReplacedInWorkdir(".soliplex-script-x.py")
     )
 
     with pytest.raises(pydantic_ai.ModelRetry) as exc_info:
@@ -1510,16 +1538,34 @@ async def test_run_python_reports_a_blocked_snapshot_path(
 async def test_skill_run_python_translates_a_blocked_snapshot_path(
     bwrap_sandbox,
 ):
-    bwrap_sandbox.execute_python.side_effect = bs_sandbox.InvalidScriptPath(
-        ".soliplex/executions/script-x.py", "not a directory"
+    bwrap_sandbox.execute_python.side_effect = (
+        bs_sandbox.CannotBeReplacedInWorkdir(".soliplex-script-x.py")
     )
 
-    with pytest.raises(skills_bwrap_sandbox.WorkspacePathBlocked):
+    with pytest.raises(skills_bwrap_sandbox.WorkspacePathBlocked) as exc_info:
         await skills_bwrap_sandbox.skill_run_python(
             bwrap_sandbox=bwrap_sandbox,
             script="print(1)",
             environment_name="bare",
         )
+
+    assert exc_info.value.path == ".soliplex-script-x.py"
+
+
+@pytest.mark.asyncio
+async def test_skill_run_python_w_invalid_script_name(bwrap_sandbox):
+    """A bad script name is a soliplex bug, not a failed call"""
+    w_error = bs_sandbox.NotInWorkdirRoot("sub/script.py")
+    bwrap_sandbox.execute_python.side_effect = w_error
+
+    with pytest.raises(bs_sandbox.InvalidScriptName) as exc_info:
+        await skills_bwrap_sandbox.skill_run_python(
+            bwrap_sandbox=bwrap_sandbox,
+            script="print(1)",
+            environment_name="bare",
+        )
+
+    assert exc_info.value is w_error
 
 
 IMAGE_BYTES = base64.b64decode(
