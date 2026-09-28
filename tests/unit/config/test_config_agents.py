@@ -25,6 +25,9 @@ PROVIDER_BASE_URL = "https://provider.example.com/api"
 PROVIDER_BASE_URL_VIA_ENV = "env:PROVIDER_BASE_URL"
 OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
 OLLAMA_BASE_URL = "https://example.com:12345"
+# Distinct from the Ollama one, so a test that resolves it proves the
+# provider read its own key rather than any key that happened to be set.
+VLLM_BASE_URL = "https://vllm.example.com:8000"
 AGUI_FEATURE_NAME = "test-agui-feature"
 
 MODEL = "testing"
@@ -842,6 +845,16 @@ def test_agentconfig_llm_model_name(
             PROVIDER_BASE_URL,
         ),
         (config_agents.LLMProviderType.GOOGLE, {}, None),
+        # vLLM takes its URL from the installation environment the way
+        # Ollama does. Without this it would fall to 'VLLMProvider'
+        # reading the *process* environment itself, which bypasses the
+        # '/v1' suffixing below and leaves 'audit' reporting no URL.
+        (config_agents.LLMProviderType.VLLM, {}, VLLM_BASE_URL),
+        (
+            config_agents.LLMProviderType.VLLM,
+            {"provider_base_url": PROVIDER_BASE_URL},
+            PROVIDER_BASE_URL,
+        ),
     ],
 )
 def test_agentconfig_llm_provider_base_url(
@@ -853,6 +866,7 @@ def test_agentconfig_llm_provider_base_url(
 ):
     ic_environ = {
         "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        "VLLM_BASE_URL": VLLM_BASE_URL,
         "PROVIDER_BASE_URL": PROVIDER_BASE_URL,
     }
 
@@ -880,6 +894,30 @@ def test_agentconfig_llm_provider_base_url(
     found = aconfig.llm_provider_base_url
 
     assert found == expected
+
+
+def test_agentconfig_llm_provider_kw_vllm_w_default_base_url(
+    installation_config,
+):
+    """A vLLM URL from the environment is suffixed like any other.
+
+    'VLLMProvider' would otherwise read 'VLLM_BASE_URL' from the process
+    environment itself and use it verbatim -- so a URL written the way
+    the documentation says to write it, without '/v1', would reach vLLM
+    without it.
+    """
+    ic_environ = {"VLLM_BASE_URL": VLLM_BASE_URL}
+    installation_config.get_environment = ic_environ.get
+    installation_config.interpolate_environment = lambda value: value
+
+    aconfig = config_agents.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        provider_type=config_agents.LLMProviderType.VLLM,
+        _installation_config=installation_config,
+    )
+
+    assert aconfig.llm_provider_kw == {"base_url": f"{VLLM_BASE_URL}/v1"}
 
 
 @pytest.mark.parametrize("has_pk", [False, True])

@@ -42,11 +42,6 @@ GUIDELINES:
 
 
 def get_quiz_judge_agent(quiz: config_quizzes.QuizConfig):
-    # Build the judge's model the way every other agent's is built,
-    # rather than picking a provider here.  Selecting one by hand meant
-    # every provider this function did not name fell through to Ollama,
-    # and that the judge's 'model_settings' -- where its reasoning
-    # control belongs (#1338) -- never reached the model at all.
     model = config_agents.get_model_from_config(
         agent_config=quiz.judge_agent,
     )
