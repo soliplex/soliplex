@@ -794,6 +794,32 @@ async def test_post_login_system_confirm_cancel(
     )
 
 
+@pytest.mark.parametrize(
+    "return_to, exp_url",
+    [
+        ("/", "/#?a=1&b=two"),
+        ("/path", "/path#?a=1&b=two"),
+        ("/path?q=x", "/path?q=x#?a=1&b=two"),
+        ("/#", "/#?a=1&b=two"),
+        ("/#/auth/callback", "/#/auth/callback?a=1&b=two"),
+        ("/?q=x#/auth/callback", "/?q=x#/auth/callback?a=1&b=two"),
+        ("/#/auth/callback?", "/#/auth/callback?a=1&b=two"),
+        ("/#/auth/callback?c=3", "/#/auth/callback?c=3&a=1&b=two"),
+        ("/#/auth/callback?c=3&", "/#/auth/callback?c=3&a=1&b=two"),
+        (
+            "https://example.com/#/auth/callback",
+            "https://example.com/#/auth/callback?a=1&b=two",
+        ),
+    ],
+)
+def test__with_callback_params(return_to, exp_url):
+    params = {"a": "1", "b": "two"}
+
+    found = authn_views._with_callback_params(return_to, params)
+
+    assert found == exp_url
+
+
 TOKENDICT = {
     "access_token": "TOKEN",
     "refresh_token": "RTOKEN",
@@ -806,14 +832,14 @@ EXP_QS = "token=TOKEN&refresh_token=RTOKEN&expires_in=EXPIRES_IN"
 @pytest.mark.parametrize(
     "return_to, exp_location",
     [
-        pytest.param(DEFAULT_RETURN_TO, f"/?{EXP_QS}", id="default"),
-        pytest.param(OTHER_RETURN_TO, f"/another/path?{EXP_QS}", id="path"),
+        pytest.param(DEFAULT_RETURN_TO, f"/#?{EXP_QS}", id="default"),
+        pytest.param(OTHER_RETURN_TO, f"/another/path#?{EXP_QS}", id="path"),
         pytest.param(
-            "/#/authn/callback", f"/?{EXP_QS}#/authn/callback", id="hash"
+            "/#/authn/callback", f"/#/authn/callback?{EXP_QS}", id="hash"
         ),
         pytest.param(
             UNLISTED_RETURN_TO,
-            f"{UNLISTED_ORIGIN}/?{EXP_QS}#/auth/callback",
+            f"{UNLISTED_ORIGIN}/#/auth/callback?{EXP_QS}",
             id="absolute-w-hash",
         ),
     ],
