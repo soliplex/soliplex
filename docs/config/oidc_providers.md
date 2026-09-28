@@ -67,6 +67,11 @@ Relative paths are resolved against the directory holding `config.yaml`.
 
 - `client_id`: a string identifying the client to the provider.
 
+Soliplex always uses PKCE (`S256`) when it exchanges the authorization
+code, so the provider must accept a code challenge for this client.
+Providers which support PKCE without requiring it (e.g., Keycloak's
+default) need no extra configuration.
+
 ## Optional OIDC Provider Elements
 
 - `client_secret`: a string;  if not empty, should be in the form
