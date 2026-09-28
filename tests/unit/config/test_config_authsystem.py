@@ -244,23 +244,36 @@ def test_authsystem_server_metadata_url():
 @pytest.mark.parametrize(
     "w_config, exp_client_kwargs, exp_secret, w_marker",
     [
-        (BARE_AUTHSYSTEM_CONFIG_KW.copy(), {}, "", False),
+        (
+            BARE_AUTHSYSTEM_CONFIG_KW.copy(),
+            {"code_challenge_method": "S256"},
+            "",
+            False,
+        ),
         (
             W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW,
-            {},
+            {"code_challenge_method": "S256"},
             AUTHSYSTEM_CLIENT_SECRET_LIT,
             False,
         ),
         (
             W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW,
-            {},
+            {"code_challenge_method": "S256"},
             AUTHSYSTEM_CLIENT_SECRET_SECRET,
             True,
         ),
-        (W_SCOPE_AUTHSYSTEM_CONFIG_KW, {"scope": AUTHSYSTEM_SCOPE}, "", False),
+        (
+            W_SCOPE_AUTHSYSTEM_CONFIG_KW,
+            {"code_challenge_method": "S256", "scope": AUTHSYSTEM_SCOPE},
+            "",
+            False,
+        ),
         (
             W_OIDC_CPP_ABS_CONFIG_KW,
-            {"verify": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS},
+            {
+                "code_challenge_method": "S256",
+                "verify": AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS,
+            },
             "",
             False,
         ),
