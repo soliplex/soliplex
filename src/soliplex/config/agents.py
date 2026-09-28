@@ -95,6 +95,19 @@ class LLMProviderType(enum.StrEnum):
     VLLM = "vllm"
 
 
+#
+#   Providers whose base URL an installation may supply through its
+#   environment rather than per agent, and the name it supplies it
+#   under.  Both providers would otherwise read the *process*
+#   environment themselves, which bypasses the '/v1' suffixing in
+#   'llm_provider_kw' and leaves 'audit' reporting no URL at all.
+#
+_BASE_URL_ENV_VARS = {
+    LLMProviderType.OLLAMA: "OLLAMA_BASE_URL",
+    LLMProviderType.VLLM: "VLLM_BASE_URL",
+}
+
+
 def _apply_agent_config_template(
     config_dict,
     installation_config,
@@ -301,13 +314,13 @@ class AgentConfig:
         if ic is None:
             return self.provider_base_url
 
-        if (
-            self.provider_type == LLMProviderType.OLLAMA
-            and self.provider_base_url is None
-        ):
-            return ic.get_environment("OLLAMA_BASE_URL")
-        else:
-            return config_interp.resolve_field(self, "provider_base_url")
+        if self.provider_base_url is None:
+            env_var = _BASE_URL_ENV_VARS.get(self.provider_type)
+
+            if env_var is not None:
+                return ic.get_environment(env_var)
+
+        return config_interp.resolve_field(self, "provider_base_url")
 
     @property
     def llm_provider_kw(self) -> dict:

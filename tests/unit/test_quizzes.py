@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from pydantic_ai.models import google as google_models
 
 from soliplex import models
 from soliplex import quizzes
@@ -107,10 +108,7 @@ def test_get_quiz_judge_agent(
     get_model_from_config,
     a_quiz,
 ):
-    """The judge's model is built by the one function that knows how.
-
-    Which provider it is does not reach this code:  that is the point.
-    """
+    """The judge's model comes from 'get_model_from_config'."""
     found = quizzes.get_quiz_judge_agent(a_quiz)
 
     assert found is agent_klass.return_value
@@ -123,6 +121,37 @@ def test_get_quiz_judge_agent(
         output_type=models.QuizLLMJudgeResponse,
         system_prompt=quizzes.ANSWER_EQUIVALENCE_RUBRIC,
     )
+
+
+def test_get_quiz_judge_agent_builds_a_google_judge(
+    qa_question,
+    mc_question,
+    installation_config,
+    monkeypatch,
+):
+    """A 'google' judge is a 'GoogleModel', not an Ollama one.
+
+    Nothing mocked here: selecting the provider by hand sent every kind
+    but 'openai' to 'OllamaProvider', so only building the model for
+    real can tell the two apart.
+    """
+    monkeypatch.setenv("GEMINI_API_KEY", "testing")
+    judge_agent = config_agents.AgentConfig(
+        id="quiz-testing-judge",
+        model_name="gemini-2.5-flash",
+        provider_type=config_agents.LLMProviderType.GOOGLE,
+        _installation_config=installation_config,
+    )
+    quiz = config_quizzes.QuizConfig(
+        id="testing",
+        question_file="ignored.json",
+        judge_agent=judge_agent,
+        _installation_config=installation_config,
+    )
+
+    agent = quizzes.get_quiz_judge_agent(quiz)
+
+    assert isinstance(agent.model, google_models.GoogleModel)
 
 
 @pytest.mark.anyio

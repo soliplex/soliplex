@@ -99,9 +99,10 @@ agent:
   If not provided, and `provider_type` is set to `"openai"`, defaults to
   the default OpenAI service URL.
 
-  **Required** if `provider_type` is set to `"vllm"`, unless the
-  installation environment sets `VLLM_BASE_URL`.  A room configured
-  without either is reported as having no context window, and fails when
+  If not provided, and `provider_type` is set to `"vllm"`, defaults to
+  the value configured in the installation environment as
+  `VLLM_BASE_URL` -- the same arrangement `"ollama"` has above.  A room
+  with neither is reported as having no context window, and fails when
   a run starts.
 
   **Must not be set** if `provider_type` is set to `"google"`.
