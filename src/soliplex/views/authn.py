@@ -29,9 +29,27 @@ depend_the_unauth_logger = views.depend_the_unauth_logger
 depend_the_logger = views.depend_the_logger
 
 
+_DEFAULT_PORT_SUFFIXES = {"http": ":80", "https": ":443"}
+
+
+def _normalize_origin(scheme: str, netloc: str) -> tuple[str, str]:
+    """Lower-case 'netloc', dropping any default port for 'scheme'
+
+    A proxy may forward 'Host: example.com:443', which names the same
+    origin as 'https://example.com'.
+    """
+    netloc = netloc.lower()
+    default_port_suffix = _DEFAULT_PORT_SUFFIXES.get(scheme)
+
+    if default_port_suffix is not None:
+        netloc = netloc.removesuffix(default_port_suffix)
+
+    return scheme, netloc
+
+
 def _scheme_netloc(url: str) -> tuple[str, str]:
     scheme, netloc = urllib_parse.urlparse(url)[:2]
-    return scheme, netloc.lower()
+    return _normalize_origin(scheme, netloc)
 
 
 def _is_loopback(host: str) -> bool:
@@ -91,7 +109,7 @@ def _classify_return_to(
         return ReturnTo.MALFORMED
 
     trusted = {
-        (request.url.scheme, request.url.netloc.lower()),
+        _normalize_origin(request.url.scheme, request.url.netloc),
         *(_scheme_netloc(afo) for afo in allowed_frontend_origins),
     }
 

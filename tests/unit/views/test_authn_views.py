@@ -41,6 +41,12 @@ BENIGN_ALLOWED_URL = "https://benign.example.com"
         (REQUEST_URL, "http", "test.example.com"),
         (OTHER_ALLOWED_URL, "http", "other.example.com"),
         (BENIGN_ALLOWED_URL, "https", "benign.example.com"),
+        ("http://example.com:80", "http", "example.com"),
+        ("https://example.com:443", "https", "example.com"),
+        ("https://[::1]:443", "https", "[::1]"),
+        ("http://example.com:443", "http", "example.com:443"),
+        ("https://example.com:80", "https", "example.com:80"),
+        ("https://example.com:8443", "https", "example.com:8443"),
     ],
 )
 def test__scheme_netloc(url, exp_scheme, exp_netloc):
@@ -127,6 +133,64 @@ def test__classify_return_to(return_to, expected):
         OTHER_ALLOWED_URL,
         BENIGN_ALLOWED_URL,
     ]
+
+    found = authn_views._classify_return_to(
+        return_to,
+        request,
+        allowed_frontend_origins,
+    )
+
+    assert found is expected
+
+
+@pytest.mark.parametrize(
+    "request_url, return_to, allowed_frontend_origin, expected",
+    [
+        (
+            "https://example.com:443",
+            "https://example.com/#/auth/callback",
+            None,
+            _RT.TRUSTED,
+        ),
+        (
+            "https://example.com",
+            "https://example.com:443/#/auth/callback",
+            None,
+            _RT.TRUSTED,
+        ),
+        (
+            "http://example.com:80",
+            "http://example.com/",
+            None,
+            _RT.TRUSTED,
+        ),
+        (
+            "https://example.com:8443",
+            "https://example.com/",
+            None,
+            _RT.UNLISTED,
+        ),
+        (
+            REQUEST_URL,
+            "https://other.example.com/",
+            "https://other.example.com:443",
+            _RT.TRUSTED,
+        ),
+    ],
+)
+def test__classify_return_to_w_default_ports(
+    request_url,
+    return_to,
+    allowed_frontend_origin,
+    expected,
+):
+    request = mock.create_autospec(
+        fastapi.Request,
+        url=urllib_parse.urlparse(request_url),
+    )
+    allowed_frontend_origins = (
+        [allowed_frontend_origin] if allowed_frontend_origin else []
+    )
 
     found = authn_views._classify_return_to(
         return_to,
