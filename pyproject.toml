@@ -40,7 +40,7 @@ dependencies = [
     "pyasn1 >= 0.6.4",  # PYSEC-2026-3456
     "pydantic-ai-slim[google] >= 2.40.0, < 3.0",
     "pydantic-settings >= 2.14.2, < 2.15",  # GHSA-4xgf-cpjx-pc3j
-    "pyjwt >= 2.13.0, < 2.14",  # PYSEC-2026-{175,177,178,179}
+    "pyjwt >= 2.15.0, < 2.16",  # CVE-2026-102275
     "pymdown-extensions >= 11.0.0",  # CVE-2026-61632
     "python-keycloak",
     "skills-ref",
