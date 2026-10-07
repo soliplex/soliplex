@@ -995,9 +995,10 @@ wheels = [
 
 [[package]]
 name = "haiku-rag-slim"
-version = "0.93.0"
+version = "0.94.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "charset-normalizer" },
     { name = "docling-core" },
     { name = "fastmcp" },
     { name = "httpx" },
@@ -1019,9 +1020,9 @@ dependencies = [
     { name = "watchfiles" },
     { name = "zstandard", marker = "python_full_version < '3.14'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2c/6e/1d103d1915fb95db645be838db2a1d7540387bc0fb1d2fe4696e906f8344/haiku_rag_slim-0.93.0.tar.gz", hash = "sha256:4aae3fe0c68d99f8a9c77dba6cfd9085a362f4777d6033c289f2999a635fc25a", size = 308163, upload-time = "2026-10-06T13:42:45.461Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/75/0a34ef28e8aa9aec94af38c3ab0e734f1f4c4a1b8a331da1feb333ccd799/haiku_rag_slim-0.94.0.tar.gz", hash = "sha256:15c8f1f1e6ffc53780b71842b1a04facbf3aa092dcc08f8a5a1a5e512087ea18", size = 310457, upload-time = "2026-10-07T13:23:24.048Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/67/0a/a1819df21623e9d6192a1fa11728a5071db248dd86928b02b189b52f090c/haiku_rag_slim-0.93.0-py3-none-any.whl", hash = "sha256:dda744a5789d27aa952b381f670a8439c2d78432985d23cc9aa8d345471ec6e5", size = 395888, upload-time = "2026-10-06T13:42:43.643Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/cd/cd62d16005b51f61fb9a4995d5c1414f20a24fc5e1690a4b8ebf32abd2b8/haiku_rag_slim-0.94.0-py3-none-any.whl", hash = "sha256:6349587df5791332520cd5b8ae6044e20c840da50f676926c9b4df828793a6a1", size = 398367, upload-time = "2026-10-07T13:23:22.241Z" },
 ]
 
 [[package]]
@@ -3308,7 +3309,7 @@ requires-dist = [
     { name = "fastapi" },
     { name = "fastmcp", specifier = ">=4.0.2,<5.0" },
     { name = "greenlet" },
-    { name = "haiku-rag-slim", specifier = ">=0.93.0,<0.94" },
+    { name = "haiku-rag-slim", specifier = ">=0.94.0,<0.95" },
     { name = "idna", specifier = ">=3.15" },
     { name = "itsdangerous" },
     { name = "joserfc", specifier = ">=1.6.7,<1.7" },
