@@ -18,6 +18,7 @@ from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import google as google_providers
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
+from pydantic_ai.providers import vllm as vllm_providers
 
 from . import _utils
 from . import exceptions
@@ -91,6 +92,20 @@ class LLMProviderType(enum.StrEnum):
     OPENAI = "openai"
     OLLAMA = "ollama"
     GOOGLE = "google"
+    VLLM = "vllm"
+
+
+#
+#   Providers whose base URL an installation may supply through its
+#   environment rather than per agent, and the name it supplies it
+#   under.  Both providers would otherwise read the *process*
+#   environment themselves, which bypasses the '/v1' suffixing in
+#   'llm_provider_kw' and leaves 'audit' reporting no URL at all.
+#
+_BASE_URL_ENV_VARS = {
+    LLMProviderType.OLLAMA: "OLLAMA_BASE_URL",
+    LLMProviderType.VLLM: "VLLM_BASE_URL",
+}
 
 
 def _apply_agent_config_template(
@@ -299,13 +314,13 @@ class AgentConfig:
         if ic is None:
             return self.provider_base_url
 
-        if (
-            self.provider_type == LLMProviderType.OLLAMA
-            and self.provider_base_url is None
-        ):
-            return ic.get_environment("OLLAMA_BASE_URL")
-        else:
-            return config_interp.resolve_field(self, "provider_base_url")
+        if self.provider_base_url is None:
+            env_var = _BASE_URL_ENV_VARS.get(self.provider_type)
+
+            if env_var is not None:
+                return ic.get_environment(env_var)
+
+        return config_interp.resolve_field(self, "provider_base_url")
 
     @property
     def llm_provider_kw(self) -> dict:
@@ -568,6 +583,19 @@ def get_model_from_config(
             model_name=model_name,
             provider=provider,
             **_profile_kw(agent_config, openai_compat=True),
+            **model_settings_kw,
+        )
+
+    elif agent_config.provider_type == LLMProviderType.VLLM:
+        provider = vllm_providers.VLLMProvider(**provider_kw)
+        return openai_models.OpenAIChatModel(
+            model_name=model_name,
+            provider=provider,
+            # No '_OPENAI_COMPAT_PROFILE' here: the vLLM provider's own
+            # profile already sets that flag, and resolves the model
+            # family from the served name -- which is the whole reason
+            # to prefer it over 'openai' with a base URL.
+            **_profile_kw(agent_config, openai_compat=False),
             **model_settings_kw,
         )
 
