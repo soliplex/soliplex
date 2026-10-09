@@ -329,6 +329,22 @@ The per-question budgets and the sandbox's limits come from the room's
 `haiku.rag` configuration: `qa.max_searches`, `qa.max_executions`,
 `sandbox.code_timeout` and `sandbox.max_output_chars`.
 
+### AG-UI SSE Delivery
+
+- `agui_sse_delivery` (a mapping, optional); if set, replaces the
+  installation's `agui_sse_delivery` stanza, as a whole, for this room. If
+  neither is set, the room uses `strategy: "message"`. See
+  [Installation Configuration](installation.md#ag-ui-sse-delivery) for the
+  strategies and their bounds.
+
+E.g., to keep whole-message delivery in one room of an installation whose
+default is `bounded`:
+
+  ```yaml
+  agui_sse_delivery:
+    strategy: "message"
+  ```
+
 ### Quiz-related elements
 
 - `quizzes` is a list of mappings (default `()`):  each mapping defines a

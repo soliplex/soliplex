@@ -70,3 +70,53 @@ def test_room_config_roundtrips(
     )
 
     assert reloaded.as_yaml == original.as_yaml
+
+
+AGUI_SSE_DELIVERY_BLOCK = {
+    "strategy": "bounded",
+    "max_deltas": 8,
+    "max_bytes": 256,
+    "max_ms": 250,
+}
+
+
+def test_installation_config_roundtrips_w_agui_sse_delivery(
+    tmp_path,
+    os_env_with_ollama_base_url,
+):
+    original = config_installation.load_installation(MINIMAL_CONFIG)
+    dumped = original.as_yaml | {"agui_sse_delivery": AGUI_SSE_DELIVERY_BLOCK}
+    dumped_path = tmp_path / "installation.yaml"
+    dumped_path.write_text(yaml.safe_dump(dumped))
+
+    reloaded = config_installation.load_installation(dumped_path)
+
+    assert reloaded.as_yaml == dumped
+    for room_config in reloaded.room_configs.values():
+        assert "agui_sse_delivery" not in room_config.as_yaml
+        assert room_config.effective_agui_sse_delivery == (
+            reloaded.agui_sse_delivery
+        )
+
+
+@pytest.mark.parametrize("room_id", _minimal_room_ids())
+def test_room_config_roundtrips_w_agui_sse_delivery(
+    tmp_path,
+    minimal_installation,
+    room_id,
+):
+    original = minimal_installation.room_configs[room_id]
+    dumped = original.as_yaml | {"agui_sse_delivery": {"strategy": "message"}}
+    dumped_path = tmp_path / "room_config.yaml"
+    dumped_path.write_text(yaml.safe_dump(dumped))
+
+    reloaded = config_rooms.RoomConfig.from_yaml(
+        minimal_installation,
+        dumped_path,
+        yaml.safe_load(dumped_path.read_text()),
+    )
+
+    assert reloaded.as_yaml == dumped
+    assert reloaded.effective_agui_sse_delivery.as_yaml == {
+        "strategy": "message",
+    }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 
 import fastapi
@@ -26,6 +27,7 @@ from soliplex.agui import persistence as agui_persistence
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
+from soliplex.config import sse_delivery as config_sse_delivery
 from soliplex.views import streaming as streaming_views
 
 router = fastapi.APIRouter(tags=["rooms"])
@@ -715,14 +717,16 @@ async def init_agent_stream(
     *,
     agui_adapter: ai_ag_ui.AGUIAdapter,
     run_stream_kwargs: dict,
+    delivery: config_sse_delivery.AGUI_SSEDeliveryConfig,
     **drive_kwargs,
 ):
     w_final_state = agui.with_final_state(
         stream=agui_adapter.run_stream(**run_stream_kwargs),
         deps=run_stream_kwargs.get("deps"),
     )
-    compacted = agui.compact_event_stream(w_final_state)
-    await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
+    delivered = agui.apply_delivery_strategy(w_final_state, delivery)
+    async with contextlib.aclosing(delivered):
+        await drive_llm_stream(llm_stream=delivered, **drive_kwargs)
 
 
 def parse_last_event_id(header_value: str | None):
@@ -877,6 +881,11 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
+    room_config = await the_installation.get_room_config(
+        room_id=room_id,
+        user=the_user_claims,
+    )
+
     # We use an unbounded queue here, so that the 'drive_llm_stream'
     # task completes even when the SSE stream gets cancelled due to a
     # client disconnect, thereby permitting the client to see the
@@ -911,6 +920,7 @@ async def post_room_agui_thread_id_run_id(
             run_id=run_id,
             title_agent_config=title_agent_config,
             messages=agui_adapter.run_input.messages,
+            delivery=room_config.effective_agui_sse_delivery,
         )
     )
     bg_tasks.add(task)

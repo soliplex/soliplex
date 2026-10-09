@@ -10,6 +10,7 @@ from . import exceptions as config_exc
 from . import quizzes as config_quizzes
 from . import rag as config_rag
 from . import skills as config_skills
+from . import sse_delivery as config_sse_delivery
 from . import tools as config_tools
 
 if typing.TYPE_CHECKING:  # avoid an import cycle at runtime
@@ -60,6 +61,11 @@ class RoomConfig:
     # Skills options
     #
     skills: config_skills.RoomSkillsConfig = None
+
+    #
+    # AG-UI SSE delivery
+    #
+    agui_sse_delivery: config_sse_delivery.AGUI_SSEDeliveryConfig | None = None
 
     #
     # Quiz-specific options
@@ -124,6 +130,15 @@ class RoomConfig:
                         installation_config,
                         config_path,
                         skills_config_yaml,
+                    )
+                )
+
+            agui_sse_delivery = config_dict.pop("agui_sse_delivery", None)
+            if agui_sse_delivery is not None:
+                config_dict["agui_sse_delivery"] = (
+                    config_sse_delivery.AGUI_SSEDeliveryConfig.from_yaml(
+                        config_path,
+                        agui_sse_delivery,
                     )
                 )
 
@@ -197,7 +212,25 @@ class RoomConfig:
         if self.skills:
             result["skills"] = self.skills.as_yaml
 
+        if self.agui_sse_delivery is not None:
+            result["agui_sse_delivery"] = self.agui_sse_delivery.as_yaml
+
         return result
+
+    @property
+    def effective_agui_sse_delivery(
+        self,
+    ) -> config_sse_delivery.AGUI_SSEDeliveryConfig:
+        """The room's own block, else the installation's, else 'message'"""
+        if self.agui_sse_delivery is not None:
+            return self.agui_sse_delivery
+
+        if self._installation_config is not None:
+            installation_block = self._installation_config.agui_sse_delivery
+            if installation_block is not None:
+                return installation_block
+
+        return config_sse_delivery.DEFAULT_SSE_DELIVERY
 
     @property
     def sort_key(self):

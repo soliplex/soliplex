@@ -15,6 +15,7 @@ from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rag as config_rag
 from soliplex.config import rooms as config_rooms
 from soliplex.config import skills as config_skills
+from soliplex.config import sse_delivery as config_sse_delivery
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_quizzes as test_quizzes
@@ -72,6 +73,52 @@ W_NON_HR_SKILLS_ROOM_CONFIG_YAML = f"""\
 skills:
     installation_skill_names:
         - "{test_skills.SKILL_NAME}"
+"""
+
+
+SSE_MESSAGE = config_sse_delivery.AGUI_SSEDeliveryConfig(
+    strategy=config_sse_delivery.AGUI_SSEDeliveryStrategy.MESSAGE,
+)
+SSE_BOUNDED_8 = config_sse_delivery.AGUI_SSEDeliveryConfig(
+    strategy=config_sse_delivery.AGUI_SSEDeliveryStrategy.BOUNDED,
+    max_deltas=8,
+    max_bytes=256,
+    max_ms=250,
+)
+SSE_BOUNDED_16 = config_sse_delivery.AGUI_SSEDeliveryConfig(
+    strategy=config_sse_delivery.AGUI_SSEDeliveryStrategy.BOUNDED,
+    max_deltas=16,
+    max_bytes=512,
+    max_ms=500,
+)
+
+W_SSE_DELIVERY_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
+    "agui_sse_delivery": SSE_BOUNDED_8,
+}
+W_SSE_DELIVERY_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+agui_sse_delivery:
+    strategy: "bounded"
+    max_deltas: 8
+    max_bytes: 256
+    max_ms: 250
+"""
+
+W_INVALID_SSE_DELIVERY_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+agui_sse_delivery: {{}}
+"""
+
+W_NULL_SSE_DELIVERY_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+agui_sse_delivery: null
+"""
+
+W_INCOMPLETE_SSE_DELIVERY_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+agui_sse_delivery:
+    strategy: "bounded"
+    max_ms: 100
 """
 
 
@@ -295,6 +342,18 @@ NoRaise = contextlib.nullcontext()
             contextlib.nullcontext(W_NON_HR_TOOLS_ROOM_CONFIG_KW),
         ),
         (
+            W_SSE_DELIVERY_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(W_SSE_DELIVERY_ROOM_CONFIG_KW),
+        ),
+        (
+            W_INVALID_SSE_DELIVERY_ROOM_CONFIG_YAML,
+            pytest.raises(config_exc.FromYamlException),
+        ),
+        (
+            W_NULL_SSE_DELIVERY_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(BARE_ROOM_CONFIG_KW),
+        ),
+        (
             FULL_ROOM_CONFIG_YAML,
             contextlib.nullcontext(FULL_ROOM_CONFIG_KW),
         ),
@@ -395,6 +454,7 @@ def test_roomconfig_from_yaml(
         W_NON_HR_SKILLS_ROOM_CONFIG_KW.copy(),
         W_HR_SKILLS_ROOM_CONFIG_KW.copy(),
         W_NON_HR_TOOLS_ROOM_CONFIG_KW.copy(),
+        W_SSE_DELIVERY_ROOM_CONFIG_KW.copy(),
         FULL_ROOM_CONFIG_KW.copy(),
     ],
 )
@@ -452,6 +512,9 @@ def test_roomconfig_as_yaml(temp_dir, installation_config, w_kw):
     if inst.skills:
         expected["skills"] = inst.skills.as_yaml
 
+    if "agui_sse_delivery" in w_kw:
+        expected["agui_sse_delivery"] = w_kw["agui_sse_delivery"].as_yaml
+
     found = inst.as_yaml
 
     assert found == expected
@@ -486,6 +549,7 @@ def _round_trip_room_config(installation_config, config_path, config_dict):
         W_NON_HR_SKILLS_ROOM_CONFIG_YAML,
         W_HR_SKILLS_ROOM_CONFIG_YAML,
         W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
+        W_SSE_DELIVERY_ROOM_CONFIG_YAML,
     ],
 )
 def test_roomconfig_as_yaml_round_trips(
@@ -526,6 +590,81 @@ def test_roomconfig_as_yaml_round_trips_w_agent_agui_feature_names(
     )
 
     assert reloaded == original
+
+
+@pytest.mark.parametrize(
+    "installation_block, room_block, expected",
+    [
+        (None, None, config_sse_delivery.DEFAULT_SSE_DELIVERY),
+        (SSE_BOUNDED_8, None, SSE_BOUNDED_8),
+        (SSE_BOUNDED_8, SSE_MESSAGE, SSE_MESSAGE),
+        (SSE_BOUNDED_8, SSE_BOUNDED_16, SSE_BOUNDED_16),
+        (None, SSE_BOUNDED_16, SSE_BOUNDED_16),
+    ],
+)
+def test_roomconfig_effective_agui_sse_delivery(
+    installation_config,
+    installation_block,
+    room_block,
+    expected,
+):
+    installation_config.agui_sse_delivery = installation_block
+    room_config = config_rooms.RoomConfig(
+        **BARE_ROOM_CONFIG_KW,
+        agui_sse_delivery=room_block,
+        _installation_config=installation_config,
+    )
+
+    assert room_config.effective_agui_sse_delivery == expected
+
+
+@pytest.mark.parametrize("room_block", [None, SSE_BOUNDED_16])
+def test_roomconfig_effective_agui_sse_delivery_wo_installation_config(
+    room_block,
+):
+    room_config = config_rooms.RoomConfig(
+        **BARE_ROOM_CONFIG_KW,
+        agui_sse_delivery=room_block,
+    )
+
+    expected = room_block or config_sse_delivery.DEFAULT_SSE_DELIVERY
+    assert room_config.effective_agui_sse_delivery == expected
+
+
+def test_roomconfig_from_yaml_incomplete_block_not_completed_by_installation(
+    installation_config,
+    temp_dir,
+):
+    installation_config.agui_sse_delivery = SSE_BOUNDED_8
+    yaml_file = temp_dir / "test.yaml"
+
+    with pytest.raises(config_exc.FromYamlException) as exc_info:
+        config_rooms.RoomConfig.from_yaml(
+            installation_config,
+            yaml_file,
+            yaml.safe_load(W_INCOMPLETE_SSE_DELIVERY_ROOM_CONFIG_YAML),
+        )
+
+    cause = exc_info.value.__cause__
+    assert isinstance(cause, config_sse_delivery.InvalidSSEDeliveryConfig)
+    assert "'max_deltas' is required" in str(cause)
+
+
+def test_roomconfig_as_yaml_round_trip_keeps_inherited_sse_delivery(
+    installation_config,
+    temp_dir,
+):
+    installation_config.agui_sse_delivery = SSE_BOUNDED_8
+
+    original, reloaded = _round_trip_room_config(
+        installation_config,
+        temp_dir / "test.yaml",
+        yaml.safe_load(BARE_ROOM_CONFIG_YAML),
+    )
+
+    assert "agui_sse_delivery" not in original.as_yaml
+    assert reloaded.agui_sse_delivery is None
+    assert reloaded.effective_agui_sse_delivery == SSE_BOUNDED_8
 
 
 @pytest.mark.parametrize("w_order", [False, True])
