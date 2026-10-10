@@ -1,0 +1,120 @@
+name: Build & publish soliplex container images
+# Publishes the 'soliplex' and 'tui' targets of the 'Dockerfile' to
+# 'ghcr.io/<owner>/soliplex' and 'ghcr.io/<owner>/soliplex-tui' on each
+# published release (#1434).  See 'docs/docker.md'.
+#
+# * On a release, or a manual run: multi-arch images, pushed, tagged by
+#   'scripts/image_tags.py' from the project version.
+# * On a pull request touching the image's inputs: an amd64-only build,
+#   not pushed, so a broken 'Dockerfile' shows up before release day.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "scripts/image_tags.py"
+      - ".github/workflows/image.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PUSH: ${{ github.event_name != 'pull_request' }}
+      PLATFORMS: >-
+        ${{ github.event_name == 'pull_request'
+            && 'linux/amd64'
+            || 'linux/amd64,linux/arm64' }}
+    steps:
+      # Full history, for the released 'v*' tags which decide 'latest'.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      # Tag from the project version, as 'pypi.yaml' does, so image and PyPI
+      # versions agree even when the git tag name differs.
+      - name: Read the project version
+        id: version
+        run: echo "version=$(uv version --short)" >> "$GITHUB_OUTPUT"
+      - name: Compute the image tags
+        id: tags
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # shellcheck disable=SC2046  # one argument per tag
+          tags=$(uv run scripts/image_tags.py --version "$VERSION" \
+                   $(git tag --list 'v*'))
+          {
+            echo "tags<<EOF"
+            echo "$tags" | sed 's/^/type=raw,value=/'
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        if: env.PUSH == 'true'
+        uses: docker/setup-qemu-action@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Log in to ghcr.io
+        if: env.PUSH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata (soliplex)
+        id: meta-soliplex
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/soliplex
+          flavor: latest=false
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+      - name: Build & push soliplex
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: soliplex
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta-soliplex.outputs.tags }}
+          labels: ${{ steps.meta-soliplex.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 'tui' is 'FROM soliplex', so it reuses the layers just built.
+      - name: Image metadata (soliplex-tui)
+        id: meta-tui
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/soliplex-tui
+          flavor: latest=false
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=soliplex-tui
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+      - name: Build & push soliplex-tui
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: tui
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta-tui.outputs.tags }}
+          labels: ${{ steps.meta-tui.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

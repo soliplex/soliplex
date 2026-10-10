@@ -104,7 +104,7 @@ most users. To run Soliplex from a checkout of this repository instead, see:
 - [RAG Database](docs/rag.md) -- create and populate the LanceDB database the
   examples expect.
 - [Client Setup](docs/client.md) -- run the Flutter web client.
-- [Docker Deployment](docs/docker.md) -- run the full stack with Docker Compose.
+- [Docker Deployment](docs/docker.md) -- extend the published container images.
 
 ## Documentation
 
