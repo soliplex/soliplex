@@ -13,7 +13,7 @@ and question answering.
 5. **[Server Setup](server/index.md)** - Set up the FastAPI backend server
 6. **[Client Setup](client.md)** - Configure the Flutter web client
 7. **[Terminal UI (TUI)](tui.md)** - Interact with rooms from the command line
-8. **[Docker Deployment](docker.md)** - Run Soliplex with Docker and Docker Compose
+8. **[Docker Deployment](docker.md)** - Extend the published container images
 9. **[Usage Guide](usage.md)** - Start using the system
 
 ## What is Soliplex?
