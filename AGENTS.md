@@ -196,6 +196,9 @@ Key files:
 - `src/soliplex/main.py` -- FastAPI app factory
 - `example/installation.yaml` -- full config example
 - `example/minimal.yaml` -- minimal config for development
+- `Dockerfile` -- release images (`soliplex` / `tui` targets), pushed to
+  `ghcr.io` by `.github/workflows/image.yaml` with tags from
+  `scripts/image_tags.py`; see `docs/docker.md`
 - `.env.example` -- environment variable reference
 
 ## Configuration System

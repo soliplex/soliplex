@@ -605,6 +605,18 @@ workflow action, defined in `.github/workflows/pypi.yaml`. This workflow
 is triggered by publishing a GitHub release, typically from a pre-existing
 signed tag.
 
+The same release also triggers `.github/workflows/image.yaml`, which pushes
+the `soliplex` and `soliplex-tui` container images to `ghcr.io` (see
+[docs/docker.md](docs/docker.md)). It tags them from the project version
+via `scripts/image_tags.py`. Moving `latest` happens only when no released
+`v*` tag names a higher version. Both workflows can also be run by hand
+(`workflow_dispatch`). The image workflow is safe to re-run on its own, for
+instance after a failed image build, since it does not touch PyPI.
+
+The `GITHUB_TOKEN` which pushes the images cannot change their visibility.
+After the first push of each image, an org admin must make its GHCR package
+public, once.
+
 ### Minor releases
 
 Minor releases typically indicate new features (a la <https://semver.org>).
