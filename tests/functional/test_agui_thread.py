@@ -226,3 +226,47 @@ def test_sse_resume_with_last_event_id(client_no_llm):
     client_no_llm.delete(
         f"/api/v1/rooms/{room_id}/agui/{thread_id}",
     )
+
+
+def test_post_rooms_roomid_agui_threadid_w_parent_run_id(client_no_llm):
+    """A new run may name an existing run of the thread as its parent."""
+    room_id = "faux"
+
+    response = client_no_llm.post(f"/api/v1/rooms/{room_id}/agui", json={})
+    assert response.status_code == 200
+    thread_id = response.json()["thread_id"]
+    (parent_run_id,) = response.json()["runs"]
+
+    response = client_no_llm.post(
+        f"/api/v1/rooms/{room_id}/agui/{thread_id}",
+        json={"parent_run_id": parent_run_id},
+    )
+
+    assert response.status_code == 200
+    child_run = response.json()
+    assert child_run["parent_run_id"] == parent_run_id
+    assert child_run["run_id"] != parent_run_id
+
+    # The parent is persisted, not just echoed from the request.
+    response = client_no_llm.get(
+        f"/api/v1/rooms/{room_id}/agui/{thread_id}/{child_run['run_id']}",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["parent_run_id"] == parent_run_id
+
+    response = client_no_llm.get(
+        f"/api/v1/rooms/{room_id}/agui/{thread_id}",
+    )
+
+    assert response.status_code == 200
+    runs = response.json()["runs"]
+    assert runs[child_run["run_id"]]["parent_run_id"] == parent_run_id
+    assert runs[parent_run_id]["parent_run_id"] is None
+
+    response = client_no_llm.post(
+        f"/api/v1/rooms/{room_id}/agui/{thread_id}",
+        json={"parent_run_id": str(uuid.uuid4())},
+    )
+
+    assert response.status_code == 400

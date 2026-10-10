@@ -598,6 +598,10 @@ async def test_get_room_agui_thread_id_only(
     else:
         test_run.parent_run_id = None
 
+    # The view loads 'parent' before reading 'parent_run_id':  a lazy load
+    # on the real (async) model raises 'MissingGreenlet'.
+    test_run.awaitable_attrs.parent = _awaitable("parent", None)
+
     # Each listed run carries its usage, so a client opening a thread
     # can show the latest measured context without a second request.
     test_run.awaitable_attrs.run_usage = _awaitable(
@@ -656,6 +660,7 @@ async def test_get_room_agui_thread_id_only(
         await test_run.awaitable_attrs.thread
         await test_run.awaitable_attrs.run_agent_input
         await test_run.awaitable_attrs.run_metadata
+        await test_run.awaitable_attrs.parent
         await test_run.awaitable_attrs.run_usage
 
     the_threads.get_thread.assert_called_once_with(
@@ -736,6 +741,10 @@ async def test_get_room_agui_thread_id_run_id(
     else:
         test_run.parent_run_id = None
 
+    # The view loads 'parent' before reading 'parent_run_id':  a lazy load
+    # on the real (async) model raises 'MissingGreenlet'.
+    test_run.awaitable_attrs.parent = _awaitable("parent", None)
+
     test_run.awaitable_attrs.run_usage = _awaitable(
         "run_usage", _run_usage(w_usage)
     )
@@ -772,6 +781,11 @@ async def test_get_room_agui_thread_id_run_id(
 
         assert found.events == w_events
 
+        if w_parent:
+            assert found.parent_run_id == TEST_PARENT_RUN_ID_UUID
+        else:
+            assert found.parent_run_id is None
+
         if w_run_meta:
             assert found.metadata.label == TEST_RUN_LABEL
         else:
@@ -780,6 +794,7 @@ async def test_get_room_agui_thread_id_run_id(
     else:  # silence resource warnings
         await test_run.awaitable_attrs.run_agent_input
         await test_run.awaitable_attrs.run_metadata
+        await test_run.awaitable_attrs.parent
         await test_run.awaitable_attrs.run_usage
         await test_run.awaitable_attrs.thread
 
@@ -1019,7 +1034,8 @@ async def test_post_room_agui_thread_id_only(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_STR,
             run_metadata=run_meta_kw,
-            parent_run_id=w_parent_id,
+            # Persistence compares run IDs as strings.
+            parent_run_id=str(w_parent_id) if w_parent_id else None,
         )
 
     cuir.assert_called_once_with(
