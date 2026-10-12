@@ -1,0 +1,146 @@
+name: Build & publish soliplex container images
+# Publishes the 'soliplex', 'soliplex-postgres' and 'soliplex-tui' targets
+# of the 'Dockerfile' to 'ghcr.io/<owner>/<target>' (#1439).  See
+# 'docs/docker.md'.
+#
+# Each image installs the release's own wheel, taken from:
+#
+# * a release:  the 'wheel-artifact' which 'pypi.yaml' built and uploaded
+#   to PyPI, passed in when it calls this workflow;
+# * a manual run (e.g. to re-push after a failed image build):  PyPI;
+# * a manual 'dry-run' (e.g. to try a 'Dockerfile' change on a branch):  a
+#   fresh 'uv build', for an amd64-only check which pushes nothing.
+#
+# Deliberately not run on pull requests:  the builds take far too long to
+# gate one.
+on:
+  workflow_call:
+    inputs:
+      wheel-artifact:
+        description: "Name of the artifact holding the release's wheel"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Build the checkout's wheel and smoke-test; push nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [soliplex, soliplex-postgres, soliplex-tui]
+    env:
+      PUSH: ${{ !inputs.dry-run }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.target }}
+    steps:
+      # Full history, for the released 'v*' tags which decide 'latest'.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      # Tag from the project version, as 'pypi.yaml' does, so image and PyPI
+      # versions agree even when the git tag name differs.
+      - name: Read the project version
+        id: version
+        run: echo "version=$(uv version --short)" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the release's wheel (release)
+        if: inputs.wheel-artifact != ''
+        uses: actions/download-artifact@v6
+        with:
+          name: ${{ inputs.wheel-artifact }}
+          path: dist
+      - name: Fetch the release's wheel (manual run)
+        if: inputs.wheel-artifact == '' && !inputs.dry-run
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          uvx pip download --no-deps --only-binary :all: \
+            --dest dist "soliplex==$VERSION"
+      - name: Build the wheel (dry run)
+        if: inputs.dry-run
+        run: uv build --wheel
+      - name: Export the locked requirements
+        run: |
+          uv export --frozen --no-dev --extra postgres --group tui \
+            --no-emit-project --no-hashes -o dist/constraints.txt
+          uv export --frozen --only-group tui \
+            --no-emit-project --no-hashes -o dist/tui.txt
+          ls -l dist
+
+      - name: Compute the image tags
+        id: tags
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # shellcheck disable=SC2046  # one argument per tag
+          tags=$(uv run scripts/image_tags.py --version "$VERSION" \
+                   $(git tag --list 'v*'))
+          {
+            echo "tags<<EOF"
+            echo "$tags" | sed 's/^/type=raw,value=/'
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=false
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.target }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Set up QEMU
+        if: env.PUSH == 'true'
+        uses: docker/setup-qemu-action@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Check the image runs before anything is pushed.
+      - name: Build (amd64, for the smoke test)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          load: true
+          tags: smoke/${{ matrix.target }}:test
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+      - name: Smoke test
+        run: scripts/smoke_image.sh "${{ matrix.target }}" "smoke/${{ matrix.target }}:test"
+
+      - name: Log in to ghcr.io
+        if: env.PUSH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push (amd64, arm64)
+        if: env.PUSH == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}

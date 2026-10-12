@@ -196,6 +196,11 @@ Key files:
 - `src/soliplex/main.py` -- FastAPI app factory
 - `example/installation.yaml` -- full config example
 - `example/minimal.yaml` -- minimal config for development
+- `Dockerfile` -- release images (`soliplex`, `soliplex-postgres`,
+  `soliplex-tui` targets) installing the release wheel; pushed to `ghcr.io`
+  by `.github/workflows/image.yaml` (called from `pypi.yaml`) with tags from
+  `scripts/image_tags.py`, after `scripts/smoke_image.sh` passes; see
+  `docs/docker.md`
 - `.env.example` -- environment variable reference
 
 ## Configuration System
