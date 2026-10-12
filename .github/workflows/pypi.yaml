@@ -28,8 +28,25 @@ jobs:
         run: echo "version=$(uv version --short)" >> "$GITHUB_OUTPUT"
       - name: Build soliplex
         run: uv build --sdist --wheel
+      # The images install this very wheel (#1439).
+      - name: Keep the distributions for the image build
+        uses: actions/upload-artifact@v6
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
       - name: Publish soliplex
         run: uv publish --token ${{ secrets.PYPI_API_TOKEN }}
+
+  # Push the container images once the wheel they install is on PyPI.
+  image:
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yaml
+    with:
+      wheel-artifact: dist
 
   # Announce the release once the distribution is actually on PyPI, so the
   # link in the message always resolves (#1041). `workflow_dispatch` runs

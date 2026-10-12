@@ -605,6 +605,26 @@ workflow action, defined in `.github/workflows/pypi.yaml`. This workflow
 is triggered by publishing a GitHub release, typically from a pre-existing
 signed tag.
 
+Once the upload succeeds, the same workflow calls
+`.github/workflows/image.yaml`, which builds the `soliplex`,
+`soliplex-postgres` and `soliplex-tui` container images from the wheel
+just uploaded, smoke-tests each with `scripts/smoke_image.sh`, and pushes
+them to `ghcr.io` (see [docs/docker.md](docs/docker.md)). It tags them from
+the project version via `scripts/image_tags.py`. Moving `latest` happens
+only when no released `v*` tag names a higher version.
+
+`image.yaml` can also be run by hand (`workflow_dispatch`) from the
+release tag, for instance after a failed image build: it then fetches that
+version's wheel from PyPI, and does not touch PyPI otherwise. With
+`dry-run` checked, a manual run on any branch instead builds that branch's
+wheel and smoke-tests the amd64 images, pushing nothing: use it to try a
+`Dockerfile` change before release day. The workflow deliberately does not
+run on pull requests, as the image builds take far too long to gate one.
+
+The `GITHUB_TOKEN` which pushes the images cannot change their visibility.
+After the first push of each image, an org admin must make its GHCR package
+public, once.
+
 ### Minor releases
 
 Minor releases typically indicate new features (a la <https://semver.org>).

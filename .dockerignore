@@ -1,48 +1,6 @@
-# Version control
-.git
-.gitignore
-.gitleaks.toml
-.pre-commit-config.yaml
-
-# Python artifacts
-__pycache__
-*.pyc
-*.pyo
-*.egg-info
-.venv
-venv
-build
-dist
-.coverage
-.pytest_cache
-.ruff_cache
-
-# Environment and secrets
-.env
-.env.*
-!.env.example
-
-# Runtime data (bind-mounted, not baked in)
-db
-uploads
-sandbox/workdirs
-
-# Documentation and metadata
-docs
-site
-mkdocs.yml
-*.md
-LICENSE
-schemas
-
-# IDE and OS
-.DS_Store
-._*
-.claude
-nul
-
-# CI
-.github
-
-# Tests (not needed in production image)
-tests
+# The images install the release wheel and the requirements exported from
+# 'uv.lock' (see 'Dockerfile'), never the checkout:  send only those.
+*
+!dist/*.whl
+!dist/constraints.txt
+!dist/tui.txt
