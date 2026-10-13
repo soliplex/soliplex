@@ -22,6 +22,7 @@ class ReloadOption(enum.StrEnum):
     CONFIG = "config"
     PYTHON = "python"
     BOTH = "both"
+    EXPLICIT = "explicit"
 
 
 class LogLevelOption(enum.StrEnum):

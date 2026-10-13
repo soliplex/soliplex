@@ -165,20 +165,11 @@ def test_serve_reload_both_directory_factory(patched_serve, tmp_path):
     serve.serve(**kwargs)
 
     patched_serve.create_app.assert_not_called()
-    assert os.environ["_SOLIPLEX_INSTALLATION_PATH"] == str(tmp_path)
-    assert "_SOLIPLEX_NO_AUTH_MODE" not in os.environ
-    assert "_SOLIPLEX_LOG_CONFIG_FILE" not in os.environ
-    assert "_SOLIPLEX_INSECURE_SESSION_COOKIE" not in os.environ
 
     args, call_kwargs = patched_serve.uvicorn_run.call_args
-    assert args == ("soliplex.main:create_app_from_environment",)
-    assert call_kwargs["factory"] is True
     assert call_kwargs["reload"] is serve.ReloadOption.BOTH
     assert str(tmp_path) in call_kwargs["reload_dirs"]
     assert call_kwargs["reload_includes"] == ["*.yaml", "*.yml", "*.txt"]
-    assert call_kwargs["host"] == serve.DEFAULT_HOST
-    assert call_kwargs["port"] == serve.DEFAULT_PORT
-    assert call_kwargs["ws"] == serve.WEBSOCKETS_SANSIO
 
 
 def test_serve_reload_config_file_watches_parent_dir(patched_serve, tmp_path):
@@ -194,6 +185,37 @@ def test_serve_reload_config_file_watches_parent_dir(patched_serve, tmp_path):
     assert call_kwargs["reload"] is serve.ReloadOption.CONFIG
     assert call_kwargs["reload_dirs"] == [str(tmp_path)]
     assert call_kwargs["reload_includes"] == ["*.yaml", "*.yml", "*.txt"]
+
+
+def test_serve_reload_explicit_adds_no_dirs(patched_serve, tmp_path):
+    # 'EXPLICIT': only directly-passed 'reload_dirs' are watched.
+    RELOAD_DIRS = [
+        tmp_path / "foo",
+        tmp_path / "bar",
+    ]
+    kwargs = _serve_kwargs(
+        tmp_path,
+        reload=serve.ReloadOption.EXPLICIT,
+        reload_dirs=RELOAD_DIRS,
+    )
+
+    serve.serve(**kwargs)
+
+    patched_serve.create_app.assert_not_called()
+    assert os.environ["_SOLIPLEX_INSTALLATION_PATH"] == str(tmp_path)
+    assert "_SOLIPLEX_NO_AUTH_MODE" not in os.environ
+    assert "_SOLIPLEX_LOG_CONFIG_FILE" not in os.environ
+    assert "_SOLIPLEX_INSECURE_SESSION_COOKIE" not in os.environ
+
+    args, call_kwargs = patched_serve.uvicorn_run.call_args
+    assert args == ("soliplex.main:create_app_from_environment",)
+    assert call_kwargs["factory"] is True
+    assert call_kwargs["reload"] is serve.ReloadOption.EXPLICIT
+    assert call_kwargs["reload_dirs"] == [str(r_dir) for r_dir in RELOAD_DIRS]
+    assert call_kwargs["reload_includes"] == []
+    assert call_kwargs["host"] == serve.DEFAULT_HOST
+    assert call_kwargs["port"] == serve.DEFAULT_PORT
+    assert call_kwargs["ws"] == serve.WEBSOCKETS_SANSIO
 
 
 def test_serve_workers_factory_with_all_options(patched_serve, tmp_path):

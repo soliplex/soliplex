@@ -62,9 +62,10 @@ soliplex-cli serve [OPTIONS] [INSTALLATION_CONFIG_PATH]
 
 ### Hot Reload Options
 
-- `-r {python,config,both}` / `--reload {python,config,both}` — enable
-  uvicorn's reloader, watching Python sources, YAML config, or both.
-  Not valid together with `--workers`.
+- `-r {python,config,both,explicit}` /
+  `--reload {python,config,both,explicit}` — enable
+  uvicorn's reloader, watching Python sources, YAML config, both, or only
+  explicit `--reload-dirs`.  Not valid together with `--workers`.
 
   When `--reload python` or `--reload both` is set, the `soliplex`
   package directories are added to the watch list automatically.
@@ -73,7 +74,11 @@ soliplex-cli serve [OPTIONS] [INSTALLATION_CONFIG_PATH]
   file's directory is added to the watch list automatically, and
   `*.yaml`, `*.yml`, `*.txt` are added to the include patterns.
 
+  When `--reload explicit` is set, only values passed via explicit
+  `--reload-dirs DIR` arguments are added to the watch list.
+
 - `--reload-dirs DIR` — additional directory to watch (repeatable).
+
 - `--reload-includes PATTERN` — additional file glob to include in the
   watch (repeatable).
 
