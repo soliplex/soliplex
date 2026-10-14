@@ -24,6 +24,7 @@ from soliplex.config import middleware as config_middleware
 from soliplex.config import routing as config_routing
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
+from soliplex.config import sse_delivery as config_sse_delivery
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_authsystem as test_authsystem
@@ -430,6 +431,29 @@ id: "{INSTALLATION_ID}"
 sandbox_config:
     environments_path: "{SANDBOX_ENVIRONMENTS_PATH}"
     workdirs_path: "{SANDBOX_WORKDIRS_PATH}"
+"""
+
+W_SSE_DELIVERY_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "agui_sse_delivery": config_sse_delivery.AGUI_SSEDeliveryConfig(
+        strategy=config_sse_delivery.AGUI_SSEDeliveryStrategy.BOUNDED,
+        max_deltas=8,
+        max_bytes=256,
+        max_ms=250,
+    ),
+}
+W_SSE_DELIVERY_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+agui_sse_delivery:
+    strategy: "bounded"
+    max_deltas: 8
+    max_bytes: 256
+    max_ms: 250
+"""
+
+W_NULL_SSE_DELIVERY_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+agui_sse_delivery: null
 """
 
 W_SANDBOX_TRANSCRIPTS_INSTALLATION_CONFIG_KW = {
@@ -2366,6 +2390,16 @@ def _marshal_iconfig_kw(iconfig_kw, config_path):
             no_depr_warning,
         ),
         (
+            W_SSE_DELIVERY_INSTALLATION_CONFIG_YAML,
+            W_SSE_DELIVERY_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
+        ),
+        (
+            W_NULL_SSE_DELIVERY_INSTALLATION_CONFIG_YAML,
+            BARE_INSTALLATION_CONFIG_KW.copy(),
+            no_depr_warning,
+        ),
+        (
             W_OIDC_PATHS_INSTALLATION_CONFIG_YAML,
             W_OIDC_PATHS_INSTALLATION_CONFIG_KW.copy(),
             no_depr_warning,
@@ -2827,6 +2861,17 @@ def _as_yaml_only_w_sandbox_config(config_path):
     )
 
 
+def _as_yaml_only_w_agui_sse_delivery(config_path):
+    agui_sse_delivery = W_SSE_DELIVERY_INSTALLATION_CONFIG_KW[
+        "agui_sse_delivery"
+    ]
+
+    return (
+        {"agui_sse_delivery": agui_sse_delivery},
+        {"agui_sse_delivery": agui_sse_delivery.as_yaml},
+    )
+
+
 def _as_yaml_only_w_title_agent_config_id(config_path):
     return (
         {"title_agent_config_id": AS_YAML_ONLY_TITLE_AGENT_CONFIG_ID},
@@ -2941,6 +2986,7 @@ AS_YAML_ONLY_STANZA_CASES = (
     _as_yaml_only_w_skill_configs,
     _as_yaml_only_w_upload_paths,
     _as_yaml_only_w_sandbox_config,
+    _as_yaml_only_w_agui_sse_delivery,
     _as_yaml_only_w_title_agent_config_id,
     _as_yaml_only_w_logfire_config,
     _as_yaml_only_w_app_router_operations,
@@ -3116,6 +3162,38 @@ def test_installationconfig_as_yaml_round_trips_sandbox_config(temp_dir):
     assert found.environments_path == expected.environments_path
     assert found.workdirs_path == expected.workdirs_path
     assert found.transcripts_path == expected.transcripts_path
+
+
+def test_installationconfig_as_yaml_round_trips_agui_sse_delivery(temp_dir):
+    original, reloaded = _round_trip_installation_config(
+        temp_dir / "installation.yaml",
+        yaml.safe_load(W_SSE_DELIVERY_INSTALLATION_CONFIG_YAML),
+    )
+
+    assert reloaded.agui_sse_delivery == original.agui_sse_delivery
+    assert (
+        original.agui_sse_delivery
+        == (W_SSE_DELIVERY_INSTALLATION_CONFIG_KW["agui_sse_delivery"])
+    )
+
+
+def test_installationconfig_from_yaml_w_invalid_agui_sse_delivery(temp_dir):
+    config_path = temp_dir / "installation.yaml"
+    config_dict = {
+        "id": INSTALLATION_ID,
+        "agui_sse_delivery": {"strategy": "message", "max_ms": 250},
+    }
+
+    with pytest.raises(config_exc.FromYamlException) as exc_info:
+        config_installation.InstallationConfig.from_yaml(
+            config_path,
+            config_dict,
+        )
+
+    assert isinstance(
+        exc_info.value.__cause__,
+        config_sse_delivery.InvalidSSEDeliveryConfig,
+    )
 
 
 def test_installationconfig_oidc_auth_system_configs_wo_existing():

@@ -1438,50 +1438,104 @@ IAS_RUN_FINISHED_EVENT = agui_core.RunFinishedEvent(
 )
 
 
+IAS_DRIVE_KWARGS = {
+    "sqla_engine": object(),
+    "user_name": USER_NAME,
+    "room_id": TEST_ROOM_ID,
+    "thread_id": TEST_THREAD_ID_STR,
+    "run_id": TEST_RUN_ID_STR,
+    "title_agent_config": None,
+    "messages": [],
+}
+
+
 # 'agui.with_final_state' owns which events get a snapshot (see
 # 'test_agui_package.test_with_final_state'):  here we check only that
-# 'init_agent_stream' wires it up, ahead of compaction, with the run's deps.
+# 'init_agent_stream' wires it up, ahead of the delivery strategy, with the
+# run's deps.
 @pytest.mark.asyncio
 @mock.patch("soliplex.views.agui.drive_llm_stream")
-@mock.patch("soliplex.agui.compact_event_stream")
-async def test_init_agent_stream_adds_final_state(ces, dls):
+@mock.patch("soliplex.agui.apply_delivery_strategy")
+async def test_init_agent_stream_adds_final_state(ads, dls):
     adapter = mock.MagicMock()
     deps = mock.Mock(state={"rag": {"citations": ["c1"]}})
     run_stream_kwargs = {"deps": deps, "on_complete": object()}
-    drive_kwargs = {
-        "sqla_engine": object(),
-        "event_queue": asyncio.Queue(),
-        "user_name": USER_NAME,
-        "room_id": TEST_ROOM_ID,
-        "thread_id": TEST_THREAD_ID_STR,
-        "run_id": TEST_RUN_ID_STR,
-        "title_agent_config": None,
-        "messages": [],
-    }
+    delivery = object()
+    drive_kwargs = IAS_DRIVE_KWARGS | {"event_queue": asyncio.Queue()}
+    found = []
 
     async def events():
         yield IAS_RUN_STARTED_EVENT
         yield IAS_RUN_FINISHED_EVENT
 
+    async def drive(*, llm_stream, **kwargs):
+        assert kwargs == drive_kwargs
+        found.extend([event async for event in llm_stream])
+
     adapter.run_stream.return_value = events()
-    ces.side_effect = lambda stream: stream
+    ads.side_effect = lambda stream, delivery: stream
+    dls.side_effect = drive
 
     await agui_views.init_agent_stream(
         agui_adapter=adapter,
         run_stream_kwargs=run_stream_kwargs,
+        delivery=delivery,
         **drive_kwargs,
     )
 
-    stream = dls.await_args.kwargs["llm_stream"]
-    found = [event async for event in stream]
-
     adapter.run_stream.assert_called_once_with(**run_stream_kwargs)
+    assert ads.call_args.args[1] is delivery
     assert [event.type for event in found] == [
         agui_core.EventType.RUN_STARTED,
         agui_core.EventType.STATE_SNAPSHOT,
         agui_core.EventType.RUN_FINISHED,
     ]
     assert found[1].snapshot == deps.state
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "drive_error",
+    [None, RuntimeError("driver failed"), asyncio.CancelledError()],
+)
+@mock.patch("soliplex.views.agui.drive_llm_stream")
+@mock.patch("soliplex.agui.apply_delivery_strategy")
+async def test_init_agent_stream_closes_delivered_stream(
+    ads,
+    dls,
+    drive_error,
+):
+    closed = []
+
+    async def delivered():
+        try:
+            yield IAS_RUN_STARTED_EVENT
+        finally:
+            closed.append(True)
+
+    async def drive(*, llm_stream, **kwargs):
+        await anext(llm_stream)
+        if drive_error is not None:
+            raise drive_error
+
+    ads.return_value = delivered()
+    dls.side_effect = drive
+
+    if drive_error is None:
+        expectation = contextlib.nullcontext()
+    else:
+        expectation = pytest.raises(type(drive_error))
+
+    with expectation:
+        await agui_views.init_agent_stream(
+            agui_adapter=mock.MagicMock(),
+            run_stream_kwargs={"deps": None},
+            delivery=object(),
+            **IAS_DRIVE_KWARGS,
+            event_queue=asyncio.Queue(),
+        )
+
+    assert closed == [True]
 
 
 @pytest.mark.asyncio
@@ -1685,6 +1739,14 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert ias_kwargs["run_id"] == TEST_RUN_ID_STR
         assert ias_kwargs["title_agent_config"] is exp_title_config
         assert ias_kwargs["messages"] is exp_adapter.run_input.messages
+        exp_room_config = the_installation.get_room_config.return_value
+        assert ias_kwargs["delivery"] is (
+            exp_room_config.effective_agui_sse_delivery
+        )
+        the_installation.get_room_config.assert_awaited_with(
+            room_id=TEST_ROOM_ID,
+            user=THE_USER_CLAIMS,
+        )
         # Verify run_stream_kwargs contains deps, conversation_id,
         # and on_complete
         rsk = ias_kwargs["run_stream_kwargs"]

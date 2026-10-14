@@ -111,6 +111,7 @@ filterwarnings = [
 ]
 markers = [
     "needs_llm: functest requiring an LLM",
+    "sse_timing: functest asserting loopback SSE delivery timing",
 ]
 
 [tool.coverage.run]

@@ -30,6 +30,7 @@ from . import rooms as config_rooms
 from . import routing as config_routing
 from . import secrets as config_secrets
 from . import skills as config_skills
+from . import sse_delivery as config_sse_delivery
 
 # from . import quizzes as config_quizzes
 # from . import rag as config_rag
@@ -687,6 +688,11 @@ class InstallationConfig:
     #
     sandbox_config: SandboxConfig | None = None
 
+    #
+    # AG-UI SSE delivery
+    #
+    agui_sse_delivery: config_sse_delivery.AGUI_SSEDeliveryConfig | None = None
+
     @property
     def sandbox_workdirs_path(self) -> pathlib.Path | None:
         if self.sandbox_config is None:
@@ -1074,6 +1080,15 @@ class InstallationConfig:
                     sandbox_config,
                 )
 
+            agui_sse_delivery = config_dict.pop("agui_sse_delivery", None)
+            if agui_sse_delivery is not None:
+                config_dict["agui_sse_delivery"] = (
+                    config_sse_delivery.AGUI_SSEDeliveryConfig.from_yaml(
+                        config_path,
+                        agui_sse_delivery,
+                    )
+                )
+
             logging_config_file = config_dict.pop("logging_config_file", None)
 
             if logging_config_file is not None:
@@ -1326,6 +1341,9 @@ class InstallationConfig:
 
         if self.sandbox_config:
             result["sandbox_config"] = self.sandbox_config.as_yaml
+
+        if self.agui_sse_delivery is not None:
+            result["agui_sse_delivery"] = self.agui_sse_delivery.as_yaml
 
         if self.title_agent_config_id is not None:
             result["title_agent_config_id"] = self.title_agent_config_id
