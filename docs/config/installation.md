@@ -438,6 +438,10 @@ The order of `room_paths` in this list controls which room configuration
 is used for any conflict on room ID:  rooms found earlier in the list
 "win" over later ones with the same ID.
 
+`soliplex-cli audit installation` reports such shadowed room configurations,
+but does not treat them as findings:  the search path mechanism is the
+documented way to override one or more of a shared set of configured rooms.
+
 By default, Soliplex loads room configurations found under the path './rooms',
 just as though we had configured:
 
@@ -452,6 +456,47 @@ To disable all rooms, list a single, "null" path, e.g.:
 room_paths:
    -
 ```
+
+### Reloading room configurations
+
+Soliplex loads room configurations when the server starts.  Python code
+running inside the server, e.g. an app router which writes a new room
+directory under one of the `room_paths`, can reload them without a
+restart:
+
+```python
+reloaded = await the_installation.reload_room_configs()
+```
+
+The reload:
+
+- re-reads only the room configurations:  `installation.yaml`, the
+  environment and secrets, completions, OIDC, and the rest of the
+  installation stay as they were at startup.
+
+- is all or nothing:  the new set of rooms replaces the old one only once
+  every room configuration has loaded.  If one fails to load, the error
+  propagates to the caller, and the rooms already loaded stay in place.
+
+- reads and parses the files in a worker thread, off the event loop.
+
+- takes effect on the next request:  room lookups read the current set
+  each time.
+
+- affects only the server process which runs it.  Under
+  `soliplex-cli serve --workers N`, each worker holds its own copy of the
+  rooms.
+
+It returns the IDs of the rooms it `added`, `removed`, and `changed`
+(a room is "changed" when its reloaded configuration differs from the one
+it replaced), each as a sorted tuple.
+
+MCP endpoints are not reloaded:  Soliplex builds the `/mcp/<room_id>`
+endpoints once, at startup, from the rooms configured then.  So a room
+which a reload adds with `allow_mcp: true` has no MCP endpoint until the
+server restarts.  Likewise, a room which a reload removes, or whose
+`allow_mcp` it turns off, keeps its MCP endpoint until then, and an MCP
+endpoint keeps serving the tools its room had at startup.
 
 ## Completion Configuration Paths
 
