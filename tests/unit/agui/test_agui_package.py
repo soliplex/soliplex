@@ -32,23 +32,30 @@ TEXT_CONTENT_1_ABC = agui_core.TextMessageContentEvent(
 )
 TEXT_END_1 = agui_core.TextMessageEndEvent(message_id=MESSAGE_ID_1)
 
-THINK_START = agui_core.ThinkingTextMessageStartEvent()
-THINK_CONTENT_A = agui_core.ThinkingTextMessageContentEvent(
+THINK_START = agui_core.ReasoningMessageStartEvent(
+    message_id="th", role="reasoning"
+)
+THINK_CONTENT_A = agui_core.ReasoningMessageContentEvent(
+    message_id="th",
     delta="A ",
 )
-THINK_CONTENT_B = agui_core.ThinkingTextMessageContentEvent(
+THINK_CONTENT_B = agui_core.ReasoningMessageContentEvent(
+    message_id="th",
     delta="B ",
 )
-THINK_CONTENT_C = agui_core.ThinkingTextMessageContentEvent(
+THINK_CONTENT_C = agui_core.ReasoningMessageContentEvent(
+    message_id="th",
     delta="C",
 )
-THINK_CONTENT_AB = agui_core.ThinkingTextMessageContentEvent(
+THINK_CONTENT_AB = agui_core.ReasoningMessageContentEvent(
+    message_id="th",
     delta="A B ",
 )
-THINK_CONTENT_ABC = agui_core.ThinkingTextMessageContentEvent(
+THINK_CONTENT_ABC = agui_core.ReasoningMessageContentEvent(
+    message_id="th",
     delta="A B C",
 )
-THINK_END = agui_core.ThinkingTextMessageEndEvent()
+THINK_END = agui_core.ReasoningMessageEndEvent(message_id="th")
 
 TOOL_CALL_ID = "test-tool-call-id"
 TOOL_CALL_NAME = "test_tool_call_name"

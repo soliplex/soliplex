@@ -83,18 +83,17 @@ TEXT_MESSAGE_CHUNK_EVENT = agui_core.TextMessageChunkEvent(
 THINKING_TEXT_MESSAGE_ID = str(uuid.uuid4())
 THINKING_TEXT_MESSAGE_DELTA = "delta - thinking"
 
-THINKING_TEXT_MESSAGE_START_EVENT = agui_core.ThinkingTextMessageStartEvent(
+THINKING_TEXT_MESSAGE_START_EVENT = agui_core.ReasoningMessageStartEvent(
+    role="reasoning",
     message_id=THINKING_TEXT_MESSAGE_ID,
 )
 
-THINKING_TEXT_MESSAGE_CONTENT_EVENT = (
-    agui_core.ThinkingTextMessageContentEvent(
-        message_id=THINKING_TEXT_MESSAGE_ID,
-        delta=THINKING_TEXT_MESSAGE_DELTA,
-    )
+THINKING_TEXT_MESSAGE_CONTENT_EVENT = agui_core.ReasoningMessageContentEvent(
+    message_id=THINKING_TEXT_MESSAGE_ID,
+    delta=THINKING_TEXT_MESSAGE_DELTA,
 )
 
-THINKING_TEXT_MESSAGE_END_EVENT = agui_core.ThinkingTextMessageEndEvent(
+THINKING_TEXT_MESSAGE_END_EVENT = agui_core.ReasoningMessageEndEvent(
     message_id=THINKING_TEXT_MESSAGE_ID,
 )
 
@@ -135,7 +134,7 @@ TOOL_CALL_RESULT_EVENT = agui_core.ToolCallResultEvent(
 )
 
 STATE_SNAPTSHOT = {"foo": "Bar", "baz": "Quz"}
-STATE_DELTA = {"baz": "Spam"}
+STATE_DELTA = {"op": "add", "path": "/baz", "value": "Spam"}
 STATE_SNAPSHOT_EVENT = agui_core.StateSnapshotEvent(
     snapshot=STATE_SNAPTSHOT,
 )

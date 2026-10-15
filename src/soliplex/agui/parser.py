@@ -21,16 +21,11 @@ AGUI_EVENT_CLASSES_BY_TYPE = {
     "TEXT_MESSAGE_CONTENT": agui_core.TextMessageContentEvent,
     "TEXT_MESSAGE_END": agui_core.TextMessageEndEvent,
     "TEXT_MESSAGE_CHUNK": agui_core.TextMessageChunkEvent,
-    "THINKING_TEXT_MESSAGE_START": agui_core.ThinkingTextMessageStartEvent,
-    "THINKING_TEXT_MESSAGE_CONTENT": agui_core.ThinkingTextMessageContentEvent,
-    "THINKING_TEXT_MESSAGE_END": agui_core.ThinkingTextMessageEndEvent,
     "TOOL_CALL_START": agui_core.ToolCallStartEvent,
     "TOOL_CALL_ARGS": agui_core.ToolCallArgsEvent,
     "TOOL_CALL_END": agui_core.ToolCallEndEvent,
     "TOOL_CALL_CHUNK": agui_core.ToolCallChunkEvent,
     "TOOL_CALL_RESULT": agui_core.ToolCallResultEvent,
-    "THINKING_START": agui_core.ThinkingStartEvent,
-    "THINKING_END": agui_core.ThinkingEndEvent,
     "STATE_SNAPSHOT": agui_core.StateSnapshotEvent,
     "STATE_DELTA": agui_core.StateDeltaEvent,
     "MESSAGES_SNAPSHOT": agui_core.MessagesSnapshotEvent,
@@ -211,9 +206,6 @@ DEFAULT_IGNORE_EVENTS: IgnorableEventTypes = frozenset(
         agui_core.EventType.REASONING_MESSAGE_END,
         agui_core.EventType.REASONING_MESSAGE_CHUNK,
         agui_core.EventType.REASONING_ENCRYPTED_VALUE,
-        agui_core.EventType.THINKING_TEXT_MESSAGE_START,
-        agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT,
-        agui_core.EventType.THINKING_TEXT_MESSAGE_END,
         agui_core.EventType.RAW,
         agui_core.EventType.CUSTOM,
     ]
@@ -494,7 +486,10 @@ class EventStreamParser:
                 self._assert_running(event)
 
                 try:
-                    new_state = jsonpatch.apply_patch(self.state, event.delta)
+                    new_state = jsonpatch.apply_patch(
+                        self.state,
+                        event.model_dump(mode="json", by_alias=True)["delta"],
+                    )
 
                 except (
                     jsonpatch.JsonPatchException,
@@ -538,7 +533,12 @@ class EventStreamParser:
                     message = agui_core.ActivityMessage(
                         id=event.message_id,
                         activity_type=event.activity_type,
-                        content=jsonpatch.apply_patch({}, event.patch),
+                        content=jsonpatch.apply_patch(
+                            {},
+                            event.model_dump(mode="json", by_alias=True)[
+                                "patch"
+                            ],
+                        ),
                     )
                     self._add_message(message)
 
@@ -546,7 +546,7 @@ class EventStreamParser:
                     message.activity_type = event.activity_type
                     new_state = jsonpatch.apply_patch(
                         message.content,
-                        event.patch,
+                        event.model_dump(mode="json", by_alias=True)["patch"],
                     )
                     message.content = new_state
 
@@ -564,7 +564,7 @@ class EventStreamParser:
                     self._add_message(message)
 
                 else:
-                    if not event.replace:
+                    if event.replace is False:
                         raise MessageAlreadyExists(event.message_id, event)
 
                     message.activity_type = event.activity_type

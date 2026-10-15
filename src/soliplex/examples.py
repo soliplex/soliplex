@@ -119,6 +119,7 @@ class _FauxRunResult:
 
     output: str
 
+    @property
     def usage(self) -> ai_usage.RunUsage:
         return ai_usage.RunUsage()
 
@@ -266,7 +267,9 @@ class FauxAgent:
             part=text_part,
         )
 
-        yield ai_run.AgentRunResultEvent(result=text_part.content)
+        yield ai_run.AgentRunResultEvent(
+            result=_FauxRunResult(output=text_part.content)
+        )
 
     def run_stream_events(
         self,

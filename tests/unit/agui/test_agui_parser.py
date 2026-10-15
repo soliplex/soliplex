@@ -1182,9 +1182,7 @@ def test_esp_call_w_activity_message_snapshot(
 @pytest.mark.parametrize(
     "event",
     [
-        agui_core.ThinkingTextMessageStartEvent(),
-        agui_core.ThinkingTextMessageContentEvent(delta=" "),
-        agui_core.ThinkingTextMessageEndEvent(),
+        agui_core.ReasoningMessageContentEvent(message_id="r", delta=" "),
         agui_core.RawEvent(event=object()),
         agui_core.CustomEvent(name="custom", value=object()),
     ],
@@ -1343,15 +1341,8 @@ def test_esp_as_run_agent_input_w_run_input(
         ({}, pytest.raises(agui_parser.InvalidJSONEvent)),
         ({"type": "bogus"}, pytest.raises(agui_parser.UnknownJSONEventType)),
         (
-            {"type": agui_core.EventType.THINKING_START},
-            no_error(agui_core.ThinkingStartEvent()),
-        ),
-        (
-            {
-                "type": agui_core.EventType.THINKING_START,
-                "title": "I'm Thinking",
-            },
-            no_error(agui_core.ThinkingStartEvent(title="I'm Thinking")),
+            {"type": agui_core.EventType.REASONING_START, "messageId": "r"},
+            no_error(agui_core.ReasoningStartEvent(message_id="r")),
         ),
     ],
 )
