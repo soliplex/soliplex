@@ -38,7 +38,7 @@ dependencies = [
     "jwcrypto",
     "logfire[fastapi]",
     "pyasn1 >= 0.6.4",  # PYSEC-2026-3456
-    "pydantic-ai-slim[google] >= 2.40.0, < 3.0",
+    "pydantic-ai-slim[google] >= 2.53.0, < 3.0",  # PYSEC-2026-4285
     "pydantic-settings >= 2.14.2, < 2.15",  # GHSA-4xgf-cpjx-pc3j
     "pyjwt >= 2.15.0, < 2.16",  # CVE-2026-102275
     "pymdown-extensions >= 11.0.0",  # CVE-2026-61632
