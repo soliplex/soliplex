@@ -53,6 +53,18 @@ _no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 
 
+# Callback for "shadowed room" probe passed to '_load_room_configs'
+ShadowedRoomCB = typing.Callable[[str, pathlib.Path, pathlib.Path], None]
+
+
+def _ignore_shadowed_room(
+    _room_id: str,
+    _kept: pathlib.Path,
+    _shadowed: pathlib.Path,
+):
+    pass
+
+
 class MissingEnvVar(ValueError):
     def __init__(self, env_var):
         self.env_var = env_var
@@ -1403,22 +1415,41 @@ class InstallationConfig:
 
         return self._oidc_auth_system_configs
 
-    def _load_room_configs(self) -> config_rooms.RoomConfigMap:
+    def _load_room_configs(
+        self,
+        _report_shadowed_room: ShadowedRoomCB = _ignore_shadowed_room,
+    ) -> config_rooms.RoomConfigMap:
+        """Load the room configs found under 'room_paths'
+
+        The order of 'room_paths' controls first-past-the-post for any
+        conflict on room ID:  a later config with the same ID is skipped,
+        unparsed.  That is the documented way to override a shared room, so
+        it is not an error.
+
+        Pass a '_report_shadowed_room' callback to be told of each
+        config skipped, as '(room_id, kept_path, skipped_path)'.
+        """
         room_configs = {}
+        kept_paths = {}
 
         for room_path in self.room_paths:
             for config_path, config_yaml in _find_room_configs(room_path):
-                # XXX  order of 'room_paths' controls first-past-the-post
-                #      for any conflict on room ID.
                 config_id = config_yaml["id"]
-                if config_id not in room_configs:
-                    room_configs[config_id] = (
-                        config_rooms.RoomConfig.from_yaml(
-                            self,
-                            config_path,
-                            config_yaml,
-                        )
+
+                if config_id in room_configs:
+                    _report_shadowed_room(
+                        config_id,
+                        kept_paths[config_id],
+                        config_path,
                     )
+                    continue
+
+                room_configs[config_id] = config_rooms.RoomConfig.from_yaml(
+                    self,
+                    config_path,
+                    config_yaml,
+                )
+                kept_paths[config_id] = config_path
 
         return room_configs
 

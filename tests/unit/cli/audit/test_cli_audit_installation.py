@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pathlib
 import warnings
 from unittest import mock
 
@@ -61,6 +62,28 @@ def test__config_warnings(w_records, exp_errors):
     found = audit_installation._config_warnings(w_records)
 
     assert found == exp_errors
+
+
+def test__shadowed_rooms(the_installation):
+    kept_path = pathlib.Path("local/foo/room_config.yaml")
+    skipped_path = pathlib.Path("shared/foo/room_config.yaml")
+
+    def _load_room_configs(_report_shadowed_room):
+        _report_shadowed_room("foo", kept_path, skipped_path)
+        return {}
+
+    i_config = the_installation._config
+    i_config._load_room_configs.side_effect = _load_room_configs
+
+    found = audit_installation._shadowed_rooms(the_installation)
+
+    assert found == [
+        {
+            "room_id": "foo",
+            "kept_path": str(kept_path),
+            "skipped_path": str(skipped_path),
+        },
+    ]
 
 
 # _audit_installation_section: ui only

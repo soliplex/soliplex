@@ -44,6 +44,30 @@ def _config_warnings(records) -> dict:
     return {}
 
 
+def _shadowed_rooms(the_installation: installation.Installation) -> list:
+    """Return an entry for each room config an earlier one shadows
+
+    Shadowing is the documented way to override a shared room, so these
+    are reported, but are not findings.
+    """
+    shadowed = []
+
+    def _report_shadowed_room(room_id, kept_path, skipped_path):
+        shadowed.append(
+            {
+                "room_id": room_id,
+                "kept_path": str(kept_path),
+                "skipped_path": str(skipped_path),
+            }
+        )
+
+    the_installation._config._load_room_configs(
+        _report_shadowed_room=_report_shadowed_room,
+    )
+
+    return shadowed
+
+
 def _audit_config_warnings(
     ctx: typer.Context,
     tc_print,
@@ -88,6 +112,12 @@ def _audit_installation_section(
         tc_print("OK")
 
     warning_errors = _audit_config_warnings(ctx, tc_print)
+
+    for shadowed in _shadowed_rooms(the_installation):
+        tc_print()
+        tc_print(f"NOTE: room '{shadowed['room_id']}' shadowed")
+        tc_print(f"  kept:    {shadowed['kept_path']}")
+        tc_print(f"  skipped: {shadowed['skipped_path']}")
 
     interpolation_errors = (
         audit_interpolation._invalid_installation_interpolations(

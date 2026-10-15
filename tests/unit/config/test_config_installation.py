@@ -3502,6 +3502,40 @@ def test_installationconfig_room_configs_wo_existing_w_conflict(temp_dir):
     assert found[test_rooms.ROOM_ID].name == "foo"
 
 
+def test_installationconfig__load_room_configs_w_report_shadowed_room(
+    temp_dir,
+):
+    ROOM_PATHS = ["./local", "./shared"]
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    kw["_config_path"] = temp_dir / "installation.yaml"
+    kw["environment"] = BARE_INSTALLATION_CONFIG_ENVIRONMENT
+    kw["room_paths"] = ROOM_PATHS
+    for room_path in ROOM_PATHS:
+        (temp_dir / room_path).mkdir()
+        _write_room_config(
+            temp_dir / room_path, "foo", _room_config_yaml("foo")
+        )
+    _write_room_config(temp_dir / "shared", "bar", _room_config_yaml("bar"))
+    i_config = config_installation.InstallationConfig(**kw)
+    reported = []
+
+    def _report_shadowed_room(room_id, kept_path, skipped_path):
+        reported.append((room_id, kept_path, skipped_path))
+
+    found = i_config._load_room_configs(
+        _report_shadowed_room=_report_shadowed_room,
+    )
+
+    assert sorted(found) == ["bar", "foo"]
+    assert reported == [
+        (
+            "foo",
+            temp_dir / "local" / "foo" / "room_config.yaml",
+            temp_dir / "shared" / "foo" / "room_config.yaml",
+        ),
+    ]
+
+
 def test_installationconfig_room_configs_w_existing():
     RC_1, RC_2 = object(), object()
     existing = {"room_1": RC_1, "room_2": RC_2}
