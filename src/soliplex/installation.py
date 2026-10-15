@@ -6,6 +6,7 @@ import sqlite3
 import warnings
 from logging import config as logging_config
 
+import anyio
 import fastapi
 import logfire
 import pydantic_ai
@@ -167,6 +168,38 @@ The '{stem}_dburi_{type_}' installation property is deprecated,
 and will be removed after soliplex v0.84 (configured in {config_path}).
 Use instead '{stem}_{type_}_dburi'.
 """
+
+
+@dataclasses.dataclass(frozen=True)
+class RoomConfigsReloaded:
+    """The room IDs a reload added, removed, or changed, each sorted
+
+    A room is 'changed' when its reloaded config compares unequal to the
+    one it replaced.
+    """
+
+    added: tuple[str, ...]
+    removed: tuple[str, ...]
+    changed: tuple[str, ...]
+
+    @classmethod
+    def between(
+        cls,
+        before: config_rooms.RoomConfigMap,
+        after: config_rooms.RoomConfigMap,
+    ) -> "RoomConfigsReloaded":
+        kept = before.keys() & after.keys()
+        return cls(
+            added=tuple(sorted(after.keys() - before.keys())),
+            removed=tuple(sorted(before.keys() - after.keys())),
+            changed=tuple(
+                sorted(
+                    room_id
+                    for room_id in kept
+                    if before[room_id] != after[room_id]
+                )
+            ),
+        )
 
 
 @dataclasses.dataclass
@@ -475,6 +508,21 @@ class Installation:
                 raise KeyError(room_id)
 
         return self._config.room_configs[room_id]
+
+    async def reload_room_configs(self) -> RoomConfigsReloaded:
+        """Reload the room configs, off the event loop
+
+        Reading and parsing the room configs is blocking file I/O, so it
+        runs in a worker thread.  As 'InstallationConfig.reload_room_configs'
+        does, a room config which fails to load raises, leaving the rooms
+        already loaded in place.
+        """
+        before = self._config.room_configs
+        after = await anyio.to_thread.run_sync(
+            self._config.reload_room_configs,
+        )
+
+        return RoomConfigsReloaded.between(before, after)
 
     async def get_completion_configs(
         self,

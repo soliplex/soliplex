@@ -2,6 +2,7 @@ import contextlib
 import dataclasses
 import logging
 import sqlite3
+import threading
 import warnings
 from unittest import mock
 
@@ -929,6 +930,67 @@ async def test_installation_get_room_config(
         )
 
         assert found is r_configs[w_room_id]
+
+
+def test_roomconfigsreloaded_between():
+    kept, old_changed, new_changed = object(), object(), object()
+    before = {
+        "kept": kept,
+        "changed": old_changed,
+        "removed": object(),
+        "also_removed": object(),
+    }
+    after = {
+        "kept": kept,
+        "changed": new_changed,
+        "added": object(),
+    }
+
+    found = installation.RoomConfigsReloaded.between(before, after)
+
+    assert found == installation.RoomConfigsReloaded(
+        added=("added",),
+        removed=("also_removed", "removed"),
+        changed=("changed",),
+    )
+
+
+@pytest.mark.anyio
+async def test_installation_reload_room_configs():
+    before = {"kept": object(), "removed": object()}
+    after = {"kept": before["kept"], "added": object()}
+    reloaded_in_threads = []
+
+    def _reload_room_configs():
+        reloaded_in_threads.append(threading.get_ident())
+        return after
+
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    i_config.room_configs = before
+    i_config.reload_room_configs.side_effect = _reload_room_configs
+    the_installation = installation.Installation(i_config)
+
+    found = await the_installation.reload_room_configs()
+
+    assert found == installation.RoomConfigsReloaded(
+        added=("added",),
+        removed=("removed",),
+        changed=(),
+    )
+    # The blocking reload ran off the event loop's thread
+    assert reloaded_in_threads != [threading.get_ident()]
+    assert len(reloaded_in_threads) == 1
+
+
+@pytest.mark.anyio
+async def test_installation_reload_room_configs_w_failure():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    i_config.room_configs = {"kept": object()}
+    i_config.reload_room_configs.side_effect = ValueError("broken room")
+    the_installation = installation.Installation(i_config)
+
+    with pytest.raises(ValueError, match="broken room"):
+        await the_installation.reload_room_configs()
 
 
 @pytest.mark.anyio
