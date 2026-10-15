@@ -1472,6 +1472,20 @@ class InstallationConfig:
         self._room_configs = self._load_room_configs()
         self._completion_configs = self._load_completion_configs()
 
+    def reload_room_configs(self) -> config_rooms.RoomConfigMap:
+        """Reload the room configs, and only those
+
+        The new map is built in full before it replaces the old one, so a
+        room config which fails to load raises, leaving the rooms already
+        loaded in place.
+
+        Returns a copy of the new map, as 'room_configs' does.
+        """
+        room_configs = self._load_room_configs()
+        self._room_configs = room_configs
+
+        return room_configs.copy()
+
 
 def load_installation(config_path: pathlib.Path) -> InstallationConfig:
     config_path = config_path.resolve()
