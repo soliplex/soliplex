@@ -200,6 +200,14 @@ Give `model_name` exactly as vLLM serves it (`--served-model-name`, which
 defaults to the model's Hugging Face repo id).  That string is what the
 model family is resolved from, so a renamed model loses its capabilities.
 
+A `thinking` entry in `model_settings` is sent to a self-hosted model --
+`"vllm"`, `"ollama"`, or `"openai"` with a `provider_base_url` -- as
+`reasoning_effort` (`false` as `"none"`, `true` as `"medium"`), whatever
+family the model resolves to.  Pydantic AI would otherwise discard it for
+any model whose family it does not mark as reasoning, which includes
+Qwen3.8 and gpt-oss.  Which values a model accepts is decided by its chat
+template, so a value it rejects fails the run.
+
 ### Example OpenAI Configuration
 
 **NOTE**: the values below show types, but should not be used without

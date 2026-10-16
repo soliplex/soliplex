@@ -523,6 +523,77 @@ def _profile_kw(agent_config: AgentConfig, *, openai_compat: bool) -> dict:
     return {"profile": profile} if profile else {}
 
 
+def _is_self_hosted(agent_config: AgentConfig) -> bool:
+    """Whether the model is served by something other than its vendor.
+
+    Pydantic AI resolves a self-hosted model's profile from its served
+    name, and a profile that does not claim thinking support discards a
+    unified 'thinking' setting without an error.  That resolution misses
+    families it does not know and excludes some on purpose (Qwen3.8,
+    whose effort ladder does not match the usual names), so a self-hosted
+    model is never trusted to have one.
+    """
+    if agent_config.provider_type in (
+        LLMProviderType.OLLAMA,
+        LLMProviderType.VLLM,
+    ):
+        return True
+
+    return agent_config.provider_type == LLMProviderType.OPENAI and bool(
+        agent_config.llm_provider_kw.get("base_url")
+    )
+
+
+def thinking_model_settings(
+    *,
+    agent_config: AgentConfig,
+    thinking: ai_settings.ThinkingLevel,
+) -> ai_settings.ModelSettings:
+    """Return the model settings asking this agent's model to think so.
+
+    A hosted model gets Pydantic AI's unified 'thinking', which its
+    profile maps per model.  A self-hosted one gets
+    'openai_reasoning_effort', which is sent as is whatever the profile
+    says -- the same arrangement haiku.rag makes for these providers.
+    """
+    if not _is_self_hosted(agent_config):
+        return ai_settings.ModelSettings(thinking=thinking)
+
+    if thinking is True:
+        effort = "medium"
+    elif thinking is False:
+        effort = "none"
+    else:
+        effort = thinking
+
+    return openai_models.OpenAIChatModelSettings(
+        openai_reasoning_effort=effort,
+    )
+
+
+def get_model_settings_from_config(
+    *,
+    agent_config: AgentConfig,
+) -> ai_settings.ModelSettings | None:
+    """Return the agent's model settings as its model is to receive them.
+
+    The configured 'model_settings', with a 'thinking' in them rewritten
+    by 'thinking_model_settings' for the agent's provider.
+    """
+    if not agent_config.model_settings:
+        return agent_config.model_settings
+
+    settings = dict(agent_config.model_settings)
+
+    if "thinking" in settings:
+        settings |= thinking_model_settings(
+            agent_config=agent_config,
+            thinking=settings.pop("thinking"),
+        )
+
+    return ai_settings.ModelSettings(**settings)
+
+
 def get_context_window_from_config(
     *,
     agent_config: AgentConfig,
@@ -561,10 +632,9 @@ def get_model_from_config(
     model_settings_kw = {}
     model_name = agent_config.llm_model_name
 
-    if agent_config.model_settings:
-        model_settings_kw["settings"] = ai_settings.ModelSettings(
-            **agent_config.model_settings,
-        )
+    model_settings = get_model_settings_from_config(agent_config=agent_config)
+    if model_settings:
+        model_settings_kw["settings"] = model_settings
 
     if agent_config.provider_type == LLMProviderType.GOOGLE:
         provider = google_providers.GoogleProvider(**provider_kw)

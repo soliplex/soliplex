@@ -1863,3 +1863,133 @@ def test_vllm_provider_keeps_the_openai_compatibility_flag():
     assert profile["openai_chat_supports_multiple_system_messages"] is False
     assert profile["context_window"] == 32768
     assert profile["supports_thinking"] is True
+
+
+@pytest.mark.parametrize(
+    "provider_type, provider_base_url, self_hosted",
+    [
+        (config_agents.LLMProviderType.GOOGLE, None, False),
+        (config_agents.LLMProviderType.OPENAI, None, False),
+        (config_agents.LLMProviderType.OPENAI, BASE_URL, True),
+        (config_agents.LLMProviderType.OLLAMA, BASE_URL, True),
+        (config_agents.LLMProviderType.VLLM, BASE_URL, True),
+    ],
+)
+@pytest.mark.parametrize(
+    "thinking, effort",
+    [(True, "medium"), (False, "none"), ("low", "low"), ("xhigh", "xhigh")],
+)
+def test_thinking_model_settings(
+    provider_type,
+    provider_base_url,
+    self_hosted,
+    thinking,
+    effort,
+):
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        provider_type=provider_type,
+        provider_base_url=provider_base_url,
+    )
+
+    found = config_agents.thinking_model_settings(
+        agent_config=agent_config,
+        thinking=thinking,
+    )
+
+    if self_hosted:
+        assert found == {"openai_reasoning_effort": effort}
+    else:
+        assert found == {"thinking": thinking}
+
+
+@pytest.mark.parametrize("model_settings", [None, {}])
+def test_get_model_settings_from_config_wo_settings(model_settings):
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        model_settings=model_settings,
+    )
+
+    found = config_agents.get_model_settings_from_config(
+        agent_config=agent_config,
+    )
+
+    assert found == model_settings
+
+
+@pytest.mark.parametrize(
+    "provider_type, expected",
+    [
+        (
+            config_agents.LLMProviderType.VLLM,
+            {"temperature": 0.5, "openai_reasoning_effort": "low"},
+        ),
+        (
+            config_agents.LLMProviderType.GOOGLE,
+            {"temperature": 0.5, "thinking": "low"},
+        ),
+    ],
+)
+def test_get_model_settings_from_config_w_thinking(provider_type, expected):
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        provider_type=provider_type,
+        provider_base_url=(
+            None
+            if provider_type == config_agents.LLMProviderType.GOOGLE
+            else BASE_URL
+        ),
+        model_settings={"temperature": 0.5, "thinking": "low"},
+    )
+
+    found = config_agents.get_model_settings_from_config(
+        agent_config=agent_config,
+    )
+
+    assert found == expected
+
+
+def test_get_model_settings_from_config_wo_thinking():
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        provider_type=config_agents.LLMProviderType.VLLM,
+        provider_base_url=BASE_URL,
+        model_settings=MODEL_SETTINGS,
+    )
+
+    found = config_agents.get_model_settings_from_config(
+        agent_config=agent_config,
+    )
+
+    assert found == MODEL_SETTINGS
+
+
+def test_vllm_model_sends_thinking_its_profile_does_not_claim():
+    """A level reaches the request for a model with no resolved family.
+
+    pydantic-ai 2.42 resolves 'openai/gpt-oss-20b' on 'vllm' with no
+    thinking support, so a unified 'thinking' would be discarded.  As
+    'openai_reasoning_effort' it is sent whatever the profile says.
+    """
+    from pydantic_ai import models as ai_models
+
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="openai/gpt-oss-20b",
+        provider_type=config_agents.LLMProviderType.VLLM,
+        provider_base_url=BASE_URL,
+        model_settings={"thinking": "high"},
+    )
+    model = config_agents.get_model_from_config(agent_config=agent_config)
+    assert not model.profile.get("supports_thinking", False)
+
+    settings, params = model.prepare_request(
+        model.settings,
+        ai_models.ModelRequestParameters(),
+    )
+
+    assert model._translate_thinking(settings, params) == "high"
