@@ -10,10 +10,10 @@ description: "A plain chat room whose reasoning effort a client can set"
 #
 # Pydantic AI resolves a model's profile from its served name and does
 # not consult that capability list, so 'gpt-oss:latest' comes back as a
-# model that does not reason.  A thinking setting for a model whose
-# profile claims no support is discarded before it reaches the wire,
-# with no error, so without the declaration below this room would offer
-# a control that does nothing.  See docs/config/agents.md.
+# model that does not reason.  That no longer matters here: on Ollama
+# the level is sent as 'reasoning_effort' whatever the profile says.
+# The declaration below is what makes the room offer a control at all.
+# See docs/config/agents.md.
 #
 # The three levels are gpt-oss's own ladder.  It has no 'xhigh' and no
 # 'minimal', and it cannot be turned off: 'reasoning_effort: "none"' is

@@ -1697,9 +1697,10 @@ def test_get_model_from_config(
     agent_config.model_settings = w_model_settings
     agent_config.context_window = w_context_window
     agent_config.provider_type = provider_type
-    # Autospec hands back a Mock for anything unset, and a Mock is
-    # truthy -- which '_profile_kw' would read as declared levels.
+    # Autospec hands back a Mock for anything unset, which would be
+    # read as declared levels and a default.
     agent_config.thinking_levels = None
+    agent_config.thinking_default = None
     # A copy, so the assertions below compare against what was
     # configured rather than against anything the code did to it.
     agent_config.llm_provider_kw = dict(llm_provider_kw)
@@ -2083,16 +2084,50 @@ def test_agentconfig_from_yaml_allows_other_model_settings(
     assert agent_config.model_settings["temperature"] == 0.5
 
 
-def test_profile_kw_declares_support_for_declared_levels():
-    """The declaration has to reach the profile to mean anything.
+def test_agentconfig_rejects_a_default_it_does_not_offer():
+    """A default outside the declared levels would fail every run.
 
-    Pydantic AI drops a thinking setting for a model whose profile
-    does not claim support, so a declaration that stopped at the
-    configuration would change nothing at all.
+    It is what a run asking for nothing is sent, and the run refuses a
+    level the room does not offer.
+    """
+    with pytest.raises(config_agents.UnofferedThinkingDefault) as exc_info:
+        config_agents.AgentConfig(
+            id=AGENT_ID,
+            thinking_levels=["low", "high"],
+            thinking_default="xhigh",
+        )
+
+    assert str(exc_info.value).endswith("one of ['low', 'high']")
+
+
+def test_agentconfig_allows_a_default_without_declared_levels():
+    """With nothing declared there is no offer for a default to miss."""
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        thinking_default="xhigh",
+    )
+
+    assert agent_config.thinking_default == "xhigh"
+
+
+def test_unknown_thinking_level_names_levels_as_strings():
+    with pytest.raises(config_agents.UnknownThinkingLevel) as exc_info:
+        config_agents.AgentConfig(id=AGENT_ID, thinking_default="bogus")
+
+    message = str(exc_info.value)
+    assert "ThinkingLevelName" not in message
+    assert "['off', 'minimal', 'low', 'medium', 'high', 'xhigh']" in message
+
+
+def test_profile_kw_leaves_thinking_support_alone():
+    """Declared levels do not touch the model's profile.
+
+    A self-hosted model is sent its level as 'openai_reasoning_effort',
+    which needs no profile claim, so the profile stays as resolved.
     """
     agent_config = config_agents.AgentConfig(
         id=AGENT_ID,
-        model_name="Qwen/Qwen3.8-27B",
+        model_name="Inferact/Qwen3.8-27B-NVFP4",
         provider_type="vllm",
         provider_base_url=BASE_URL,
         thinking_levels=["low", "medium", "xhigh"],
@@ -2102,77 +2137,91 @@ def test_profile_kw_declares_support_for_declared_levels():
         agent_config=agent_config,
     ).profile
 
-    assert profile["supports_thinking"] is True
-
-
-def _agent_config_with_profile(monkeypatch, profile):
-    """An agent config whose model resolves to 'profile'."""
-    agent_config = config_agents.AgentConfig(
-        id=AGENT_ID,
-        model_name=MODEL,
-        provider_type="vllm",
-        provider_base_url=BASE_URL,
-    )
-    monkeypatch.setattr(
-        config_agents,
-        "get_model_from_config",
-        lambda *, agent_config: mock.Mock(profile=profile),
-    )
-    return agent_config
+    assert not profile.get("supports_thinking", False)
 
 
 @pytest.mark.parametrize(
-    "profile, expected_levels",
+    "agent_kw, expected",
     [
-        # Nothing claims support: no control at all.
-        ({}, None),
-        ({"supports_thinking": False}, None),
-        # The ordinary case.
+        # The default stands in for a 'thinking' in 'model_settings'.
         (
-            {"supports_thinking": True},
-            ("off", "minimal", "low", "medium", "high", "xhigh"),
+            dict(
+                model_settings={"temperature": 0.5, "thinking": "low"},
+                thinking_default="high",
+            ),
+            {"temperature": 0.5, "openai_reasoning_effort": "high"},
         ),
-        # A model that cannot stop reasoning is not offered 'off',
-        # and still reports the rest.
+        # A default alone is still a setting.
         (
-            {"thinking_always_enabled": True},
-            ("minimal", "low", "medium", "high", "xhigh"),
-        ),
-        # Where 'minimal' is missing Pydantic AI quietly sends 'low',
-        # so offering it would be a control that does nothing.
-        (
-            {
-                "supports_thinking": True,
-                "openai_supports_minimal_reasoning_effort": False,
-            },
-            ("off", "low", "medium", "high", "xhigh"),
+            dict(thinking_default="off"),
+            {"openai_reasoning_effort": "none"},
         ),
     ],
 )
-def test_get_thinking_from_config_resolves_the_profile(
-    monkeypatch,
-    profile,
-    expected_levels,
-):
-    agent_config = _agent_config_with_profile(monkeypatch, profile)
+def test_get_model_settings_from_config_w_thinking_default(agent_kw, expected):
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        provider_type=config_agents.LLMProviderType.VLLM,
+        provider_base_url=BASE_URL,
+        **agent_kw,
+    )
 
-    support = config_agents.get_thinking_from_config(
+    found = config_agents.get_model_settings_from_config(
         agent_config=agent_config,
     )
 
-    if expected_levels is None:
-        assert support is None
-    else:
-        assert support.levels == expected_levels
-        assert support.default is None
+    assert found == expected
 
 
-def test_get_thinking_from_config_prefers_the_declaration(monkeypatch):
-    """A declaration answers without building a model at all.
+def test_thinking_default_reaches_the_request():
+    """The default is sent by the model itself, wherever it runs.
 
-    It exists for the models this resolution cannot serve, so it must
-    not be overridden by what the resolution would have said.
+    Qwen3.8 resolves on 'vllm' with no thinking support, which is the
+    case the declaration exists for.
     """
+    from pydantic_ai import models as ai_models
+
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="Inferact/Qwen3.8-27B-NVFP4",
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+        thinking_levels=["low", "medium", "xhigh"],
+        thinking_default="xhigh",
+    )
+    model = config_agents.get_model_from_config(agent_config=agent_config)
+
+    settings, params = model.prepare_request(
+        model.settings,
+        ai_models.ModelRequestParameters(),
+    )
+
+    assert model._translate_thinking(settings, params) == "xhigh"
+
+
+def test_get_thinking_from_config_offers_only_a_declaration():
+    """A model that reasons, but declares no levels, offers no control.
+
+    The profile says at most whether a model reasons, not which levels
+    its chat template accepts.
+    """
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="Qwen/Qwen3-32B",
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+        thinking_default="low",
+    )
+
+    assert (
+        config_agents.get_thinking_from_config(agent_config=agent_config)
+        is None
+    )
+
+
+def test_get_thinking_from_config_reports_the_declaration(monkeypatch):
+    """A declaration answers without building a model at all."""
     agent_config = config_agents.AgentConfig(
         id=AGENT_ID,
         model_name=MODEL,
@@ -2196,32 +2245,3 @@ def test_get_thinking_from_config_prefers_the_declaration(monkeypatch):
     assert support.levels == ("low", "xhigh")
     assert support.default == "low"
     get_model_from_config.assert_not_called()
-
-
-def test_get_thinking_from_config_without_a_model():
-    """An agent template with no model offers nothing."""
-    agent_config = config_agents.AgentConfig(id=AGENT_ID)
-
-    assert (
-        config_agents.get_thinking_from_config(agent_config=agent_config)
-        is None
-    )
-
-
-def test_get_thinking_from_config_unbuildable(monkeypatch):
-    """A configuration no model can be built from offers nothing.
-
-    The same bargain 'get_context_window_from_config' strikes: listing
-    a room is not the moment to fail over a missing provider key.
-    """
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    agent_config = config_agents.AgentConfig(
-        id=AGENT_ID,
-        model_name="gpt-4o",
-        provider_type="openai",
-    )
-
-    assert (
-        config_agents.get_thinking_from_config(agent_config=agent_config)
-        is None
-    )

@@ -131,29 +131,27 @@ agent:
 - `thinking_default` (a string, default unset):  how hard the model
   thinks when a run asks for nothing.  One of `off`, `minimal`, `low`,
   `medium`, `high`, `xhigh`.  Unset asserts nothing, leaving the model
-  whatever it does by default.
+  whatever it does by default.  It applies wherever the agent runs --
+  AG-UI threads, completions, and `soliplex-cli ask` -- and is sent the
+  way a `thinking` in `model_settings` is (see the vLLM example below).
+  With `thinking_levels` declared, it must be one of them.
 
   ```yaml
   thinking_default: "low"
   ```
 
 - `thinking_levels` (a list of strings, default unset):  the levels
-  this model accepts, from the same set.  Declaring it says the model
-  reasons, and is the *complete* set offered to a client:  a level
-  absent from the list is never sent, `off` included.
+  this model accepts, from the same set, offered to a client so it can
+  choose one per run.  It is the *complete* set:  a run asking for a
+  level absent from the list is refused, `off` included.  Unset, the
+  room offers no control, whatever the model is.
 
-  Leave it unset for any model Pydantic AI recognises -- it resolves
-  the answer from the model itself, which is right far more often than
-  a hand-maintained list.  Declare it only for a model that reasons but
-  is not resolved:  one served under a name no family matches, or one
-  whose ladder does not use these names.
-
-  The levels a model accepts are decided by its chat template, which is
-  shipped with the weights and is the only authority on the matter.
-  They differ:  Qwen3.8 takes `xhigh`, `medium` and `low`, and rejects
-  `high`; gpt-oss takes `low`, `medium` and `high`.  A level the
-  template rejects fails the run, which is why declaring a wrong list
-  is worse than declaring none.
+  Nothing resolves this set for you.  The levels a model accepts are
+  decided by its chat template, which is shipped with the weights and
+  is the only authority on the matter, and they differ:  Qwen3.8 takes
+  `xhigh`, `medium` and `low`, and rejects `high`; gpt-oss takes
+  `low`, `medium` and `high`.  A level the template rejects fails the
+  run, so list only levels you have seen the model accept.
 
   ```yaml
   # Qwen3.8's own ladder, which does not include 'high' or 'off'.

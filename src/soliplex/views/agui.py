@@ -13,6 +13,7 @@ from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+from soliplex import agents
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
@@ -83,25 +84,19 @@ async def _check_user_room_agent(
 
     If not, raise a 404.
     """
-    try:
-        agent = await the_installation.get_agent_for_room(
-            room_id=room_id,
-            user=the_user_claims,
-            the_room_authz=the_room_authz,
-            the_logger=the_logger,
-        )
-    except KeyError:
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"No such room: {room_id}",
-        ) from None
-
     room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_room_authz=the_room_authz,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
+    )
+
+    agent = agents.get_agent_from_configs(
+        agent_config=room_config.agent_config,
+        tool_configs=room_config.tool_configs,
+        mcp_client_toolset_configs=room_config.mcp_client_toolset_configs,
+        capability_config=room_config.skills,
     )
 
     user_profile = models.UserProfile.from_user_claims(the_user_claims)
@@ -113,21 +108,24 @@ def _thinking_model_settings(
     room_config: config_rooms.RoomConfig,
     run_input: agui_core.RunAgentInput,
 ) -> dict:
-    """Return the run's thinking setting, as 'run_stream' kwargs.
+    """Return the level this run asks for, as 'run_stream' kwargs.
 
-    Empty when the room's model offers no control over how hard it
-    thinks.  A level asked for there is dropped rather than refused:
-    the room's model may have been changed under a thread that still
-    carries one, and nothing is gained by failing the run over a
-    setting that would be discarded anyway.
+    Empty when the run asks for none, which leaves the room's default
+    in force:  that is already in the agent's own model settings.
+
+    Empty, too, when the room's model offers no control.  A level asked
+    for there is dropped rather than refused:  the room's model may have
+    been changed under a thread that still carries one, and nothing is
+    gained by failing the run over it.
 
     A level the room does offer a control for, but not that level, is
     refused.  A client reads the offered set from the room, so asking
     outside it is a bug worth seeing -- and the alternative, running at
     some other level, answers a question nobody asked.
     """
+    agent_config = room_config.agent_config
     support = config_agents.get_thinking_from_config(
-        agent_config=room_config.agent_config,
+        agent_config=agent_config,
     )
 
     if support is None:
@@ -135,26 +133,37 @@ def _thinking_model_settings(
 
     state = run_input.state if isinstance(run_input.state, dict) else {}
     feature = state.get(config_agui.THINKING_FEATURE_NAME)
-    asked = feature.get("level") if isinstance(feature, dict) else None
-    level = support.default if asked is None else asked
 
-    if level is None:
+    if feature is None:
         return {}
 
-    if level not in support.levels:
-        # The rejected value is deliberately not echoed:  it arrived
-        # from a client, and naming what the room offers is the part
-        # that says how to fix it.
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail=(
-                f"Unsupported thinking level for room {room_config.id}; "
-                f"one of {list(support.levels)}"
-            ),
-        )
+    # The rejected value is deliberately not echoed:  it arrived from a
+    # client, and naming what the room offers is the part that says how
+    # to fix it.
+    unsupported = fastapi.HTTPException(
+        status_code=400,
+        detail=(
+            f"Unsupported thinking level for room {room_config.id}; "
+            f"one of {list(support.levels)}"
+        ),
+    )
+
+    try:
+        asked = config_agui.ThinkingState.model_validate(feature).level
+    except pydantic.ValidationError:
+        raise unsupported from None
+
+    if asked is None:
+        return {}
+
+    if asked.value not in support.levels:
+        raise unsupported
 
     return {
-        "model_settings": {"thinking": config_agents.as_thinking_level(level)}
+        "model_settings": config_agents.thinking_model_settings(
+            agent_config=agent_config,
+            thinking=config_agents.as_thinking_level(asked.value),
+        ),
     }
 
 

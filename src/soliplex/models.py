@@ -175,10 +175,9 @@ ConfiguredSkills = dict[str, Skill]
 class AgentThinking(pydantic.BaseModel):
     """How hard this agent's model may be asked to think.
 
-    Absent from an agent whose model is not known to reason, so a
-    client offers a control only where one has an effect:  a level sent
-    to a model that reports no support is discarded on the way to the
-    wire, with no error to show for it.
+    Absent from an agent whose configuration declares no
+    'thinking_levels', so a client offers a control only where an
+    operator has said which levels the model takes.
     """
 
     levels: list[str]
@@ -186,8 +185,7 @@ class AgentThinking(pydantic.BaseModel):
 
     A client offers these and nothing else.  Which levels a model
     accepts belongs to its chat template rather than to any catalogue,
-    so a level absent here is one that would fail the run.  'off' is
-    absent for a model that cannot stop reasoning.
+    so the run refuses a level absent here.
     """
 
     default: str | None = None
@@ -214,7 +212,7 @@ class DefaultAgent(pydantic.BaseModel):
     # with the room rather than asking per thread.
     context_window: int | None = None
     # What the model offers for how hard it thinks, or null where it
-    # offers nothing. Resolved from the model, so a client reads it
+    # offers nothing. Declared with the agent, so a client reads it
     # once with the room rather than guessing from the model name.
     thinking: AgentThinking | None = None
     agui_feature_names: list[str] = pydantic.Field(default_factory=list)
