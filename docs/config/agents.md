@@ -74,7 +74,16 @@ agent:
 ### Optional Elements
 
 - `provider_type`: a string, must be one of `"ollama"` (the default),
-  `"openai"`, or `"google"`.
+  `"openai"`, `"vllm"`, or `"google"`.
+
+  Prefer `"vllm"` over `"openai"` for a model served by vLLM.  Both speak
+  the same wire protocol, so either will run, but Pydantic AI resolves a
+  model's capabilities -- context window, whether it reasons and whether
+  its reasoning can be turned off -- from the served model name, and the
+  `"openai"` provider resolves that name against *OpenAI's own catalogue*.
+  A locally served `Qwen/Qwen3-32B` matches nothing there and is reported
+  as a model with no capabilities, silently.  The `"vllm"` provider maps
+  Hugging Face names to the right model families instead.
 
 - `provider_base_url`: a string, is the base API URL for the agent's LLM
   provider.
@@ -89,6 +98,12 @@ agent:
 
   If not provided, and `provider_type` is set to `"openai"`, defaults to
   the default OpenAI service URL.
+
+  If not provided, and `provider_type` is set to `"vllm"`, defaults to
+  the value configured in the installation environment as
+  `VLLM_BASE_URL` -- the same arrangement `"ollama"` has above.  A room
+  with neither is reported as having no context window, and fails when
+  a run starts.
 
   **Must not be set** if `provider_type` is set to `"google"`.
 
@@ -166,6 +181,24 @@ model_settings:
   num_ctx: 2048
   num_predict: 2000
 ```
+
+### Example vLLM Configuration
+
+**NOTE**: the values below show types, but should not be used without
+          testing.
+
+```yaml
+model_name: "Qwen/Qwen3-32B"
+provider_type: "vllm"
+provider_base_url: "http://vllm.example.com"
+model_settings:
+  temperature: 0.90
+  max_tokens: 2048
+```
+
+Give `model_name` exactly as vLLM serves it (`--served-model-name`, which
+defaults to the model's Hugging Face repo id).  That string is what the
+model family is resolved from, so a renamed model loses its capabilities.
 
 ### Example OpenAI Configuration
 

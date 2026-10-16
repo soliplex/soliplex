@@ -25,6 +25,9 @@ PROVIDER_BASE_URL = "https://provider.example.com/api"
 PROVIDER_BASE_URL_VIA_ENV = "env:PROVIDER_BASE_URL"
 OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
 OLLAMA_BASE_URL = "https://example.com:12345"
+# Distinct from the Ollama one, so a test that resolves it proves the
+# provider read its own key rather than any key that happened to be set.
+VLLM_BASE_URL = "https://vllm.example.com:8000"
 AGUI_FEATURE_NAME = "test-agui-feature"
 
 MODEL = "testing"
@@ -33,6 +36,7 @@ API_KEY = "DEADBEEF"
 OLLAMA_PROVIDER_KW = {"base_url": BASE_URL}
 OPENAI_PROVIDER_KW = {"base_url": BASE_URL, "api_key": API_KEY}
 GOOGLE_PROVIDER_KW = {"api_key": API_KEY}
+VLLM_PROVIDER_KW = {"base_url": BASE_URL}
 MODEL_SETTINGS = {"temperature": 0.875}
 
 BOGUS_AGENT_CONFIG_YAML = ""
@@ -841,6 +845,16 @@ def test_agentconfig_llm_model_name(
             PROVIDER_BASE_URL,
         ),
         (config_agents.LLMProviderType.GOOGLE, {}, None),
+        # vLLM takes its URL from the installation environment the way
+        # Ollama does. Without this it would fall to 'VLLMProvider'
+        # reading the *process* environment itself, which bypasses the
+        # '/v1' suffixing below and leaves 'audit' reporting no URL.
+        (config_agents.LLMProviderType.VLLM, {}, VLLM_BASE_URL),
+        (
+            config_agents.LLMProviderType.VLLM,
+            {"provider_base_url": PROVIDER_BASE_URL},
+            PROVIDER_BASE_URL,
+        ),
     ],
 )
 def test_agentconfig_llm_provider_base_url(
@@ -852,6 +866,7 @@ def test_agentconfig_llm_provider_base_url(
 ):
     ic_environ = {
         "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        "VLLM_BASE_URL": VLLM_BASE_URL,
         "PROVIDER_BASE_URL": PROVIDER_BASE_URL,
     }
 
@@ -879,6 +894,30 @@ def test_agentconfig_llm_provider_base_url(
     found = aconfig.llm_provider_base_url
 
     assert found == expected
+
+
+def test_agentconfig_llm_provider_kw_vllm_w_default_base_url(
+    installation_config,
+):
+    """A vLLM URL from the environment is suffixed like any other.
+
+    'VLLMProvider' would otherwise read 'VLLM_BASE_URL' from the process
+    environment itself and use it verbatim -- so a URL written the way
+    the documentation says to write it, without '/v1', would reach vLLM
+    without it.
+    """
+    ic_environ = {"VLLM_BASE_URL": VLLM_BASE_URL}
+    installation_config.get_environment = ic_environ.get
+    installation_config.interpolate_environment = lambda value: value
+
+    aconfig = config_agents.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        provider_type=config_agents.LLMProviderType.VLLM,
+        _installation_config=installation_config,
+    )
+
+    assert aconfig.llm_provider_kw == {"base_url": f"{VLLM_BASE_URL}/v1"}
 
 
 @pytest.mark.parametrize("has_pk", [False, True])
@@ -1623,8 +1662,10 @@ def test_get_context_window_from_config_unbuildable(monkeypatch):
         (config_agents.LLMProviderType.OPENAI, OPENAI_PROVIDER_KW),
         (config_agents.LLMProviderType.OPENAI, {"api_key": API_KEY}),
         (config_agents.LLMProviderType.GOOGLE, GOOGLE_PROVIDER_KW),
+        (config_agents.LLMProviderType.VLLM, VLLM_PROVIDER_KW),
     ],
 )
+@mock.patch("pydantic_ai.providers.vllm.VLLMProvider")
 @mock.patch("pydantic_ai.providers.google.GoogleProvider")
 @mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
 @mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
@@ -1636,6 +1677,7 @@ def test_get_model_from_config(
     oai_provider_klass,
     oll_provider_klass,
     google_provider_klass,
+    vllm_provider_klass,
     provider_type,
     llm_provider_kw,
     w_model_settings,
@@ -1690,6 +1732,7 @@ def test_get_model_from_config(
         oai_model_klass.assert_not_called()
         oai_provider_klass.assert_not_called()
         oll_provider_klass.assert_not_called()
+        vllm_provider_klass.assert_not_called()
 
     elif provider_type == config_agents.LLMProviderType.OPENAI:
         assert model is oai_model_klass.return_value
@@ -1705,6 +1748,27 @@ def test_get_model_from_config(
         )
         oai_provider_klass.assert_called_once_with(**llm_provider_kw)
 
+        oll_provider_klass.assert_not_called()
+        vllm_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
+
+    elif provider_type == config_agents.LLMProviderType.VLLM:
+        assert model is oai_model_klass.return_value
+        # The vLLM provider's own profile already carries the
+        # OpenAI-compatibility flag, so none is merged over it here.
+        expected_kw = expected_profile_kw(openai_compat=False)
+        if w_model_settings:
+            expected_kw["settings"] = w_model_settings
+        oai_model_klass.assert_called_once_with(
+            model_name=exp_model_name,
+            provider=vllm_provider_klass.return_value,
+            **expected_kw,
+        )
+        # Unlike Ollama, the vLLM provider wants no placeholder key.
+        vllm_provider_klass.assert_called_once_with(**llm_provider_kw)
+
+        oai_provider_klass.assert_not_called()
         oll_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
@@ -1728,5 +1792,74 @@ def test_get_model_from_config(
         assert agent_config.llm_provider_kw == llm_provider_kw
 
         oai_provider_klass.assert_not_called()
+        vllm_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "model_name, supports_thinking, always_enabled",
+    [
+        # A reasoning model whose reasoning can be turned down or off.
+        ("Qwen/Qwen3-32B", True, False),
+        # A checkpoint that always reasons: the level is settable, the
+        # switch is not.
+        ("Qwen/Qwen3-235B-A22B-Thinking-2507", True, True),
+        ("deepseek-ai/DeepSeek-R1", True, True),
+        # Not a reasoning model, and reported as such.
+        ("meta-llama/Llama-3.3-70B-Instruct", False, False),
+    ],
+)
+def test_vllm_provider_resolves_model_families(
+    model_name,
+    supports_thinking,
+    always_enabled,
+):
+    """The reason 'vllm' exists beside 'openai' as a provider type.
+
+    Both speak the same wire protocol, so either would run.  What
+    differs is that Pydantic AI resolves a model's capabilities from
+    the served name, and the 'openai' provider resolves that name
+    against OpenAI's own catalogue -- where a locally served Qwen or
+    Llama matches nothing and is reported as having no capabilities,
+    with no error.  Capabilities resolved wrong are silent: a thinking
+    setting a model is not known to support is dropped on the floor.
+    """
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=model_name,
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+    )
+
+    profile = config_agents.get_model_from_config(
+        agent_config=agent_config,
+    ).profile
+
+    assert bool(profile.get("supports_thinking")) is supports_thinking
+    assert bool(profile.get("thinking_always_enabled")) is always_enabled
+
+
+def test_vllm_provider_keeps_the_openai_compatibility_flag():
+    """'_OPENAI_COMPAT_PROFILE' is not merged over the vLLM provider.
+
+    It does not need to be: the provider's own profile already carries
+    that flag, for every served name, including one no family matches.
+    A declared context window merges over the resolved profile rather
+    than replacing it, so it costs none of the resolved capabilities.
+    """
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="Qwen/Qwen3-32B",
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+        context_window=32768,
+    )
+
+    profile = config_agents.get_model_from_config(
+        agent_config=agent_config,
+    ).profile
+
+    assert profile["openai_chat_supports_multiple_system_messages"] is False
+    assert profile["context_window"] == 32768
+    assert profile["supports_thinking"] is True
