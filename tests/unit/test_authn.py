@@ -1,7 +1,9 @@
 import contextlib
+import random
 from unittest import mock
 
 import fastapi
+import itsdangerous
 import jwt
 import pytest
 
@@ -365,3 +367,276 @@ def test_validate_access_token(jwtd, w_jwt_err, w_as_kw, exp_msg):
             "require": ["exp", "iat", "iss", "sub"],
         },
     )
+
+
+@pytest.mark.parametrize(
+    "w_environ, expected",
+    [
+        ({}, True),
+        ({authn.INSECURE_COOKIES_ENV_VAR: "N"}, True),
+        ({authn.INSECURE_COOKIES_ENV_VAR: "Y"}, False),
+    ],
+)
+def test_secure_cookies(w_environ, expected):
+    with mock.patch.dict("os.environ", w_environ, clear=True):
+        found = authn.secure_cookies()
+
+    assert found is expected
+
+
+COOKIE_SECRET = "cookie-secret"
+# The serializer compresses its payload:  random hex stays large.
+INCOMPRESSIBLE = random.Random(0).randbytes(authn.AUTHN_COOKIE_MAX_SIZE).hex()
+COOKIE_NOW = 1_000_000.0
+COOKIE_EXP = 1_000_600
+COOKIE_ISSUER = "https://idp.example.com/realms/test"
+COOKIE_CLAIMS = {
+    "iss": COOKIE_ISSUER,
+    "sub": "user-sub",
+    "exp": COOKIE_EXP,
+    "email": "phreddy@example.com",
+    "preferred_username": "phreddy",
+    "josce": {"org": {"duty_org_code": "XYZ"}},
+    "scope": "openid email",
+}
+
+
+@pytest.fixture
+def cookie_installation():
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_secret.return_value = COOKIE_SECRET
+    auth_system = mock.create_autospec(
+        config_authsystem.OIDCAuthSystemConfig,
+        id=AUTHSYSTEM_ID,
+        issuer=COOKIE_ISSUER,
+    )
+    the_installation.oidc_auth_system_configs = [auth_system]
+    return the_installation
+
+
+def test__authn_cookie_serializer(cookie_installation):
+    value = itsdangerous.URLSafeSerializer(
+        COOKIE_SECRET,
+        salt=authn.AUTHN_COOKIE_SALT,
+    ).dumps(COOKIE_CLAIMS)
+
+    found = authn._authn_cookie_serializer(cookie_installation)
+
+    assert found.loads(value) == COOKIE_CLAIMS
+    cookie_installation.get_secret.assert_called_once_with(
+        authn.AUTHN_COOKIE_SECRET_NAME,
+    )
+
+
+@pytest.mark.parametrize(
+    "w_cookie_claims, w_extra, exp_names, exp_error",
+    [
+        pytest.param([], {}, ["sub"], False, id="none"),
+        pytest.param(
+            ["email", "preferred_username"],
+            {},
+            ["sub", "email", "preferred_username"],
+            False,
+            id="default",
+        ),
+        pytest.param(
+            ["josce", "missing"],
+            {},
+            ["sub", "josce"],
+            False,
+            id="w_missing",
+        ),
+        pytest.param(
+            ["huge"],
+            {"huge": INCOMPRESSIBLE},
+            ["sub", "huge"],
+            True,
+            id="too_large",
+        ),
+    ],
+)
+@mock.patch("soliplex.authn.secure_cookies")
+@mock.patch("time.time", return_value=COOKIE_NOW)
+def test_set_authn_cookie(
+    time_time,
+    secure_cookies,
+    cookie_installation,
+    w_cookie_claims,
+    w_extra,
+    exp_names,
+    exp_error,
+):
+    response = mock.create_autospec(fastapi.Response)
+    auth_system = mock.create_autospec(
+        config_authsystem.OIDCAuthSystemConfig,
+        id=AUTHSYSTEM_ID,
+    )
+    auth_system.cookie_claims = w_cookie_claims
+    claims = COOKIE_CLAIMS | w_extra
+    logger = mock.create_autospec(loggers.LogWrapper)
+
+    authn.set_authn_cookie(
+        response,
+        the_installation=cookie_installation,
+        auth_system=auth_system,
+        claims=claims,
+        logger=logger,
+    )
+
+    response.set_cookie.assert_called_once_with(
+        authn.AUTHN_COOKIE_NAME,
+        mock.ANY,
+        max_age=COOKIE_EXP - int(COOKIE_NOW),
+        path="/",
+        secure=secure_cookies.return_value,
+        httponly=True,
+        samesite="lax",
+    )
+    value = response.set_cookie.call_args.args[1]
+    serializer = authn._authn_cookie_serializer(cookie_installation)
+    exp_claims = {name: claims[name] for name in exp_names}
+    assert serializer.loads(value) == [AUTHSYSTEM_ID, COOKIE_EXP, exp_claims]
+
+    if exp_error:
+        logger.error.assert_called_once_with(
+            loggers.AUTHN_COOKIE_TOO_LARGE,
+            size=len(value),
+        )
+    else:
+        logger.error.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_len, exp_logged",
+    [
+        pytest.param(authn.AUTHN_COOKIE_MAX_SIZE - 1, False, id="under_cap"),
+        pytest.param(authn.AUTHN_COOKIE_MAX_SIZE, False, id="at_cap"),
+        pytest.param(authn.AUTHN_COOKIE_MAX_SIZE + 1, True, id="over_cap"),
+    ],
+)
+@mock.patch("soliplex.authn.secure_cookies")
+@mock.patch("soliplex.authn._authn_cookie_serializer")
+@mock.patch("time.time", return_value=COOKIE_NOW)
+def test_set_authn_cookie_size_boundary(
+    time_time,
+    serializer,
+    secure_cookies,
+    w_len,
+    exp_logged,
+    cookie_installation,
+):
+    """The error is logged exactly for 'AUTHN_COOKIE_MAX_SIZE' + 1"""
+    s_dumps = serializer.return_value.dumps
+    s_dumps.return_value = "x" * w_len
+    auth_system = mock.create_autospec(
+        config_authsystem.OIDCAuthSystemConfig,
+        id=AUTHSYSTEM_ID,
+    )
+    auth_system.cookie_claims = []
+    response = mock.create_autospec(fastapi.Response)
+    logger = mock.create_autospec(loggers.LogWrapper)
+
+    authn.set_authn_cookie(
+        response,
+        the_installation=cookie_installation,
+        auth_system=auth_system,
+        claims=dict(COOKIE_CLAIMS),
+        logger=logger,
+    )
+
+    response.set_cookie.assert_called_once_with(
+        authn.AUTHN_COOKIE_NAME,
+        "x" * w_len,
+        max_age=COOKIE_EXP - int(COOKIE_NOW),
+        path="/",
+        secure=secure_cookies.return_value,
+        httponly=True,
+        samesite="lax",
+    )
+
+    serializer.assert_called_once_with(cookie_installation)
+    s_dumps.assert_called_once_with(
+        (AUTHSYSTEM_ID, COOKIE_EXP, {"sub": "user-sub"}),
+    )
+
+    if exp_logged:
+        logger.error.assert_called_once_with(
+            loggers.AUTHN_COOKIE_TOO_LARGE,
+            size=w_len,
+        )
+    else:
+        logger.error.assert_not_called()
+
+
+@mock.patch("soliplex.authn.secure_cookies")
+def test_clear_authn_cookie(secure_cookies):
+    response = mock.create_autospec(fastapi.Response)
+
+    authn.clear_authn_cookie(response)
+
+    response.delete_cookie.assert_called_once_with(
+        authn.AUTHN_COOKIE_NAME,
+        path="/",
+        secure=secure_cookies.return_value,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+@pytest.mark.parametrize(
+    "w_secret, w_envelope, expected",
+    [
+        pytest.param(
+            COOKIE_SECRET,
+            (AUTHSYSTEM_ID, COOKIE_EXP, COOKIE_CLAIMS),
+            COOKIE_CLAIMS,
+            id="valid",
+        ),
+        pytest.param(
+            "other-secret",
+            (AUTHSYSTEM_ID, COOKIE_EXP, COOKIE_CLAIMS),
+            None,
+            id="bad_signature",
+        ),
+        pytest.param(
+            COOKIE_SECRET,
+            (AUTHSYSTEM_ID, COOKIE_NOW, COOKIE_CLAIMS),
+            None,
+            id="expired",
+        ),
+        pytest.param(
+            COOKIE_SECRET,
+            ("other-auth-system", COOKIE_EXP, COOKIE_CLAIMS),
+            None,
+            id="unknown_issuer",
+        ),
+        pytest.param(
+            COOKIE_SECRET,
+            ("too", "short"),
+            None,
+            id="wrong_arity",
+        ),
+        pytest.param(
+            COOKIE_SECRET,
+            dict(COOKIE_CLAIMS),
+            None,
+            id="pre_envelope",
+        ),
+    ],
+)
+@mock.patch("time.time", return_value=COOKIE_NOW)
+def test_load_authn_cookie(
+    time_time,
+    cookie_installation,
+    w_secret,
+    w_envelope,
+    expected,
+):
+    value = itsdangerous.URLSafeSerializer(
+        w_secret,
+        salt=authn.AUTHN_COOKIE_SALT,
+    ).dumps(w_envelope)
+
+    found = authn.load_authn_cookie(cookie_installation, value)
+
+    assert found == expected

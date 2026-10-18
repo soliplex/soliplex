@@ -142,9 +142,21 @@ _CONSENT_HEADERS = {
 }
 
 
+class CallbackDelivery(enum.StrEnum):
+    """How the login callback hands the tokens to 'return_to'"""
+
+    FRAGMENT = "fragment"  # tokens in the fragment, plus the authn cookie
+    COOKIE = "cookie"  # the authn cookie only
+
+
 def _return_to_session_key(system: str) -> str:
     """Session key for the 'return_to' accepted for 'system'"""
     return f"soliplex.authn.{system}.return_to"
+
+
+def _delivery_session_key(system: str) -> str:
+    """Session key for the 'CallbackDelivery' requested for 'system'"""
+    return f"soliplex.authn.{system}.delivery"
 
 
 def _pending_session_key(system: str) -> str:
@@ -249,13 +261,16 @@ async def _redirect_to_idp(
     system: str,
     return_to: str,
     prompt: str | None,
+    delivery: CallbackDelivery,
 ):
-    """Remember 'return_to' for the callback, and redirect to the IdP
+    """Remember 'return_to' and 'delivery' for the callback, and redirect
+    to the IdP
 
     The 'redirect_uri' carries no query:  each auth system's client can
     register it exactly with the IdP.
     """
     request.session[_return_to_session_key(system)] = return_to
+    request.session[_delivery_session_key(system)] = delivery.value
 
     redirect_uri = request.url_for("get_auth_system", system=system)
     redirect_uri = util.strip_default_port(redirect_uri)
@@ -323,6 +338,13 @@ async def get_login_system(
     if rt_status is ReturnTo.MALFORMED:
         raise _bad_request(bound_logger, loggers.AUTHN_BAD_REQUEST)
 
+    try:
+        delivery = CallbackDelivery(
+            request.query_params.get("delivery", CallbackDelivery.FRAGMENT)
+        )
+    except ValueError:
+        raise _bad_request(bound_logger, loggers.AUTHN_BAD_REQUEST) from None
+
     prompt = request.query_params.get("prompt")
 
     if rt_status is ReturnTo.TRUSTED:
@@ -333,6 +355,7 @@ async def get_login_system(
             system=system,
             return_to=return_to,
             prompt=prompt,
+            delivery=delivery,
         )
 
     # ReturnTo.UNLISTED
@@ -354,6 +377,7 @@ async def get_login_system(
     request.session[_pending_session_key(system)] = {
         "return_to": return_to,
         "prompt": prompt,
+        "delivery": delivery.value,
         "csrf_token": csrf_token,
     }
     bound_logger.info(loggers.AUTHN_CONSENT_REQUESTED, origin=origin)
@@ -419,6 +443,7 @@ async def post_login_system_confirm(
             system=system,
             return_to=pending["return_to"],
             prompt=pending["prompt"],
+            delivery=CallbackDelivery(pending["delivery"]),
         )
 
     if decision != "cancel":
@@ -477,14 +502,16 @@ async def get_auth_system(
 ):
     """Complete the OIDC token auth flow with the specified provider
 
-    On success, redirect to client-specified URL, passing 'token',
-    'refresh_token', 'expires_in', and (when the provider returns one)
-    'id_token' as callback parameters.
+    On success, set the authn cookie (see 'authn.set_authn_cookie'), and
+    redirect to the client-specified URL.  Unless the login asked for
+    'CallbackDelivery.COOKIE', pass 'token', 'refresh_token',
+    'expires_in', and (when the provider returns one) 'id_token' as
+    callback parameters.
     """
     bound_logger = the_unauth_logger.bind(oidc_system=system)
 
-    # For the side effect: 404 if 'system' is unknown or auth is disabled.
-    authn._get_authsystem_config(
+    # 404 if 'system' is unknown or authentication is disabled.
+    authsystem_config = authn._get_authsystem_config(
         the_installation=the_installation,
         logger=bound_logger,
         system=system,
@@ -512,7 +539,9 @@ async def get_auth_system(
     access_token = tokendict["access_token"]
 
     try:
-        authn.authenticate(the_installation, bound_logger, access_token)
+        claims = authn.authenticate(
+            the_installation, bound_logger, access_token
+        )
     except fastapi.HTTPException:
         bound_logger.error(  # noqa: TRY400 'authenticate' logged details
             loggers.AUTHN_JWT_INVALID,
@@ -521,23 +550,69 @@ async def get_auth_system(
     else:
         bound_logger.debug(loggers.AUTHN_JWT_VALID)
 
-    refresh_token = tokendict["refresh_token"]
-    expires_in = tokendict["expires_in"]
-
-    callback_params = dict(
-        token=access_token,
-        refresh_token=refresh_token,
-        expires_in=expires_in,
+    delivery = CallbackDelivery(
+        request.session.pop(
+            _delivery_session_key(system),
+            CallbackDelivery.FRAGMENT,
+        )
     )
 
-    # Absent unless the configured scope includes 'openid'.
-    id_token = tokendict.get("id_token")
-    if id_token is not None:
-        callback_params["id_token"] = id_token
+    if delivery is CallbackDelivery.FRAGMENT:
+        callback_params = dict(
+            token=access_token,
+            refresh_token=tokendict["refresh_token"],
+            expires_in=tokendict["expires_in"],
+        )
 
-    return_to = _with_callback_params(return_to, callback_params)
+        # Absent unless the configured scope includes 'openid'.
+        id_token = tokendict.get("id_token")
+        if id_token is not None:
+            callback_params["id_token"] = id_token
 
-    return responses.RedirectResponse(return_to)
+        return_to = _with_callback_params(return_to, callback_params)
+
+    response = responses.RedirectResponse(return_to)
+    authn.set_authn_cookie(
+        response,
+        the_installation=the_installation,
+        auth_system=authsystem_config,
+        claims=claims,
+        logger=bound_logger,
+    )
+    return response
+
+
+@util.logfire_span("POST /auth/{system}/logout")
+@router.post(
+    "/auth/{system}/logout",
+    status_code=204,
+    response_class=fastapi.Response,
+    summary="Clear the authn cookie set at login",
+)
+async def post_auth_system_logout(
+    system: str,
+    the_installation: installation.Installation = depend_the_installation,
+    the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
+) -> fastapi.Response:
+    """Clear the authn cookie set by 'get_auth_system'
+
+    Raises:
+
+    - 'fastapi.HTTPException' (404) if 'system' is unknown, or
+      authentication is disabled.
+    """
+    bound_logger = the_unauth_logger.bind(oidc_system=system)
+
+    authn._get_authsystem_config(
+        the_installation=the_installation,
+        logger=bound_logger,
+        system=system,
+    )
+
+    response = fastapi.Response(status_code=204)
+    authn.clear_authn_cookie(response)
+    bound_logger.info(loggers.AUTHN_COOKIE_LOGOUT)
+    return response
 
 
 @util.logfire_span("GET /user_info")

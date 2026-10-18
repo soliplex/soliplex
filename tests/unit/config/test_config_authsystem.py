@@ -178,6 +178,16 @@ W_ISSUER_AUTHSYSTEM_CONFIG_YAML = f"""
     issuer: "{AUTHSYSTEM_ISSUER}"
 """
 
+COOKIE_CLAIM = "josce"
+W_COOKIE_CLAIMS_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "_cookie_claims": [COOKIE_CLAIM],
+}
+W_COOKIE_CLAIMS_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    cookie_claims:
+      - "{COOKIE_CLAIM}"
+"""
+
 RQ_CLAIM_TYP = "Bearer"
 W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
     "required_claims": {
@@ -230,6 +240,25 @@ def test_authsystem_issuer(installation_config, w__iss, exp_iss):
     found = inst.issuer
 
     assert found == exp_iss
+
+
+@pytest.mark.parametrize(
+    "w__cc, exp_cc",
+    [
+        (None, ["email", "preferred_username"]),
+        ([], []),
+        ([COOKIE_CLAIM], [COOKIE_CLAIM]),
+    ],
+)
+def test_authsystem_cookie_claims(installation_config, w__cc, exp_cc):
+    inst = config_authsystem.OIDCAuthSystemConfig(
+        **BARE_AUTHSYSTEM_CONFIG_KW,
+        _cookie_claims=w__cc,
+    )
+
+    found = inst.cookie_claims
+
+    assert found == exp_cc
 
 
 def test_authsystem_server_metadata_url():
@@ -583,12 +612,16 @@ def test_authsystem_from_yaml_w_consent_template(
             W_ISSUER_AUTHSYSTEM_CONFIG_KW.copy(),
         ),
         (
+            W_COOKIE_CLAIMS_AUTHSYSTEM_CONFIG_YAML,
+            W_COOKIE_CLAIMS_AUTHSYSTEM_CONFIG_KW.copy(),
+        ),
+        (
             W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_YAML,
             W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_KW.copy(),
         ),
     ],
 )
-def test_authsystem_from_yaml_w_accepted_azp_list_issuer_rq_claims(
+def test_authsystem_from_yaml_w_azp_list_issuer_cookie_rq_claims(
     installation_config,
     temp_dir,
     config_yaml,
@@ -627,6 +660,7 @@ def test_authsystem_from_yaml_w_accepted_azp_list_issuer_rq_claims(
         W_OIDC_CPP_ABS_CONFIG_KW.copy(),
         W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_KW.copy(),
         W_ISSUER_AUTHSYSTEM_CONFIG_KW.copy(),
+        W_COOKIE_CLAIMS_AUTHSYSTEM_CONFIG_KW.copy(),
         W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_KW.copy(),
     ],
 )
@@ -661,6 +695,9 @@ def test_authsystem_as_yaml(installation_config, temp_dir, w_kw):
 
     if "_issuer" in w_kw:
         expected["issuer"] = w_kw["_issuer"]
+
+    if "_cookie_claims" in w_kw:
+        expected["cookie_claims"] = w_kw["_cookie_claims"]
 
     if "required_claims" in w_kw:
         expected["required_claims"] = w_kw["required_claims"]

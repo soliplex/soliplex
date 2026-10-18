@@ -1,3 +1,4 @@
+import re
 from unittest import mock
 
 import fastapi
@@ -9,6 +10,8 @@ from soliplex import loggers
 from soliplex import models
 from soliplex.views import authz as authz_views
 
+PREFERRED_USERNAME = "bharney"
+USER_SUB = "user-sub"
 ADMIN_EMAIL = "admin@example.com"
 ADMIN_EMAIL_JSON_PATH = f'$[?$.email == "{ADMIN_EMAIL}"]'
 ADMIN_OTHER_JSON_PATH = '$[?$.group == "test.admin.group"]'
@@ -327,4 +330,129 @@ async def test_get_user_authz(
         THE_USER_CLAIMS,
         resource=loggers.AUDIT_RESOURCE_USER_AUTHZ,
         action=loggers.AUDIT_ACTION_READ,
+    )
+
+
+@pytest.mark.parametrize(
+    "resource, expected",
+    [
+        ("ingester_control", True),
+        ("soliplex:room:test-room", True),
+        ("v1.2", True),
+        ("", False),
+        ("has space", False),
+        ("has/slash", False),
+        ("caf\u00e9", False),
+    ],
+)
+def test_authz_check_resource_pattern(resource, expected):
+
+    found = re.fullmatch(authz_views.AUTHZ_CHECK_RESOURCE_PATTERN, resource)
+
+    assert (found is not None) is expected
+
+
+PUN_CLAIM_NON_WIRESAFE = {"preferred_username": "Andr\u00e9"}
+PUN_CLAIM_WIRESAFE = {"preferred_username": PREFERRED_USERNAME}
+EMAIL_CLAIM_NON_WIRESAFE = {"email": f"{ADMIN_EMAIL}\n"}
+EMAIL_CLAIM_WIRESAFE = {"email": ADMIN_EMAIL}
+SUB_CLAIM_NON_WIRESAFE = {"sub": f"{USER_SUB}\t"}
+SUB_CLAIM_WIRESAFE = {"sub": USER_SUB}
+
+
+@pytest.mark.parametrize(
+    "claims, expected",
+    [
+        # No claims
+        ({}, None),
+        # Non-wiresafe claims miss
+        (SUB_CLAIM_NON_WIRESAFE, None),
+        (EMAIL_CLAIM_NON_WIRESAFE, None),
+        (PUN_CLAIM_NON_WIRESAFE, None),
+        # Wiresafe claims hit
+        (SUB_CLAIM_WIRESAFE, USER_SUB),
+        (EMAIL_CLAIM_WIRESAFE, ADMIN_EMAIL),
+        (PUN_CLAIM_WIRESAFE, PREFERRED_USERNAME),
+        # Precedence
+        (SUB_CLAIM_WIRESAFE | EMAIL_CLAIM_WIRESAFE, ADMIN_EMAIL),
+        (SUB_CLAIM_WIRESAFE | PUN_CLAIM_WIRESAFE, PREFERRED_USERNAME),
+        (EMAIL_CLAIM_WIRESAFE | PUN_CLAIM_WIRESAFE, PREFERRED_USERNAME),
+        (
+            PUN_CLAIM_WIRESAFE | EMAIL_CLAIM_WIRESAFE | SUB_CLAIM_WIRESAFE,
+            PREFERRED_USERNAME,
+        ),
+        # Claims with precedence but non-wiresafe values do not short circuit
+        (
+            PUN_CLAIM_NON_WIRESAFE
+            | EMAIL_CLAIM_NON_WIRESAFE
+            | SUB_CLAIM_WIRESAFE,
+            USER_SUB,
+        ),
+        (
+            PUN_CLAIM_NON_WIRESAFE | EMAIL_CLAIM_WIRESAFE | SUB_CLAIM_WIRESAFE,
+            ADMIN_EMAIL,
+        ),
+        (
+            PUN_CLAIM_NON_WIRESAFE
+            | EMAIL_CLAIM_NON_WIRESAFE
+            | SUB_CLAIM_NON_WIRESAFE,
+            None,
+        ),
+    ],
+)
+def test__soliplex_user_for_header(claims, expected):
+
+    found = authz_views._soliplex_user_for_header(claims)
+
+    assert found == expected
+
+
+AUTHZ_CHECK_RESOURCE = "ingester_control"
+
+
+@pytest.mark.anyio
+async def test_get_authz_check_denied():
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = False
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await authz_views.get_authz_check(
+            resource=AUTHZ_CHECK_RESOURCE,
+            the_admin_users=the_admin_users,
+            the_user_claims=THE_USER_CLAIMS,
+        )
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+    the_admin_users.check_admin_access.assert_awaited_once_with(
+        THE_USER_CLAIMS,
+        resource=AUTHZ_CHECK_RESOURCE,
+        action=loggers.AUDIT_ACTION_ACCESS,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "claims, exp_user",
+    [
+        (THE_USER_CLAIMS, ADMIN_EMAIL),
+        ({"name": "Anonymous"}, None),
+    ],
+)
+async def test_get_authz_check_allowed(claims, exp_user):
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = True
+
+    found = await authz_views.get_authz_check(
+        resource=AUTHZ_CHECK_RESOURCE,
+        the_admin_users=the_admin_users,
+        the_user_claims=claims,
+    )
+
+    assert found.status_code == 204
+    assert found.headers.get(authz_views.AUTHZ_CHECK_USER_HEADER) == exp_user
+    the_admin_users.check_admin_access.assert_awaited_once_with(
+        claims,
+        resource=AUTHZ_CHECK_RESOURCE,
+        action=loggers.AUDIT_ACTION_ACCESS,
     )
