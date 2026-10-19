@@ -1027,6 +1027,9 @@ Three blocks are printed:
   that auth system can never satisfy the discriminator via the nginx
   `auth_request` check endpoint — see
   [the check endpoint](../config/oidc_providers.md#the-check-endpoint).
+  The check is best-effort:  it inspects the JSONPath queries in stored
+  discriminators;  claims read only inside a registered JSONPath
+  function extension are invisible to it.
   `(none)` if every referenced claim is carried everywhere.
 
 When the installation's `authorization_db` is the in-memory

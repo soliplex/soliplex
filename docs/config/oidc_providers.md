@@ -84,7 +84,8 @@ default) need no extra configuration.
 - `cookie_claims`: a list of token claim names to copy into the authn
   cookie set at sign-in (default: `email` and `preferred_username`).
   List top-level claim names:  a listed claim is copied whole, including
-  any nested values.  See
+  any nested values.  The authn cookie is signed, not encrypted:  do
+  not list claims you consider sensitive.  See
   [Protecting other services with nginx `auth_request`](#protecting-other-services-with-nginx-auth_request)
   below.
 
@@ -228,7 +229,9 @@ browser then sends with every request to that host.
   `delivery=cookie` sign-in answers with an error page (HTTP 500)
   rather than redirecting.
 
-`POST /api/auth/<id>/logout` clears the cookie.
+`POST /api/auth/<id>/logout` clears the cookie.  The web client's own
+logout drops only its tokens:  the authn cookie persists until this
+endpoint is called or the cookie expires.
 
 ### The check endpoint
 
@@ -245,7 +248,10 @@ subrequest:
   verify or has expired;
 - `403` if the user is authenticated, but not an admin user.
 
-It reads only the authn cookie, not a bearer token.  The admin check
+It reads only the authn cookie, not a bearer token:  the check answers
+for browser navigations, which carry only the cookie, while a client
+holding a bearer token authenticates to the proxied service's own API
+directly.  The admin check
 matches the deployment's admin-user discriminators against the claims
 carried by the cookie, so the provider's `cookie_claims` must name every
 claim those discriminators reference (`sub` is always carried):
@@ -309,6 +315,10 @@ proxy_set_header X-Forwarded-User $soliplex_user;
 
 and different proxied locations may project the same check under
 different names.
+
+The login redirect issued after a lapsed session carries the original
+path, but as a `GET` request:  a `POST` submission lost to a lapse is
+not replayed after sign-in, and must be re-entered.
 
 Sign-ins which deliver tokens (`delivery=fragment`, the default)
 redirect through the same nginx, and an IdP issuing larger tokens can
