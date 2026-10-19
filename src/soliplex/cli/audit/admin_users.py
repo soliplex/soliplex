@@ -164,37 +164,69 @@ def _collect_from_expression(
     return chain
 
 
-def _claims_not_carried(
-    json_paths: list[str],
+def _unresolvable_discriminators(
+    refs: dict[str, set[str]],
     auth_system_configs,
-) -> list[tuple[str, str]]:
-    """Report admin discriminators claims an authn cookie won't carry.
+) -> list[tuple[str, list[str]]]:
+    """Report discriminators 'the authn cookie' can never satisfy.
 
     The admin check (see the nginx 'auth_request' check endpoint)
     evaluates stored discriminators against the claims carried by the
-    authn cookie, so a discriminator whose claims are not all carried
-    can never be satisfied by that auth system's users.
+    authn cookie, so a discriminator is satisfiable for an auth
+    system's users only when that system carries every claim the
+    discriminator references.
 
-    Returns '(auth_system_id, claim)' pairs, in config order, listing
-    every referenced claim not carried by each configured auth system
-    (including always-carried claims such as 'sub':  see
-    'authn.AUTHN_COOKIE_ALWAYS_CLAIMS').
-
-    These pairs are warning-grade:  the audit prints them in the
-    admin-users section, and no installation fails on their account --
-    bearer-token admin checks see full claims regardless.
+    Returns '(json_path, needs)' for every discriminator referenced in
+    'refs' which NO configured auth system fully carries (with no auth
+    systems configured, there are no cookies, and nothing is flagged);
+    'needs' holds the discriminator's referenced claims, sorted.  These
+    entries are warning-grade:  the audit prints them and no
+    installation fails on their account -- bearer-token admin checks
+    see full claims regardless.
     """
-    referenced: set[str] = set()
-    for json_path in json_paths:
-        referenced.update(_discriminator_claim_names(json_path))
+    if not auth_system_configs:
+        return []
 
-    not_carried: list[tuple[str, str]] = []
+    unresolvable: list[tuple[str, list[str]]] = []
+    for json_path, needed in sorted(refs.items()):
+        for oidc_config in auth_system_configs:
+            carried = set(authn.AUTHN_COOKIE_ALWAYS_CLAIMS)
+            carried |= set(oidc_config.cookie_claims)
+            if not (needed - carried):
+                break
+        else:
+            unresolvable.append((json_path, sorted(needed)))
+    return unresolvable
+
+
+def _cookie_claims_gaps(
+    refs: dict[str, set[str]],
+    auth_system_configs,
+) -> dict[str, list[str]]:
+    """Report the claims each auth system's cookie does not carry.
+
+    Returns, per auth system id (config order), the sorted referenced
+    claims its 'cookie_claims' does not carry -- the additions which
+    would let its users satisfy every stored discriminator through the
+    check endpoint -- for auth systems with gaps only.  With no auth
+    systems configured, there are no cookies, and nothing is flagged.
+    Warning-grade, like the unresolvable-discriminator report.
+    """
+    if not auth_system_configs:
+        return {}
+
+    referenced: set[str] = set()
+    for needed in refs.values():
+        referenced.update(needed)
+
+    gaps: dict[str, list[str]] = {}
     for oidc_config in auth_system_configs:
         carried = set(authn.AUTHN_COOKIE_ALWAYS_CLAIMS)
         carried |= set(oidc_config.cookie_claims)
-        for claim in sorted(referenced - carried):
-            not_carried.append((oidc_config.id, claim))
-    return not_carried
+        missing = sorted(referenced - carried)
+        if missing:
+            gaps[oidc_config.id] = missing
+    return gaps
 
 
 def _audit_admin_users_section(
@@ -250,17 +282,35 @@ def _audit_admin_users_section(
         tc_print("  (none)")
     tc_line()
 
-    not_carried = _claims_not_carried(
-        json_paths,
+    refs = {
+        json_path: set(_discriminator_claim_names(json_path))
+        for json_path in json_paths
+    }
+    unresolvable = _unresolvable_discriminators(
+        refs,
+        the_installation.oidc_auth_system_configs,
+    )
+    gaps = _cookie_claims_gaps(
+        refs,
         the_installation.oidc_auth_system_configs,
     )
     tc_print("Claims not carried in the authn cookie:")
-    if not_carried:
-        for the_id, claim in not_carried:
-            tc_print(f"  - {the_id}: {claim}")
-    else:
+    if not unresolvable and not gaps:
         tc_print("  (none)")
-    tc_line()
+        tc_line()
+    else:
+        if unresolvable:
+            tc_print(
+                "  Unresolvable discriminators"
+                " (no provider carries every claim):"
+            )
+            for json_path, needs in unresolvable:
+                tc_print(f"    - {json_path}  (needs {', '.join(needs)})")
+        if gaps:
+            tc_print("  Gaps by auth system (referenced claims not carried):")
+            for the_id, missing in gaps.items():
+                tc_print(f"    - {the_id}: {', '.join(missing)}")
+        tc_line()
 
     errors: dict = {}
     if invalid:

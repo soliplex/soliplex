@@ -1020,20 +1020,26 @@ Three blocks are printed:
   longer present. Use
   [`admin-users delete --allow-invalid-json-path`](#admin-users-delete)
   to remove such an entry. `(none)` if every stored row validates.
-- **Claims not carried in the authn cookie** — one line per
-  `(auth system, claim)` pair for which a stored admin discriminator
-  references a claim the auth system's `cookie_claims` does not carry
-  (plus the always-carried `sub` claim):  users authenticating through
-  that auth system can never satisfy the discriminator via the nginx
-  `auth_request` check endpoint — see
-  [the check endpoint](../config/oidc_providers.md#the-check-endpoint).
-  The check is best-effort:  it inspects the JSONPath queries in stored
-  discriminators;  claims read only inside a registered JSONPath
-  function extension are invisible to it.  These pairs are a warning,
-  not an audit error:  `admin-users` never fails on their account, and
-  they matter only to deployments which gate protected services
-  through the check endpoint.
-  `(none)` if every referenced claim is carried everywhere.
+- **Claims not carried in the authn cookie** — a warning-grade
+  diagnostic about the gap between the stored discriminators and the
+  authn cookie's claims (see
+  [the check endpoint](../config/oidc_providers.md#the-check-endpoint));
+  a warning, not an audit error:  `admin-users` never fails on its
+  account, and it matters only to deployments which gate protected
+  services through the check endpoint.  Two sub-blocks:
+
+  - **Unresolvable discriminators** — one line per stored
+    discriminator which no auth system's cookie fully covers. Such
+    an entry can never admit anyone through the check endpoint:
+    widen the providers' `cookie_claims`, or remove the entry.
+    Claims read only inside a registered JSONPath function extension
+    are invisible to this check.
+  - **Gaps by auth system** — one line per auth system, naming the
+    referenced claims its `cookie_claims` does not carry. Matters
+    only for auth systems whose users are expected to be admin
+    candidates.
+
+  Each sub-block is `(none)` when empty.
 
 When the installation's `authorization_db` is the in-memory
 default (`sqlite://`), no admin rows are persisted; all three blocks read
