@@ -207,12 +207,14 @@ def _soliplex_user_for_header(the_user_claims: authn.UserClaims) -> str | None:
     """Determine a value for the 'X-Soliplex-User' header
 
     Return the first of 'AUTHZ_CHECK_USER_CLAIMS' present in
-    'the_user_claims' whose value is wire-safe (ASCII, printable);
-    if no claim is wire-safe, return 'None'.
+    'the_user_claims' whose value is a wire-safe (printable ASCII)
+    string;  if no claim is wire-safe, return 'None'.  A claim which a
+    quirky IdP emitted as some non-string JSON value fails the gate and
+    falls through, like any other non-safe value.
     """
     for claim in AUTHZ_CHECK_USER_CLAIMS:
         value = the_user_claims.get(claim)
-        if value is not None and value.isascii() and value.isprintable():
+        if isinstance(value, str) and value.isascii() and value.isprintable():
             return value
 
     return None

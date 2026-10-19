@@ -358,6 +358,10 @@ EMAIL_CLAIM_NON_WIRESAFE = {"email": f"{ADMIN_EMAIL}\n"}
 EMAIL_CLAIM_WIRESAFE = {"email": ADMIN_EMAIL}
 SUB_CLAIM_NON_WIRESAFE = {"sub": f"{USER_SUB}\t"}
 SUB_CLAIM_WIRESAFE = {"sub": USER_SUB}
+# A quirky IdP's non-string JSON claims fail the wire gate, like any
+# other non-safe value, and fall through.
+PUN_CLAIM_NON_STRING = {"preferred_username": 12345}
+EMAIL_CLAIM_NON_STRING = {"email": {"local": "phreddy"}}
 
 
 @pytest.mark.parametrize(
@@ -369,6 +373,11 @@ SUB_CLAIM_WIRESAFE = {"sub": USER_SUB}
         (SUB_CLAIM_NON_WIRESAFE, None),
         (EMAIL_CLAIM_NON_WIRESAFE, None),
         (PUN_CLAIM_NON_WIRESAFE, None),
+        # Non-string claims miss, and fall through like any non-safe value.
+        (PUN_CLAIM_NON_STRING, None),
+        (PUN_CLAIM_NON_STRING | EMAIL_CLAIM_WIRESAFE, ADMIN_EMAIL),
+        (EMAIL_CLAIM_NON_STRING, None),
+        (EMAIL_CLAIM_NON_STRING | SUB_CLAIM_WIRESAFE, USER_SUB),
         # Wiresafe claims hit
         (SUB_CLAIM_WIRESAFE, USER_SUB),
         (EMAIL_CLAIM_WIRESAFE, ADMIN_EMAIL),
