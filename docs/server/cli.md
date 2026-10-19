@@ -1006,7 +1006,7 @@ See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Output
 
-Two blocks are printed:
+Three blocks are printed:
 
 - **Admin users (N)** — one line per stored admin row. Email-keyed and
   `preferred_username`-keyed admins (the canonical
@@ -1020,9 +1020,17 @@ Two blocks are printed:
   longer present. Use
   [`admin-users delete --allow-invalid-json-path`](#admin-users-delete)
   to remove such an entry. `(none)` if every stored row validates.
+- **Claims not carried in the authn cookie** — one line per
+  `(auth system, claim)` pair for which a stored admin discriminator
+  references a claim the auth system's `cookie_claims` does not carry
+  (plus the always-carried `sub` claim):  users authenticating through
+  that auth system can never satisfy the discriminator via the nginx
+  `auth_request` check endpoint — see
+  [the check endpoint](../config/oidc_providers.md#the-check-endpoint).
+  `(none)` if every referenced claim is carried everywhere.
 
 When the installation's `authorization_db` is the in-memory
-default (`sqlite://`), no admin rows are persisted; both blocks read
+default (`sqlite://`), no admin rows are persisted; all three blocks read
 as `(none)`.
 
 When the authorization database cannot be reached at all — e.g. its

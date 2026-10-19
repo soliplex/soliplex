@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import re
 
 import typer
 
+from soliplex import authn
 from soliplex import authz
 from soliplex.cli import cli_util
 from soliplex.cli import types
@@ -67,6 +69,58 @@ def _invalid_admin_user_json_paths(
     return invalid
 
 
+_DISCRIMINATOR_CLAIM_RE = re.compile(r"\$\.([A-Za-z_]\w*)")
+_BRACKETED_CLAIM_RE = re.compile(r"\$\[[\"']([\w.]+)[\"']\]")
+
+
+def _discriminator_claim_names(json_path: str) -> list[str]:
+    """Extract the claim names referenced by an admin discriminator.
+
+    Returns the (sorted) distinct root claims of every '$.name' and
+    '$["name"]' reference in 'json_path'.  A dotted reference such as
+    '$.realm_access.roles[0]' contributes only its root, 'realm_access',
+    matching how the authn cookie carries claims.  Quoted string
+    literals are stripped first:  a comparison value which itself
+    contains '$.something' contributes nothing.
+    """
+    stripped = re.sub(r'"[^"]*"', "", json_path)
+
+    claims = set(_DISCRIMINATOR_CLAIM_RE.findall(stripped))
+    claims |= {
+        match.split(".")[0] for match in _BRACKETED_CLAIM_RE.findall(stripped)
+    }
+    return sorted(claims)
+
+
+def _claims_not_carried(
+    json_paths: list[str],
+    auth_system_configs,
+) -> list[tuple[str, str]]:
+    """Report admin discriminators claims an authn cookie won't carry.
+
+    The admin check (see the nginx 'auth_request' check endpoint)
+    evaluates stored discriminators against the claims carried by the
+    authn cookie, so a discriminator whose claims are not all carried
+    can never be satisfied by that auth system's users.
+
+    Returns '(auth_system_id, claim)' pairs, in config order, listing
+    every referenced claim not carried by each configured auth system
+    (including always-carried claims such as 'sub':  see
+    'authn.AUTHN_COOKIE_ALWAYS_CLAIMS').
+    """
+    referenced: set[str] = set()
+    for json_path in json_paths:
+        referenced.update(_discriminator_claim_names(json_path))
+
+    not_carried: list[tuple[str, str]] = []
+    for oidc_config in auth_system_configs:
+        carried = set(authn.AUTHN_COOKIE_ALWAYS_CLAIMS)
+        carried |= set(oidc_config.cookie_claims)
+        for claim in sorted(referenced - carried):
+            not_carried.append((oidc_config.id, claim))
+    return not_carried
+
+
 def _audit_admin_users_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
@@ -120,9 +174,26 @@ def _audit_admin_users_section(
         tc_print("  (none)")
     tc_line()
 
+    not_carried = _claims_not_carried(
+        json_paths,
+        the_installation.oidc_auth_system_configs,
+    )
+    tc_print("Claims not carried in the authn cookie:")
+    if not_carried:
+        for the_id, claim in not_carried:
+            tc_print(f"  - {the_id}: {claim}")
+    else:
+        tc_print("  (none)")
+    tc_line()
+
     errors: dict = {}
+    section_findings: dict = {}
     if invalid:
-        errors["admin_users"] = {"invalid_json_paths": invalid}
+        section_findings["invalid_json_paths"] = invalid
+    if not_carried:
+        section_findings["claims_not_carried"] = not_carried
+    if section_findings:
+        errors["admin_users"] = section_findings
     return errors
 
 

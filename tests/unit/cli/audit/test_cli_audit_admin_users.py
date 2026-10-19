@@ -6,6 +6,7 @@ import pytest
 
 from soliplex.cli import cli_util
 from soliplex.cli.audit import admin_users as audit_admin_users
+from soliplex.config import authsystem as config_authsystem
 from tests.unit.cli.audit import audit_helpers
 
 
@@ -141,6 +142,86 @@ def test__invalid_admin_user_json_paths(json_paths, exp_invalid):
 
     normalized = [(jp, "<error>") for (jp, _err) in found]
     assert normalized == exp_invalid
+
+
+_A_ID = "alpha"
+_B_ID = "beta"
+
+
+@pytest.mark.parametrize(
+    "json_path, exp_claim_names",
+    [
+        # Canonical single-claim discriminators.
+        ('$[?$.email == "alice@example.com"]', ["email"]),
+        ('$[?$.preferred_username == "bob"]', ["preferred_username"]),
+        # Quoted values contribute no claim names, however evil-shaped.
+        ('$[?$.email == "x@$.evil.com"]', ["email"]),
+        # Filter functions' arguments are claims like any other.
+        ("$[?some_func($.email)]", ["email"]),
+        # Dotted references contribute only their root claim.
+        ("$.realm_access.roles[0]", ["realm_access"]),
+        # Bracketed references, root segment only.
+        ("$['email']", ["email"]),
+        # No claim references at all.
+        ("$", []),
+    ],
+)
+def test__discriminator_claim_names(json_path, exp_claim_names):
+
+    found = audit_admin_users._discriminator_claim_names(json_path)
+
+    assert found == exp_claim_names
+
+
+@pytest.mark.parametrize(
+    "json_paths, auth_system_kws, exp_not_carried",
+    [
+        # No stored admins: nothing referenced, nothing uncovered.
+        ([], [(_A_ID, ("email",))], []),
+        # Referenced claims carried by the (only) auth system.
+        (
+            ['$[?$.email == "alice@example.com"]'],
+            [(_A_ID, ("email", "preferred_username"))],
+            [],
+        ),
+        # 'sub' is always carried, whatever 'cookie_claims' says.
+        (['$[?$.sub == "user-sub"]'], [(_A_ID, ())], []),
+        # Uncovered claims: one pair for each auth system missing them.
+        (
+            ["$.realm_access.roles[0]"],
+            [(_A_ID, ()), (_B_ID, ("realm_access",))],
+            [(_A_ID, "realm_access")],
+        ),
+        # Multiple paths accumulate; output sorted by claim name.
+        (
+            [
+                '$[?$.email == "alice@example.com"]',
+                '$[?$.preferred_username == "bob"]',
+            ],
+            [(_A_ID, ())],
+            [(_A_ID, "email"), (_A_ID, "preferred_username")],
+        ),
+        # No auth systems configured: no cookies exist to check.
+        (['$[?$.email == "alice@example.com"]'], [], []),
+    ],
+)
+def test__claims_not_carried(
+    json_paths,
+    auth_system_kws,
+    exp_not_carried,
+):
+    configs = []
+    for the_id, cookie_claims in auth_system_kws:
+        config = mock.create_autospec(
+            config_authsystem.OIDCAuthSystemConfig,
+            id=the_id,
+        )
+        config.cookie_claims = list(cookie_claims)
+        configs.append(config)
+
+    found = audit_admin_users._claims_not_carried(json_paths, configs)
+
+    assert found == exp_not_carried
 
 
 # _audit_admin_users_section: ui only
