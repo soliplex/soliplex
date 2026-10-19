@@ -4,6 +4,7 @@ from unittest import mock
 
 import pytest
 
+from soliplex import authz
 from soliplex.cli import cli_util
 from soliplex.cli.audit import admin_users as audit_admin_users
 from soliplex.config import authsystem as config_authsystem
@@ -164,7 +165,27 @@ _B_ID = "beta"
         ("$['email']", ["email"]),
         # No claim references at all.
         ("$", []),
+        # Nested '@'-relative queries take the enclosing chain's root.
+        ('$[?$.groups[?@ == "x"]]', ["groups"]),
+        ('$[?@.org.code == "XYZ"]', ["org"]),
+        (
+            '$[?$.org.personnel.specialties[?@ == "A1B2C3"]]',
+            ["org"],
+        ),
+        # Unions, recursive descent:  every chain contributes its root.
+        ('$["a", "b"]', ["a", "b"]),
+        ("$..roles", ["roles"]),
+        # A singular-query selector reads its embedded query's claims.
+        ("$[$.key]", ["key"]),
+        # Unparseable queries contribute nothing:  rows like these are
+        # reported separately, in the invalid JSONPath block.
+        ("$[", []),
+        ("$[?missing_func($.email)]", []),
     ],
+)
+@mock.patch.dict(
+    authz.the_jsonpath_environment.function_extensions,
+    {"some_func": lambda *args: None},
 )
 def test__discriminator_claim_names(json_path, exp_claim_names):
 

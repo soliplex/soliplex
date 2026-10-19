@@ -167,8 +167,8 @@ def test_authenticate_w_token_none(w_auth_disabled):
 @pytest.mark.parametrize("w_hit", [None, "first", "second"])
 @mock.patch("soliplex.authn.validate_access_token")
 def test_authenticate(vat, with_auth_systems, w_hit):
-    FIRST_USER = {"test": "pydio"}
-    SECOND_USER = {"test": "josce"}
+    FIRST_USER = {"test": "one-idp"}
+    SECOND_USER = {"test": "another-idp"}
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = len(with_auth_systems) == 0
     the_installation.oidc_auth_system_configs = with_auth_systems
@@ -396,7 +396,7 @@ COOKIE_CLAIMS = {
     "exp": COOKIE_EXP,
     "email": "phreddy@example.com",
     "preferred_username": "phreddy",
-    "josce": {"org": {"duty_org_code": "XYZ"}},
+    "an-idp": {"org": {"sub-org": "XYZ"}},
     "scope": "openid email",
 }
 
@@ -440,9 +440,9 @@ def test__authn_cookie_serializer(cookie_installation):
             id="default",
         ),
         pytest.param(
-            ["josce", "missing"],
+            ["an-idp", "missing"],
             {},
-            ["sub", "josce"],
+            ["sub", "an-idp"],
             True,
             id="w_missing",
         ),

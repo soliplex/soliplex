@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import re
 
+import jsonpath
 import typer
+from jsonpath import filter as jp_filter
 
 from soliplex import authn
 from soliplex import authz
@@ -69,27 +70,98 @@ def _invalid_admin_user_json_paths(
     return invalid
 
 
-_DISCRIMINATOR_CLAIM_RE = re.compile(r"\$\.([A-Za-z_]\w*)")
-_BRACKETED_CLAIM_RE = re.compile(r"\$\[[\"']([\w.]+)[\"']\]")
-
-
 def _discriminator_claim_names(json_path: str) -> list[str]:
     """Extract the claim names referenced by an admin discriminator.
 
-    Returns the (sorted) distinct root claims of every '$.name' and
-    '$["name"]' reference in 'json_path'.  A dotted reference such as
-    '$.realm_access.roles[0]' contributes only its root, 'realm_access',
-    matching how the authn cookie carries claims.  Quoted string
-    literals are stripped first:  a comparison value which itself
-    contains '$.something' contributes nothing.
-    """
-    stripped = re.sub(r'"[^"]*"', "", json_path)
+    Returns the (sorted) distinct claim names a discriminator can
+    reference from the token root:  for each chain of names reachable
+    from '$', or from an '@'-relative query under '$' or under one of
+    those chains, the chain's first name (so '$.realm_access.roles[0]'
+    yields 'realm_access', matching how the authn cookie carries
+    claims).
 
-    claims = set(_DISCRIMINATOR_CLAIM_RE.findall(stripped))
-    claims |= {
-        match.split(".")[0] for match in _BRACKETED_CLAIM_RE.findall(stripped)
-    }
+    Parsing uses this environment's own JSONPath compiler, not pattern
+    matching:  quoted values, slices, wildcards, unions, recursive
+    descent, nested filters and JSONPath function extensions are all
+    understood, though claims read only *inside* a function extension
+    remain invisible to the audit.
+
+    An unparseable query (e.g. authored under a metaconfig whose filter
+    function no longer exists) contributes no claim names:  such rows
+    are reported separately, in the invalid JSONPath block.
+    """
+    try:
+        parsed = authz.the_jsonpath_environment.compile(json_path)
+    except jsonpath.JSONPathError:
+        return []
+
+    claims: set[str] = set()
+    _collect_from_segments(parsed.segments, (), claims)
     return sorted(claims)
+
+
+def _collect_from_segments(
+    segments,
+    chain: tuple[str, ...],
+    claims: set[str],
+) -> None:
+    """Fold a segment sequence into the claim set, threading 'chain'.
+
+    Each chain's first name is a referenced claim.  Within one segment,
+    union selectors each fork from the incoming chain, and the first
+    fork's chain continues into later segments.  Wildcard, index and
+    slice segments pass the chain through unchanged.
+    """
+    for segment in segments:
+        grown: tuple[str, ...] | None = None
+
+        for selector in segment.selectors:
+            name = getattr(selector, "name", None)
+
+            if name is None:
+                sub_path = getattr(selector, "query", None)
+                if sub_path is not None:
+                    _collect_from_segments(sub_path.segments, (), claims)
+                    continue
+
+                expression = getattr(selector, "expression", None)
+                if expression is not None:
+                    _collect_from_expression(expression, chain, claims)
+                continue
+
+            forked = (*chain, str(name))
+            claims.add(forked[0])
+            if grown is None:
+                grown = forked
+
+        if grown is not None:
+            chain = grown
+
+
+def _collect_from_expression(
+    expression,
+    chain: tuple[str, ...],
+    claims: set[str],
+) -> tuple[str, ...]:
+    """Fold a filter expression's claim references into 'claims'.
+
+    Embedded JSONPaths are folded per their kind:  a '$'-anchored query
+    re-roots at '$';  an '@'-relative query continues the enclosing
+    chain.  Other expressions (infix operators, literals, function
+    calls) contribute only their children.
+    """
+    if isinstance(expression, jp_filter.FilterQuery):
+        sub_chain: tuple[str, ...] = chain
+        if not isinstance(expression, jp_filter.RelativeFilterQuery):
+            sub_chain = ()
+
+        _collect_from_segments(expression.path.segments, sub_chain, claims)
+        return chain
+
+    for child in expression.children():
+        _collect_from_expression(child, chain, claims)
+
+    return chain
 
 
 def _claims_not_carried(
