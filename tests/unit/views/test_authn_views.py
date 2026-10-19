@@ -855,12 +855,12 @@ async def test_get_login_system_unlisted_consent(
     )
 
 
-PENDING = {
+PENDING_WO_DELIVERY = {
     "return_to": UNLISTED_RETURN_TO,
     "prompt": TEST_PROMPT,
-    "delivery": "cookie",
     "csrf_token": TEST_CSRF_TOKEN,
 }
+PENDING = PENDING_WO_DELIVERY | {"delivery": "cookie"}
 
 
 @pytest.mark.anyio
@@ -909,6 +909,7 @@ async def test_post_login_system_confirm_invalid(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_pending", [PENDING, PENDING_WO_DELIVERY])
 @mock.patch("soliplex.views.authn._redirect_to_idp")
 @mock.patch("soliplex.authn._get_authsystem_config")
 async def test_post_login_system_confirm_continue(
@@ -916,11 +917,12 @@ async def test_post_login_system_confirm_continue(
     _redirect_to_idp,
     the_unauth_logger,
     login_asc,
+    w_pending,
 ):
     the_installation = mock.create_autospec(installation.Installation)
     bound_logger = the_unauth_logger.bind.return_value
     _get_authsystem_config.return_value = login_asc
-    request = _make_request(session={PENDING_KEY: dict(PENDING)})
+    request = _make_request(session={PENDING_KEY: dict(w_pending)})
 
     found = await authn_views.post_login_system_confirm(
         request=request,
@@ -940,7 +942,7 @@ async def test_post_login_system_confirm_continue(
         system=TEST_SYSTEM,
         return_to=UNLISTED_RETURN_TO,
         prompt=TEST_PROMPT,
-        delivery=_CD.COOKIE,
+        delivery=_CD(w_pending.get("delivery", _CD.FRAGMENT)),
     )
     bound_logger.info.assert_called_once_with(
         loggers.AUTHN_CONSENT_CONFIRMED,

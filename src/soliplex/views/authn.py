@@ -497,6 +497,9 @@ async def post_login_system_confirm(
             loggers.AUTHN_CONSENT_CONFIRMED,
             return_to=pending["return_to"],
         )
+        delivery = CallbackDelivery(
+            pending.get("delivery", CallbackDelivery.FRAGMENT)
+        )
         return await _redirect_to_idp(
             request,
             the_installation=the_installation,
@@ -504,7 +507,7 @@ async def post_login_system_confirm(
             system=system,
             return_to=pending["return_to"],
             prompt=pending["prompt"],
-            delivery=CallbackDelivery(pending["delivery"]),
+            delivery=delivery,
         )
 
     if decision != "cancel":
