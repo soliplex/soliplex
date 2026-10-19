@@ -84,7 +84,7 @@ async def get_the_authn_cookie_claims(
     cookie = request.cookies.get(authn_module.AUTHN_COOKIE_NAME)
 
     if cookie is None:
-        the_unauth_logger.error(loggers.AUTHN_COOKIE_NOT_SET)
+        the_unauth_logger.info(loggers.AUTHN_COOKIE_NOT_SET)
         raise fastapi.HTTPException(
             status_code=401,
             detail=loggers.AUTHN_COOKIE_NOT_SET,

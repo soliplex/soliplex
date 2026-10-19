@@ -165,7 +165,7 @@ async def test_get_the_authn_cookie_claims_wo_cookie(
 
     assert exc.value.status_code == 401
     assert exc.value.detail == loggers.AUTHN_COOKIE_NOT_SET
-    the_unauth_logger.error.assert_called_once_with(
+    the_unauth_logger.info.assert_called_once_with(
         loggers.AUTHN_COOKIE_NOT_SET,
     )
     load_authn_cookie.assert_not_called()
