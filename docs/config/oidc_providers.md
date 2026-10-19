@@ -235,7 +235,9 @@ subrequest:
 - `204` if the user is an admin user (see
   [`admin-users`](../server/cli.md#admin-users)), with the
   `X-Soliplex-User` header
-  naming the user (their `preferred_username`, `email`, or `sub` claim);
+  naming the user (their `preferred_username`, `email`, or `sub` claim;
+  the header is omitted when none of the three is a printable ASCII
+  string);
 - `401` if the request has no authn cookie, or the cookie does not
   verify or has expired;
 - `403` if the user is authenticated, but not an admin user.
@@ -250,6 +252,14 @@ otherwise the check denies users whom it would otherwise admit.
 for the audit log, such as `ingester_control`, made of letters, digits,
 `_`, `.`, `:`, and `-`.  In no-auth mode, it answers as the rest of the
 API does.
+
+On success, the response's `X-Soliplex-User` header is an unverified
+display name, projected onto the proxied request by nginx:  treat it
+as a value for logs and interface display, never as an input to
+authorization, and never as a record key.  It is trustworthy only in
+locations whose `proxy_set_header` overwrites whatever the client
+itself sent, so keep the proxied service reachable only through nginx,
+and repeat the `proxy_set_header` in every proxied location.
 
 ### Signing in from a proxied service
 
@@ -286,6 +296,32 @@ location @soliplex_login {
 The proxied service receives the `soliplex_authn` cookie along with
 every other cookie for the host.  To keep it from the service, remove
 it in nginx before proxying.
+
+The header's name is nginx's to change, too:  a service expecting,
+say, `X-Forwarded-User` takes one line in the same location,
+
+```nginx
+proxy_set_header X-Forwarded-User $soliplex_user;
+```
+
+and different proxied locations may project the same check under
+different names.
+
+Sign-ins which deliver tokens (`delivery=fragment`, the default)
+redirect through the same nginx, and an IdP issuing larger tokens can
+push the callback's `Location` header past nginx's default
+response-header buffer (4k or 8k, one memory page):  nginx logs
+`upstream sent too big header`, and the login fails with a 502.
+Where the Soliplex API is proxied, size the buffers to the
+deployment's largest tokens:
+
+```nginx
+proxy_buffer_size 64k;
+proxy_buffers 8 64k;
+```
+
+`delivery=cookie` logins — the proxied-service flow above — do not
+have this problem:  their redirects carry no tokens at all.
 
 ## Customizing the consent page
 
