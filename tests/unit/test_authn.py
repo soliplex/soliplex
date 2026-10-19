@@ -608,42 +608,48 @@ def test_clear_authn_cookie(secure_cookies):
 
 
 @pytest.mark.parametrize(
-    "w_secret, w_envelope, expected",
+    "w_secret, w_envelope, expected, exp_reason",
     [
         pytest.param(
             COOKIE_SECRET,
             (AUTHSYSTEM_ID, COOKIE_EXP, COOKIE_CLAIMS),
             COOKIE_CLAIMS,
+            None,
             id="valid",
         ),
         pytest.param(
             "other-secret",
             (AUTHSYSTEM_ID, COOKIE_EXP, COOKIE_CLAIMS),
             None,
+            loggers.AUTHN_COOKIE_BAD_SIGNATURE,
             id="bad_signature",
+        ),
+        pytest.param(
+            COOKIE_SECRET,
+            ("too", "short"),
+            None,
+            loggers.AUTHN_COOKIE_BAD_ENVELOPE,
+            id="bad_envelope",
         ),
         pytest.param(
             COOKIE_SECRET,
             (AUTHSYSTEM_ID, COOKIE_NOW, COOKIE_CLAIMS),
             None,
+            loggers.AUTHN_COOKIE_EXPIRED,
             id="expired",
         ),
         pytest.param(
             COOKIE_SECRET,
             ("other-auth-system", COOKIE_EXP, COOKIE_CLAIMS),
             None,
+            loggers.AUTHN_COOKIE_UNKNOWN_IDP,
             id="unknown_issuer",
-        ),
-        pytest.param(
-            COOKIE_SECRET,
-            ("too", "short"),
-            None,
-            id="wrong_arity",
         ),
         pytest.param(
             COOKIE_SECRET,
             dict(COOKIE_CLAIMS),
             None,
+            loggers.AUTHN_COOKIE_BAD_ENVELOPE,
             id="pre_envelope",
         ),
     ],
@@ -655,12 +661,14 @@ def test_load_authn_cookie(
     w_secret,
     w_envelope,
     expected,
+    exp_reason,
 ):
     value = itsdangerous.URLSafeSerializer(
         w_secret,
         salt=authn.AUTHN_COOKIE_SALT,
     ).dumps(w_envelope)
 
-    found = authn.load_authn_cookie(cookie_installation, value)
+    found, reason = authn.load_authn_cookie(cookie_installation, value)
 
     assert found == expected
+    assert reason == exp_reason

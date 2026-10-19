@@ -246,10 +246,10 @@ def clear_authn_cookie(response: fastapi.Response):
 def load_authn_cookie(
     the_installation: installation.Installation,
     value: str,
-) -> UserClaims | None:
-    """Return the claims held in an authn cookie's 'value'
+) -> tuple[UserClaims | None, None | str]:
+    """Return '(claims, None)' from authn cookie's 'value' if valid.
 
-    Return 'None' if:
+    Return '(None, reason)' if not:
     - the signature does not verify;
     - 'value' is not a well formed '(authsystem_id, exp, claims)' envelope;
     - the unpacked 'exp' has expired;
@@ -258,21 +258,21 @@ def load_authn_cookie(
     try:
         envelope = _authn_cookie_serializer(the_installation).loads(value)
     except itsdangerous.BadSignature:
-        return None
+        return None, loggers.AUTHN_COOKIE_BAD_SIGNATURE
 
     try:
         authsystem_id, exp, claims = envelope
     except ValueError:
-        return None
+        return None, loggers.AUTHN_COOKIE_BAD_ENVELOPE
 
     if exp <= time.time():
-        return None
+        return None, loggers.AUTHN_COOKIE_EXPIRED
 
     authsystem_map = {
         auth_system.id
         for auth_system in the_installation.oidc_auth_system_configs
     }
     if authsystem_id not in authsystem_map:
-        return None
+        return None, loggers.AUTHN_COOKIE_UNKNOWN_IDP
 
-    return claims
+    return claims, None

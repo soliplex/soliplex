@@ -181,7 +181,9 @@ async def test_get_the_authn_cookie_claims_w_cookie(
 ):
     the_installation.auth_disabled = False
     the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
-    load_authn_cookie.return_value = THE_USER_CLAIMS if w_valid else None
+    load_authn_cookie.return_value = (
+        (THE_USER_CLAIMS, None) if w_valid else (None, "testing")
+    )
     request = _make_cookie_request(COOKIE_VALUE)
 
     if w_valid:
@@ -202,8 +204,9 @@ async def test_get_the_authn_cookie_claims_w_cookie(
     else:
         assert expected.value.status_code == 401
         assert expected.value.detail == loggers.AUTHN_COOKIE_INVALID
-        the_unauth_logger.error.assert_called_once_with(
+        the_unauth_logger.info.assert_called_once_with(
             loggers.AUTHN_COOKIE_INVALID,
+            reason="testing",
         )
 
     load_authn_cookie.assert_called_once_with(the_installation, COOKIE_VALUE)
