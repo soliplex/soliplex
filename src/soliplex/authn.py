@@ -201,11 +201,12 @@ def set_authn_cookie(
     expires at 'claims["exp"]'.  Returns True when the cookie was set.
 
     A value larger than 'AUTHN_COOKIE_MAX_SIZE' is logged as an error,
-    and the cookie is NOT set:  the browser would not store a cookie
-    that big (see 'AUTHN_COOKIE_MAX_SIZE'), and setting it would evict
-    any cookie the visitor already holds, leaving proxied-service
-    sessions re-logging-in on every request until the deployment trims
-    'cookie_claims'.
+    and the cookie is cleared from the response rather than set:  the
+    browser ignores an oversized 'Set-Cookie' entirely (see
+    'AUTHN_COOKIE_MAX_SIZE'), so merely not setting it would leave
+    whatever 'soliplex_authn' cookie the browser already holds --
+    possibly left by a different visitor's sign-in -- authorizing the
+    wrong person until it expires.
     """
     names = (*AUTHN_COOKIE_ALWAYS_CLAIMS, *auth_system.cookie_claims)
     selected = {name: claims[name] for name in names if name in claims}
@@ -226,6 +227,7 @@ def set_authn_cookie(
         )
     else:
         logger.error(loggers.AUTHN_COOKIE_TOO_LARGE, size=len(value))
+        clear_authn_cookie(response)
 
     return cookie_set
 

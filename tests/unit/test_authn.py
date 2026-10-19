@@ -506,6 +506,13 @@ def test_set_authn_cookie(
         logger.error.assert_not_called()
     else:
         response.set_cookie.assert_not_called()
+        response.delete_cookie.assert_called_once_with(
+            authn.AUTHN_COOKIE_NAME,
+            path="/",
+            secure=secure_cookies.return_value,
+            httponly=True,
+            samesite="lax",
+        )
 
         (logged,) = logger.error.call_args_list
         (msg,) = logged.args
@@ -561,6 +568,13 @@ def test_set_authn_cookie_size_boundary(
 
     if exp_logged:
         response.set_cookie.assert_not_called()
+        response.delete_cookie.assert_called_once_with(
+            authn.AUTHN_COOKIE_NAME,
+            path="/",
+            secure=secure_cookies.return_value,
+            httponly=True,
+            samesite="lax",
+        )
         logger.error.assert_called_once_with(
             loggers.AUTHN_COOKIE_TOO_LARGE,
             size=w_len,
