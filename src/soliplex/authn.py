@@ -193,35 +193,41 @@ def set_authn_cookie(
     auth_system: config_authsystem.OIDCAuthSystemConfig,
     claims: UserClaims,
     logger: loggers.LogWrapper,
-):
+) -> bool:
     """Set the signed authn cookie on 'response'
 
     The cookie holds the claims named in 'AUTHN_COOKIE_ALWAYS_CLAIMS' and
     in 'auth_system.cookie_claims' (those present in 'claims'), and
-    expires at 'claims["exp"]'.  A value larger than
-    'AUTHN_COOKIE_MAX_SIZE' is logged as an error:  the browser will
-    not store a cookie that big (see 'AUTHN_COOKIE_MAX_SIZE'), so
-    proxied-service sessions would re-login on every request until the
-    deployment trims 'cookie_claims'.  The oversized cookie is still
-    sent either way.
+    expires at 'claims["exp"]'.  Returns True when the cookie was set.
+
+    A value larger than 'AUTHN_COOKIE_MAX_SIZE' is logged as an error,
+    and the cookie is NOT set:  the browser would not store a cookie
+    that big (see 'AUTHN_COOKIE_MAX_SIZE'), and setting it would evict
+    any cookie the visitor already holds, leaving proxied-service
+    sessions re-logging-in on every request until the deployment trims
+    'cookie_claims'.
     """
     names = (*AUTHN_COOKIE_ALWAYS_CLAIMS, *auth_system.cookie_claims)
     selected = {name: claims[name] for name in names if name in claims}
     envelope = (auth_system.id, claims["exp"], selected)
     value = _authn_cookie_serializer(the_installation).dumps(envelope)
 
-    if len(value) > AUTHN_COOKIE_MAX_SIZE:
+    cookie_set = len(value) <= AUTHN_COOKIE_MAX_SIZE
+
+    if cookie_set:
+        response.set_cookie(
+            AUTHN_COOKIE_NAME,
+            value,
+            max_age=max(int(claims["exp"] - time.time()), 0),
+            path="/",
+            secure=secure_cookies(),
+            httponly=True,
+            samesite="lax",
+        )
+    else:
         logger.error(loggers.AUTHN_COOKIE_TOO_LARGE, size=len(value))
 
-    response.set_cookie(
-        AUTHN_COOKIE_NAME,
-        value,
-        max_age=max(int(claims["exp"] - time.time()), 0),
-        path="/",
-        secure=secure_cookies(),
-        httponly=True,
-        samesite="lax",
-    )
+    return cookie_set
 
 
 def clear_authn_cookie(response: fastapi.Response):

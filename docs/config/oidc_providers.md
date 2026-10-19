@@ -220,10 +220,13 @@ browser then sends with every request to that host.
 - It is marked `Secure`, unless `soliplex-cli serve` runs with
   `--insecure-session-cookie` for local testing.
 - A value larger than 4000 bytes is logged as an error, and the
-  browser will not keep the cookie (their 4096-byte limit counts
-  name and value, and this cookie's name takes 14 of them), so
-  proxied-service sessions re-login on every request:  trim the
-  provider's `cookie_claims`.
+  cookie is not set:  the browser would not keep it (their 4096-byte
+  limit counts name and value, and this cookie's name takes 14 of
+  them), and setting it would evict any cookie the visitor already
+  holds.  Proxied-service sessions re-login on every request until
+  the deployment trims the provider's `cookie_claims`;  a
+  `delivery=cookie` sign-in answers with an error page (HTTP 500)
+  rather than redirecting.
 
 `POST /api/auth/<id>/logout` clears the cookie.
 

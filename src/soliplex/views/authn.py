@@ -126,8 +126,14 @@ def _classify_return_to(
 
 
 CONSENT_TEMPLATE_FILENAME = "consent.html.mako"
-_PACKAGED_CONSENT_TEMPLATE = (
-    pathlib.Path(__file__).parent / "templates" / CONSENT_TEMPLATE_FILENAME
+_PACKAGED_TEMPLATES = pathlib.Path(__file__).parent / "templates"
+_PACKAGED_CONSENT_TEMPLATE = _PACKAGED_TEMPLATES / CONSENT_TEMPLATE_FILENAME
+
+# The callback serves this page when the authn cookie cannot be set
+# ('delivery=cookie' sign-ins):  see 'authn.AUTHN_COOKIE_MAX_SIZE'.
+COOKIE_TOO_LARGE_TEMPLATE_FILENAME = "cookie-too-large.html.mako"
+_PACKAGED_COOKIE_TOO_LARGE_TEMPLATE = (
+    _PACKAGED_TEMPLATES / COOKIE_TOO_LARGE_TEMPLATE_FILENAME
 )
 
 # No 'form-action': browsers apply it to the redirect which follows the
@@ -196,6 +202,34 @@ def _display_origin(return_to: str) -> str:
     return f"{parsed.scheme}://{host}{port}"
 
 
+def _oidc_folder_template_path(
+    filename: str,
+    authsystem_config: config_authsystem.OIDCAuthSystemConfig,
+) -> pathlib.Path:
+    """Find a page template:  oidc folder first, packaged default second"""
+    in_oidc_folder = authsystem_config._config_path.parent / filename
+
+    if in_oidc_folder.is_file():
+        return in_oidc_folder
+
+    return _PACKAGED_TEMPLATES / filename
+
+
+def _cookie_too_large_template_path(
+    authsystem_config: config_authsystem.OIDCAuthSystemConfig,
+) -> pathlib.Path:
+    """Find the template for the page showing the "cookie too large" error
+
+    - 'cookie-too-large.html.mako' in the auth system's 'oidc' folder,
+      if present
+    - else the packaged default
+    """
+    return _oidc_folder_template_path(
+        COOKIE_TOO_LARGE_TEMPLATE_FILENAME,
+        authsystem_config,
+    )
+
+
 def _consent_template_path(
     authsystem_config: config_authsystem.OIDCAuthSystemConfig,
 ) -> pathlib.Path:
@@ -208,14 +242,10 @@ def _consent_template_path(
     if authsystem_config.consent_template_path is not None:
         return authsystem_config.consent_template_path
 
-    in_oidc_folder = (
-        authsystem_config._config_path.parent / CONSENT_TEMPLATE_FILENAME
+    return _oidc_folder_template_path(
+        CONSENT_TEMPLATE_FILENAME,
+        authsystem_config,
     )
-
-    if in_oidc_folder.is_file():
-        return in_oidc_folder
-
-    return _PACKAGED_CONSENT_TEMPLATE
 
 
 def _render_template(template_path: pathlib.Path, **kwargs) -> str:
@@ -244,6 +274,37 @@ def _consent_response(
         html = _render_template(_PACKAGED_CONSENT_TEMPLATE, **kwargs)
 
     return responses.HTMLResponse(html, headers=_CONSENT_HEADERS)
+
+
+def _cookie_error_response(
+    *,
+    authsystem_config: config_authsystem.OIDCAuthSystemConfig,
+    logger: loggers.LogWrapper,
+    **kwargs,
+) -> responses.HTMLResponse:
+    """Render the 'sign-in problem' page for an unset authn cookie
+
+    The page follows the consent page's design and customization order
+    ('cookie-too-large.html.mako' in the auth system's 'oidc' folder,
+    then the packaged default), and serves HTTP 500:  the sign-in
+    cannot complete because the provider's credentials do not fit the
+    authn cookie.
+    """
+    template_path = _cookie_too_large_template_path(
+        authsystem_config,
+    )
+
+    try:
+        html = _render_template(template_path, **kwargs)
+    except Exception:
+        logger.exception(loggers.AUTHN_COOKIE_TEMPLATE_FAILED)
+        html = _render_template(_PACKAGED_COOKIE_TOO_LARGE_TEMPLATE, **kwargs)
+
+    return responses.HTMLResponse(
+        html,
+        status_code=500,
+        headers=_CONSENT_HEADERS,
+    )
 
 
 def _bad_request(
@@ -506,7 +567,9 @@ async def get_auth_system(
     redirect to the client-specified URL.  Unless the login asked for
     'CallbackDelivery.COOKIE', pass 'token', 'refresh_token',
     'expires_in', and (when the provider returns one) 'id_token' as
-    callback parameters.
+    callback parameters.  A 'CallbackDelivery.COOKIE' sign-in for which
+    the authn cookie cannot be set serves an error page (HTTP 500)
+    instead of such a redirect.
     """
     bound_logger = the_unauth_logger.bind(oidc_system=system)
 
@@ -572,13 +635,24 @@ async def get_auth_system(
         return_to = _with_callback_params(return_to, callback_params)
 
     response = responses.RedirectResponse(return_to)
-    authn.set_authn_cookie(
+    carried = authn.set_authn_cookie(
         response,
         the_installation=the_installation,
         auth_system=authsystem_config,
         claims=claims,
         logger=bound_logger,
     )
+
+    if delivery is CallbackDelivery.COOKIE and not carried:
+        return _cookie_error_response(
+            authsystem_config=authsystem_config,
+            logger=bound_logger,
+            server_name=(
+                the_installation._config.server_name or request.url.hostname
+            ),
+            auth_system_title=authsystem_config.title,
+        )
+
     return response
 
 

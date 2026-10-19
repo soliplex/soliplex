@@ -429,28 +429,28 @@ def test__authn_cookie_serializer(cookie_installation):
 
 
 @pytest.mark.parametrize(
-    "w_cookie_claims, w_extra, exp_names, exp_error",
+    "w_cookie_claims, w_extra, exp_names, exp_cookie_set",
     [
-        pytest.param([], {}, ["sub"], False, id="none"),
+        pytest.param([], {}, ["sub"], True, id="none"),
         pytest.param(
             ["email", "preferred_username"],
             {},
             ["sub", "email", "preferred_username"],
-            False,
+            True,
             id="default",
         ),
         pytest.param(
             ["josce", "missing"],
             {},
             ["sub", "josce"],
-            False,
+            True,
             id="w_missing",
         ),
         pytest.param(
             ["huge"],
             {"huge": INCOMPRESSIBLE},
             ["sub", "huge"],
-            True,
+            False,
             id="too_large",
         ),
     ],
@@ -464,7 +464,7 @@ def test_set_authn_cookie(
     w_cookie_claims,
     w_extra,
     exp_names,
-    exp_error,
+    exp_cookie_set,
 ):
     response = mock.create_autospec(fastapi.Response)
     auth_system = mock.create_autospec(
@@ -475,7 +475,7 @@ def test_set_authn_cookie(
     claims = COOKIE_CLAIMS | w_extra
     logger = mock.create_autospec(loggers.LogWrapper)
 
-    authn.set_authn_cookie(
+    found = authn.set_authn_cookie(
         response,
         the_installation=cookie_installation,
         auth_system=auth_system,
@@ -483,27 +483,35 @@ def test_set_authn_cookie(
         logger=logger,
     )
 
-    response.set_cookie.assert_called_once_with(
-        authn.AUTHN_COOKIE_NAME,
-        mock.ANY,
-        max_age=COOKIE_EXP - int(COOKIE_NOW),
-        path="/",
-        secure=secure_cookies.return_value,
-        httponly=True,
-        samesite="lax",
-    )
-    value = response.set_cookie.call_args.args[1]
-    serializer = authn._authn_cookie_serializer(cookie_installation)
-    exp_claims = {name: claims[name] for name in exp_names}
-    assert serializer.loads(value) == [AUTHSYSTEM_ID, COOKIE_EXP, exp_claims]
+    assert found == exp_cookie_set
 
-    if exp_error:
-        logger.error.assert_called_once_with(
-            loggers.AUTHN_COOKIE_TOO_LARGE,
-            size=len(value),
+    if exp_cookie_set:
+        response.set_cookie.assert_called_once_with(
+            authn.AUTHN_COOKIE_NAME,
+            mock.ANY,
+            max_age=COOKIE_EXP - int(COOKIE_NOW),
+            path="/",
+            secure=secure_cookies.return_value,
+            httponly=True,
+            samesite="lax",
         )
-    else:
+        value = response.set_cookie.call_args.args[1]
+        serializer = authn._authn_cookie_serializer(cookie_installation)
+        exp_claims = {name: claims[name] for name in exp_names}
+        assert serializer.loads(value) == [
+            AUTHSYSTEM_ID,
+            COOKIE_EXP,
+            exp_claims,
+        ]
         logger.error.assert_not_called()
+    else:
+        response.set_cookie.assert_not_called()
+
+        (logged,) = logger.error.call_args_list
+        (msg,) = logged.args
+        size = logged.kwargs["size"]
+        assert msg == loggers.AUTHN_COOKIE_TOO_LARGE
+        assert size > authn.AUTHN_COOKIE_MAX_SIZE
 
 
 @pytest.mark.parametrize(
@@ -536,7 +544,7 @@ def test_set_authn_cookie_size_boundary(
     response = mock.create_autospec(fastapi.Response)
     logger = mock.create_autospec(loggers.LogWrapper)
 
-    authn.set_authn_cookie(
+    found = authn.set_authn_cookie(
         response,
         the_installation=cookie_installation,
         auth_system=auth_system,
@@ -544,15 +552,7 @@ def test_set_authn_cookie_size_boundary(
         logger=logger,
     )
 
-    response.set_cookie.assert_called_once_with(
-        authn.AUTHN_COOKIE_NAME,
-        "x" * w_len,
-        max_age=COOKIE_EXP - int(COOKIE_NOW),
-        path="/",
-        secure=secure_cookies.return_value,
-        httponly=True,
-        samesite="lax",
-    )
+    assert found is not exp_logged
 
     serializer.assert_called_once_with(cookie_installation)
     s_dumps.assert_called_once_with(
@@ -560,11 +560,21 @@ def test_set_authn_cookie_size_boundary(
     )
 
     if exp_logged:
+        response.set_cookie.assert_not_called()
         logger.error.assert_called_once_with(
             loggers.AUTHN_COOKIE_TOO_LARGE,
             size=w_len,
         )
     else:
+        response.set_cookie.assert_called_once_with(
+            authn.AUTHN_COOKIE_NAME,
+            "x" * w_len,
+            max_age=COOKIE_EXP - int(COOKIE_NOW),
+            path="/",
+            secure=secure_cookies.return_value,
+            httponly=True,
+            samesite="lax",
+        )
         logger.error.assert_not_called()
 
 

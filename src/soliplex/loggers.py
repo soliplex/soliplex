@@ -79,6 +79,7 @@ AUTHN_GET_USER_CLAIMS_FAILED = "get user claims failed"
 AUTHN_COOKIE_NOT_SET = "authn cookie not set"
 AUTHN_COOKIE_INVALID = "authn cookie invalid"
 AUTHN_COOKIE_TOO_LARGE = "authn cookie too large"
+AUTHN_COOKIE_TEMPLATE_FAILED = "authn cookie error template failed"
 AUTHN_COOKIE_LOGOUT = "authn cookie logout"
 
 AUTHZ_LOGGER_NAME = "soliplex.authz"
