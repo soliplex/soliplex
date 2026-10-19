@@ -107,6 +107,10 @@ def _claims_not_carried(
     every referenced claim not carried by each configured auth system
     (including always-carried claims such as 'sub':  see
     'authn.AUTHN_COOKIE_ALWAYS_CLAIMS').
+
+    These pairs are warning-grade:  the audit prints them in the
+    admin-users section, and no installation fails on their account --
+    bearer-token admin checks see full claims regardless.
     """
     referenced: set[str] = set()
     for json_path in json_paths:
@@ -187,13 +191,8 @@ def _audit_admin_users_section(
     tc_line()
 
     errors: dict = {}
-    section_findings: dict = {}
     if invalid:
-        section_findings["invalid_json_paths"] = invalid
-    if not_carried:
-        section_findings["claims_not_carried"] = not_carried
-    if section_findings:
-        errors["admin_users"] = section_findings
+        errors["admin_users"] = {"invalid_json_paths": invalid}
     return errors
 
 

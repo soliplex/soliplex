@@ -1029,7 +1029,10 @@ Three blocks are printed:
   [the check endpoint](../config/oidc_providers.md#the-check-endpoint).
   The check is best-effort:  it inspects the JSONPath queries in stored
   discriminators;  claims read only inside a registered JSONPath
-  function extension are invisible to it.
+  function extension are invisible to it.  These pairs are a warning,
+  not an audit error:  `admin-users` never fails on their account, and
+  they matter only to deployments which gate protected services
+  through the check endpoint.
   `(none)` if every referenced claim is carried everywhere.
 
 When the installation's `authorization_db` is the in-memory
