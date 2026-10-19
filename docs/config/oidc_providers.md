@@ -303,6 +303,26 @@ location @soliplex_login {
 }
 ```
 
+`return_to=$request_uri` pastes the proxied request's URI into the
+redirect unescaped:  a request whose own URI carries a query string
+truncates the parameter at the first `&` (`/ingester/x?a=1&b=2`
+arrives as `return_to=/ingester/x?a=1`).  Stock nginx has no
+variable-escaping directive:  deployments which need the query string
+preserved can escape it first, with the `set-misc` module's
+`set_escape_uri`, or an `njs` `js_set` handler:
+
+```nginx
+set_escape_uri $escaped_uri $request_uri;
+
+location @soliplex_login {
+    return 302 /api/login/myprovider?delivery=cookie&return_to=$escaped_uri;
+}
+```
+
+Soliplex decodes the escaped parameter, so the user lands on the full
+original URI.  Deployments whose proxied paths carry no query strings
+are unaffected.
+
 The proxied service receives the `soliplex_authn` cookie along with
 every other cookie for the host.  To keep it from the service, remove
 it in nginx before proxying.
