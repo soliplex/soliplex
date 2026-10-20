@@ -487,6 +487,32 @@ EARLIER_MESSAGES = [
     ),
 ]
 MULTI_RUN_MESSAGES = EARLIER_MESSAGES + SINGLE_RUN_MESSAGES
+IMAGE_CONTENT = agui_core.types.ImageInputContent(
+    source=agui_core.types.InputContentUrlSource(
+        type="url",
+        value="https://example.com/image.png",
+    ),
+)
+TEXT_CONTENT = agui_core.types.TextInputContent(text=USER_PROMPT)
+MULTIMODAL_PROMPT = f"{USER_PROMPT}\n[image]"
+MULTIMODAL_RUN_MESSAGES = [
+    agui_core.types.UserMessage(
+        id=USER_PROMPT_MESSAGE_ID,
+        content=[TEXT_CONTENT, IMAGE_CONTENT],
+    ),
+] + ONLY_RESPONSE_MESSAGES
+
+
+@pytest.mark.parametrize(
+    "content, expected",
+    [
+        (None, None),
+        (USER_PROMPT, USER_PROMPT),
+        ([TEXT_CONTENT, IMAGE_CONTENT], MULTIMODAL_PROMPT),
+    ],
+)
+def test__content_text(content, expected):
+    assert arf_tools._content_text(content) == expected
 
 
 @pytest.mark.anyio
@@ -505,6 +531,14 @@ MULTI_RUN_MESSAGES = EARLIER_MESSAGES + SINGLE_RUN_MESSAGES
         # normal cases:  the *last* exchange of the run
         (SINGLE_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE, 0),
         (MULTI_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE, 0),
+        # prompt with an image attached
+        (
+            MULTIMODAL_RUN_MESSAGES,
+            RS.FINISHED,
+            MULTIMODAL_PROMPT,
+            RESPONSE_MESSAGE,
+            0,
+        ),
         # run whose replay could not apply some of its state deltas
         (SINGLE_RUN_MESSAGES, RS.FINISHED, USER_PROMPT, RESPONSE_MESSAGE, 2),
     ],

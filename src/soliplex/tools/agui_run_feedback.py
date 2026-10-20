@@ -390,6 +390,17 @@ def _find_feedback_by_run_id(
     raise UnknownFeedback(run_id)
 
 
+def _content_text(content) -> str | None:
+    """Render message content as text, with placeholders for non-text parts"""
+    if content is None or isinstance(content, str):
+        return content
+
+    return "\n".join(
+        part.text if part.type == "text" else f"[{part.type}]"
+        for part in content
+    )
+
+
 async def get_feedback_run_info(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
     run_id: str,
@@ -437,7 +448,9 @@ async def get_feedback_run_info(
             esp(e_model)
 
     user_prompts = [
-        message.content for message in esp.messages if message.role == "user"
+        _content_text(message.content)
+        for message in esp.messages
+        if message.role == "user"
     ]
 
     agent_responses = [
