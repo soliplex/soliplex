@@ -390,6 +390,24 @@ def _find_feedback_by_run_id(
     raise UnknownFeedback(run_id)
 
 
+async def _replay_run(run) -> agui_parser.EventStreamParser:
+    """Replay a run's recorded input and events through a parser"""
+    run_input = await run.awaitable_attrs.run_agent_input
+    events = await run.awaitable_attrs.events
+
+    esp = agui_parser.EventStreamParser(run_input)
+
+    for event in events:
+        try:
+            e_model = event.to_agui_model()
+        # agui_core.events.Event is not all-inclusive :<
+        except pydantic.ValidationError:  # pragma: NO COVER
+            continue
+        esp(e_model)
+
+    return esp
+
+
 async def get_feedback_run_info(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
     run_id: str,
@@ -422,19 +440,8 @@ async def get_feedback_run_info(
 
         thread = await run.awaitable_attrs.thread
         email = await thread.awaitable_attrs.email
-        run_input = await run.awaitable_attrs.run_agent_input
         parent_run_id = await run.awaitable_attrs.parent_run_id
-        events = await run.awaitable_attrs.events
-
-        esp = agui_parser.EventStreamParser(run_input)
-
-        for event in events:
-            try:
-                e_model = event.to_agui_model()
-            # agui_core.events.Event is not all-inclusive :<
-            except pydantic.ValidationError:  # pragma: NO COVER
-                continue
-            esp(e_model)
+        esp = await _replay_run(run)
 
     user_prompts = [
         message.content for message in esp.messages if message.role == "user"
