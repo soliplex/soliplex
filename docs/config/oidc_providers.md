@@ -214,6 +214,11 @@ browser then sends with every request to that host.
 - The cookie is signed with the `SESSION_MIDDLEWARE_TOKEN` installation
   secret, but not encrypted:  anyone holding it can read the claims it
   carries.
+- Configure `SESSION_MIDDLEWARE_TOKEN` from a stable source, shared by
+  every backend process:  with the `random_chars` fallback, each
+  process signs with its own key, so every restart (including a
+  `--reload=config` reload) invalidates every authn cookie, and each
+  user must sign in again.
 - It encodes the signing auth system's id, the expiry, the `sub` claim,
   and the claims named in the provider's `cookie_claims`.
 - It expires with the access token, and is not renewed when the web
@@ -271,6 +276,17 @@ locations whose `proxy_set_header` overwrites whatever the client
 itself sent, so keep the proxied service reachable only through nginx,
 and repeat the `proxy_set_header` in every proxied location.
 
+nginx makes the check subrequest for every request through the
+protected location, not once per session:  each page load, asset, and
+API call the proxied service makes costs a cookie verification and an
+admin-policy lookup, so a service which polls its own API keeps up a
+steady load on the check endpoint.  Stock nginx does not cache
+`auth_request` results.  A deployment which needs fewer checks can give
+the check location a `proxy_cache` keyed on the `soliplex_authn`
+cookie, at the cost of answering from the cache for as long as an entry
+lives:  a user removed from the admin users, or whose cookie expires,
+keeps access until the entry does.
+
 ### Signing in from a proxied service
 
 To sign in from a proxied service, send the browser to
@@ -283,6 +299,12 @@ web client knows to remove from the address bar.  The default,
 For example:
 
 ```nginx
+# in 'http {}'
+map $http_sec_fetch_mode $soliplex_login_redirect {
+    navigate  1;
+    default   0;
+}
+
 location /ingester/ {
     auth_request /_soliplex_authz_check;
     auth_request_set $soliplex_user $upstream_http_x_soliplex_user;
@@ -299,9 +321,30 @@ location = /_soliplex_authz_check {
 }
 
 location @soliplex_login {
+    if ($soliplex_login_redirect = 0) {
+        return 401;
+    }
     return 302 /api/login/myprovider?delivery=cookie&return_to=$request_uri;
 }
 ```
+
+Redirect only top-level navigations to the login, which browsers mark
+with `Sec-Fetch-Mode: navigate`, and answer every other request with
+the 401.  `error_page` applies to every request through the location,
+including the proxied service's own `fetch()` / XHR calls:  redirected,
+each of those starts a sign-in it can never finish, and overwrites the
+session holding the OIDC `state`, so a real sign-in in another tab
+fails at the callback (`MismatchingStateError`) for as long as the
+service's page keeps making calls.  With the redirect limited to
+navigations:
+
+- A proxied service sees a lapsed session as a 401 on its own API
+  calls, and reacts however it reacts to any 401 (the ingester
+  dashboard, for one, prompts for a bearer token), though reloading the
+  page is all the user needs to do to sign in again.
+- Clients sending no `Sec-Fetch-Mode` header, such as scripts and
+  `curl`, get the 401 rather than a redirect to a login page they
+  cannot complete.
 
 `return_to=$request_uri` pastes the proxied request's URI into the
 redirect unescaped:  a request whose own URI carries a query string
@@ -315,6 +358,9 @@ preserved can escape it first, with the `set-misc` module's
 set_escape_uri $escaped_uri $request_uri;
 
 location @soliplex_login {
+    if ($soliplex_login_redirect = 0) {
+        return 401;
+    }
     return 302 /api/login/myprovider?delivery=cookie&return_to=$escaped_uri;
 }
 ```
