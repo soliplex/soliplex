@@ -178,6 +178,12 @@ class AllowDeny(enum.Enum):
     DENY = "deny"
 
 
+class Permission(enum.Enum):
+    READ = "read"
+    WRITE = "write"
+    ADMIN = "admin"
+
+
 class AdminUserPolicy(abc.ABC):
     """Protocol for checking / managing admin-user discriminators."""
 

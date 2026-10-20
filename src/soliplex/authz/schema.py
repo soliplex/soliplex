@@ -196,6 +196,11 @@ class ACLEntry(Base):
     authenticated: Mapped[bool] = mapped_column(default=False)
     json_path: Mapped[str | None] = mapped_column(default=None)
 
+    permission: Mapped[authz.Permission] = mapped_column(
+        default=authz.Permission.READ,
+        server_default=authz.Permission.READ.name,
+    )
+
     @sqla_orm.validates("json_path")
     def _check_json_path(self, _key, value):
         return authz.validate_json_path(value)
