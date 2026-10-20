@@ -4,8 +4,10 @@ from unittest import mock
 
 import pytest
 
+from soliplex import authz
 from soliplex.cli import cli_util
 from soliplex.cli.audit import admin_users as audit_admin_users
+from soliplex.config import authsystem as config_authsystem
 from tests.unit.cli.audit import audit_helpers
 
 
@@ -141,6 +143,204 @@ def test__invalid_admin_user_json_paths(json_paths, exp_invalid):
 
     normalized = [(jp, "<error>") for (jp, _err) in found]
     assert normalized == exp_invalid
+
+
+_A_ID = "alpha"
+_B_ID = "beta"
+
+
+@pytest.mark.parametrize(
+    "json_path, exp_claim_names",
+    [
+        # Canonical single-claim discriminators.
+        ('$[?$.email == "alice@example.com"]', ["email"]),
+        ('$[?$.preferred_username == "bob"]', ["preferred_username"]),
+        # Quoted values contribute no claim names, however evil-shaped.
+        ('$[?$.email == "x@$.evil.com"]', ["email"]),
+        # Filter functions' arguments are claims like any other.
+        ("$[?some_func($.email)]", ["email"]),
+        # Dotted references contribute only their root claim.
+        ("$.realm_access.roles[0]", ["realm_access"]),
+        # Bracketed references, root segment only.
+        ("$['email']", ["email"]),
+        # No claim references at all.
+        ("$", []),
+        # Nested '@'-relative queries take the enclosing chain's root.
+        ('$[?$.groups[?@ == "x"]]', ["groups"]),
+        ('$[?@.org.code == "XYZ"]', ["org"]),
+        (
+            '$[?$.org.personnel.specialties[?@ == "A1B2C3"]]',
+            ["org"],
+        ),
+        # Unions, recursive descent:  every chain contributes its root.
+        ('$["a", "b"]', ["a", "b"]),
+        ("$..roles", ["roles"]),
+        # A singular-query selector reads its embedded query's claims.
+        ("$[$.key]", ["key"]),
+        # Unparseable queries contribute nothing:  rows like these are
+        # reported separately, in the invalid JSONPath block.
+        ("$[", []),
+        ("$[?missing_func($.email)]", []),
+    ],
+)
+@mock.patch.dict(
+    authz.the_jsonpath_environment.function_extensions,
+    {"some_func": lambda *args: None},
+)
+def test__discriminator_claim_names(json_path, exp_claim_names):
+
+    found = audit_admin_users._discriminator_claim_names(json_path)
+
+    assert found == exp_claim_names
+
+
+@pytest.mark.parametrize(
+    "json_paths, auth_system_kws, exp_not_carried",
+    [
+        # No stored admins: nothing referenced, nothing uncovered.
+        ([], [(_A_ID, ("email",))], []),
+        # Referenced claims carried by the (only) auth system.
+        (
+            ['$[?$.email == "alice@example.com"]'],
+            [(_A_ID, ("email", "preferred_username"))],
+            [],
+        ),
+        # 'sub' is always carried, whatever 'cookie_claims' says.
+        (['$[?$.sub == "user-sub"]'], [(_A_ID, ())], []),
+        # Uncovered claims: one pair for each auth system missing them.
+        (
+            ["$.realm_access.roles[0]"],
+            [(_A_ID, ()), (_B_ID, ("realm_access",))],
+            [(_A_ID, "realm_access")],
+        ),
+        # Multiple paths accumulate; output sorted by claim name.
+        (
+            [
+                '$[?$.email == "alice@example.com"]',
+                '$[?$.preferred_username == "bob"]',
+            ],
+            [(_A_ID, ())],
+            [(_A_ID, "email"), (_A_ID, "preferred_username")],
+        ),
+        # No auth systems configured: no cookies exist to check.
+        (['$[?$.email == "alice@example.com"]'], [], []),
+    ],
+)
+def _configs(auth_system_kws):
+    """Build mock auth system configs from '(id, cookie_claims)' pairs"""
+    configs = []
+    for the_id, cookie_claims in auth_system_kws:
+        config = mock.create_autospec(
+            config_authsystem.OIDCAuthSystemConfig,
+            id=the_id,
+        )
+        config.cookie_claims = list(cookie_claims)
+        configs.append(config)
+    return configs
+
+
+@pytest.mark.parametrize(
+    "refs, auth_system_kws, exp_unresolvable",
+    [
+        # No discriminators: nothing to resolve.
+        ({}, [(_A_ID, ("email",))], []),
+        # Each discriminator resolvable by some provider.
+        (
+            {
+                '$[?$.email == "a@example.com"]': {"email"},
+                "$.realm_access.roles[0]": {"realm_access"},
+            },
+            [(_A_ID, ("email",)), (_B_ID, ("realm_access",))],
+            [],
+        ),
+        # Split-carrying: every provider misses one of the claims.
+        (
+            {'$[?$.groups == "staff"]': {"groups", "realm_access"}},
+            [(_A_ID, ("groups",)), (_B_ID, ("realm_access",))],
+            [('$[?$.groups == "staff"]', ["groups", "realm_access"])],
+        ),
+        # Orphan claim: carried by no provider at all.
+        (
+            {'$[?$.groups == "staff"]': {"groups"}},
+            [(_A_ID, ("email",)), (_B_ID, ("preferred_username",))],
+            [('$[?$.groups == "staff"]', ["groups"])],
+        ),
+        # No auth systems configured: no cookies exist to check.
+        (
+            {'$[?$.email == "a@example.com"]': {"email"}},
+            [],
+            [],
+        ),
+    ],
+)
+def test__unresolvable_discriminators(
+    refs,
+    auth_system_kws,
+    exp_unresolvable,
+):
+    found = audit_admin_users._unresolvable_discriminators(
+        refs,
+        _configs(auth_system_kws),
+    )
+
+    assert found == exp_unresolvable
+
+
+@pytest.mark.parametrize(
+    "refs, auth_system_kws, exp_gaps",
+    [
+        # No discriminators: no gaps.
+        ({}, [(_A_ID, ("email",))], {}),
+        # Every referenced claim carried everywhere.
+        (
+            {'$[?$.email == "a@example.com"]': {"email"}},
+            [(_A_ID, ("email",)), (_B_ID, ("email",))],
+            {},
+        ),
+        # 'sub' is always carried, whatever 'cookie_claims' says.
+        ({'$[?$.sub == "user-sub"]': {"sub"}}, [(_A_ID, ())], {}),
+        # Per-provider gaps, named for the provider that must fix them.
+        (
+            {"$.realm_access.roles[0]": {"realm_access"}},
+            [(_A_ID, ()), (_B_ID, ("realm_access",))],
+            {_A_ID: ["realm_access"]},
+        ),
+        # Multiple discriminators accumulate per provider.
+        (
+            {
+                '$[?$.email == "a@example.com"]': {"email"},
+                '$[?$.preferred_username == "bob"]': {
+                    "preferred_username",
+                },
+            },
+            [(_A_ID, ())],
+            {_A_ID: ["email", "preferred_username"]},
+        ),
+        # Orphan claims gap every provider.
+        (
+            {'$[?$.groups == "staff"]': {"groups"}},
+            [(_A_ID, ("email",)), (_B_ID, ("preferred_username",))],
+            {_A_ID: ["groups"], _B_ID: ["groups"]},
+        ),
+        # No auth systems configured: no cookies exist to check.
+        (
+            {'$[?$.email == "a@example.com"]': {"email"}},
+            [],
+            {},
+        ),
+    ],
+)
+def test__cookie_claims_gaps(
+    refs,
+    auth_system_kws,
+    exp_gaps,
+):
+    found = audit_admin_users._cookie_claims_gaps(
+        refs,
+        _configs(auth_system_kws),
+    )
+
+    assert found == exp_gaps
 
 
 # _audit_admin_users_section: ui only

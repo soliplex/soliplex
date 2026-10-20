@@ -81,6 +81,14 @@ default) need no extra configuration.
 
 - `scope`: string, an OAuth scope specifier.
 
+- `cookie_claims`: a list of token claim names to copy into the authn
+  cookie set at sign-in (default: `email` and `preferred_username`).
+  List top-level claim names:  a listed claim is copied whole, including
+  any nested values.  The authn cookie is signed, not encrypted:  do
+  not list claims you consider sensitive.  See
+  [Protecting other services with nginx `auth_request`](#protecting-other-services-with-nginx-auth_request)
+  below.
+
 - `oidc_client_pem_path`, `allowed_frontend_origins`,
   `unlisted_frontend_origin`, `consent_template_path`: as above, for this
   provider only, replacing any top-level default.
@@ -188,6 +196,212 @@ URI exactly in the provider's client configuration, for example
 such as `https://soliplex.example.com/*`.  Adding a frontend never requires
 changing the provider's configuration:  frontends are allowed by
 `allowed_frontend_origins` here, not by the provider.
+
+## Protecting other services with nginx `auth_request`
+
+A deployment can put other web services (for example, an ingester
+dashboard) behind the same nginx as Soliplex, and let Soliplex decide who
+reaches them, through nginx's
+[`auth_request`](https://nginx.org/en/docs/http/ngx_http_auth_request_module.html).
+
+### The authn cookie
+
+A browser following a link to a proxied service sends no bearer token.
+So, whenever a sign-in completes, Soliplex also sets an `HttpOnly`,
+`SameSite=Lax` cookie named `soliplex_authn`, with `Path=/`, which the
+browser then sends with every request to that host.
+
+- The cookie is signed with the `SESSION_MIDDLEWARE_TOKEN` installation
+  secret, but not encrypted:  anyone holding it can read the claims it
+  carries.
+- Configure `SESSION_MIDDLEWARE_TOKEN` from a stable source, shared by
+  every backend process:  with the `random_chars` fallback, each
+  process signs with its own key, so every restart (including a
+  `--reload=config` reload) invalidates every authn cookie, and each
+  user must sign in again.
+- It encodes the signing auth system's id, the expiry, the `sub` claim,
+  and the claims named in the provider's `cookie_claims`.
+- It expires with the access token, and is not renewed when the web
+  client refreshes its tokens.
+- It is marked `Secure`, unless `soliplex-cli serve` runs with
+  `--insecure-session-cookie` for local testing.
+- A value larger than 4000 bytes is logged as an error, and the
+  callback clears the cookie rather than setting it:  the browser
+  ignores an oversized `Set-Cookie` entirely (its 4096-byte limit
+  counts name and value, and this cookie's name takes 14 of them),
+  which would otherwise leave any previously-held cookie -- possibly
+  from a different visitor's sign-in -- in place.  Proxied-service
+  sessions re-login on every request until the deployment trims the
+  provider's `cookie_claims`;  a `delivery=cookie` sign-in answers
+  with an error page (HTTP 500) rather than redirecting.
+
+`POST /api/auth/<id>/logout` clears the cookie.  The web client's own
+logout drops only its tokens:  the authn cookie persists until this
+endpoint is called or the cookie expires.
+
+### The check endpoint
+
+`GET /api/v1/authz/check/<resource>` answers an `auth_request`
+subrequest:
+
+- `204` if the user is an admin user (see
+  [`admin-users`](../server/cli.md#admin-users)), with the
+  `X-Soliplex-User` header
+  naming the user (their `preferred_username`, `email`, or `sub` claim;
+  the header is omitted when none of the three is a printable ASCII
+  string);
+- `401` if the request has no authn cookie, or the cookie does not
+  verify or has expired;
+- `403` if the user is authenticated, but not an admin user.
+
+It reads only the authn cookie, not a bearer token:  the check answers
+for browser navigations, which carry only the cookie, while a client
+holding a bearer token authenticates to the proxied service's own API
+directly.  The admin check
+matches the deployment's admin-user discriminators against the claims
+carried by the cookie, so the provider's `cookie_claims` must name every
+claim those discriminators reference (`sub` is always carried):
+otherwise the check denies users whom it would otherwise admit.
+
+`<resource>` is a label
+for the audit log, such as `ingester_control`, made of letters, digits,
+`_`, `.`, `:`, and `-`.  In no-auth mode, it answers as the rest of the
+API does.
+
+On success, the response's `X-Soliplex-User` header is an unverified
+display name, projected onto the proxied request by nginx:  treat it
+as a value for logs and interface display, never as an input to
+authorization, and never as a record key.  It is trustworthy only in
+locations whose `proxy_set_header` overwrites whatever the client
+itself sent, so keep the proxied service reachable only through nginx,
+and repeat the `proxy_set_header` in every proxied location.
+
+nginx makes the check subrequest for every request through the
+protected location, not once per session:  each page load, asset, and
+API call the proxied service makes costs a cookie verification and an
+admin-policy lookup, so a service which polls its own API keeps up a
+steady load on the check endpoint.  Stock nginx does not cache
+`auth_request` results.  A deployment which needs fewer checks can give
+the check location a `proxy_cache` keyed on the `soliplex_authn`
+cookie, at the cost of answering from the cache for as long as an entry
+lives:  a user removed from the admin users, or whose cookie expires,
+keeps access until the entry does.
+
+### Signing in from a proxied service
+
+To sign in from a proxied service, send the browser to
+`/api/login/<id>?return_to=<path>&delivery=cookie`.  With
+`delivery=cookie`, the callback sets the authn cookie and redirects to
+`return_to` without appending the user's tokens, which only the Soliplex
+web client knows to remove from the address bar.  The default,
+`delivery=fragment`, appends the tokens as usual.
+
+For example:
+
+```nginx
+# in 'http {}'
+map $http_sec_fetch_mode $soliplex_login_redirect {
+    navigate  1;
+    default   0;
+}
+
+location /ingester/ {
+    auth_request /_soliplex_authz_check;
+    auth_request_set $soliplex_user $upstream_http_x_soliplex_user;
+    proxy_set_header X-Soliplex-User $soliplex_user;
+    error_page 401 = @soliplex_login;
+    proxy_pass http://ingester:8080/;
+}
+
+location = /_soliplex_authz_check {
+    internal;
+    proxy_pass http://soliplex:8000/api/v1/authz/check/ingester_control;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+}
+
+location @soliplex_login {
+    if ($soliplex_login_redirect = 0) {
+        return 401;
+    }
+    return 302 /api/login/myprovider?delivery=cookie&return_to=$request_uri;
+}
+```
+
+Redirect only top-level navigations to the login, which browsers mark
+with `Sec-Fetch-Mode: navigate`, and answer every other request with
+the 401.  `error_page` applies to every request through the location,
+including the proxied service's own `fetch()` / XHR calls:  redirected,
+each of those starts a sign-in it can never finish, and overwrites the
+session holding the OIDC `state`, so a real sign-in in another tab
+fails at the callback (`MismatchingStateError`) for as long as the
+service's page keeps making calls.  With the redirect limited to
+navigations:
+
+- A proxied service sees a lapsed session as a 401 on its own API
+  calls, and reacts however it reacts to any 401 (the ingester
+  dashboard, for one, prompts for a bearer token), though reloading the
+  page is all the user needs to do to sign in again.
+- Clients sending no `Sec-Fetch-Mode` header, such as scripts and
+  `curl`, get the 401 rather than a redirect to a login page they
+  cannot complete.
+
+`return_to=$request_uri` pastes the proxied request's URI into the
+redirect unescaped:  a request whose own URI carries a query string
+truncates the parameter at the first `&` (`/ingester/x?a=1&b=2`
+arrives as `return_to=/ingester/x?a=1`).  Stock nginx has no
+variable-escaping directive:  deployments which need the query string
+preserved can escape it first, with the `set-misc` module's
+`set_escape_uri`, or an `njs` `js_set` handler:
+
+```nginx
+set_escape_uri $escaped_uri $request_uri;
+
+location @soliplex_login {
+    if ($soliplex_login_redirect = 0) {
+        return 401;
+    }
+    return 302 /api/login/myprovider?delivery=cookie&return_to=$escaped_uri;
+}
+```
+
+Soliplex decodes the escaped parameter, so the user lands on the full
+original URI.  Deployments whose proxied paths carry no query strings
+are unaffected.
+
+The proxied service receives the `soliplex_authn` cookie along with
+every other cookie for the host.  To keep it from the service, remove
+it in nginx before proxying.
+
+The header's name is nginx's to change, too:  a service expecting,
+say, `X-Forwarded-User` takes one line in the same location,
+
+```nginx
+proxy_set_header X-Forwarded-User $soliplex_user;
+```
+
+and different proxied locations may project the same check under
+different names.
+
+The login redirect issued after a lapsed session carries the original
+path, but as a `GET` request:  a `POST` submission lost to a lapse is
+not replayed after sign-in, and must be re-entered.
+
+Sign-ins which deliver tokens (`delivery=fragment`, the default)
+redirect through the same nginx, and an IdP issuing larger tokens can
+push the callback's `Location` header past nginx's default
+response-header buffer (4k or 8k, one memory page):  nginx logs
+`upstream sent too big header`, and the login fails with a 502.
+Where the Soliplex API is proxied, size the buffers to the
+deployment's largest tokens:
+
+```nginx
+proxy_buffer_size 64k;
+proxy_buffers 8 64k;
+```
+
+`delivery=cookie` logins — the proxied-service flow above — do not
+have this problem:  their redirects carry no tokens at all.
 
 ## Customizing the consent page
 

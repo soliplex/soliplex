@@ -113,6 +113,105 @@ async def test_get_the_user_claims(auth_fn, the_installation, code, msg):
     )
 
 
+COOKIE_VALUE = "cookie-value"
+
+
+def _make_cookie_request(cookie):
+    headers = []
+    if cookie is not None:
+        headers.append(
+            (b"cookie", f"{authn.AUTHN_COOKIE_NAME}={cookie}".encode())
+        )
+    return fastapi.Request(scope={"type": "http", "headers": headers})
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.authn.load_authn_cookie", autospec=True)
+async def test_get_the_authn_cookie_claims_w_auth_disabled(
+    load_authn_cookie,
+    the_installation,
+):
+    the_installation.auth_disabled = True
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+    request = _make_cookie_request(COOKIE_VALUE)
+
+    found = await views.get_the_authn_cookie_claims(
+        request=request,
+        the_installation=the_installation,
+        the_unauth_logger=the_unauth_logger,
+    )
+
+    assert found is installation.NO_AUTH_MODE_USER_TOKEN
+    load_authn_cookie.assert_not_called()
+    the_unauth_logger.error.assert_not_called()
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.authn.load_authn_cookie", autospec=True)
+async def test_get_the_authn_cookie_claims_wo_cookie(
+    load_authn_cookie,
+    the_installation,
+):
+    the_installation.auth_disabled = False
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+    request = _make_cookie_request(None)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await views.get_the_authn_cookie_claims(
+            request=request,
+            the_installation=the_installation,
+            the_unauth_logger=the_unauth_logger,
+        )
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == loggers.AUTHN_COOKIE_NOT_SET
+    the_unauth_logger.info.assert_called_once_with(
+        loggers.AUTHN_COOKIE_NOT_SET,
+    )
+    load_authn_cookie.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_valid", [False, True])
+@mock.patch("soliplex.authn.load_authn_cookie", autospec=True)
+async def test_get_the_authn_cookie_claims_w_cookie(
+    load_authn_cookie,
+    the_installation,
+    w_valid,
+):
+    the_installation.auth_disabled = False
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+    load_authn_cookie.return_value = (
+        (THE_USER_CLAIMS, None) if w_valid else (None, "testing")
+    )
+    request = _make_cookie_request(COOKIE_VALUE)
+
+    if w_valid:
+        expectation = contextlib.nullcontext(None)
+    else:
+        expectation = pytest.raises(fastapi.HTTPException)
+
+    with expectation as expected:
+        found = await views.get_the_authn_cookie_claims(
+            request=request,
+            the_installation=the_installation,
+            the_unauth_logger=the_unauth_logger,
+        )
+
+    if expected is None:
+        assert found is THE_USER_CLAIMS
+        the_unauth_logger.error.assert_not_called()
+    else:
+        assert expected.value.status_code == 401
+        assert expected.value.detail == loggers.AUTHN_COOKIE_INVALID
+        the_unauth_logger.info.assert_called_once_with(
+            loggers.AUTHN_COOKIE_INVALID,
+            reason="testing",
+        )
+
+    load_authn_cookie.assert_called_once_with(the_installation, COOKIE_VALUE)
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_claims_map", [{}, {"user_id": "email"}])
 @pytest.mark.parametrize("w_claims", [{}, THE_USER_CLAIMS])
@@ -154,6 +253,36 @@ async def test_get_the_admin_user_policy(ap_klass, fake_async_session):
         new=fake_async_session.cls,
     ):
         async for policy in views.get_the_admin_user_policy(
+            request, THE_USER_CLAIMS
+        ):
+            assert policy is ap_klass.return_value
+            counter += 1
+
+    assert counter == 1
+
+    ap_klass.assert_called_once_with(
+        fake_async_session.session,
+        THE_USER_CLAIMS,
+    )
+    fake_async_session.cls.assert_called_once_with(bind=engine)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.authz.persistence.AdminUserPolicy")
+async def test_get_the_authn_cookie_admin_user_policy(
+    ap_klass, fake_async_session
+):
+    engine = object()
+    request = fastapi.Request(scope={"type": "http"})
+    request.state.authorization_engine = engine
+
+    counter = 0
+
+    with mock.patch(
+        "sqlalchemy.ext.asyncio.AsyncSession",
+        new=fake_async_session.cls,
+    ):
+        async for policy in views.get_the_authn_cookie_admin_user_policy(
             request, THE_USER_CLAIMS
         ):
             assert policy is ap_klass.return_value

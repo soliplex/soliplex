@@ -24,6 +24,8 @@ _secret_whole_or_literal_field = config_interp.secret_whole_or_literal_field
 
 WELL_KNOWN_OPENID_CONFIGURATION = ".well-known/openid-configuration"
 
+DEFAULT_COOKIE_CLAIMS = ("email", "preferred_username")
+
 
 class UnlistedFrontendOriginPolicy(enum.StrEnum):
     CONSENT_REQUIRED = "consent-required"
@@ -69,6 +71,16 @@ class OIDCAuthSystemConfig:
             return self._issuer
         else:
             return self.server_url
+
+    _cookie_claims: list[str] | None = None
+
+    @property
+    def cookie_claims(self) -> list[str]:
+        """Names of the token claims copied into the authn cookie."""
+        if self._cookie_claims is not None:
+            return self._cookie_claims
+        else:
+            return list(DEFAULT_COOKIE_CLAIMS)
 
     # Required claims: must match values
     required_claims: dict[str, str] = _utils._default_dict_field()
@@ -145,6 +157,10 @@ class OIDCAuthSystemConfig:
         if iss is not None:
             config_dict["_issuer"] = iss
 
+        cc = config_dict.pop("cookie_claims", None)
+        if cc is not None:
+            config_dict["_cookie_claims"] = cc
+
         try:
             return cls(**config_dict)
         except Exception as exc:
@@ -193,6 +209,9 @@ class OIDCAuthSystemConfig:
 
         if self._issuer is not None:
             result["issuer"] = self._issuer
+
+        if self._cookie_claims is not None:
+            result["cookie_claims"] = self._cookie_claims
 
         if self.required_claims:
             result["required_claims"] = self.required_claims

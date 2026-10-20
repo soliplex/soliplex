@@ -126,8 +126,14 @@ def _classify_return_to(
 
 
 CONSENT_TEMPLATE_FILENAME = "consent.html.mako"
-_PACKAGED_CONSENT_TEMPLATE = (
-    pathlib.Path(__file__).parent / "templates" / CONSENT_TEMPLATE_FILENAME
+_PACKAGED_TEMPLATES = pathlib.Path(__file__).parent / "templates"
+_PACKAGED_CONSENT_TEMPLATE = _PACKAGED_TEMPLATES / CONSENT_TEMPLATE_FILENAME
+
+# The callback serves this page when the authn cookie cannot be set
+# ('delivery=cookie' sign-ins):  see 'authn.AUTHN_COOKIE_MAX_SIZE'.
+COOKIE_TOO_LARGE_TEMPLATE_FILENAME = "cookie-too-large.html.mako"
+_PACKAGED_COOKIE_TOO_LARGE_TEMPLATE = (
+    _PACKAGED_TEMPLATES / COOKIE_TOO_LARGE_TEMPLATE_FILENAME
 )
 
 # No 'form-action': browsers apply it to the redirect which follows the
@@ -142,9 +148,21 @@ _CONSENT_HEADERS = {
 }
 
 
+class CallbackDelivery(enum.StrEnum):
+    """How the login callback hands the tokens to 'return_to'"""
+
+    FRAGMENT = "fragment"  # tokens in the fragment, plus the authn cookie
+    COOKIE = "cookie"  # the authn cookie only
+
+
 def _return_to_session_key(system: str) -> str:
     """Session key for the 'return_to' accepted for 'system'"""
     return f"soliplex.authn.{system}.return_to"
+
+
+def _delivery_session_key(system: str) -> str:
+    """Session key for the 'CallbackDelivery' requested for 'system'"""
+    return f"soliplex.authn.{system}.delivery"
 
 
 def _pending_session_key(system: str) -> str:
@@ -184,6 +202,34 @@ def _display_origin(return_to: str) -> str:
     return f"{parsed.scheme}://{host}{port}"
 
 
+def _oidc_folder_template_path(
+    filename: str,
+    authsystem_config: config_authsystem.OIDCAuthSystemConfig,
+) -> pathlib.Path:
+    """Find a page template:  oidc folder first, packaged default second"""
+    in_oidc_folder = authsystem_config._config_path.parent / filename
+
+    if in_oidc_folder.is_file():
+        return in_oidc_folder
+
+    return _PACKAGED_TEMPLATES / filename
+
+
+def _cookie_too_large_template_path(
+    authsystem_config: config_authsystem.OIDCAuthSystemConfig,
+) -> pathlib.Path:
+    """Find the template for the page showing the "cookie too large" error
+
+    - 'cookie-too-large.html.mako' in the auth system's 'oidc' folder,
+      if present
+    - else the packaged default
+    """
+    return _oidc_folder_template_path(
+        COOKIE_TOO_LARGE_TEMPLATE_FILENAME,
+        authsystem_config,
+    )
+
+
 def _consent_template_path(
     authsystem_config: config_authsystem.OIDCAuthSystemConfig,
 ) -> pathlib.Path:
@@ -196,14 +242,10 @@ def _consent_template_path(
     if authsystem_config.consent_template_path is not None:
         return authsystem_config.consent_template_path
 
-    in_oidc_folder = (
-        authsystem_config._config_path.parent / CONSENT_TEMPLATE_FILENAME
+    return _oidc_folder_template_path(
+        CONSENT_TEMPLATE_FILENAME,
+        authsystem_config,
     )
-
-    if in_oidc_folder.is_file():
-        return in_oidc_folder
-
-    return _PACKAGED_CONSENT_TEMPLATE
 
 
 def _render_template(template_path: pathlib.Path, **kwargs) -> str:
@@ -234,6 +276,37 @@ def _consent_response(
     return responses.HTMLResponse(html, headers=_CONSENT_HEADERS)
 
 
+def _cookie_error_response(
+    *,
+    authsystem_config: config_authsystem.OIDCAuthSystemConfig,
+    logger: loggers.LogWrapper,
+    **kwargs,
+) -> responses.HTMLResponse:
+    """Render the 'sign-in problem' page for an unset authn cookie
+
+    The page follows the consent page's design and customization order
+    ('cookie-too-large.html.mako' in the auth system's 'oidc' folder,
+    then the packaged default), and serves HTTP 500:  the sign-in
+    cannot complete because the provider's credentials do not fit the
+    authn cookie.
+    """
+    template_path = _cookie_too_large_template_path(
+        authsystem_config,
+    )
+
+    try:
+        html = _render_template(template_path, **kwargs)
+    except Exception:
+        logger.exception(loggers.AUTHN_COOKIE_TEMPLATE_FAILED)
+        html = _render_template(_PACKAGED_COOKIE_TOO_LARGE_TEMPLATE, **kwargs)
+
+    return responses.HTMLResponse(
+        html,
+        status_code=500,
+        headers=_CONSENT_HEADERS,
+    )
+
+
 def _bad_request(
     logger: loggers.LogWrapper, msg: str, **fields
 ) -> fastapi.HTTPException:
@@ -249,13 +322,16 @@ async def _redirect_to_idp(
     system: str,
     return_to: str,
     prompt: str | None,
+    delivery: CallbackDelivery,
 ):
-    """Remember 'return_to' for the callback, and redirect to the IdP
+    """Remember 'return_to' and 'delivery' for the callback, and redirect
+    to the IdP
 
     The 'redirect_uri' carries no query:  each auth system's client can
     register it exactly with the IdP.
     """
     request.session[_return_to_session_key(system)] = return_to
+    request.session[_delivery_session_key(system)] = delivery.value
 
     redirect_uri = request.url_for("get_auth_system", system=system)
     redirect_uri = util.strip_default_port(redirect_uri)
@@ -323,6 +399,13 @@ async def get_login_system(
     if rt_status is ReturnTo.MALFORMED:
         raise _bad_request(bound_logger, loggers.AUTHN_BAD_REQUEST)
 
+    try:
+        delivery = CallbackDelivery(
+            request.query_params.get("delivery", CallbackDelivery.FRAGMENT)
+        )
+    except ValueError:
+        raise _bad_request(bound_logger, loggers.AUTHN_BAD_REQUEST) from None
+
     prompt = request.query_params.get("prompt")
 
     if rt_status is ReturnTo.TRUSTED:
@@ -333,6 +416,7 @@ async def get_login_system(
             system=system,
             return_to=return_to,
             prompt=prompt,
+            delivery=delivery,
         )
 
     # ReturnTo.UNLISTED
@@ -354,6 +438,7 @@ async def get_login_system(
     request.session[_pending_session_key(system)] = {
         "return_to": return_to,
         "prompt": prompt,
+        "delivery": delivery.value,
         "csrf_token": csrf_token,
     }
     bound_logger.info(loggers.AUTHN_CONSENT_REQUESTED, origin=origin)
@@ -412,6 +497,9 @@ async def post_login_system_confirm(
             loggers.AUTHN_CONSENT_CONFIRMED,
             return_to=pending["return_to"],
         )
+        delivery = CallbackDelivery(
+            pending.get("delivery", CallbackDelivery.FRAGMENT)
+        )
         return await _redirect_to_idp(
             request,
             the_installation=the_installation,
@@ -419,6 +507,7 @@ async def post_login_system_confirm(
             system=system,
             return_to=pending["return_to"],
             prompt=pending["prompt"],
+            delivery=delivery,
         )
 
     if decision != "cancel":
@@ -477,14 +566,18 @@ async def get_auth_system(
 ):
     """Complete the OIDC token auth flow with the specified provider
 
-    On success, redirect to client-specified URL, passing 'token',
-    'refresh_token', 'expires_in', and (when the provider returns one)
-    'id_token' as callback parameters.
+    On success, set the authn cookie (see 'authn.set_authn_cookie'), and
+    redirect to the client-specified URL.  Unless the login asked for
+    'CallbackDelivery.COOKIE', pass 'token', 'refresh_token',
+    'expires_in', and (when the provider returns one) 'id_token' as
+    callback parameters.  A 'CallbackDelivery.COOKIE' sign-in for which
+    the authn cookie cannot be set serves an error page (HTTP 500)
+    instead of such a redirect.
     """
     bound_logger = the_unauth_logger.bind(oidc_system=system)
 
-    # For the side effect: 404 if 'system' is unknown or auth is disabled.
-    authn._get_authsystem_config(
+    # 404 if 'system' is unknown or authentication is disabled.
+    authsystem_config = authn._get_authsystem_config(
         the_installation=the_installation,
         logger=bound_logger,
         system=system,
@@ -512,7 +605,9 @@ async def get_auth_system(
     access_token = tokendict["access_token"]
 
     try:
-        authn.authenticate(the_installation, bound_logger, access_token)
+        claims = authn.authenticate(
+            the_installation, bound_logger, access_token
+        )
     except fastapi.HTTPException:
         bound_logger.error(  # noqa: TRY400 'authenticate' logged details
             loggers.AUTHN_JWT_INVALID,
@@ -521,23 +616,80 @@ async def get_auth_system(
     else:
         bound_logger.debug(loggers.AUTHN_JWT_VALID)
 
-    refresh_token = tokendict["refresh_token"]
-    expires_in = tokendict["expires_in"]
-
-    callback_params = dict(
-        token=access_token,
-        refresh_token=refresh_token,
-        expires_in=expires_in,
+    delivery = CallbackDelivery(
+        request.session.pop(
+            _delivery_session_key(system),
+            CallbackDelivery.FRAGMENT,
+        )
     )
 
-    # Absent unless the configured scope includes 'openid'.
-    id_token = tokendict.get("id_token")
-    if id_token is not None:
-        callback_params["id_token"] = id_token
+    if delivery is CallbackDelivery.FRAGMENT:
+        callback_params = dict(
+            token=access_token,
+            refresh_token=tokendict["refresh_token"],
+            expires_in=tokendict["expires_in"],
+        )
 
-    return_to = _with_callback_params(return_to, callback_params)
+        # Absent unless the configured scope includes 'openid'.
+        id_token = tokendict.get("id_token")
+        if id_token is not None:
+            callback_params["id_token"] = id_token
 
-    return responses.RedirectResponse(return_to)
+        return_to = _with_callback_params(return_to, callback_params)
+
+    response = responses.RedirectResponse(return_to)
+    carried = authn.set_authn_cookie(
+        response,
+        the_installation=the_installation,
+        auth_system=authsystem_config,
+        claims=claims,
+        logger=bound_logger,
+    )
+
+    if delivery is CallbackDelivery.COOKIE and not carried:
+        return _cookie_error_response(
+            authsystem_config=authsystem_config,
+            logger=bound_logger,
+            server_name=(
+                the_installation._config.server_name or request.url.hostname
+            ),
+            auth_system_title=authsystem_config.title,
+        )
+
+    return response
+
+
+@util.logfire_span("POST /auth/{system}/logout")
+@router.post(
+    "/auth/{system}/logout",
+    status_code=204,
+    response_class=fastapi.Response,
+    summary="Clear the authn cookie set at login",
+)
+async def post_auth_system_logout(
+    system: str,
+    the_installation: installation.Installation = depend_the_installation,
+    the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
+) -> fastapi.Response:
+    """Clear the authn cookie set by 'get_auth_system'
+
+    Raises:
+
+    - 'fastapi.HTTPException' (404) if 'system' is unknown, or
+      authentication is disabled.
+    """
+    bound_logger = the_unauth_logger.bind(oidc_system=system)
+
+    authn._get_authsystem_config(
+        the_installation=the_installation,
+        logger=bound_logger,
+        system=system,
+    )
+
+    response = fastapi.Response(status_code=204)
+    authn.clear_authn_cookie(response)
+    bound_logger.info(loggers.AUTHN_COOKIE_LOGOUT)
+    return response
 
 
 @util.logfire_span("GET /user_info")

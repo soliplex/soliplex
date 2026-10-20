@@ -246,7 +246,9 @@ REQUEST_HOST = "test.example.com"
 FORM_ACTION = "http://test.example.com/api/login/test_oauth_appname/confirm"
 UFOP = config_authsystem.UnlistedFrontendOriginPolicy
 RETURN_TO_KEY = f"soliplex.authn.{TEST_SYSTEM}.return_to"
+DELIVERY_KEY = f"soliplex.authn.{TEST_SYSTEM}.delivery"
 PENDING_KEY = f"soliplex.authn.{TEST_SYSTEM}.pending"
+_CD = authn_views.CallbackDelivery
 _raises_badrequest = raises_httpexc(loggers.AUTHN_BAD_REQUEST, 400)
 
 HOSTILE_KW = {
@@ -290,6 +292,12 @@ def test__return_to_session_key():
     assert found == RETURN_TO_KEY
 
 
+def test__delivery_session_key():
+    found = authn_views._delivery_session_key(TEST_SYSTEM)
+
+    assert found == DELIVERY_KEY
+
+
 def test__pending_session_key():
     found = authn_views._pending_session_key(TEST_SYSTEM)
 
@@ -328,38 +336,78 @@ def test__display_origin_raises(return_to):
         authn_views._display_origin(return_to)
 
 
-@pytest.mark.parametrize(
-    "w_configured, w_in_oidc_folder, exp_name",
-    [
-        (False, False, "packaged"),
-        (False, True, "in_oidc_folder"),
-        (True, False, "configured"),
-        (True, True, "configured"),
-    ],
-)
-def test__consent_template_path(
-    temp_dir,
-    w_configured,
-    w_in_oidc_folder,
-    exp_name,
-):
-    configured = temp_dir / "elsewhere.html.mako"
-    in_oidc_folder = temp_dir / authn_views.CONSENT_TEMPLATE_FILENAME
+@pytest.mark.parametrize("w_in_oidc_folder", [False, True])
+def test__oidc_folder_template_path(temp_dir, w_in_oidc_folder):
+    TEMPLATE_FILENAME = "test-template.html.mako"
+    in_oidc_folder = temp_dir / TEMPLATE_FILENAME
+
     if w_in_oidc_folder:
         in_oidc_folder.write_text("in folder", encoding="utf-8")
+        expected = in_oidc_folder
+    else:
+        expected = authn_views._PACKAGED_TEMPLATES / TEMPLATE_FILENAME
+
+    asc = _make_authsystem_config(temp_dir)
+
+    found = authn_views._oidc_folder_template_path(TEMPLATE_FILENAME, asc)
+
+    assert found == expected
+
+
+@mock.patch("soliplex.views.authn._oidc_folder_template_path")
+def test__cookie_too_large_template_path(
+    oftr,
+    temp_dir,
+):
+    asc = _make_authsystem_config(temp_dir)
+
+    found = authn_views._cookie_too_large_template_path(asc)
+
+    assert found is oftr.return_value
+
+    oftr.assert_called_once_with(
+        authn_views.COOKIE_TOO_LARGE_TEMPLATE_FILENAME,
+        asc,
+    )
+
+
+@pytest.mark.parametrize("w_configured", [False, True])
+@mock.patch("soliplex.views.authn._oidc_folder_template_path")
+def test__consent_template_path(
+    oftr,
+    temp_dir,
+    w_configured,
+):
+    configured = temp_dir / "elsewhere.html.mako"
     asc = _make_authsystem_config(
         temp_dir,
         consent_template_path=configured if w_configured else None,
     )
-    exp_path = {
-        "packaged": authn_views._PACKAGED_CONSENT_TEMPLATE,
-        "in_oidc_folder": in_oidc_folder,
-        "configured": configured,
-    }[exp_name]
 
     found = authn_views._consent_template_path(asc)
 
-    assert found == exp_path
+    if w_configured:
+        assert found == configured
+        oftr.assert_not_called()
+
+    else:
+        assert found is oftr.return_value
+        oftr.assert_called_once_with(
+            authn_views.CONSENT_TEMPLATE_FILENAME,
+            asc,
+        )
+
+
+def test__render_template_cookie_too_large_packaged():
+    found = authn_views._render_template(
+        authn_views._PACKAGED_COOKIE_TOO_LARGE_TEMPLATE,
+        **HOSTILE_KW,
+    )
+
+    assert found.startswith("<!doctype html>")
+    assert "<script>" not in found
+    assert "Soli&lt;b&gt;plex" in found
+    assert "Sign-in could not be completed" in found
 
 
 def test__render_template_escapes(temp_dir):
@@ -430,6 +478,42 @@ def test__consent_response(temp_dir, template_text, exp_html, exp_logged):
         logger.exception.assert_called_once_with(
             loggers.AUTHN_CONSENT_TEMPLATE_FAILED
         )
+
+
+@pytest.mark.parametrize(
+    "template_text, exp_html, exp_logged",
+    [
+        ("<p>${server_name}</p>", "<p>ORIGIN</p>", False),
+        ("<p>${nonesuch}</p>", None, True),
+        ("<p>${origin</p>", None, True),
+    ],
+)
+def test__cookie_error_response(temp_dir, template_text, exp_html, exp_logged):
+    template_path = temp_dir / authn_views.COOKIE_TOO_LARGE_TEMPLATE_FILENAME
+    template_path.write_text(template_text, encoding="utf-8")
+    asc = _make_authsystem_config(temp_dir)
+    logger = mock.create_autospec(loggers.LogWrapper)
+    kwargs = {"server_name": "ORIGIN", "auth_system_title": "TITLE"}
+    if exp_html is None:
+        exp_html = authn_views._render_template(
+            authn_views._PACKAGED_COOKIE_TOO_LARGE_TEMPLATE, **kwargs
+        )
+
+    found = authn_views._cookie_error_response(
+        authsystem_config=asc,
+        logger=logger,
+        **kwargs,
+    )
+
+    assert isinstance(found, responses.HTMLResponse)
+    assert found.status_code == 500
+    assert found.body.decode("utf-8") == exp_html
+    for key, value in authn_views._CONSENT_HEADERS.items():
+        assert found.headers[key] == value
+    if exp_logged:
+        logger.exception.assert_called_once_with(
+            loggers.AUTHN_COOKIE_TEMPLATE_FAILED
+        )
     else:
         logger.exception.assert_not_called()
 
@@ -453,11 +537,13 @@ def test__bad_request():
         (TEST_PROMPT, {"prompt": TEST_PROMPT}),
     ],
 )
+@pytest.mark.parametrize("delivery", [_CD.FRAGMENT, _CD.COOKIE])
 @mock.patch("soliplex.util.strip_default_port")
 @mock.patch("soliplex.authn.get_oauth")
 async def test__redirect_to_idp(
     get_oauth,
     strip_default_port,
+    delivery,
     prompt,
     exp_auth_params,
 ):
@@ -475,10 +561,14 @@ async def test__redirect_to_idp(
         system=TEST_SYSTEM,
         return_to=OTHER_RETURN_TO,
         prompt=prompt,
+        delivery=delivery,
     )
 
     assert found is ar.return_value
-    assert request.session == {RETURN_TO_KEY: OTHER_RETURN_TO}
+    assert request.session == {
+        RETURN_TO_KEY: OTHER_RETURN_TO,
+        DELIVERY_KEY: delivery.value,
+    }
     ruf.assert_called_once_with("get_auth_system", system=TEST_SYSTEM)
     # No 'return_to' query on the 'redirect_uri':  it is registered exactly.
     strip_default_port.assert_called_once_with(ruf.return_value)
@@ -535,15 +625,28 @@ async def test_get_login_system_malformed(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "w_qs_dict, exp_return_to, exp_prompt",
+    "w_qs_dict, exp_return_to, exp_prompt, exp_delivery",
     [
-        ({}, DEFAULT_RETURN_TO, None),
-        ({"return_to": OTHER_RETURN_TO}, OTHER_RETURN_TO, None),
-        ({"prompt": TEST_PROMPT}, DEFAULT_RETURN_TO, TEST_PROMPT),
+        ({}, DEFAULT_RETURN_TO, None, _CD.FRAGMENT),
+        ({"return_to": OTHER_RETURN_TO}, OTHER_RETURN_TO, None, _CD.FRAGMENT),
+        (
+            {"prompt": TEST_PROMPT},
+            DEFAULT_RETURN_TO,
+            TEST_PROMPT,
+            _CD.FRAGMENT,
+        ),
         (
             {"return_to": OTHER_RETURN_TO, "prompt": TEST_PROMPT},
             OTHER_RETURN_TO,
             TEST_PROMPT,
+            _CD.FRAGMENT,
+        ),
+        ({"delivery": "fragment"}, DEFAULT_RETURN_TO, None, _CD.FRAGMENT),
+        (
+            {"return_to": OTHER_RETURN_TO, "delivery": "cookie"},
+            OTHER_RETURN_TO,
+            None,
+            _CD.COOKIE,
         ),
     ],
 )
@@ -559,6 +662,7 @@ async def test_get_login_system_trusted(
     w_qs_dict,
     exp_return_to,
     exp_prompt,
+    exp_delivery,
 ):
     the_installation = mock.create_autospec(installation.Installation)
     bound_logger = the_unauth_logger.bind.return_value
@@ -581,6 +685,7 @@ async def test_get_login_system_trusted(
         system=TEST_SYSTEM,
         return_to=exp_return_to,
         prompt=exp_prompt,
+        delivery=exp_delivery,
     )
     _classify_return_to.assert_called_once_with(
         exp_return_to,
@@ -593,6 +698,33 @@ async def test_get_login_system_trusted(
         system=TEST_SYSTEM,
     )
     the_unauth_logger.bind.assert_called_once_with(oidc_system=TEST_SYSTEM)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.views.authn._redirect_to_idp")
+@mock.patch("soliplex.views.authn._classify_return_to")
+@mock.patch("soliplex.authn._get_authsystem_config")
+async def test_get_login_system_bad_delivery(
+    _get_authsystem_config,
+    _classify_return_to,
+    _redirect_to_idp,
+    the_unauth_logger,
+    login_asc,
+):
+    _get_authsystem_config.return_value = login_asc
+    _classify_return_to.return_value = _RT.TRUSTED
+    request = _make_request({"delivery": "bogus"})
+
+    with _raises_badrequest:
+        await authn_views.get_login_system(
+            request=request,
+            system=TEST_SYSTEM,
+            the_installation=mock.create_autospec(installation.Installation),
+            the_unauth_logger=the_unauth_logger,
+        )
+
+    assert request.session == {}
+    _redirect_to_idp.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -699,6 +831,7 @@ async def test_get_login_system_unlisted_consent(
         PENDING_KEY: {
             "return_to": UNLISTED_RETURN_TO,
             "prompt": TEST_PROMPT,
+            "delivery": "fragment",
             "csrf_token": TEST_CSRF_TOKEN,
         },
     }
@@ -722,11 +855,12 @@ async def test_get_login_system_unlisted_consent(
     )
 
 
-PENDING = {
+PENDING_WO_DELIVERY = {
     "return_to": UNLISTED_RETURN_TO,
     "prompt": TEST_PROMPT,
     "csrf_token": TEST_CSRF_TOKEN,
 }
+PENDING = PENDING_WO_DELIVERY | {"delivery": "cookie"}
 
 
 @pytest.mark.anyio
@@ -775,6 +909,7 @@ async def test_post_login_system_confirm_invalid(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_pending", [PENDING, PENDING_WO_DELIVERY])
 @mock.patch("soliplex.views.authn._redirect_to_idp")
 @mock.patch("soliplex.authn._get_authsystem_config")
 async def test_post_login_system_confirm_continue(
@@ -782,11 +917,12 @@ async def test_post_login_system_confirm_continue(
     _redirect_to_idp,
     the_unauth_logger,
     login_asc,
+    w_pending,
 ):
     the_installation = mock.create_autospec(installation.Installation)
     bound_logger = the_unauth_logger.bind.return_value
     _get_authsystem_config.return_value = login_asc
-    request = _make_request(session={PENDING_KEY: dict(PENDING)})
+    request = _make_request(session={PENDING_KEY: dict(w_pending)})
 
     found = await authn_views.post_login_system_confirm(
         request=request,
@@ -806,6 +942,7 @@ async def test_post_login_system_confirm_continue(
         system=TEST_SYSTEM,
         return_to=UNLISTED_RETURN_TO,
         prompt=TEST_PROMPT,
+        delivery=_CD(w_pending.get("delivery", _CD.FRAGMENT)),
     )
     bound_logger.info.assert_called_once_with(
         loggers.AUTHN_CONSENT_CONFIRMED,
@@ -910,6 +1047,7 @@ EXP_QS_W_ID_TOKEN = f"{EXP_QS}&id_token=IDTOKEN"
         ),
     ],
 )
+@mock.patch("soliplex.authn.set_authn_cookie")
 @mock.patch("soliplex.authn.get_oauth")
 @mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.authn._get_authsystem_config")
@@ -917,6 +1055,7 @@ async def test_get_auth_system(
     _get_authsystem_config,
     auth_fn,
     get_oauth,
+    set_authn_cookie,
     the_unauth_logger,
     return_to,
     exp_location,
@@ -946,6 +1085,13 @@ async def test_get_auth_system(
     assert request.session == {}
     aat.assert_awaited_once_with(request)
     auth_fn.assert_called_once_with(the_installation, bound_logger, "TOKEN")
+    set_authn_cookie.assert_called_once_with(
+        response,
+        the_installation=the_installation,
+        auth_system=_get_authsystem_config.return_value,
+        claims=auth_fn.return_value,
+        logger=bound_logger,
+    )
     cc.assert_called_once_with(TEST_SYSTEM)
     bound_logger.debug.assert_called_once_with(loggers.AUTHN_JWT_VALID)
     _get_authsystem_config.assert_called_once_with(
@@ -966,6 +1112,7 @@ async def test_get_auth_system(
         ),
     ],
 )
+@mock.patch("soliplex.authn.set_authn_cookie")
 @mock.patch("soliplex.authn.get_oauth")
 @mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.authn._get_authsystem_config")
@@ -973,6 +1120,7 @@ async def test_get_auth_system_id_token(
     _get_authsystem_config,
     auth_fn,
     get_oauth,
+    set_authn_cookie,
     the_unauth_logger,
     tokendict,
     exp_location,
@@ -992,6 +1140,130 @@ async def test_get_auth_system_id_token(
     )
 
     assert response.headers["location"] == exp_location
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_delivery, exp_location",
+    [
+        pytest.param("fragment", f"/another/path#?{EXP_QS}", id="fragment"),
+        pytest.param("cookie", OTHER_RETURN_TO, id="cookie"),
+    ],
+)
+@mock.patch("soliplex.authn.set_authn_cookie")
+@mock.patch("soliplex.authn.get_oauth")
+@mock.patch("soliplex.authn.authenticate")
+@mock.patch("soliplex.authn._get_authsystem_config")
+async def test_get_auth_system_w_delivery(
+    _get_authsystem_config,
+    auth_fn,
+    get_oauth,
+    set_authn_cookie,
+    the_unauth_logger,
+    w_delivery,
+    exp_location,
+):
+    the_installation = mock.create_autospec(installation.Installation)
+    cc = get_oauth.return_value.create_client
+    cc.return_value.authorize_access_token = mock.AsyncMock(
+        return_value=TOKENDICT,
+    )
+    request = _make_request(
+        session={RETURN_TO_KEY: OTHER_RETURN_TO, DELIVERY_KEY: w_delivery},
+    )
+
+    response = await authn_views.get_auth_system(
+        request=request,
+        system=TEST_SYSTEM,
+        the_installation=the_installation,
+        the_unauth_logger=the_unauth_logger,
+    )
+
+    assert response.headers["location"] == exp_location
+    assert request.session == {}
+    set_authn_cookie.assert_called_once_with(
+        response,
+        the_installation=the_installation,
+        auth_system=_get_authsystem_config.return_value,
+        claims=auth_fn.return_value,
+        logger=the_unauth_logger.bind.return_value,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_delivery, exp_page",
+    [
+        pytest.param("fragment", False, id="fragment"),
+        pytest.param("cookie", True, id="cookie"),
+    ],
+)
+@pytest.mark.parametrize("w_server_name", [False, True])
+@mock.patch("soliplex.views.authn._cookie_error_response")
+@mock.patch("soliplex.authn.set_authn_cookie")
+@mock.patch("soliplex.authn.get_oauth")
+@mock.patch("soliplex.authn.authenticate")
+@mock.patch("soliplex.authn._get_authsystem_config")
+async def test_get_auth_system_wo_carried_cookie(
+    _get_authsystem_config,
+    auth_fn,
+    get_oauth,
+    set_authn_cookie,
+    cookie_error_response,
+    the_unauth_logger,
+    w_server_name,
+    w_delivery,
+    exp_page,
+):
+    """A 'delivery=cookie' sign-in serves the error page when not set
+
+    A 'delivery=fragment' sign-in whose authn cookie cannot be set
+    still redirects:  the web client gets its tokens either way.
+    """
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation._config = mock.Mock(
+        server_name=mock.sentinel.server_name if w_server_name else None,
+    )
+    cc = get_oauth.return_value.create_client
+    cc.return_value.authorize_access_token = mock.AsyncMock(
+        return_value=TOKENDICT,
+    )
+    set_authn_cookie.return_value = False
+    request = _make_request(
+        session={RETURN_TO_KEY: OTHER_RETURN_TO, DELIVERY_KEY: w_delivery},
+    )
+
+    response = await authn_views.get_auth_system(
+        request=request,
+        system=TEST_SYSTEM,
+        the_installation=the_installation,
+        the_unauth_logger=the_unauth_logger,
+    )
+
+    set_authn_cookie.assert_called_once_with(
+        mock.ANY,
+        the_installation=the_installation,
+        auth_system=_get_authsystem_config.return_value,
+        claims=auth_fn.return_value,
+        logger=the_unauth_logger.bind.return_value,
+    )
+    assert request.session == {}
+
+    if exp_page:
+        cookie_error_response.assert_called_once_with(
+            authsystem_config=_get_authsystem_config.return_value,
+            logger=the_unauth_logger.bind.return_value,
+            server_name=(
+                mock.sentinel.server_name
+                if w_server_name
+                else request.url.hostname
+            ),
+            auth_system_title=_get_authsystem_config.return_value.title,
+        )
+        assert response is cookie_error_response.return_value
+    else:
+        cookie_error_response.assert_not_called()
+        assert response.headers["location"] == f"/another/path#?{EXP_QS}"
 
 
 @pytest.mark.anyio
@@ -1055,6 +1327,34 @@ async def test_get_auth_system_w_error(
         )
     else:  # Details logged by 'authenticate'
         bound_logger.error.assert_called_once_with(loggers.AUTHN_JWT_INVALID)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.authn.clear_authn_cookie")
+@mock.patch("soliplex.authn._get_authsystem_config")
+async def test_post_auth_system_logout(
+    _get_authsystem_config,
+    clear_authn_cookie,
+    the_unauth_logger,
+):
+    the_installation = mock.create_autospec(installation.Installation)
+    bound_logger = the_unauth_logger.bind.return_value
+
+    response = await authn_views.post_auth_system_logout(
+        system=TEST_SYSTEM,
+        the_installation=the_installation,
+        the_unauth_logger=the_unauth_logger,
+    )
+
+    assert response.status_code == 204
+    clear_authn_cookie.assert_called_once_with(response)
+    _get_authsystem_config.assert_called_once_with(
+        the_installation=the_installation,
+        logger=bound_logger,
+        system=TEST_SYSTEM,
+    )
+    bound_logger.info.assert_called_once_with(loggers.AUTHN_COOKIE_LOGOUT)
+    the_unauth_logger.bind.assert_called_once_with(oidc_system=TEST_SYSTEM)
 
 
 @pytest.mark.anyio

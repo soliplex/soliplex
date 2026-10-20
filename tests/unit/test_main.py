@@ -90,23 +90,16 @@ def test_app_with_cors():
     )
 
 
-@pytest.mark.parametrize(
-    "env, exp_https_only",
-    [
-        ({}, True),
-        ({"_SOLIPLEX_INSECURE_SESSION_COOKIE": "Y"}, False),
-    ],
-)
-def test_app_with_session(env, exp_https_only):
+@mock.patch("soliplex.authn.secure_cookies")
+def test_app_with_session(asc):
     app = mock.Mock(spec_set=["add_middleware"])
     installation_config = mock.Mock(spec_set=["get_secret"])
     installation_config.get_secret.return_value = TOKEN
 
-    with mock.patch.dict("os.environ", env, clear=True):
-        found = main.app_with_session(
-            app,
-            installation_config=installation_config,
-        )
+    found = main.app_with_session(
+        app,
+        installation_config=installation_config,
+    )
 
     assert found is app
     installation_config.get_secret.assert_called_once_with(
@@ -115,7 +108,7 @@ def test_app_with_session(env, exp_https_only):
     app.add_middleware.assert_called_once_with(
         starlette_mw_sessions.SessionMiddleware,
         secret_key=TOKEN.encode("ascii"),
-        https_only=exp_https_only,
+        https_only=asc.return_value,
         same_site="lax",
     )
 

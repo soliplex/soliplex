@@ -12,6 +12,7 @@ import uvicorn
 from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
+from soliplex import authn
 from soliplex import installation
 from soliplex.config import installation as config_installation
 from soliplex.config import middleware as config_middleware
@@ -58,7 +59,7 @@ def app_with_session(
     same_site: str = "lax",
 ) -> fastapi.FastAPI:
     token = installation_config.get_secret("secret:SESSION_MIDDLEWARE_TOKEN")
-    https_only = os.environ.get("_SOLIPLEX_INSECURE_SESSION_COOKIE") != "Y"
+    https_only = authn.secure_cookies()
     app.add_middleware(
         starlette_mw_sessions.SessionMiddleware,
         secret_key=token.encode("ascii"),

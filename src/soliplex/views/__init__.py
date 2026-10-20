@@ -62,6 +62,49 @@ async def get_the_user_claims(
 depend_the_user_claims = fastapi.Depends(get_the_user_claims)
 
 
+async def get_the_authn_cookie_claims(
+    request: fastapi.Request,
+    the_installation: Installation = depend_the_installation,
+    the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
+) -> authn_module.UserClaims:
+    """Return the claims held in the authn cookie set at login
+
+    In no-auth mode, return the no-auth user's claims, regardless
+    whether the cookie is present.
+
+    Raises:
+
+    - 'fastapi.HTTPException' (401) if the request has no authn cookie.
+    - 'fastapi.HTTPException' (401) if the cookie does not verify (see
+      'authn.load_authn_cookie').
+    """
+    if the_installation.auth_disabled:
+        return installation_module.NO_AUTH_MODE_USER_TOKEN
+
+    cookie = request.cookies.get(authn_module.AUTHN_COOKIE_NAME)
+
+    if cookie is None:
+        the_unauth_logger.info(loggers.AUTHN_COOKIE_NOT_SET)
+        raise fastapi.HTTPException(
+            status_code=401,
+            detail=loggers.AUTHN_COOKIE_NOT_SET,
+        )
+
+    claims, reason = authn_module.load_authn_cookie(the_installation, cookie)
+
+    if claims is None:
+        the_unauth_logger.info(loggers.AUTHN_COOKIE_INVALID, reason=reason)
+        raise fastapi.HTTPException(
+            status_code=401,
+            detail=loggers.AUTHN_COOKIE_INVALID,
+        )
+
+    return claims
+
+
+depend_the_authn_cookie_claims = fastapi.Depends(get_the_authn_cookie_claims)
+
+
 async def get_the_logger(
     the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
     the_user_claims: authn_module.UserClaims = depend_the_user_claims,
@@ -102,6 +145,23 @@ async def get_the_admin_user_policy(
 
 
 depend_the_admin_user_policy = fastapi.Depends(get_the_admin_user_policy)
+
+
+async def get_the_authn_cookie_admin_user_policy(
+    request: fastapi.Request,
+    the_user_claims: authn_module.UserClaims = depend_the_authn_cookie_claims,
+):
+    from soliplex.authz import persistence
+
+    engine = request.state.authorization_engine
+    async with sqla_asyncio.AsyncSession(bind=engine) as session:
+        async with session.begin():
+            yield persistence.AdminUserPolicy(session, the_user_claims)
+
+
+depend_the_authn_cookie_admin_user_policy = fastapi.Depends(
+    get_the_authn_cookie_admin_user_policy
+)
 
 
 async def get_the_room_authz_policy(

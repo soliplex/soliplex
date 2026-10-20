@@ -1,5 +1,5 @@
 ## Packaged default for the page asking a user to confirm an unlisted
-## frontend origin before the OIDC sign-in proceeds.  See afsoc-rag#1907.
+## frontend origin before the OIDC sign-in proceeds.
 ##
 ## Copy this file to 'consent.html.mako' in an 'oidc' folder (or point
 ## 'consent_template_path' at it) to restyle it.  Rendered with
