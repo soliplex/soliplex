@@ -836,3 +836,286 @@ async def test_resolve_recent_feedback(
         assert after_feedback_state == before_feedback_state
         rsv_rf.assert_not_awaited()
         gts.assert_not_called()
+
+
+IMAGE_CONTENT = agui_core.types.ImageInputContent(
+    source=agui_core.types.InputContentUrlSource(
+        type="url",
+        value="https://example.com/image.png",
+    ),
+)
+TEXT_CONTENT = agui_core.types.TextInputContent(text=USER_PROMPT)
+
+
+TOOL_CALL_ID = "tool-call-1234"
+TOOL_NAME = "search_documents"
+TOOL_ARGUMENTS = '{"query": "test query"}'
+TOOL_RESULT = "test tool result"
+TOOL_ERROR = "test tool error"
+TOOL_CALL = agui_core.types.ToolCall(
+    id=TOOL_CALL_ID,
+    function=agui_core.types.FunctionCall(
+        name=TOOL_NAME,
+        arguments=TOOL_ARGUMENTS,
+    ),
+)
+EXP_TOOL_CALL = arf_tools.TranscriptToolCall(
+    tool_call_id=TOOL_CALL_ID,
+    name=TOOL_NAME,
+    arguments=TOOL_ARGUMENTS,
+)
+LONG_TOOL_RESULT = "x" * (arf_tools.TOOL_RESULT_LIMIT + 5)
+EXP_LONG_TOOL_RESULT = (
+    "x" * arf_tools.TOOL_RESULT_LIMIT + "... [5 characters omitted]"
+)
+
+
+@pytest.mark.parametrize(
+    "message, exp_kw",
+    [
+        (
+            agui_core.types.UserMessage(
+                id=USER_PROMPT_MESSAGE_ID,
+                content=[TEXT_CONTENT, IMAGE_CONTENT],
+            ),
+            {"role": "user", "content": f"{USER_PROMPT}\n[image]"},
+        ),
+        (
+            agui_core.types.AssistantMessage(
+                id=USER_PROMPT_MESSAGE_ID,
+                content=RESPONSE_MESSAGE,
+            ),
+            {"role": "assistant", "content": RESPONSE_MESSAGE},
+        ),
+        (
+            agui_core.types.AssistantMessage(
+                id=USER_PROMPT_MESSAGE_ID,
+                tool_calls=[TOOL_CALL],
+            ),
+            {"role": "assistant", "tool_calls": [EXP_TOOL_CALL]},
+        ),
+        (
+            agui_core.types.ToolMessage(
+                id=USER_PROMPT_MESSAGE_ID,
+                content=TOOL_RESULT,
+                tool_call_id=TOOL_CALL_ID,
+                error=TOOL_ERROR,
+            ),
+            {
+                "role": "tool",
+                "content": TOOL_RESULT,
+                "tool_call_id": TOOL_CALL_ID,
+                "error": TOOL_ERROR,
+            },
+        ),
+        (
+            agui_core.types.ToolMessage(
+                id=USER_PROMPT_MESSAGE_ID,
+                content=LONG_TOOL_RESULT,
+                tool_call_id=TOOL_CALL_ID,
+            ),
+            {
+                "role": "tool",
+                "content": EXP_LONG_TOOL_RESULT,
+                "tool_call_id": TOOL_CALL_ID,
+            },
+        ),
+    ],
+)
+def test__transcript_message(message, exp_kw):
+    found = arf_tools._transcript_message(message)
+
+    assert found == arf_tools.TranscriptMessage(
+        message_id=USER_PROMPT_MESSAGE_ID,
+        **exp_kw,
+    )
+
+
+EARLIER_TOOL_CALL_MESSAGE_ID = "message-5678"
+EARLIER_TOOL_RESULT_MESSAGE_ID = "message-6789"
+SYSTEM_MESSAGE_ID = "message-7890"
+EARLIER_RUN_MESSAGES = [
+    agui_core.types.SystemMessage(
+        id=SYSTEM_MESSAGE_ID,
+        content="test system prompt",
+    ),
+    agui_core.types.UserMessage(
+        id=EARLIER_USER_PROMPT_MESSAGE_ID,
+        content=EARLIER_USER_PROMPT,
+    ),
+    agui_core.types.AssistantMessage(
+        id=EARLIER_TOOL_CALL_MESSAGE_ID,
+        tool_calls=[TOOL_CALL],
+    ),
+    agui_core.types.ToolMessage(
+        id=EARLIER_TOOL_RESULT_MESSAGE_ID,
+        content=TOOL_RESULT,
+        tool_call_id=TOOL_CALL_ID,
+    ),
+    agui_core.types.AssistantMessage(
+        id=EARLIER_RESPONSE_MESSAGE_ID,
+        content=EARLIER_RESPONSE_MESSAGE,
+    ),
+]
+#   A later run's input repeats the thread's history.
+LATER_RUN_MESSAGES = EARLIER_RUN_MESSAGES + SINGLE_RUN_MESSAGES
+EARLIER_AGUI_STATE = {"test-namespace": {"test-key": "earlier-value"}}
+EARLIER_CREATED = NOW - datetime.timedelta(minutes=5)
+THUMBS_DOWN = "thumbs_down"
+
+
+def _transcript_run(
+    run_id,
+    parent_run_id,
+    created,
+    run_feedback,
+    events,
+):
+    run = mock.create_autospec(
+        agui.Run,
+        awaitable_attrs=mock.AsyncMock(),
+    )
+    run.awaitable_attrs.run_id = _awaitable("run_id", run_id)
+    run.awaitable_attrs.parent_run_id = _awaitable(
+        "parent_run_id",
+        parent_run_id,
+    )
+    run.awaitable_attrs.created = _awaitable("created", created)
+    run.awaitable_attrs.run_feedback = _awaitable(
+        "run_feedback",
+        run_feedback,
+    )
+    run.events = events
+    return run
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("include_agui_state", [False, True])
+@pytest.mark.parametrize("include_tool_results", [False, True])
+@mock.patch("soliplex.tools.agui_run_feedback._replay_run")
+@mock.patch("soliplex.tools.agui_run_feedback._get_threads_storage")
+async def test_get_feedback_thread_transcript(
+    gts,
+    replay_run,
+    run_feedback_entry,
+    ctx_w_deps,
+    the_thread,
+    include_tool_results,
+    include_agui_state,
+):
+    the_threads = gts.return_value.__aenter__.return_value
+
+    run_feedback = mock.create_autospec(
+        agui.RunFeedback,
+        awaitable_attrs=mock.AsyncMock(),
+    )
+    run_feedback.awaitable_attrs.feedback = _awaitable(
+        "feedback",
+        THUMBS_DOWN,
+    )
+    run_feedback.awaitable_attrs.reason = _awaitable("reason", REASON)
+
+    earlier_run = _transcript_run(
+        PARENT_RUN_ID,
+        None,
+        EARLIER_CREATED,
+        None,
+        (EARLIER_RUN_MESSAGES, RS.FINISHED, EARLIER_AGUI_STATE),
+    )
+    later_run = _transcript_run(
+        RUN_ID,
+        PARENT_RUN_ID,
+        NOW,
+        run_feedback,
+        (LATER_RUN_MESSAGES, RS.ERROR, AGUI_STATE),
+    )
+
+    async def _replay(run):
+        messages, run_status, state = run.events
+        return mock.Mock(
+            messages=messages,
+            run_status=run_status,
+            state=state,
+        )
+
+    replay_run.side_effect = _replay
+
+    the_thread.awaitable_attrs.runs = _awaitable(
+        "runs",
+        [earlier_run, later_run],
+    )
+    the_threads.get_thread.return_value = the_thread
+
+    entries = arf_tools.RecentRunFeedbackEntries(
+        opened=[run_feedback_entry],
+    )
+    our_state = arf_tools.RecentRunFeedback(entries=entries)
+
+    deps = ctx_w_deps.deps
+    deps.state[STATE_NAMESPACE] = our_state.model_dump(mode="json")
+
+    found = await arf_tools.get_feedback_thread_transcript(
+        ctx_w_deps,
+        RUN_ID,
+        include_tool_results=include_tool_results,
+        include_agui_state=include_agui_state,
+    )
+
+    the_threads.get_thread.assert_awaited_once_with(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=THREAD_ID,
+    )
+
+    assert found.user_name == USER_NAME
+    assert found.email == EMAIL
+    assert found.room_id == ROOM_ID
+    assert found.thread_id == THREAD_ID
+
+    if include_agui_state:
+        assert found.agui_state == AGUI_STATE
+    else:
+        assert found.agui_state is None
+
+    earlier, later = found.runs
+
+    assert earlier.run_id == PARENT_RUN_ID
+    assert earlier.parent_run_id is None
+    assert earlier.created == EARLIER_CREATED
+    assert earlier.run_status == RS.FINISHED.name
+    assert earlier.feedback is None
+    assert earlier.feedback_reason is None
+
+    exp_earlier_ids = [
+        EARLIER_USER_PROMPT_MESSAGE_ID,
+        EARLIER_TOOL_CALL_MESSAGE_ID,
+    ]
+    if include_tool_results:
+        exp_earlier_ids.append(EARLIER_TOOL_RESULT_MESSAGE_ID)
+    exp_earlier_ids.append(EARLIER_RESPONSE_MESSAGE_ID)
+
+    assert [m.message_id for m in earlier.messages] == exp_earlier_ids
+    assert earlier.messages[0].content == EARLIER_USER_PROMPT
+    assert earlier.messages[1].tool_calls == [EXP_TOOL_CALL]
+
+    assert later.run_id == RUN_ID
+    assert later.parent_run_id == PARENT_RUN_ID
+    assert later.created == NOW
+    assert later.run_status == RS.ERROR.name
+    assert later.feedback == THUMBS_DOWN
+    assert later.feedback_reason == REASON
+
+    # only the messages new in the later run
+    assert [m.message_id for m in later.messages] == [
+        USER_PROMPT_MESSAGE_ID,
+        RESPONSE_MESSAGE_ID,
+    ]
+    assert [m.content for m in later.messages] == [
+        USER_PROMPT,
+        RESPONSE_MESSAGE,
+    ]
+
+    # silence resource warnings for unused fixtures
+    await the_thread.awaitable_attrs.user_name
+    await the_thread.awaitable_attrs.room_id
+    await the_thread.awaitable_attrs.thread_id

@@ -149,6 +149,126 @@ class RunFeedbackInfo(pydantic.BaseModel):
     run_status_note: str
 
 
+#   Tool results longer than this are cut short in a thread transcript.
+TOOL_RESULT_LIMIT = 2000
+
+#   Message roles which appear in a thread transcript.
+TRANSCRIPT_ROLES = ("user", "assistant", "tool")
+
+
+class TranscriptToolCall(pydantic.BaseModel):
+    """A tool call made by the agent
+
+    Args:
+
+      'tool_call_id' (string):  ID of the call;  a 'tool' message with the
+        same 'tool_call_id' holds its result.
+
+      'name' (string):  name of the tool called.
+
+      'arguments' (string):  JSON-encoded arguments passed to the tool.
+    """
+
+    tool_call_id: str
+    name: str
+    arguments: str
+
+
+class TranscriptMessage(pydantic.BaseModel):
+    """One message in a thread transcript
+
+    Args:
+
+      'message_id' (string):  ID of the message.
+
+      'role' (one of "user", "assistant", "tool"):  "user" messages are
+        the user's prompts, "assistant" messages are the agent's replies
+        and tool calls, "tool" messages are tool results (including the
+        user's answers to human-in-the-loop tool calls), present only when
+        requested.
+
+      'content' (string or None):  text of the message.  Non-text parts
+        of a user message appear as '[<type>]' placeholders.  Tool results
+        are cut short after 'TOOL_RESULT_LIMIT' characters.
+
+      'tool_calls' (list):  tool calls made in an "assistant" message.
+
+      'tool_call_id' (string or None):  for a "tool" message, the ID of the
+        call whose result it holds.
+
+      'error' (string or None):  for a "tool" message, the error raised by
+        the tool, if any.
+    """
+
+    message_id: str
+    role: str
+    content: str | None = None
+    tool_calls: list[TranscriptToolCall] = []
+    tool_call_id: str | None = None
+    error: str | None = None
+
+
+class TranscriptRun(pydantic.BaseModel):
+    """One run in a thread transcript
+
+    Args:
+
+      'run_id' (string):  UUID of the run.
+
+      'parent_run_id' (string or None):  UUID of the run this one
+        continues, or None.
+
+      'created' (datetime.datetime):  when the run was created.
+
+      'run_status' (one of "INITIALIZED", "RUNNING", "FINISHED", "ERROR"):
+        the run's status, recovered by replaying its recorded events.
+
+      'feedback' (one of None, "thumbs_up", "thumbs_down"):  feedback
+        given by the user for this run, if any.
+
+      'feedback_reason' (string or None):  reason given with the
+        feedback.
+
+      'messages' (list):  messages which first appear in this run, in
+        order.  Earlier messages of the thread are in earlier runs.
+    """
+
+    run_id: str
+    parent_run_id: str | None = None
+    created: datetime.datetime
+    run_status: str
+    feedback: str | None = None
+    feedback_reason: str | None = None
+    messages: list[TranscriptMessage] = []
+
+
+class ThreadTranscript(pydantic.BaseModel):
+    """Everything recorded for the thread of a feedback entry
+
+    Args:
+
+      'user_name' (string):  preferred username of the thread's user.
+
+      'email' (string or None):  email-address of the thread's user.
+
+      'room_id' (string): ID of the room in which the thread was created.
+
+      'thread_id' (string): UUID of the thread.
+
+      'runs' (list):  the thread's runs, oldest first.
+
+      'agui_state' (mapping or None):  the AG-UI state as of the end of
+        the thread's last run, if requested.
+    """
+
+    user_name: str
+    email: str | None = None
+    room_id: str
+    thread_id: str
+    runs: list[TranscriptRun] = []
+    agui_state: dict[str, typing.Any] | None = None
+
+
 class RecentRunFeedbackQuery(pydantic.BaseModel):
     """Define a query for recent AGUI run feedback
 
@@ -408,6 +528,45 @@ async def _replay_run(run) -> agui_parser.EventStreamParser:
     return esp
 
 
+def _content_text(content) -> str | None:
+    """Render message content as text, with placeholders for non-text parts"""
+    if content is None or isinstance(content, str):
+        return content
+
+    return "\n".join(
+        part.text if part.type == "text" else f"[{part.type}]"
+        for part in content
+    )
+
+
+def _transcript_message(message) -> TranscriptMessage:
+    content = _content_text(message.content)
+
+    if message.role == "tool" and len(content) > TOOL_RESULT_LIMIT:
+        omitted = len(content) - TOOL_RESULT_LIMIT
+        content = (
+            f"{content[:TOOL_RESULT_LIMIT]}... [{omitted} characters omitted]"
+        )
+
+    tool_calls = [
+        TranscriptToolCall(
+            tool_call_id=tool_call.id,
+            name=tool_call.function.name,
+            arguments=tool_call.function.arguments,
+        )
+        for tool_call in getattr(message, "tool_calls", None) or ()
+    ]
+
+    return TranscriptMessage(
+        message_id=message.id,
+        role=message.role,
+        content=content,
+        tool_calls=tool_calls,
+        tool_call_id=getattr(message, "tool_call_id", None),
+        error=getattr(message, "error", None),
+    )
+
+
 async def get_feedback_run_info(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
     run_id: str,
@@ -481,6 +640,100 @@ async def get_feedback_run_info(
         agent_response=agent_responses[-1] if agent_responses else None,
         run_status=run_status.name,
         run_status_note=run_status_note,
+    )
+
+
+async def get_feedback_thread_transcript(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
+    run_id: str,
+    include_tool_results: bool = False,
+    include_agui_state: bool = False,
+) -> ThreadTranscript:
+    """Return the transcript of the thread containing a feedback entry's run
+
+    The transcript lists every run of the thread, oldest first.  Each run
+    holds the messages which first appear in it:  the user's prompts, the
+    agent's replies and tool calls, and (if requested) the tool results.
+    Runs which received feedback carry it in 'feedback' and
+    'feedback_reason'.
+
+    Args:
+
+      'run_id' is the UUID of the feedback entry's run.
+
+      'include_tool_results' (default False):  if True, include "tool"
+        messages holding tool results.  They can be large:  request them
+        only when the user asks what a tool returned.
+
+      'include_agui_state' (default False):  if True, include the AG-UI
+        state as of the end of the thread's last run.  It can be very
+        large:  request it only when the user asks about the state.
+        'get_feedback_run_info' returns the state as of the end of the
+        feedback entry's own run.
+    """
+    agui_state = ctx.deps.state
+    raw_state = agui_state.get(STATE_NAMESPACE)
+    our_state = RecentRunFeedback.model_validate(
+        raw_state or {}  # guard against actual 'None'
+    )
+
+    to_query, _ = _find_feedback_by_run_id(our_state, run_id)
+
+    transcript_runs = []
+    seen_message_ids = set()
+    last_state = None
+
+    async with _get_threads_storage(ctx) as the_threads:
+        thread = await the_threads.get_thread(
+            user_name=to_query.user_name,
+            room_id=to_query.room_id,
+            thread_id=to_query.thread_id,
+        )
+        email = await thread.awaitable_attrs.email
+
+        for run in await thread.awaitable_attrs.runs:
+            esp = await _replay_run(run)
+            last_state = esp.state
+
+            messages = []
+            for message in esp.messages:
+                if message.id in seen_message_ids:
+                    continue
+                seen_message_ids.add(message.id)
+
+                if message.role == "tool" and not include_tool_results:
+                    continue
+
+                if message.role in TRANSCRIPT_ROLES:
+                    messages.append(_transcript_message(message))
+
+            run_feedback = await run.awaitable_attrs.run_feedback
+
+            if run_feedback is not None:
+                feedback = await run_feedback.awaitable_attrs.feedback
+                feedback_reason = await run_feedback.awaitable_attrs.reason
+            else:
+                feedback = feedback_reason = None
+
+            transcript_runs.append(
+                TranscriptRun(
+                    run_id=await run.awaitable_attrs.run_id,
+                    parent_run_id=await run.awaitable_attrs.parent_run_id,
+                    created=await run.awaitable_attrs.created,
+                    run_status=esp.run_status.name,
+                    feedback=feedback,
+                    feedback_reason=feedback_reason,
+                    messages=messages,
+                )
+            )
+
+    return ThreadTranscript(
+        user_name=to_query.user_name,
+        email=email,
+        room_id=to_query.room_id,
+        thread_id=to_query.thread_id,
+        runs=transcript_runs,
+        agui_state=last_state if include_agui_state else None,
     )
 
 
