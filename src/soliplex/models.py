@@ -898,6 +898,7 @@ class AGUI_Threads(pydantic.BaseModel):
 
 class ACLEntryUnchecked(pydantic.BaseModel):
     allow_deny: authz.AllowDeny = authz.AllowDeny.DENY
+    permission: authz.Permission = authz.Permission.READ
     everyone: bool = False
     authenticated: bool = False
     preferred_username: str | None = None

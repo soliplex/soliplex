@@ -21,6 +21,13 @@ USER_TOKEN = {
 ROOM_ID = "test-room"
 CLAIMS = {"source": "test", "actor": EMAIL}
 
+ALLOW = authz.AllowDeny.ALLOW
+DENY = authz.AllowDeny.DENY
+READ = authz.Permission.READ
+WRITE = authz.Permission.WRITE
+ADMIN = authz.Permission.ADMIN
+STALE_JSON_PATH = "$[?stale_filter_func($.email)]"
+
 
 @pytest.fixture
 def faux_sqlaa_session():
@@ -357,7 +364,6 @@ async def test_admin_user_check_admin_access_json_path(
 
 # Canonical discriminator-key helpers: comparing a candidate
 # 'models.ACLEntryUnchecked' against stored 'authz_schema.ACLEntry' rows.
-
 EVERYONE_KW = {"everyone": True}
 EVERYONE_KEY = ("everyone",)
 
@@ -643,16 +649,17 @@ async def test_room_authz_policy_crud(the_async_session):
     rap._audit.room_policy_deleted.reset_mock()
 
 
-ALLOW = authz.AllowDeny.ALLOW
-DENY = authz.AllowDeny.DENY
-STALE_JSON_PATH = "$[?stale_filter_func($.email)]"
-
-
 def _orm_entry(
-    allow_deny, *, everyone=False, authenticated=False, json_path=None
+    allow_deny,
+    permission,
+    *,
+    everyone=False,
+    authenticated=False,
+    json_path=None,
 ):
     return authz_schema.ACLEntry(
         allow_deny=allow_deny,
+        permission=permission,
         everyone=everyone,
         authenticated=authenticated,
         json_path=json_path,
@@ -670,11 +677,11 @@ async def _seed_policy(session, *, default=DENY, entries=()):
     return policy
 
 
-async def _seed_stale_entry(session, *, allow_deny=ALLOW):
+async def _seed_stale_entry(session, *, allow_deny=ALLOW, permission=READ):
     await _seed_policy(
         session,
         default=DENY,
-        entries=[_orm_entry(allow_deny, json_path=JSON_PATH)],
+        entries=[_orm_entry(allow_deny, permission, json_path=JSON_PATH)],
     )
     # Flush so the entry is a persistent row (not just pending state)
     # before the raw UPDATE corrupts its 'json_path' out from under the
@@ -793,7 +800,7 @@ async def test_delete_room_policy_removes_acl_entries(the_async_session):
     await _seed_policy(
         the_async_session,
         default=DENY,
-        entries=[_orm_entry(ALLOW, everyone=True)],
+        entries=[_orm_entry(ALLOW, READ, everyone=True)],
     )
 
     await rap.delete_room_policy(ROOM_ID)
@@ -812,8 +819,8 @@ async def test_clear_room_acl(the_async_session, unit_of_work):
         the_async_session,
         default=DENY,
         entries=[
-            _orm_entry(ALLOW, everyone=True),
-            _orm_entry(DENY, authenticated=True),
+            _orm_entry(ALLOW, READ, everyone=True),
+            _orm_entry(DENY, WRITE, authenticated=True),
         ],
     )
 
@@ -884,9 +891,13 @@ async def test_add_acl_entry_replaces_same_discriminator(
     await _seed_policy(
         the_async_session,
         default=DENY,
-        entries=[_orm_entry(ALLOW, **discriminator_kwargs)],
+        entries=[_orm_entry(ALLOW, READ, **discriminator_kwargs)],
     )
-    entry = models.ACLEntry(allow_deny=DENY, **discriminator_kwargs)
+    entry = models.ACLEntry(
+        allow_deny=DENY,
+        permission=READ,
+        **discriminator_kwargs,
+    )
 
     async with unit_of_work():
         await rap.add_acl_entry(ROOM_ID, entry)
@@ -898,14 +909,39 @@ async def test_add_acl_entry_replaces_same_discriminator(
 
 
 @pytest.mark.asyncio
+async def test_add_acl_entry_keeps_other_permission(the_async_session):
+    rap = _room_authz_policy(the_async_session)
+    await _seed_policy(
+        the_async_session,
+        default=DENY,
+        entries=[_orm_entry(ALLOW, READ, json_path=ROLE_JSON_PATH)],
+    )
+    entry = models.ACLEntry(
+        allow_deny=DENY,
+        permission=ADMIN,
+        json_path=ROLE_JSON_PATH,
+    )
+
+    await rap.add_acl_entry(ROOM_ID, entry)
+
+    rap._audit.acl_entry_added.assert_called_once_with(ROOM_ID, entry)
+    after = await rap.get_room_policy(ROOM_ID)
+    assert len(after.acl_entries) == 2
+
+
+@pytest.mark.asyncio
 async def test_add_acl_entry_keeps_other_discriminator(the_async_session):
     rap = _room_authz_policy(the_async_session)
     await _seed_policy(
         the_async_session,
         default=DENY,
-        entries=[_orm_entry(ALLOW, everyone=True)],
+        entries=[_orm_entry(ALLOW, READ, everyone=True)],
     )
-    entry = models.ACLEntry(allow_deny=DENY, json_path=ROLE_JSON_PATH)
+    entry = models.ACLEntry(
+        allow_deny=DENY,
+        permission=ADMIN,
+        json_path=ROLE_JSON_PATH,
+    )
 
     await rap.add_acl_entry(ROOM_ID, entry)
 
@@ -939,9 +975,13 @@ async def test_remove_acl_entry_matches_discriminator(
     await _seed_policy(
         the_async_session,
         default=DENY,
-        entries=[_orm_entry(ALLOW, **seed_kwargs)],
+        entries=[_orm_entry(ALLOW, READ, **seed_kwargs)],
     )
-    entry = models.ACLEntryUnchecked(allow_deny=ALLOW, **remove_kwargs)
+    entry = models.ACLEntryUnchecked(
+        allow_deny=ALLOW,
+        permission=READ,
+        **remove_kwargs,
+    )
 
     async with unit_of_work():
         await rap.remove_acl_entry(ROOM_ID, entry)
@@ -958,13 +998,14 @@ async def test_remove_acl_entry_no_match_raises(the_async_session):
         the_async_session,
         default=DENY,
         entries=[
-            _orm_entry(ALLOW, everyone=True),
-            _orm_entry(DENY, json_path=ROLE_JSON_PATH),
+            _orm_entry(ALLOW, READ, everyone=True),
+            _orm_entry(ALLOW, WRITE, json_path=ROLE_JSON_PATH),
+            _orm_entry(DENY, READ, json_path=ROLE_JSON_PATH),
         ],
     )
 
     entry = models.ACLEntryUnchecked(
-        allow_deny=ALLOW, json_path=ROLE_JSON_PATH
+        allow_deny=ALLOW, permission=READ, json_path=ROLE_JSON_PATH
     )
 
     with pytest.raises(authz.NoSuchACLEntry):
@@ -1030,7 +1071,7 @@ async def test_set_room_default_updates_existing(the_async_session):
     await _seed_policy(
         the_async_session,
         default=DENY,
-        entries=[_orm_entry(ALLOW, everyone=True)],
+        entries=[_orm_entry(ALLOW, READ, everyone=True)],
     )
 
     await rap.set_room_default(ROOM_ID, ALLOW)

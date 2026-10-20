@@ -24,6 +24,13 @@ app = typer.Typer(
 )
 
 
+PermissionOption: authz.Permission = typer.Option(
+    authz.Permission.READ,
+    "--permission",
+    help="Permission",
+)
+
+
 # Flip this to True to make human-focused output the default.
 # '--quiet' will still force JSON.
 _DEFAULT_VERBOSE = False
@@ -147,6 +154,7 @@ def _acl_entry_as_jsonable(entry) -> dict:
     """
     return {
         "allow_deny": entry.allow_deny.name,
+        "permission": entry.permission.name,
         "everyone": entry.everyone,
         "authenticated": entry.authenticated,
         "preferred_username": entry.preferred_username,
@@ -195,6 +203,7 @@ def _room_policy_from_jsonable(data) -> models.RoomPolicy | None:
     for entry in data.get("acl_entries", ()):
         entry = dict(entry)
         entry["allow_deny"] = authz.AllowDeny[entry["allow_deny"]]
+        entry["permission"] = authz.Permission[entry["permission"]]
         acl_entries.append(models.ACLEntry(**entry))
     return models.RoomPolicy(
         room_id=data["room_id"],
@@ -620,6 +629,23 @@ def _resolve_allow_deny(allow: bool, deny: bool) -> authz.AllowDeny:
     return authz.AllowDeny.DENY
 
 
+def _resolve_permission(permission: str) -> authz.Permission:
+    """Return the Permission implied by --permission
+
+    Raises 'typer.Exit(1)' when an invalid string is supplied.
+    """
+    try:
+        return authz.Permission(permission)
+    except ValueError:
+        values = [member.lower() for member in authz.Permission.__members__]
+        the_console.rule("Invalid Permission")
+        the_console.print(
+            f"--permission must be one of {', '.join(values)}. "
+            f"Got: {permission}.",
+        )
+        raise typer.Exit(1) from None
+
+
 _ACL_ENTRY_DISCRIMINATORS_SUMMARY = (
     "'--everyone', '--authenticated', '--json-path', "
     "'--preferred-username', or '--email'"
@@ -631,6 +657,7 @@ def _check_acl_entry_args(
     room_id: str,
     allow: bool,
     deny: bool,
+    permission: str,
     everyone: bool,
     authenticated: bool,
     json_path: str | None,
@@ -638,7 +665,7 @@ def _check_acl_entry_args(
     email: str | None,
     command: str,
     allow_invalid_json_path: bool = False,
-) -> tuple[str, authz.AllowDeny, str | None]:
+) -> tuple[str, authz.AllowDeny, authz.Permission, str | None]:
     """Run the validation prolog shared by add/delete-acl-entry.
 
     Loads the installation, checks the room id is configured, validates
@@ -660,6 +687,7 @@ def _check_acl_entry_args(
     _check_room_id(the_installation, room_id)
 
     allow_deny = _resolve_allow_deny(allow, deny)
+    permission = _resolve_permission(permission)
     cli_util._check_exactly_one_discriminator(
         [
             ("--everyone", everyone),
@@ -678,7 +706,7 @@ def _check_acl_entry_args(
         allow_invalid=allow_invalid_json_path,
     )
 
-    return the_installation, allow_deny, json_path
+    return the_installation, allow_deny, permission, json_path
 
 
 @app.command("add-acl-entry")
@@ -696,6 +724,7 @@ def add_acl_entry(
         "--deny",
         help="Entry denies access. Mutually exclusive with '--allow'.",
     ),
+    permission: authz.Permission = PermissionOption,
     everyone: bool = typer.Option(
         False,
         "--everyone",
@@ -742,21 +771,25 @@ def add_acl_entry(
     replaced by the new entry. Entries with different discriminators
     are left untouched.
     """
-    the_installation, allow_deny, json_path = _check_acl_entry_args(
-        installation_path,
-        room_id,
-        allow,
-        deny,
-        everyone,
-        authenticated,
-        json_path,
-        preferred_username,
-        email,
-        "room-authz add-acl-entry",
+    the_installation, allow_deny, permission, json_path = (
+        _check_acl_entry_args(
+            installation_path,
+            room_id,
+            allow,
+            deny,
+            permission,
+            everyone,
+            authenticated,
+            json_path,
+            preferred_username,
+            email,
+            "room-authz add-acl-entry",
+        )
     )
 
     entry = models.ACLEntry(
         allow_deny=allow_deny,
+        permission=permission,
         everyone=everyone,
         authenticated=authenticated,
         json_path=json_path,
@@ -798,6 +831,7 @@ def delete_acl_entry(
         "--deny",
         help="Match a DENY entry. Mutually exclusive with '--allow'.",
     ),
+    permission: authz.Permission = PermissionOption,
     everyone: bool = typer.Option(
         False,
         "--everyone",
@@ -849,18 +883,21 @@ def delete_acl_entry(
     The RoomPolicy row is preserved; only matching ACL entries
     are removed.
     """
-    the_installation, allow_deny, json_path = _check_acl_entry_args(
-        installation_path,
-        room_id,
-        allow,
-        deny,
-        everyone,
-        authenticated,
-        json_path,
-        preferred_username,
-        email,
-        "room-authz delete-acl-entry",
-        allow_invalid_json_path=allow_invalid_json_path,
+    the_installation, allow_deny, permission, json_path = (
+        _check_acl_entry_args(
+            installation_path,
+            room_id,
+            allow,
+            deny,
+            permission,
+            everyone,
+            authenticated,
+            json_path,
+            preferred_username,
+            email,
+            "room-authz delete-acl-entry",
+            allow_invalid_json_path=allow_invalid_json_path,
+        )
     )
 
     entry = models.ACLEntryUnchecked(
@@ -868,6 +905,7 @@ def delete_acl_entry(
         everyone=everyone,
         authenticated=authenticated,
         json_path=json_path,
+        permission=permission,
     )
 
     try:

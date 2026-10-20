@@ -427,15 +427,15 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
     async def add_acl_entry(
         self,
         room_id: str,
-        entry: models.ACLEntry,
+        from_cli: models.ACLEntry,
     ) -> None:
         """Add an ACL entry to the room's policy.
 
         The room must already have a policy ('set_room_default' or a prior
-        'update_room_policy'); otherwise 'NoSuchRoomPolicy' is raised. Any
-        existing entry with the same discriminator is replaced.
+        'update_room_policy'); otherwise 'NoSuchRoomPolicy' is raised.
+
+        Replaces existing entries with the same discriminator and permission.
         """
-        new_acl = authz_schema.ACLEntry.from_model(entry)
 
         async with self.session as session:
             policy = await _find_room_policy(room_id, session)
@@ -443,29 +443,37 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             if policy is None:
                 exc = authz.NoSuchRoomPolicy(room_id=room_id)
                 self._audit.acl_entry_add_failed(
-                    room_id, entry, reason=str(exc)
+                    room_id, from_cli, reason=str(exc)
                 )
                 raise exc
 
             await policy.awaitable_attrs.acl_entries
+
             for existing in list(policy.acl_entries):
-                if _compare_discriminator(entry, existing):
+                if (
+                    _compare_discriminator(from_cli, existing)
+                    and from_cli.permission == existing.permission
+                ):
                     await session.delete(existing)
 
-            new_acl.room_policy = policy
-            session.add(new_acl)
-        self._audit.acl_entry_added(room_id, entry)
+            entry = authz_schema.ACLEntry.from_model(from_cli)
+            entry.room_policy = policy
+            session.add(entry)
+
+        self._audit.acl_entry_added(room_id, from_cli)
 
     async def remove_acl_entry(
         self,
         room_id: str,
-        entry: models.ACLEntryUnchecked,
+        from_cli: models.ACLEntryUnchecked,
     ) -> None:
         """Remove the matching ACL entry from the room's policy.
 
-        Matches stored entries by 'allow_deny' and discriminator. 'entry'
-        is the unchecked model so a stored 'json_path' that no longer
+        'from_cli' is an unchecked model so a stored 'json_path' that no longer
         compiles can still be matched; the entry is not re-validated.
+
+        Compare against stored entries, matching by 'allow_deny',
+        'permission' and discriminator.
 
         Raises 'NoSuchRoomPolicy' if the room has no policy, or
         'NoSuchACLEntry' if no stored entry matches.
@@ -476,7 +484,7 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             if policy is None:
                 exc = authz.NoSuchRoomPolicy(room_id=room_id)
                 self._audit.acl_entry_remove_failed(
-                    room_id, entry, reason=str(exc)
+                    room_id, from_cli, reason=str(exc)
                 )
                 raise exc
 
@@ -484,20 +492,22 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             matches = [
                 existing
                 for existing in policy.acl_entries
-                if existing.allow_deny == entry.allow_deny
-                and _compare_discriminator(entry, existing)
+                if existing.allow_deny == from_cli.allow_deny
+                and existing.permission == from_cli.permission
+                and _compare_discriminator(from_cli, existing)
             ]
 
             if not matches:
                 exc = authz.NoSuchACLEntry(room_id=room_id)
                 self._audit.acl_entry_remove_failed(
-                    room_id, entry, reason=str(exc)
+                    room_id, from_cli, reason=str(exc)
                 )
                 raise exc
 
             for existing in matches:
                 await session.delete(existing)
-        self._audit.acl_entry_removed(room_id, entry)
+
+        self._audit.acl_entry_removed(room_id, from_cli)
 
     async def set_room_default(
         self,

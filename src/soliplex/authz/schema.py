@@ -222,6 +222,7 @@ class ACLEntry(Base):
             json_path = model.json_path
         return cls(
             allow_deny=model.allow_deny,
+            permission=model.permission,
             everyone=model.everyone,
             authenticated=model.authenticated,
             json_path=json_path,
@@ -247,6 +248,7 @@ class ACLEntry(Base):
     def as_model(self) -> models.ACLEntry:
         return models.ACLEntry(
             allow_deny=self.allow_deny,
+            permission=self.permission,
             everyone=self.everyone,
             authenticated=self.authenticated,
             **self._model_kwargs(),
@@ -258,6 +260,7 @@ class ACLEntry(Base):
         # 'json_path' that no longer compiles does not raise.
         return models.ACLEntryUnchecked(
             allow_deny=self.allow_deny,
+            permission=self.permission,
             everyone=self.everyone,
             authenticated=self.authenticated,
             **self._model_kwargs(),

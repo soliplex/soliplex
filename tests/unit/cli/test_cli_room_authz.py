@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from unittest import mock
 
 import pytest
@@ -190,6 +191,7 @@ def test__dump(
 def _mock_acl_entry(
     *,
     allow_deny=authz.AllowDeny.DENY,
+    permission=authz.Permission.READ,
     everyone=False,
     authenticated=False,
     preferred_username=None,
@@ -198,6 +200,7 @@ def _mock_acl_entry(
 ):
     return models.ACLEntryUnchecked(
         allow_deny=allow_deny,
+        permission=permission,
         everyone=everyone,
         authenticated=authenticated,
         preferred_username=preferred_username,
@@ -211,9 +214,14 @@ def _mock_acl_entry(
     [
         # 'everyone' entry: no discriminator fields beyond the flag.
         (
-            {"allow_deny": authz.AllowDeny.ALLOW, "everyone": True},
+            {
+                "allow_deny": authz.AllowDeny.ALLOW,
+                "permission": authz.Permission.READ,
+                "everyone": True,
+            },
             {
                 "allow_deny": "ALLOW",
+                "permission": "READ",
                 "everyone": True,
                 "authenticated": False,
                 "preferred_username": None,
@@ -225,10 +233,12 @@ def _mock_acl_entry(
         (
             {
                 "allow_deny": authz.AllowDeny.DENY,
+                "permission": authz.Permission.WRITE,
                 "authenticated": True,
             },
             {
                 "allow_deny": "DENY",
+                "permission": "WRITE",
                 "everyone": False,
                 "authenticated": True,
                 "preferred_username": None,
@@ -240,10 +250,12 @@ def _mock_acl_entry(
         (
             {
                 "allow_deny": authz.AllowDeny.ALLOW,
+                "permission": authz.Permission.ADMIN,
                 "preferred_username": "alice",
             },
             {
                 "allow_deny": "ALLOW",
+                "permission": "ADMIN",
                 "everyone": False,
                 "authenticated": False,
                 "preferred_username": "alice",
@@ -255,10 +267,12 @@ def _mock_acl_entry(
         (
             {
                 "allow_deny": authz.AllowDeny.ALLOW,
+                "permission": authz.Permission.READ,
                 "email": "alice@example.com",
             },
             {
                 "allow_deny": "ALLOW",
+                "permission": "READ",
                 "everyone": False,
                 "authenticated": False,
                 "preferred_username": None,
@@ -270,10 +284,12 @@ def _mock_acl_entry(
         (
             {
                 "allow_deny": authz.AllowDeny.DENY,
+                "permission": authz.Permission.WRITE,
                 "json_path": "$[?match($.foo, 'b.*z')]",
             },
             {
                 "allow_deny": "DENY",
+                "permission": "WRITE",
                 "everyone": False,
                 "authenticated": False,
                 "preferred_username": None,
@@ -286,10 +302,12 @@ def _mock_acl_entry(
         (
             {
                 "allow_deny": authz.AllowDeny.DENY,
+                "permission": authz.Permission.ADMIN,
                 "json_path": "$[?stale_filter_func($.email)]",
             },
             {
                 "allow_deny": "DENY",
+                "permission": "ADMIN",
                 "everyone": False,
                 "authenticated": False,
                 "preferred_username": None,
@@ -336,14 +354,17 @@ def test__room_policy_as_jsonable_populated_w_invalid_json_path():
         acl_entries=[
             _mock_acl_entry(
                 allow_deny=authz.AllowDeny.ALLOW,
+                permission=authz.Permission.READ,
                 email="alice@example.com",
             ),
             _mock_acl_entry(
                 allow_deny=authz.AllowDeny.DENY,
+                permission=authz.Permission.WRITE,
                 json_path="$[?stale_filter_func($.email)]",
             ),
             _mock_acl_entry(
                 allow_deny=authz.AllowDeny.DENY,
+                permission=authz.Permission.ADMIN,
                 everyone=True,
             ),
         ],
@@ -357,6 +378,7 @@ def test__room_policy_as_jsonable_populated_w_invalid_json_path():
         "acl_entries": [
             {
                 "allow_deny": "ALLOW",
+                "permission": "READ",
                 "everyone": False,
                 "authenticated": False,
                 "preferred_username": None,
@@ -365,6 +387,7 @@ def test__room_policy_as_jsonable_populated_w_invalid_json_path():
             },
             {
                 "allow_deny": "DENY",
+                "permission": "WRITE",
                 "everyone": False,
                 "authenticated": False,
                 "preferred_username": None,
@@ -373,6 +396,7 @@ def test__room_policy_as_jsonable_populated_w_invalid_json_path():
             },
             {
                 "allow_deny": "DENY",
+                "permission": "ADMIN",
                 "everyone": True,
                 "authenticated": False,
                 "preferred_username": None,
@@ -394,6 +418,17 @@ def test__room_policy_as_yaml_populated():
         acl_entries=[
             _mock_acl_entry(
                 allow_deny=authz.AllowDeny.ALLOW,
+                permission=authz.Permission.READ,
+                email="alice@example.com",
+            ),
+            _mock_acl_entry(
+                allow_deny=authz.AllowDeny.ALLOW,
+                permission=authz.Permission.WRITE,
+                email="alice@example.com",
+            ),
+            _mock_acl_entry(
+                allow_deny=authz.AllowDeny.ALLOW,
+                permission=authz.Permission.ADMIN,
                 email="alice@example.com",
             ),
         ],
@@ -407,6 +442,25 @@ def test__room_policy_as_yaml_populated():
         "acl_entries": [
             {
                 "allow_deny": "ALLOW",
+                "permission": "READ",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": "alice@example.com",
+                "json_path": None,
+            },
+            {
+                "allow_deny": "ALLOW",
+                "permission": "WRITE",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": "alice@example.com",
+                "json_path": None,
+            },
+            {
+                "allow_deny": "ALLOW",
+                "permission": "ADMIN",
                 "everyone": False,
                 "authenticated": False,
                 "preferred_username": None,
@@ -444,6 +498,16 @@ def test__room_policy_as_yaml_populated():
                 "acl_entries": [
                     {
                         "allow_deny": "ALLOW",
+                        "permission": "READ",
+                        "everyone": False,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": "alice@example.com",
+                        "json_path": None,
+                    },
+                    {
+                        "allow_deny": "ALLOW",
+                        "permission": "WRITE",
                         "everyone": False,
                         "authenticated": False,
                         "preferred_username": None,
@@ -452,6 +516,16 @@ def test__room_policy_as_yaml_populated():
                     },
                     {
                         "allow_deny": "DENY",
+                        "permission": "READ",
+                        "everyone": True,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": None,
+                        "json_path": None,
+                    },
+                    {
+                        "allow_deny": "DENY",
+                        "permission": "WRITE",
                         "everyone": True,
                         "authenticated": False,
                         "preferred_username": None,
@@ -466,10 +540,22 @@ def test__room_policy_as_yaml_populated():
                 acl_entries=[
                     models.ACLEntry(
                         allow_deny=authz.AllowDeny.ALLOW,
+                        permission=authz.Permission.READ,
+                        email="alice@example.com",
+                    ),
+                    models.ACLEntry(
+                        allow_deny=authz.AllowDeny.ALLOW,
+                        permission=authz.Permission.WRITE,
                         email="alice@example.com",
                     ),
                     models.ACLEntry(
                         allow_deny=authz.AllowDeny.DENY,
+                        permission=authz.Permission.READ,
+                        everyone=True,
+                    ),
+                    models.ACLEntry(
+                        allow_deny=authz.AllowDeny.DENY,
+                        permission=authz.Permission.WRITE,
                         everyone=True,
                     ),
                 ],
@@ -544,6 +630,28 @@ def test__resolve_allow_deny_mutex_violation(
     )
 
 
+@pytest.mark.parametrize(
+    "value, expectation",
+    [
+        ("read", contextlib.nullcontext(authz.Permission.READ)),
+        ("write", contextlib.nullcontext(authz.Permission.WRITE)),
+        ("admin", contextlib.nullcontext(authz.Permission.ADMIN)),
+        ("bogus", pytest.raises(typer.Exit)),
+    ],
+)
+@mock.patch("soliplex.cli.room_authz.the_console")
+def test__resolve_permission(the_console, value, expectation):
+    with expectation as expected:
+        found = cli_room_authz._resolve_permission(value)
+
+    if isinstance(expected, pytest.ExceptionInfo):
+        (return_code,) = expected.value.args
+        assert return_code == 1
+        the_console.rule.assert_called_once_with("Invalid Permission")
+    else:
+        assert found is expected
+
+
 @mock.patch("soliplex.cli.room_authz.cli_util.get_installation")
 def test__check_acl_entry_args(get_installation):
     the_installation = get_installation.return_value
@@ -554,6 +662,7 @@ def test__check_acl_entry_args(get_installation):
         "chat",
         allow=True,
         deny=False,
+        permission="read",
         everyone=False,
         authenticated=False,
         json_path=None,
@@ -565,6 +674,7 @@ def test__check_acl_entry_args(get_installation):
     assert found == (
         the_installation,
         authz.AllowDeny.ALLOW,
+        authz.Permission.READ,
         '$[?$.preferred_username == "alice"]',
     )
 
@@ -585,6 +695,7 @@ def test__check_acl_entry_args_allow_invalid_json_path(
         "chat",
         allow=False,
         deny=True,
+        permission="write",
         everyone=False,
         authenticated=False,
         json_path=bogus,
@@ -597,6 +708,7 @@ def test__check_acl_entry_args_allow_invalid_json_path(
     assert found == (
         the_installation,
         authz.AllowDeny.DENY,
+        authz.Permission.WRITE,
         bogus,
     )
 
@@ -614,6 +726,9 @@ def test__check_acl_entry_args_allow_invalid_json_path(
 
 ALLOW = authz.AllowDeny.ALLOW
 DENY = authz.AllowDeny.DENY
+READ = authz.Permission.READ
+WRITE = authz.Permission.WRITE
+ADMIN = authz.Permission.ADMIN
 
 ALICE_EMAIL = "alice@example.com"
 ALICE_EMAIL_JP = authz.token_field_json_path("email", ALICE_EMAIL)
@@ -622,7 +737,14 @@ ALICE_EMAIL_JP = authz.token_field_json_path("email", ALICE_EMAIL)
 STALE_JP = "$[?stale_filter_func($.email)]"
 
 
-def _entry(allow_deny, *, everyone=False, authenticated=False, json_path=None):
+def _entry(
+    allow_deny,
+    *,
+    permission=READ,
+    everyone=False,
+    authenticated=False,
+    json_path=None,
+):
     """An ACL-entry kwargs dict in the shape the commands build/store."""
     return {
         "allow_deny": allow_deny,
@@ -704,6 +826,7 @@ def _read_policy(scratch, room_id):
                 "entries": {
                     (
                         entry.allow_deny,
+                        entry.permission,
                         entry.everyone,
                         entry.authenticated,
                         entry.json_path,
@@ -811,7 +934,7 @@ def test_make_private_noop_when_already_deny(
     # Existing default + ACL entries are left untouched.
     policy = _read_policy(scratch_installation, "chat")
     assert policy["default"] == DENY
-    assert policy["entries"] == {(ALLOW, True, False, None)}
+    assert policy["entries"] == {(ALLOW, READ, True, False, None)}
 
 
 def test_make_private_existing_allow_requires_update(
@@ -850,7 +973,7 @@ def test_make_private_update_flips_allow_to_deny(
     policy = _read_policy(scratch_installation, "chat")
     assert policy["default"] == DENY
     # ACL entries are preserved across the flip.
-    assert policy["entries"] == {(ALLOW, True, False, None)}
+    assert policy["entries"] == {(ALLOW, READ, True, False, None)}
 
 
 # -- make-public ------------------------------------------------------------
@@ -910,7 +1033,7 @@ def test_make_public_update_flips_deny_to_allow(
     assert result.exit_code == 0
     policy = _read_policy(scratch_installation, "chat")
     assert policy["default"] == ALLOW
-    assert policy["entries"] == {(DENY, True, False, None)}
+    assert policy["entries"] == {(DENY, READ, True, False, None)}
 
 
 # -- clear-acl --------------------------------------------------------------
@@ -950,9 +1073,17 @@ def test_clear_acl_removes_entries_preserving_policy(
 # -- add-acl-entry ----------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    "optional_kw, exp_attrs",
+    [
+        ({}, {"permission": authz.Permission.READ}),
+    ],
+)
 def test_add_acl_entry_requires_existing_policy(
     scratch_installation,
     cli_runner,
+    optional_kw,
+    exp_attrs,
 ):
     result = _invoke(
         cli_runner,
@@ -1020,9 +1151,9 @@ def test_add_acl_entry_replaces_matching_discriminators(
     policy = _read_policy(scratch_installation, "chat")
     # Each discriminator still appears exactly once (replaced, not dup'd).
     assert policy["entries"] == {
-        (DENY, True, False, None),
-        (ALLOW, False, True, None),
-        (ALLOW, False, False, ALICE_EMAIL_JP),
+        (DENY, READ, True, False, None),
+        (ALLOW, READ, False, True, None),
+        (ALLOW, READ, False, False, ALICE_EMAIL_JP),
     }
 
 
@@ -1051,7 +1182,7 @@ def test_delete_acl_entry_no_match_errors(scratch_installation, cli_runner):
         scratch_installation,
         "chat",
         DENY,
-        [_entry(DENY, everyone=True)],
+        [_entry(DENY, permission=READ, everyone=True)],
     )
 
     result = _invoke(
@@ -1066,7 +1197,7 @@ def test_delete_acl_entry_no_match_errors(scratch_installation, cli_runner):
     assert result.exit_code == 1
     # The non-matching entry is left in place.
     assert _read_policy(scratch_installation, "chat")["entries"] == {
-        (DENY, True, False, None),
+        (DENY, READ, True, False, None),
     }
 
 
@@ -1076,11 +1207,11 @@ def test_delete_acl_entry_removes_matching(scratch_installation, cli_runner):
         "chat",
         DENY,
         [
-            _entry(ALLOW, everyone=True),
-            _entry(ALLOW, authenticated=True),
-            _entry(ALLOW, json_path=ALICE_EMAIL_JP),
+            _entry(ALLOW, permission=READ, everyone=True),
+            _entry(ALLOW, permission=READ, authenticated=True),
+            _entry(ALLOW, permission=READ, json_path=ALICE_EMAIL_JP),
             # Opposite allow/deny: skipped via the 'continue' branch.
-            _entry(DENY, everyone=True),
+            _entry(DENY, permission=READ, everyone=True),
         ],
     )
 
@@ -1101,7 +1232,7 @@ def test_delete_acl_entry_removes_matching(scratch_installation, cli_runner):
 
     # Only the opposite-sense DENY entry that never matched remains.
     assert _read_policy(scratch_installation, "chat")["entries"] == {
-        (DENY, True, False, None),
+        (DENY, READ, True, False, None),
     }
 
 
@@ -1124,7 +1255,7 @@ def test_delete_acl_entry_invalid_json_path_requires_flag(
     )
     assert rejected.exit_code == 1
     assert _read_policy(scratch_installation, "chat")["entries"] == {
-        (DENY, False, False, STALE_JP),
+        (DENY, READ, False, False, STALE_JP),
     }
 
     # With the flag the stale entry can still be matched and removed.
@@ -1204,6 +1335,22 @@ def test_as_yaml_then_from_yaml_populates_other_room(
             "add-acl-entry",
             "chat",
             "--allow",
+            "--permission",
+            "read",
+            "--email",
+            ALICE_EMAIL,
+        ).exit_code
+        == 0
+    )
+    assert (
+        _invoke(
+            cli_runner,
+            scratch_installation,
+            "add-acl-entry",
+            "chat",
+            "--allow",
+            "--permission",
+            "write",
             "--email",
             ALICE_EMAIL,
         ).exit_code
@@ -1216,6 +1363,21 @@ def test_as_yaml_then_from_yaml_populates_other_room(
             "add-acl-entry",
             "chat",
             "--deny",
+            "--permission",
+            "read",
+            "--everyone",
+        ).exit_code
+        == 0
+    )
+    assert (
+        _invoke(
+            cli_runner,
+            scratch_installation,
+            "add-acl-entry",
+            "chat",
+            "--deny",
+            "--permission",
+            "write",
             "--everyone",
         ).exit_code
         == 0
@@ -1275,6 +1437,7 @@ def test_from_yaml_replaces_existing_policy(
                 "default_allow_deny": "DENY",
                 "acl_entries": [
                     {
+                        "permission": "WRITE",
                         "allow_deny": "ALLOW",
                         "everyone": False,
                         "authenticated": True,
@@ -1299,7 +1462,7 @@ def test_from_yaml_replaces_existing_policy(
     assert result.exit_code == 0
     assert _read_policy(scratch_installation, "search") == {
         "default": DENY,
-        "entries": {(ALLOW, False, True, None)},
+        "entries": {(ALLOW, WRITE, False, True, None)},
     }
 
 
