@@ -264,6 +264,8 @@ def test_room_authz_smoketest(scratch_installation):
         "add-acl-entry",
         ROOM,
         "--allow",
+        "--permission",
+        "read",
         "--email",
         ALICE,
     )
@@ -271,6 +273,7 @@ def test_room_authz_smoketest(scratch_installation):
     assert _policy(added)["acl_entries"] == [
         {
             "allow_deny": "ALLOW",
+            "permission": "READ",
             "everyone": False,
             "authenticated": False,
             "preferred_username": None,
@@ -292,6 +295,8 @@ def test_room_authz_smoketest(scratch_installation):
         "delete-acl-entry",
         ROOM,
         "--allow",
+        "--permission",
+        "write",
         "--email",
         "nobody@example.com",
     )
@@ -330,6 +335,8 @@ def test_audit_smoketest(scratch_installation, authz_db_path):
         "add-acl-entry",
         ROOM,
         "--allow",
+        "--permission",
+        "admin",
         "--preferred-username",
         BOB,
     )
