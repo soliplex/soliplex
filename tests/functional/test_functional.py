@@ -40,6 +40,7 @@ def test_room_authz_endpoints(client_no_llm):
         "acl_entries": [
             {
                 "allow_deny": "allow",
+                "permission": "read",
                 "everyone": False,
                 "authenticated": False,
                 "preferred_username": None,
