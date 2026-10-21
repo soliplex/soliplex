@@ -2637,6 +2637,22 @@ def test__thinking_model_settings_ignores_a_level_where_none_is_offered():
     assert found == {}
 
 
+def test__thinking_model_settings_ignores_a_level_for_a_factory_agent():
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.id = TEST_ROOM_ID
+    room_config.agent_config = config_agents.FactoryAgentConfig(
+        id="test-agent",
+        factory_name="soliplex.examples.faux_agent_factory",
+    )
+
+    found = agui_views._thinking_model_settings(
+        room_config=room_config,
+        run_input=mock.Mock(state={"thinking": {"level": "high"}}),
+    )
+
+    assert found == {}
+
+
 @pytest.mark.parametrize(
     "feature",
     [

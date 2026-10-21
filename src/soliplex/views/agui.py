@@ -113,7 +113,8 @@ def _thinking_model_settings(
     Empty when the run asks for none, which leaves the room's default
     in force:  that is already in the agent's own model settings.
 
-    Empty, too, when the room's model offers no control.  A level asked
+    Empty, too, when the room's model offers no control -- as a factory
+    agent never does, having no thinking configuration.  A level asked
     for there is dropped rather than refused:  the room's model may have
     been changed under a thread that still carries one, and nothing is
     gained by failing the run over it.
@@ -124,6 +125,10 @@ def _thinking_model_settings(
     some other level, answers a question nobody asked.
     """
     agent_config = room_config.agent_config
+
+    if agent_config.kind != "default":
+        return {}
+
     support = config_agents.get_thinking_from_config(
         agent_config=agent_config,
     )
