@@ -252,23 +252,31 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
         self,
         room_id: str,
         user_token: authz.UserToken | None,
+        *,
+        permission: authz.Permission,
     ) -> bool:
-        """Can the user represented by 'user_token' can access a room?
+        """Can the user represented by 'user_token' access a room?
 
-        If an authorization policy exists for the room, check that it allows
-        access for the user token.
+        For a room with an authorization policy, return whether the result
+        of its ``check_token`` for the user token and permission is ALLOW.
 
-        Otherwise, return True (i.e., the room is public).
+        For a room without an authorization policy:
+
+        - Return True for READ (such rooms are public for read).
+
+        - Return False for WRITE and ADMIN.
         """
         async with self.session as session:
             policy = await _find_room_policy(room_id, session)
 
             if policy is not None:
                 await policy.awaitable_attrs.acl_entries
-                allow_deny = policy.check_token(user_token)
+                allow_deny = policy.check_token(
+                    user_token, permission=permission
+                )
                 result = allow_deny == authz.AllowDeny.ALLOW
             else:
-                result = True
+                result = permission is authz.Permission.READ
 
         if result:
             self._access_audit.room_access_allowed(room_id)
@@ -281,24 +289,32 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
         self,
         room_ids: list[str],
         user_token: authz.UserToken | None,
+        *,
+        permission: authz.Permission,
     ) -> list[str]:
-        """Filter room IDs based on room authz policies for 'user_token'
+        """Filter room IDs via authz policies for 'user_token'/'permission'.
 
-        For each room, if an authorization policy exists for the room,
-        check that it allows access for the user token.
+        Filter rooms with authorization policies based on those
+        policies' ``check_token`` for the user token and permission.
 
-        Otherwise, treat the room as public.
+        Include rooms without authorization polices for READ, but exclude
+        such rooms for WRITE and ADMIN.
         """
         result = []
         async with self.session as session:
             for room_id in room_ids:
                 policy = await _find_room_policy(room_id, session)
-                if policy is not None:
+
+                if policy is None:
+                    if permission is authz.Permission.READ:
+                        result.append(room_id)
+                else:
                     await policy.awaitable_attrs.acl_entries
-                    allow_deny = policy.check_token(user_token)
-                    if allow_deny != authz.AllowDeny.ALLOW:
-                        continue
-                result.append(room_id)
+                    allow_deny = policy.check_token(
+                        user_token, permission=permission
+                    )
+                    if allow_deny == authz.AllowDeny.ALLOW:
+                        result.append(room_id)
 
         return result
 

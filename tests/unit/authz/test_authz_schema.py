@@ -195,9 +195,19 @@ def test_roompolicy_check_token_w_empty(default_allow_deny, token):
         default_allow_deny=default_allow_deny,
     )
 
-    found = policy.check_token(token)
+    found = policy.check_token(token, permission=authz.Permission.READ)
 
     assert found == default_allow_deny
+
+    # WRITE / ADMIN are default-denied, whatever 'default_allow_deny'.
+    assert (
+        policy.check_token(token, permission=authz.Permission.WRITE)
+        == authz.AllowDeny.DENY
+    )
+    assert (
+        policy.check_token(token, permission=authz.Permission.ADMIN)
+        == authz.AllowDeny.DENY
+    )
 
 
 @pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
@@ -218,9 +228,19 @@ def test_roompolicy_check_token_w_acl_miss(default_allow_deny, token):
         allow_deny=authz.AllowDeny.ALLOW,
     )
 
-    found = policy.check_token(token)
+    found = policy.check_token(token, permission=authz.Permission.READ)
 
     assert found == default_allow_deny
+
+    # WRITE / ADMIN are default-denied, whatever 'default_allow_deny'.
+    assert (
+        policy.check_token(token, permission=authz.Permission.WRITE)
+        == authz.AllowDeny.DENY
+    )
+    assert (
+        policy.check_token(token, permission=authz.Permission.ADMIN)
+        == authz.AllowDeny.DENY
+    )
 
 
 @pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
@@ -242,9 +262,83 @@ def test_roompolicy_check_token_w_acl_hit(default_allow_deny, token):
         everyone=True,
     )
 
-    found = policy.check_token(token)
+    found = policy.check_token(token, permission=authz.Permission.READ)
 
     assert found == authz.AllowDeny.ALLOW
+
+    # A READ-scoped hit does not grant WRITE / ADMIN.
+    assert (
+        policy.check_token(token, permission=authz.Permission.WRITE)
+        == authz.AllowDeny.DENY
+    )
+    assert (
+        policy.check_token(token, permission=authz.Permission.ADMIN)
+        == authz.AllowDeny.DENY
+    )
+
+
+@pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
+def test_roompolicy_check_token_w_permission_scoping(token):
+    # Default falls through only where no entry scoped to the queried
+    # permission matches: WRITE is adjudicated by its own entry,
+    # ADMIN has none and falls back to 'default_allow_deny'.
+    policy = authz_schema.RoomPolicy(
+        room_id=ROOM_ID,
+        default_allow_deny=authz.AllowDeny.DENY,
+    )
+    _read_entry = authz_schema.ACLEntry(
+        room_policy=policy,
+        allow_deny=authz.AllowDeny.ALLOW,
+        permission=authz.Permission.READ,
+        everyone=True,
+    )
+    _write_entry = authz_schema.ACLEntry(
+        room_policy=policy,
+        allow_deny=authz.AllowDeny.DENY,
+        permission=authz.Permission.WRITE,
+        everyone=True,
+    )
+
+    assert (
+        policy.check_token(token, permission=authz.Permission.READ)
+        == authz.AllowDeny.ALLOW
+    )
+
+    assert (
+        policy.check_token(token, permission=authz.Permission.WRITE)
+        == authz.AllowDeny.DENY
+    )
+
+    found = policy.check_token(token, permission=authz.Permission.ADMIN)
+    assert found == authz.AllowDeny.DENY
+
+
+@pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
+def test_roompolicy_check_token_w_permission_fallback(token):
+    # WRITE / ADMIN fall back to DENY even when 'default_allow_deny'
+    # would allow them: only entries scoped to them can grant.
+    policy = authz_schema.RoomPolicy(
+        room_id=ROOM_ID,
+        default_allow_deny=authz.AllowDeny.ALLOW,
+    )
+    _entry = authz_schema.ACLEntry(
+        room_policy=policy,
+        allow_deny=authz.AllowDeny.ALLOW,
+        permission=authz.Permission.READ,
+        everyone=True,
+    )
+
+    found = policy.check_token(token, permission=authz.Permission.READ)
+    assert found == authz.AllowDeny.ALLOW
+
+    assert (
+        policy.check_token(token, permission=authz.Permission.WRITE)
+        == authz.AllowDeny.DENY
+    )
+    assert (
+        policy.check_token(token, permission=authz.Permission.ADMIN)
+        == authz.AllowDeny.DENY
+    )
 
 
 @pytest.fixture
@@ -418,7 +512,7 @@ def test_aclentry_check_token_wo_discrim(the_room_policy, allow_deny, token):
         allow_deny=allow_deny,
     )
 
-    found = entry.check_token(token)
+    found = entry.check_token(token, permission=authz.Permission.READ)
 
     assert found is None
 
@@ -438,9 +532,57 @@ def test_aclentry_check_token_w_everyone(the_room_policy, allow_deny, token):
         everyone=True,
     )
 
-    found = entry.check_token(token)
+    found = entry.check_token(token, permission=authz.Permission.READ)
 
     assert found == allow_deny
+
+
+@pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
+@pytest.mark.parametrize(
+    "allow_deny",
+    [
+        authz.AllowDeny.ALLOW,
+        authz.AllowDeny.DENY,
+    ],
+)
+def test_aclentry_check_token_w_permission(
+    the_room_policy,
+    allow_deny,
+    token,
+):
+    # The entry is scoped to WRITE: it never matches a READ check, but
+    # does match the check made for its own permission.
+    entry = authz_schema.ACLEntry(
+        room_policy=the_room_policy,
+        allow_deny=allow_deny,
+        permission=authz.Permission.WRITE,
+        everyone=True,
+    )
+
+    assert entry.check_token(token, permission=authz.Permission.READ) is None
+
+    found = entry.check_token(token, permission=authz.Permission.WRITE)
+
+    assert found == allow_deny
+
+    # On a pending row, unset columns read as None: an unset
+    # 'permission' behaves as its READ column default.
+    pending = authz_schema.ACLEntry(
+        room_policy=the_room_policy,
+        allow_deny=allow_deny,
+        everyone=True,
+    )
+
+    assert (
+        pending.check_token(token, permission=authz.Permission.READ)
+        == allow_deny
+    )
+
+    pending_allowed = pending.check_token(
+        token, permission=authz.Permission.WRITE
+    )
+
+    assert pending_allowed is None
 
 
 @pytest.mark.parametrize(
@@ -470,7 +612,7 @@ def test_aclentry_check_token_w_authenticated(
         authenticated=True,
     )
 
-    found = entry.check_token(token)
+    found = entry.check_token(token, permission=authz.Permission.READ)
 
     if matched:
         assert found == allow_deny
@@ -507,7 +649,7 @@ def test_aclentry_check_token_w_jsonpath(
         json_path="$[?match($.foo, 'b.*z')]",
     )
 
-    found = entry.check_token(token)
+    found = entry.check_token(token, permission=authz.Permission.READ)
 
     if matched:
         assert found is allow_deny
@@ -542,7 +684,7 @@ def test_aclentry_check_token_w_preferred_username(
     )
     entry.room_policy = the_room_policy
 
-    found = entry.check_token(token)
+    found = entry.check_token(token, permission=authz.Permission.READ)
 
     if matched:
         assert found == allow_deny
@@ -577,7 +719,7 @@ def test_aclentry_check_token_w_email(
     )
     entry.room_policy = the_room_policy
 
-    found = entry.check_token(token)
+    found = entry.check_token(token, permission=authz.Permission.READ)
 
     if matched:
         assert found == allow_deny

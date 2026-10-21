@@ -512,11 +512,22 @@ def test_room_authz_policy_builds_audit_log():
 async def test_room_authz_check_room_access_public(the_async_session):
     rap = _room_authz_policy(the_async_session)
 
-    granted = await rap.check_room_access(ROOM_ID, None)
+    granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
 
     assert granted
     rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
     rap._access_audit.room_access_denied.assert_not_called()
+
+    # No policy: WRITE and ADMIN remain default-denied.
+    assert not await rap.check_room_access(ROOM_ID, None, permission=WRITE)
+    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
+
+    rap._access_audit.room_access_denied.reset_mock()
+    assert not await rap.check_room_access(
+        ROOM_ID, None, permission=authz.Permission.ADMIN
+    )
+    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
+
     # The room-policy CRUD audit log is not touched by an access check.
     assert rap._audit.method_calls == []
 
@@ -527,7 +538,7 @@ async def test_room_authz_check_room_access_denied(the_async_session):
     # Policy w/ deny as default, no ACL entries.
     the_async_session.add(authz_schema.RoomPolicy(room_id=ROOM_ID))
 
-    granted = await rap.check_room_access(ROOM_ID, None)
+    granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
 
     assert not granted
     rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
@@ -548,7 +559,7 @@ async def test_room_authz_check_room_access_allowed(the_async_session):
         )
     )
 
-    granted = await rap.check_room_access(ROOM_ID, None)
+    granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
 
     assert granted
     rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
@@ -562,14 +573,23 @@ async def test_room_authz_filter_room_ids(the_async_session):
 
     room_ids = [ROOM_ID]
 
-    # No policy -> public room
-    assert await rap.filter_room_ids(room_ids, None) == room_ids
+    # No policy -> public room (READ); WRITE / ADMIN default-denied.
+    assert (
+        await rap.filter_room_ids(room_ids, None, permission=READ) == room_ids
+    )
+    assert await rap.filter_room_ids(room_ids, None, permission=WRITE) == []
+    assert (
+        await rap.filter_room_ids(
+            room_ids, None, permission=authz.Permission.ADMIN
+        )
+        == []
+    )
 
     # Policy w/ deny as default, no ACL entries
     denier = authz_schema.RoomPolicy(room_id=ROOM_ID)
     the_async_session.add(denier)
 
-    assert await rap.filter_room_ids(room_ids, None) == []
+    assert await rap.filter_room_ids(room_ids, None, permission=READ) == []
 
     allower = authz_schema.ACLEntry(
         room_policy=denier,
@@ -578,7 +598,156 @@ async def test_room_authz_filter_room_ids(the_async_session):
     )
     the_async_session.add(allower)
 
-    assert await rap.filter_room_ids(room_ids, None) == room_ids
+    assert (
+        await rap.filter_room_ids(room_ids, None, permission=READ) == room_ids
+    )
+
+    # The hot end-user access path is deliberately not audited.
+    assert rap._audit.method_calls == []
+
+
+@pytest.mark.asyncio
+async def test_room_authz_check_room_access_w_permission(the_async_session):
+    # Policy defaulting to ALLOW (public reads), with a WRITE-scoped
+    # entry denying everyone: reads fall through to the default, while
+    # writes are adjudicated by the WRITE-scoped entry.
+    rap = _room_authz_policy(the_async_session)
+    policy = authz_schema.RoomPolicy(
+        room_id=ROOM_ID,
+        default_allow_deny=ALLOW,
+    )
+    the_async_session.add(policy)
+    the_async_session.add(
+        authz_schema.ACLEntry(
+            room_policy=policy,
+            allow_deny=DENY,
+            permission=WRITE,
+            everyone=True,
+        )
+    )
+
+    granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
+
+    assert granted
+    rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
+
+    rap._access_audit.room_access_allowed.reset_mock()
+
+    denied = await rap.check_room_access(ROOM_ID, None, permission=WRITE)
+
+    assert not denied
+    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_allowed.assert_not_called()
+    # The room-policy CRUD audit log is not touched by an access check.
+    assert rap._audit.method_calls == []
+
+
+@pytest.mark.asyncio
+async def test_room_authz_check_room_access_w_write_grant(
+    the_async_session,
+):
+    # Policy defaulting to DENY (private reads), with a WRITE-scoped
+    # entry granting everyone: reads are denied by the default, while
+    # writes are adjudicated by the WRITE-scoped entry.
+    rap = _room_authz_policy(the_async_session)
+    policy = authz_schema.RoomPolicy(room_id=ROOM_ID)
+    the_async_session.add(policy)
+    the_async_session.add(
+        authz_schema.ACLEntry(
+            room_policy=policy,
+            allow_deny=ALLOW,
+            permission=WRITE,
+            everyone=True,
+        )
+    )
+
+    granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
+
+    assert not granted
+    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
+
+    rap._access_audit.room_access_denied.reset_mock()
+
+    allowed = await rap.check_room_access(
+        ROOM_ID, None, permission=authz.Permission.WRITE
+    )
+
+    assert allowed
+    rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_denied.assert_not_called()
+    assert rap._audit.method_calls == []
+
+
+@pytest.mark.asyncio
+async def test_room_authz_check_room_access_write_default_denied(
+    the_async_session,
+):
+    # A policy defaulting to ALLOW does not open WRITE / ADMIN: they
+    # are denied unless an entry scoped to them grants them.
+    rap = _room_authz_policy(the_async_session)
+    policy = authz_schema.RoomPolicy(
+        room_id=ROOM_ID,
+        default_allow_deny=ALLOW,
+    )
+    the_async_session.add(policy)
+    the_async_session.add(
+        authz_schema.ACLEntry(
+            room_policy=policy,
+            allow_deny=ALLOW,
+            permission=authz.Permission.READ,
+            everyone=True,
+        )
+    )
+
+    assert await rap.check_room_access(ROOM_ID, None, permission=READ)
+    assert not await rap.check_room_access(ROOM_ID, None, permission=WRITE)
+    assert not await rap.check_room_access(
+        ROOM_ID, None, permission=authz.Permission.ADMIN
+    )
+
+
+@pytest.mark.asyncio
+async def test_room_authz_filter_room_ids_w_permission(the_async_session):
+    rap = _room_authz_policy(the_async_session)
+    # Both rooms publicly readable; 'reader-room' explicitly grants
+    # WRITE, while 'writer-room' denies it via its own scoped entry.
+    reader_policy = authz_schema.RoomPolicy(
+        room_id="reader-room",
+        default_allow_deny=ALLOW,
+    )
+    the_async_session.add(reader_policy)
+    the_async_session.add(
+        authz_schema.ACLEntry(
+            room_policy=reader_policy,
+            allow_deny=ALLOW,
+            permission=WRITE,
+            everyone=True,
+        )
+    )
+    writer_policy = authz_schema.RoomPolicy(
+        room_id="writer-room",
+        default_allow_deny=ALLOW,
+    )
+    the_async_session.add(writer_policy)
+    the_async_session.add(
+        authz_schema.ACLEntry(
+            room_policy=writer_policy,
+            allow_deny=DENY,
+            permission=WRITE,
+            everyone=True,
+        )
+    )
+
+    room_ids = ["reader-room", "writer-room"]
+
+    # Default (READ): both rooms allowed via their defaults.
+    assert (
+        await rap.filter_room_ids(room_ids, None, permission=READ) == room_ids
+    )
+
+    assert await rap.filter_room_ids(
+        room_ids, None, permission=authz.Permission.WRITE
+    ) == ["reader-room"]
 
     # The hot end-user access path is deliberately not audited.
     assert rap._audit.method_calls == []

@@ -242,16 +242,37 @@ class RoomAuthorizationPolicy(abc.ABC):
         self,
         room_id: str,
         user_token: UserToken | None,
+        *,
+        permission: Permission,
     ) -> bool:
-        """Can the user represented by 'user_token' access a room?"""
+        """Can the user represented by 'user_token' access a room?
+
+        For a room with an authorization policy, return whether the result
+        of its ``check_token`` for the user token and permission is ALLOW.
+
+        For a room without an authorization policy:
+
+        - Return True for READ (such rooms are public for read).
+
+        - Return False for WRITE and ADMIN.
+        """
 
     @abc.abstractmethod
     async def filter_room_ids(
         self,
         room_ids: list[str],
         user_token: UserToken | None,
+        *,
+        permission: Permission,
     ) -> list[str]:
-        """Filter room IDs based on room authz policies for 'user_token'"""
+        """Filter room IDs via authz policies for 'user_token'/'permission'.
+
+        Filter rooms with authorization policies based on those
+        policies' ``check_token`` for the user token and permission.
+
+        Include rooms without authorization policies for READ, but exclude
+        such rooms for WRITE and ADMIN.
+        """
 
     @abc.abstractmethod
     async def get_room_policy(
@@ -299,7 +320,7 @@ class RoomAuthorizationPolicy(abc.ABC):
     async def clear_room_acl(self, room_id: str) -> None:
         """Remove all ACL entries from the room's policy.
 
-        The policy row and its 'default_allow_deny' are preserved.
+        The policy and its 'default_allow_deny' setting are preserved.
         """
 
     @abc.abstractmethod
@@ -308,8 +329,13 @@ class RoomAuthorizationPolicy(abc.ABC):
         room_id: str,
         entry: models.ACLEntry,
     ) -> None:
-        """Add an ACL entry to the room's policy, replacing any entry with
-        the same discriminator."""
+        """Add an ACL entry to the room's policy
+
+        The room must already have a policy ('set_room_default' or a prior
+        'update_room_policy'); otherwise 'NoSuchRoomPolicy' is raised.
+
+        Replaces existing entries with the same discriminator and permission.
+        """
 
     @abc.abstractmethod
     async def remove_acl_entry(
@@ -317,7 +343,17 @@ class RoomAuthorizationPolicy(abc.ABC):
         room_id: str,
         entry: models.ACLEntryUnchecked,
     ) -> None:
-        """Remove the matching ACL entry from the room's policy."""
+        """Remove the matching ACL entry from the room's policy.
+
+        'entry' is an unchecked model so a stored 'json_path' that no longer
+        compiles can still be matched; the entry is not re-validated.
+
+        Compare against stored entries, matching by 'allow_deny',
+        'permission' and discriminator.
+
+        Raises 'NoSuchRoomPolicy' if the room has no policy, or
+        'NoSuchACLEntry' if no stored entry matches.
+        """
 
     @abc.abstractmethod
     async def set_room_default(
@@ -325,5 +361,7 @@ class RoomAuthorizationPolicy(abc.ABC):
         room_id: str,
         allow_deny: AllowDeny,
     ) -> None:
-        """Set the room policy's 'default_allow_deny', creating an empty
-        policy if none exists."""
+        """Set the room policy's 'default_allow_deny'
+
+        Create an empty policy if none exists.
+        """
