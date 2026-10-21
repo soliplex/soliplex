@@ -355,6 +355,144 @@ async def test_admin_user_check_admin_access_json_path(
     aup._audit.admin_users_listed.reset_mock()
 
 
+# Canonical discriminator-key helpers: comparing a candidate
+# 'models.ACLEntryUnchecked' against stored 'authz_schema.ACLEntry' rows.
+
+EVERYONE_KW = {"everyone": True}
+EVERYONE_KEY = ("everyone",)
+
+AUTHENTICATED_KW = {"authenticated": True}
+AUTHENTICATED_KEY = ("authenticated",)
+
+PUN_CLAIM = "phreddy"
+PUN_CLAIM_KW = {"preferred_username": PUN_CLAIM}
+PUN_CLAIM_PATH = authz.token_field_json_path("preferred_username", PUN_CLAIM)
+PUN_CLAIM_KEY = ("json_path", PUN_CLAIM_PATH)
+
+EMAIL_CLAIM_KW = {"email": EMAIL}
+EMAIL_CLAIM_PATH = JSON_PATH
+EMAIL_CLAIM_KEY = ("json_path", EMAIL_CLAIM_PATH)
+
+ROLE_JSON_PATH_KW = {"json_path": ROLE_JSON_PATH}
+ROLE_JSON_PATH_KEY = ("json_path", ROLE_JSON_PATH)
+
+INVALID_JSON_PATH_KW = {"json_path": INVALID_JSON_PATH}
+INVALID_JSON_PATH_KEY = ("json_path", INVALID_JSON_PATH)
+
+
+@pytest.mark.parametrize(
+    "from_cli_kw, expected",
+    [
+        ({}, None),
+        (PUN_CLAIM_KW, PUN_CLAIM_PATH),
+        (EMAIL_CLAIM_KW, EMAIL_CLAIM_PATH),
+        (ROLE_JSON_PATH_KW, ROLE_JSON_PATH),
+        (INVALID_JSON_PATH_KW, INVALID_JSON_PATH),
+        # Claim shortcuts take precedence over a raw 'json_path'.
+        (PUN_CLAIM_KW | EMAIL_CLAIM_KW, PUN_CLAIM_PATH),
+        (EMAIL_CLAIM_KW | ROLE_JSON_PATH_KW, EMAIL_CLAIM_PATH),
+        (PUN_CLAIM_KW | ROLE_JSON_PATH_KW, PUN_CLAIM_PATH),
+        (PUN_CLAIM_KW | EMAIL_CLAIM_KW | ROLE_JSON_PATH_KW, PUN_CLAIM_PATH),
+    ],
+)
+def test__effective_json_path(from_cli_kw, expected):
+    from_cli = models.ACLEntryUnchecked(**from_cli_kw)
+
+    found = authz_persistence._effective_json_path(from_cli)
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "from_cli_kw, expected",
+    [
+        (EVERYONE_KW, EVERYONE_KEY),
+        (AUTHENTICATED_KW, AUTHENTICATED_KEY),
+        (PUN_CLAIM_KW, PUN_CLAIM_KEY),
+        (EMAIL_CLAIM_KW, EMAIL_CLAIM_KEY),
+        (ROLE_JSON_PATH_KW, ROLE_JSON_PATH_KEY),
+        (INVALID_JSON_PATH_KW, INVALID_JSON_PATH_KEY),
+        # Where several discriminators are set on an unchecked model,
+        # the first active one in 'check_token' evaluation order wins.
+        (EVERYONE_KW | AUTHENTICATED_KW, EVERYONE_KEY),
+        (EVERYONE_KW | ROLE_JSON_PATH_KW, EVERYONE_KEY),
+        (EVERYONE_KW | INVALID_JSON_PATH_KW, EVERYONE_KEY),
+        (AUTHENTICATED_KW | PUN_CLAIM_KW, AUTHENTICATED_KEY),
+        (AUTHENTICATED_KW | ROLE_JSON_PATH_KW, AUTHENTICATED_KEY),
+        (AUTHENTICATED_KW | INVALID_JSON_PATH_KW, AUTHENTICATED_KEY),
+        (EVERYONE_KW | AUTHENTICATED_KW | ROLE_JSON_PATH_KW, EVERYONE_KEY),
+        (
+            AUTHENTICATED_KW | PUN_CLAIM_KW | ROLE_JSON_PATH_KW,
+            AUTHENTICATED_KEY,
+        ),
+        (PUN_CLAIM_KW | EMAIL_CLAIM_KW | ROLE_JSON_PATH_KW, PUN_CLAIM_KEY),
+    ],
+)
+def test__discriminator_key_unchecked(from_cli_kw, expected):
+    from_cli = models.ACLEntryUnchecked(**from_cli_kw)
+
+    found = authz_persistence._discriminator_key_unchecked(from_cli)
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "entry_kw, expected",
+    [
+        (EVERYONE_KW, EVERYONE_KEY),
+        (AUTHENTICATED_KW, AUTHENTICATED_KEY),
+        (ROLE_JSON_PATH_KW, ROLE_JSON_PATH_KEY),
+        # Stored rows honor 'exactly one discriminator' by the ORM
+        # validator, but the key resolves flags-first regardless.
+        (EVERYONE_KW | ROLE_JSON_PATH_KW, EVERYONE_KEY),
+        (AUTHENTICATED_KW | ROLE_JSON_PATH_KW, AUTHENTICATED_KEY),
+        (EVERYONE_KW | AUTHENTICATED_KW | ROLE_JSON_PATH_KW, EVERYONE_KEY),
+    ],
+)
+def test__discriminator_key(entry_kw, expected):
+    entry = authz_schema.ACLEntry(**entry_kw)
+
+    found = authz_persistence._discriminator_key(entry)
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "from_cli_kw, existing_kw, expected",
+    [
+        # Same discriminator, however it is spelled.
+        (EVERYONE_KW, EVERYONE_KW, True),
+        (AUTHENTICATED_KW, AUTHENTICATED_KW, True),
+        (ROLE_JSON_PATH_KW, ROLE_JSON_PATH_KW, True),
+        (PUN_CLAIM_KW, {"json_path": PUN_CLAIM_PATH}, True),
+        (EMAIL_CLAIM_KW, {"json_path": EMAIL_CLAIM_PATH}, True),
+        # Different discriminator kinds never match.
+        (EVERYONE_KW, AUTHENTICATED_KW, False),
+        (EVERYONE_KW, ROLE_JSON_PATH_KW, False),
+        (AUTHENTICATED_KW, ROLE_JSON_PATH_KW, False),
+        (ROLE_JSON_PATH_KW, {"json_path": PUN_CLAIM_PATH}, False),
+        # A multi-discriminator candidate targets only its first active
+        # discriminator (highest precedence wins).
+        (EVERYONE_KW | ROLE_JSON_PATH_KW, EVERYONE_KW, True),
+        (EVERYONE_KW | ROLE_JSON_PATH_KW, ROLE_JSON_PATH_KW, False),
+        (
+            AUTHENTICATED_KW | PUN_CLAIM_KW,
+            {"json_path": PUN_CLAIM_PATH},
+            False,
+        ),
+        # A candidate with no discriminator matches nothing.
+        ({}, ROLE_JSON_PATH_KW, False),
+    ],
+)
+def test__compare_discriminator(from_cli_kw, existing_kw, expected):
+    from_cli = models.ACLEntryUnchecked(**from_cli_kw)
+    existing = authz_schema.ACLEntry(**existing_kw)
+
+    found = authz_persistence._compare_discriminator(from_cli, existing)
+
+    assert found is expected
+
+
 def test_room_authz_policy_builds_audit_log():
     policy = authz_persistence.RoomAuthorizationPolicy(object(), CLAIMS)
 

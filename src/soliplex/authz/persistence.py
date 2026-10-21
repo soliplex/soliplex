@@ -17,25 +17,81 @@ from soliplex import models
 from soliplex.authz import schema as authz_schema
 
 
-def _entry_discriminator(
+def _effective_json_path(
     entry: models.ACLEntryUnchecked,
-) -> tuple[bool, bool, str | None]:
-    """Resolve an ACL-entry model's discriminator without compiling.
+) -> str | None:
+    """Resolve an ACL-entry model's effective 'json_path' without compiling.
 
     Collapses the 'preferred_username' / 'email' claim shortcuts to the
     equivalent stored 'json_path' string (highest priority first, matching
     'authz_schema.ACLEntry.from_model'), so a possibly-stale 'json_path'
-    can be matched against stored rows by string equality. Returns the
-    '(everyone, authenticated, json_path)' triple.
+    can be matched against stored rows by string equality.
     """
-    json_path = entry.json_path
     if entry.preferred_username is not None:
-        json_path = authz.token_field_json_path(
+        return authz.token_field_json_path(
             "preferred_username", entry.preferred_username
         )
-    elif entry.email is not None:
-        json_path = authz.token_field_json_path("email", entry.email)
-    return entry.everyone, entry.authenticated, json_path
+
+    if entry.email is not None:
+        return authz.token_field_json_path("email", entry.email)
+
+    return entry.json_path
+
+
+def _discriminator_key_unchecked(
+    entry: models.ACLEntryUnchecked,
+) -> tuple:
+    """Return the canonical discriminator key for an ACL-entry model.
+
+    Unchecked models are not required to honor the 'exactly one
+    discriminator' rule (validation belongs to the checked model and
+    the CLI); where several discriminators are set, the first active
+    one in 'authz_schema.ACLEntry.check_token' evaluation order wins:
+    'everyone', then 'authenticated', then the effective 'json_path'
+    (see '_effective_json_path').
+    """
+    if entry.everyone:
+        return ("everyone",)
+
+    if entry.authenticated:
+        return ("authenticated",)
+
+    return ("json_path", _effective_json_path(entry))
+
+
+def _discriminator_key(
+    entry: authz_schema.ACLEntry,
+) -> tuple:
+    """Return the canonical discriminator key for a stored ACL entry.
+
+    The mirror of '_discriminator_key_unchecked' over a schema row's
+    stored columns.
+    """
+    if entry.everyone:
+        return ("everyone",)
+
+    if entry.authenticated:
+        return ("authenticated",)
+
+    return ("json_path", entry.json_path)
+
+
+def _compare_discriminator(
+    candidate: models.ACLEntryUnchecked,
+    existing: authz_schema.ACLEntry,
+) -> bool:
+    """Does the candidate model target the stored entry's discriminator?
+
+    The single test shared by 'add_acl_entry' (replace the entry with
+    the same discriminator) and 'remove_acl_entry' (delete the entry
+    with the same discriminator, plus its 'allow_deny'): compares
+    canonical discriminator keys rather than "any active discriminator",
+    so a candidate is never confused with a stored entry pinned to a
+    different discriminator kind.
+    """
+    return _discriminator_key_unchecked(candidate) == _discriminator_key(
+        existing
+    )
 
 
 async def _find_admin_user_by_json_path(
@@ -393,14 +449,7 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
 
             await policy.awaitable_attrs.acl_entries
             for existing in list(policy.acl_entries):
-                if (
-                    (new_acl.everyone and existing.everyone)
-                    or (new_acl.authenticated and existing.authenticated)
-                    or (
-                        new_acl.json_path is not None
-                        and existing.json_path == new_acl.json_path
-                    )
-                ):
+                if _compare_discriminator(entry, existing):
                     await session.delete(existing)
 
             new_acl.room_policy = policy
@@ -421,8 +470,6 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
         Raises 'NoSuchRoomPolicy' if the room has no policy, or
         'NoSuchACLEntry' if no stored entry matches.
         """
-        everyone, authenticated, json_path = _entry_discriminator(entry)
-
         async with self.session as session:
             policy = await _find_room_policy(room_id, session)
 
@@ -438,14 +485,7 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
                 existing
                 for existing in policy.acl_entries
                 if existing.allow_deny == entry.allow_deny
-                and (
-                    (everyone and existing.everyone)
-                    or (authenticated and existing.authenticated)
-                    or (
-                        json_path is not None
-                        and existing.json_path == json_path
-                    )
-                )
+                and _compare_discriminator(entry, existing)
             ]
 
             if not matches:
