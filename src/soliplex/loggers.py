@@ -790,11 +790,15 @@ class RoomAccessAuditLog(AuditLogWrapper):
         super().__init__(scope=AuditLogScopes.ROOM_ACCESS, **extra_with_claims)
 
     # access decision: a principal accessed the room
-    def room_access_allowed(self, room_id: str):
-        self._succeeded(AUDIT_ROOM_ACCESS, room_id=room_id)
+    def room_access_allowed(self, room_id: str, permission: str):
+        self._succeeded(
+            AUDIT_ROOM_ACCESS,
+            room_id=room_id,
+            permission=permission,
+        )
 
-    def room_access_denied(self, room_id: str):
-        self._denied(AUDIT_ROOM_ACCESS, room_id=room_id)
+    def room_access_denied(self, room_id: str, permission: str):
+        self._denied(AUDIT_ROOM_ACCESS, room_id=room_id, permission=permission)
 
     # run outcome (after the run)
     def run_finished(self):

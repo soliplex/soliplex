@@ -473,6 +473,7 @@ class Installation:
             allowed = await the_room_authz.filter_room_ids(
                 configs.keys(),
                 user_token=user,
+                permission=authz.Permission.READ,
             )
 
             configs = {
@@ -504,6 +505,7 @@ class Installation:
             if not await the_room_authz.check_room_access(
                 room_id=room_id,
                 user_token=user,
+                permission=authz.Permission.READ,
             ):
                 raise KeyError(room_id)
 

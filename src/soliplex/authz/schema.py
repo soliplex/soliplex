@@ -89,11 +89,11 @@ class RoomPolicy(Base):
 
     'room_id': name of the room (distinct from our actual primary key).
 
-    'default_allow_deny': whether the room is allowed / denied if no
-        ACLEntry matches the user's token.
+    'default_allow_deny': whether read access to the room is allowed /
+    denied if no ACLEntry matches the user's token.
 
     'acl_entries": stored in the 'RoomACLEntry' table via a
-        one-to-many relationship.
+    one-to-many relationship.
     """
 
     __tablename__ = "room_policies"
@@ -154,24 +154,34 @@ class RoomPolicy(Base):
     def check_token(
         self,
         user_token: authz.UserToken | None,
+        *,
+        permission: authz.Permission,
     ) -> authz.AllowDeny:
         """Check the supplied token against our ACL entries
 
-        If one of them returns non-None, return that value.
+        Only consult entries scoped to 'permission': if one of
+        them returns non-None, return that value.
 
-        Otherwise, return our 'default_allow_deny'.
+        If no ACL entry matches:
+
+        - Return our 'default_allow_deny' for READ.
+
+        - Return DENY for WRITE and ADMIN.
         """
         for entry in self.acl_entries:
-            found = entry.check_token(user_token)
+            found = entry.check_token(user_token, permission=permission)
 
             if found is not None:
                 return found
 
-        return self.default_allow_deny
+        if permission is authz.Permission.READ:
+            return self.default_allow_deny
+
+        return authz.AllowDeny.DENY
 
 
 class ACLEntry(Base):
-    """Allow / deny access to a room based on fields in the user's token"""
+    """Allow / deny access for a permission based on the user's token"""
 
     __tablename__ = "room_acl_entries"
 
@@ -196,6 +206,11 @@ class ACLEntry(Base):
     authenticated: Mapped[bool] = mapped_column(default=False)
     json_path: Mapped[str | None] = mapped_column(default=None)
 
+    permission: Mapped[authz.Permission] = mapped_column(
+        default=authz.Permission.READ,
+        server_default=authz.Permission.READ.name,
+    )
+
     @sqla_orm.validates("json_path")
     def _check_json_path(self, _key, value):
         return authz.validate_json_path(value)
@@ -217,6 +232,7 @@ class ACLEntry(Base):
             json_path = model.json_path
         return cls(
             allow_deny=model.allow_deny,
+            permission=model.permission,
             everyone=model.everyone,
             authenticated=model.authenticated,
             json_path=json_path,
@@ -242,6 +258,7 @@ class ACLEntry(Base):
     def as_model(self) -> models.ACLEntry:
         return models.ACLEntry(
             allow_deny=self.allow_deny,
+            permission=self.permission,
             everyone=self.everyone,
             authenticated=self.authenticated,
             **self._model_kwargs(),
@@ -253,6 +270,7 @@ class ACLEntry(Base):
         # 'json_path' that no longer compiles does not raise.
         return models.ACLEntryUnchecked(
             allow_deny=self.allow_deny,
+            permission=self.permission,
             everyone=self.everyone,
             authenticated=self.authenticated,
             **self._model_kwargs(),
@@ -261,13 +279,25 @@ class ACLEntry(Base):
     def check_token(
         self,
         user_token: authz.UserToken | None,
+        *,
+        permission: authz.Permission,
     ) -> authz.AllowDeny | None:
-        """Check the supplied token against our discriminators
+        """Check the supplied token for the given permission.
 
-        If 'user_token' matches one of our discriminators, return our flag
+        If 'permission' does not match our field, return None.
+
+        Otherwise, if 'user_token' matches one of our discriminators,
+        return our 'allow_deny'.
 
         Otherwise, return None.
         """
+        # Column defaults (Python 'default' / the migration's
+        # 'server_default', which backfills existing rows) are applied
+        # at flush, not at construction: a pending, unflushed instance
+        # reads 'permission' as None. Let it behave as its default.
+        if (self.permission or authz.Permission.READ) != permission:
+            return None
+
         if self.everyone:
             return self.allow_deny
 

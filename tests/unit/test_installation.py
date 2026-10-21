@@ -15,6 +15,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
 from soliplex import alembic_migrations
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -812,10 +813,20 @@ class FauxRoomAuthz:
     def __init__(self, allowed):
         self.allowed = allowed
 
-    async def check_room_access(self, room_id, user_token):
+    async def check_room_access(
+        self,
+        room_id,
+        user_token,
+        permission: authz.Permission,
+    ):
         return self.allowed
 
-    async def filter_room_ids(self, room_ids, user_token):
+    async def filter_room_ids(
+        self,
+        room_ids,
+        user_token,
+        permission: authz.Permission,
+    ):
         if self.allowed:
             return room_ids
         else:

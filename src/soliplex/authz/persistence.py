@@ -17,25 +17,81 @@ from soliplex import models
 from soliplex.authz import schema as authz_schema
 
 
-def _entry_discriminator(
+def _effective_json_path(
     entry: models.ACLEntryUnchecked,
-) -> tuple[bool, bool, str | None]:
-    """Resolve an ACL-entry model's discriminator without compiling.
+) -> str | None:
+    """Resolve an ACL-entry model's effective 'json_path' without compiling.
 
     Collapses the 'preferred_username' / 'email' claim shortcuts to the
     equivalent stored 'json_path' string (highest priority first, matching
     'authz_schema.ACLEntry.from_model'), so a possibly-stale 'json_path'
-    can be matched against stored rows by string equality. Returns the
-    '(everyone, authenticated, json_path)' triple.
+    can be matched against stored rows by string equality.
     """
-    json_path = entry.json_path
     if entry.preferred_username is not None:
-        json_path = authz.token_field_json_path(
+        return authz.token_field_json_path(
             "preferred_username", entry.preferred_username
         )
-    elif entry.email is not None:
-        json_path = authz.token_field_json_path("email", entry.email)
-    return entry.everyone, entry.authenticated, json_path
+
+    if entry.email is not None:
+        return authz.token_field_json_path("email", entry.email)
+
+    return entry.json_path
+
+
+def _discriminator_key_unchecked(
+    entry: models.ACLEntryUnchecked,
+) -> tuple:
+    """Return the canonical discriminator key for an ACL-entry model.
+
+    Unchecked models are not required to honor the 'exactly one
+    discriminator' rule (validation belongs to the checked model and
+    the CLI); where several discriminators are set, the first active
+    one in 'authz_schema.ACLEntry.check_token' evaluation order wins:
+    'everyone', then 'authenticated', then the effective 'json_path'
+    (see '_effective_json_path').
+    """
+    if entry.everyone:
+        return ("everyone",)
+
+    if entry.authenticated:
+        return ("authenticated",)
+
+    return ("json_path", _effective_json_path(entry))
+
+
+def _discriminator_key(
+    entry: authz_schema.ACLEntry,
+) -> tuple:
+    """Return the canonical discriminator key for a stored ACL entry.
+
+    The mirror of '_discriminator_key_unchecked' over a schema row's
+    stored columns.
+    """
+    if entry.everyone:
+        return ("everyone",)
+
+    if entry.authenticated:
+        return ("authenticated",)
+
+    return ("json_path", entry.json_path)
+
+
+def _compare_discriminator(
+    candidate: models.ACLEntryUnchecked,
+    existing: authz_schema.ACLEntry,
+) -> bool:
+    """Does the candidate model target the stored entry's discriminator?
+
+    The single test shared by 'add_acl_entry' (replace the entry with
+    the same discriminator) and 'remove_acl_entry' (delete the entry
+    with the same discriminator, plus its 'allow_deny'): compares
+    canonical discriminator keys rather than "any active discriminator",
+    so a candidate is never confused with a stored entry pinned to a
+    different discriminator kind.
+    """
+    return _discriminator_key_unchecked(candidate) == _discriminator_key(
+        existing
+    )
 
 
 async def _find_admin_user_by_json_path(
@@ -196,28 +252,42 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
         self,
         room_id: str,
         user_token: authz.UserToken | None,
+        *,
+        permission: authz.Permission,
     ) -> bool:
-        """Can the user represented by 'user_token' can access a room?
+        """Can the user represented by 'user_token' access a room?
 
-        If an authorization policy exists for the room, check that it allows
-        access for the user token.
+        For a room with an authorization policy, return whether the result
+        of its ``check_token`` for the user token and permission is ALLOW.
 
-        Otherwise, return True (i.e., the room is public).
+        For a room without an authorization policy:
+
+        - Return True for READ (such rooms are public for read).
+
+        - Return False for WRITE and ADMIN.
         """
         async with self.session as session:
             policy = await _find_room_policy(room_id, session)
 
             if policy is not None:
                 await policy.awaitable_attrs.acl_entries
-                allow_deny = policy.check_token(user_token)
+                allow_deny = policy.check_token(
+                    user_token, permission=permission
+                )
                 result = allow_deny == authz.AllowDeny.ALLOW
             else:
-                result = True
+                result = permission is authz.Permission.READ
 
         if result:
-            self._access_audit.room_access_allowed(room_id)
+            self._access_audit.room_access_allowed(
+                room_id,
+                permission=permission,
+            )
         else:
-            self._access_audit.room_access_denied(room_id)
+            self._access_audit.room_access_denied(
+                room_id,
+                permission=permission,
+            )
 
         return result
 
@@ -225,24 +295,32 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
         self,
         room_ids: list[str],
         user_token: authz.UserToken | None,
+        *,
+        permission: authz.Permission,
     ) -> list[str]:
-        """Filter room IDs based on room authz policies for 'user_token'
+        """Filter room IDs via authz policies for 'user_token'/'permission'.
 
-        For each room, if an authorization policy exists for the room,
-        check that it allows access for the user token.
+        Filter rooms with authorization policies based on those
+        policies' ``check_token`` for the user token and permission.
 
-        Otherwise, treat the room as public.
+        Include rooms without authorization polices for READ, but exclude
+        such rooms for WRITE and ADMIN.
         """
         result = []
         async with self.session as session:
             for room_id in room_ids:
                 policy = await _find_room_policy(room_id, session)
-                if policy is not None:
+
+                if policy is None:
+                    if permission is authz.Permission.READ:
+                        result.append(room_id)
+                else:
                     await policy.awaitable_attrs.acl_entries
-                    allow_deny = policy.check_token(user_token)
-                    if allow_deny != authz.AllowDeny.ALLOW:
-                        continue
-                result.append(room_id)
+                    allow_deny = policy.check_token(
+                        user_token, permission=permission
+                    )
+                    if allow_deny == authz.AllowDeny.ALLOW:
+                        result.append(room_id)
 
         return result
 
@@ -371,15 +449,15 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
     async def add_acl_entry(
         self,
         room_id: str,
-        entry: models.ACLEntry,
+        from_cli: models.ACLEntry,
     ) -> None:
         """Add an ACL entry to the room's policy.
 
         The room must already have a policy ('set_room_default' or a prior
-        'update_room_policy'); otherwise 'NoSuchRoomPolicy' is raised. Any
-        existing entry with the same discriminator is replaced.
+        'update_room_policy'); otherwise 'NoSuchRoomPolicy' is raised.
+
+        Replaces existing entries with the same discriminator and permission.
         """
-        new_acl = authz_schema.ACLEntry.from_model(entry)
 
         async with self.session as session:
             policy = await _find_room_policy(room_id, session)
@@ -387,49 +465,48 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             if policy is None:
                 exc = authz.NoSuchRoomPolicy(room_id=room_id)
                 self._audit.acl_entry_add_failed(
-                    room_id, entry, reason=str(exc)
+                    room_id, from_cli, reason=str(exc)
                 )
                 raise exc
 
             await policy.awaitable_attrs.acl_entries
+
             for existing in list(policy.acl_entries):
                 if (
-                    (new_acl.everyone and existing.everyone)
-                    or (new_acl.authenticated and existing.authenticated)
-                    or (
-                        new_acl.json_path is not None
-                        and existing.json_path == new_acl.json_path
-                    )
+                    _compare_discriminator(from_cli, existing)
+                    and from_cli.permission == existing.permission
                 ):
                     await session.delete(existing)
 
-            new_acl.room_policy = policy
-            session.add(new_acl)
-        self._audit.acl_entry_added(room_id, entry)
+            entry = authz_schema.ACLEntry.from_model(from_cli)
+            entry.room_policy = policy
+            session.add(entry)
+
+        self._audit.acl_entry_added(room_id, from_cli)
 
     async def remove_acl_entry(
         self,
         room_id: str,
-        entry: models.ACLEntryUnchecked,
+        from_cli: models.ACLEntryUnchecked,
     ) -> None:
         """Remove the matching ACL entry from the room's policy.
 
-        Matches stored entries by 'allow_deny' and discriminator. 'entry'
-        is the unchecked model so a stored 'json_path' that no longer
+        'from_cli' is an unchecked model so a stored 'json_path' that no longer
         compiles can still be matched; the entry is not re-validated.
+
+        Compare against stored entries, matching by 'allow_deny',
+        'permission' and discriminator.
 
         Raises 'NoSuchRoomPolicy' if the room has no policy, or
         'NoSuchACLEntry' if no stored entry matches.
         """
-        everyone, authenticated, json_path = _entry_discriminator(entry)
-
         async with self.session as session:
             policy = await _find_room_policy(room_id, session)
 
             if policy is None:
                 exc = authz.NoSuchRoomPolicy(room_id=room_id)
                 self._audit.acl_entry_remove_failed(
-                    room_id, entry, reason=str(exc)
+                    room_id, from_cli, reason=str(exc)
                 )
                 raise exc
 
@@ -437,27 +514,22 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
             matches = [
                 existing
                 for existing in policy.acl_entries
-                if existing.allow_deny == entry.allow_deny
-                and (
-                    (everyone and existing.everyone)
-                    or (authenticated and existing.authenticated)
-                    or (
-                        json_path is not None
-                        and existing.json_path == json_path
-                    )
-                )
+                if existing.allow_deny == from_cli.allow_deny
+                and existing.permission == from_cli.permission
+                and _compare_discriminator(from_cli, existing)
             ]
 
             if not matches:
                 exc = authz.NoSuchACLEntry(room_id=room_id)
                 self._audit.acl_entry_remove_failed(
-                    room_id, entry, reason=str(exc)
+                    room_id, from_cli, reason=str(exc)
                 )
                 raise exc
 
             for existing in matches:
                 await session.delete(existing)
-        self._audit.acl_entry_removed(room_id, entry)
+
+        self._audit.acl_entry_removed(room_id, from_cli)
 
     async def set_room_default(
         self,

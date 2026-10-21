@@ -2214,25 +2214,32 @@ This group replaces the flat `show-room-authz` command; see
 
 Each room's authorization is captured by a `RoomPolicy` row plus zero or
 more `ACLEntry` rows attached to it. A `RoomPolicy` has a
-`default_allow_deny` flag (default: `DENY`) that applies when no ACL
-entry matches the requesting user. An `ACLEntry` has an `allow_deny`
-flag plus a discriminator — one of `everyone`, `authenticated`,
-`preferred_username`, `email`, or a free-form `json_path` — used to
-decide whether it matches the caller's token. (The
-`preferred_username` and `email` discriminators are stored as
-equivalent `json_path` queries; the row layout has just `everyone`,
-`authenticated`, and `json_path` underneath.) The first matching entry wins; if none match, the
-policy's `default_allow_deny` is used.
+`default_allow_deny` flag (default: `DENY`) which governs **read**
+access. An `ACLEntry` has an `allow_deny` flag plus a discriminator —
+one of `everyone`, `authenticated`, `preferred_username`, `email`, or a
+free-form `json_path` — used to decide whether it matches the caller's
+token, plus a `permission` flag (`read`, `write`, or `admin`) scoping
+the entry to that permission. (The `preferred_username` and `email`
+discriminators are stored as equivalent `json_path` queries;
+the row layout has just `everyone`, `authenticated`, and `json_path`
+underneath.)
+
+The first matching entry — scoped to the queried permission — wins. If
+no entry scoped to that permission matches, read access falls back to
+`default_allow_deny`, while write and admin access fall back to `DENY`:
+only an entry explicitly scoped to `write` or `admin` can grant it.
 
 The critical distinction to keep in mind is between **no policy row**
 and **an empty policy row**:
 
-- A room with **no `RoomPolicy` row at all** is treated as **public**:
-  every authenticated user is allowed in. This is the default state of
-  every room on a fresh authz database.
+- A room with **no `RoomPolicy` row at all** is treated as **public
+  for read**: every authenticated user is allowed in, but write and
+  admin operations remain denied unless explicitly granted. This is
+  the default state of every room on a fresh authz database.
 - A room with a `RoomPolicy` row and **no matching ACL entries** falls
-  through to `default_allow_deny`, which defaults to `DENY` — making
-  the room effectively **private**.
+  through for reads to `default_allow_deny`, which defaults to `DENY` —
+  making the room effectively **private**. Write and admin access are
+  denied unless an entry scoped to them grants it.
 
 The eight commands below create, inspect, edit, and populate these
 rows.
@@ -2272,6 +2279,7 @@ All eight commands share the following:
     "acl_entries": [
       {
         "allow_deny": "ALLOW",
+        "permission": "READ",
         "everyone": false,
         "authenticated": false,
         "preferred_username": null,
@@ -2294,10 +2302,11 @@ All eight commands share the following:
 
   ```text
   ─── Room policy: chat ───
-  Default: DENY (private -- denies callers that don't match an ALLOW entry).
+  Default: DENY READ (private -- denies callers that don't match an
+  ALLOW READ entry).
   ACL entries (2):
-    1. ALLOW  email=alice@example.com
-    2. DENY   everyone
+    1. ALLOW READ  email=alice@example.com
+    2. DENY READ   everyone
   ```
 
 - The group-level `--cli-log-config PATH` option (also read from the
@@ -2344,7 +2353,8 @@ soliplex-cli room-authz show example/installation.yaml chat \
 ```
 
 A `null` response means no `RoomPolicy` row exists yet — i.e. the room
-is in its default public state:
+is in its default public (for read) state, with writes and admin
+operations denied unless explicitly granted:
 
 ```bash
 $ soliplex-cli room-authz show example/installation.yaml search
@@ -2389,8 +2399,9 @@ soliplex-cli room-authz as-yaml [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
 #### Behavior Notes
 
 - **Per-entry shape mirrors `ACLEntry`.** Each entry dumps with the
-  same fields as the public `ACLEntry` model: an entry stored as a
-  `preferred_username` or `email` query is surfaced back under
+  same fields as the public `ACLEntry` model, including the entry's
+  `permission` scope (`READ` / `WRITE` / `ADMIN`): an entry stored as
+  a `preferred_username` or `email` query is surfaced back under
   `preferred_username` / `email` (with `json_path: null`), and a
   general-purpose query is surfaced under `json_path`. The document
   re-loads cleanly via [`from-yaml`](#room-authz-from-yaml).
@@ -2460,7 +2471,7 @@ soliplex-cli room-authz from-yaml [OPTIONS] INSTALLATION_CONFIG_PATH [ROOM_ID]
   (and all its ACL entries) is replaced by the imported one.
 - **`null` removes the policy.** Importing a `null` document deletes
   the target room's `RoomPolicy` entirely, returning it to the default
-  public state.
+  public (for read) state.
 - **Configured-room check.** Unlike [`as-yaml`](#room-authz-as-yaml),
   `from-yaml` always requires the target room to be configured in the
   installation's YAML; there is no `--allow-stale` escape hatch.
@@ -2531,9 +2542,9 @@ soliplex-cli room-authz make-private [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
   existing policy — including all its ACL entries — is dumped
   unchanged.
 - **Public-no-row vs. public-by-policy.** A room with no policy row
-  at all is the default public state; this command transitions it
-  directly to private (`DENY`, no entries) without needing
-  `--update`. A room with an explicit policy whose
+  at all is the default public (for read) state; this command
+  transitions it directly to private (`DENY`, no entries) without
+  needing `--update`. A room with an explicit policy whose
   `default_allow_deny=ALLOW` is a deliberately public-by-policy
   room — the command refuses to flip it without `--update`, so an
   operator who relied on the explicit ALLOW isn't silently overridden.
@@ -2584,7 +2595,8 @@ soliplex-cli room-authz add-acl-entry \
 
 ### `room-authz make-public`
 
-Ensure a room is public. Inverse of `make-private`: a room with no
+Ensure a room is public for read (WRITE and ADMIN remain granted only
+by entries scoped to them). Inverse of `make-private`: a room with no
 `RoomPolicy` row is already public-to-all-authenticated-users, so the
 command is a no-op in that case; a room with an existing policy whose
 `default_allow_deny=ALLOW` is also already public-by-policy, again a
@@ -2614,8 +2626,8 @@ soliplex-cli room-authz make-public [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
   up with [`clear-acl`](#room-authz-clear-acl) and rebuild.
 - **No row needed for "public."** Unlike `make-private`, this command
   does not create a `RoomPolicy` row in the no-row case — the room
-  is already in the default public state. As a result, the JSON
-  dump may be `null` after a successful run.
+  is already in the default public (for read) state. As a result,
+  the JSON dump may be `null` after a successful run.
 
 #### Exit Status
 
@@ -2653,6 +2665,7 @@ soliplex-cli room-authz clear-acl example/installation.yaml chat
 
 Add an `ACLEntry` to a room's `RoomPolicy`. The entry's allow/deny
 flag is selected with `--allow` or `--deny`; the entry's
+permission scope is selected with `--permission`; the entry's
 discriminator (what it matches against the caller's token) is
 selected with one of `--everyone`, `--authenticated`, `--json-path`,
 `--preferred-username`, or `--email`.
@@ -2695,6 +2708,16 @@ Exactly one of (the discriminator — what the entry matches on):
   `email` claim equals `TEXT`. Stored as the equivalent `--json-path`
   query `$[?$.email == "TEXT"]`.
 
+Plus (the permission scope):
+
+- `--permission read|write|admin` — scope the entry to that
+  permission. A `write`- or `admin`-scoped entry grants/denies that
+  permission for matched callers without affecting read
+  adjudication: reads always fall back to the policy's
+  `default_allow_deny`, while write and admin access fall back to
+  `DENY` — only an entry scoped to the same permission can grant
+  them (see [The Model in One Paragraph](#the-model-in-one-paragraph)).
+
 [rfc9535]: https://www.rfc-editor.org/rfc/rfc9535
 
 #### Behavior Notes
@@ -2702,16 +2725,18 @@ Exactly one of (the discriminator — what the entry matches on):
 - **Existing policy required.** If no `RoomPolicy` row exists for the
   room, the command prints an error and exits with status `1`. Run
   `make-private` (or `make-public`) first.
-- **Dedup is per-discriminator.** Adding an entry whose discriminator
-  matches an existing entry on the policy deletes the existing entry
-  before inserting the new one. Adding `--allow --email alice@x.y`
-  replaces any prior `email=alice@x.y` entry (whether previously
-  `ALLOW` or `DENY`). Entries keyed by other discriminators
-  (`--preferred-username alice`, `--email bob@x.y`, etc.) are left
-  alone.
-- **First-match-wins, in insertion order.** ACL entries are checked
-  in their creation order at request time; the first one whose
-  discriminator matches the caller wins (see
+- **Dedup is per-discriminator, per-permission.** Adding an entry
+  whose discriminator and permission match an existing entry on the
+  policy deletes the existing entry before inserting the new one.
+  Adding `--allow --email alice@x.y` replaces any prior `read`-scoped
+  `email=alice@x.y` entry (whether previously `ALLOW` or `DENY`);
+  adding `--allow --permission write --email alice@x.y` leaves any
+  prior `read`-scoped entry for the same email in place. Entries keyed
+  by other discriminators (`--preferred-username alice`,
+  `--email bob@x.y`, etc.) are left alone.
+- **First-match-wins, in insertion order.** For each permission, the
+  entries scoped to it are checked in their creation order at request
+  time; the first one whose discriminator matches the caller wins (see
   `ACLEntry.check_token`). This means a `--deny --email alice@x.y`
   added *after* a `--allow --everyone` will still keep Alice out,
   because the `email` entry matches her token before the catch-all
@@ -2725,6 +2750,8 @@ Exactly one of (the discriminator — what the entry matches on):
 - `1` when `--allow`/`--deny` are both passed or both omitted; when
   no (or more than one) discriminator option is supplied; when no
   `RoomPolicy` exists for the room; or when the RAM-DB guard fires.
+- `2` when `--permission` is omitted or names an unknown permission
+  (usage errors; the command is not run at all).
 
 #### Examples
 
@@ -2732,7 +2759,9 @@ Grant a single user access to a private room:
 
 ```bash
 soliplex-cli room-authz add-acl-entry \
-  --allow --email alice@example.com \
+  --allow \
+  --permission read \
+  --email alice@example.com \
   example/installation.yaml chat
 ```
 
@@ -2740,7 +2769,9 @@ Block a single user on a public-by-policy room:
 
 ```bash
 soliplex-cli room-authz add-acl-entry \
-  --deny --email mallory@example.com \
+  --deny \
+  --permission read \
+  --email mallory@example.com \
   example/installation.yaml chat
 ```
 
@@ -2750,7 +2781,9 @@ flipping `default_allow_deny`):
 
 ```bash
 soliplex-cli room-authz add-acl-entry \
-  --allow --authenticated \
+  --allow \
+  --permission read \
+  --authenticated \
   example/installation.yaml chat
 ```
 
@@ -2758,7 +2791,9 @@ Keyed by `preferred_username` instead of `email`:
 
 ```bash
 soliplex-cli room-authz add-acl-entry \
-  --allow --preferred-username alice \
+  --allow \
+  --permission read \
+  --preferred-username alice \
   example/installation.yaml chat
 ```
 
@@ -2768,10 +2803,24 @@ exceptions added beforehand (because earlier entries win):
 ```bash
 soliplex-cli room-authz make-public example/installation.yaml chat
 soliplex-cli room-authz add-acl-entry \
-  --allow --email alice@example.com \
+  --allow \
+  --permission read \
+  --email alice@example.com \
   example/installation.yaml chat
 soliplex-cli room-authz add-acl-entry \
-  --deny --everyone \
+  --deny \
+  --permission read \
+  --everyone \
+  example/installation.yaml chat
+```
+
+Grant a user write access (explicitly scoped, so who can read the room
+is unaffected, and the policy's `default_allow_deny` is not consulted
+for writes):
+
+```bash
+soliplex-cli room-authz add-acl-entry \
+  --allow --permission write --email alice@example.com \
   example/installation.yaml chat
 ```
 
@@ -2780,9 +2829,9 @@ soliplex-cli room-authz add-acl-entry \
 Delete a single `ACLEntry` from a room's `RoomPolicy`. The entry is
 identified by the same parameter shape as
 [`add-acl-entry`](#room-authz-add-acl-entry): the combination of
-`--allow`/`--deny` and one discriminator option (`--everyone`,
+`--allow`/`--deny`, one discriminator option (`--everyone`,
 `--authenticated`, `--json-path`, `--preferred-username`, or
-`--email`).
+`--email`), and a `--permission` scope.
 
 The room must already have a `RoomPolicy` row with at least one ACL
 entry matching the supplied parameters. If no match is found, the
@@ -2813,6 +2862,12 @@ Exactly one of (the discriminator):
 - `--email TEXT` — convenience alias matching the entry stored as the
   equivalent `--json-path` query `$[?$.email == "TEXT"]`.
 
+Plus (the permission scope):
+
+- `--permission read|write|admin` — match entries scoped to this
+  permission. The match on permission is exact: a `write`-scoped
+  entry is removed only by a delete carrying `--permission write`.
+
 Optional:
 
 - `--allow-invalid-json-path` — skip JSONPath compile-validation of
@@ -2825,10 +2880,11 @@ Optional:
 
 #### Behavior Notes
 
-- **Exact match on (allow/deny, discriminator).** An entry with the
-  same discriminator but the opposite allow/deny flag is *not* a
-  match. To swap an entry from `DENY` to `ALLOW` for the same
-  discriminator, just call
+- **Exact match on (allow/deny, permission, discriminator).** An
+  entry with the same discriminator but the opposite allow/deny flag —
+  or scoped to a different permission — is *not* a match. To swap an
+  entry from `DENY` to `ALLOW` for the same discriminator and
+  permission, just call
   [`add-acl-entry`](#room-authz-add-acl-entry) with the new flag —
   its per-discriminator dedup will replace the existing row.
 - **Policy preserved.** Only the matching ACL entries are removed;
@@ -2846,6 +2902,8 @@ Optional:
   no (or more than one) discriminator option is supplied; when no
   `RoomPolicy` exists for the room; when no entry matches the
   supplied parameters; or when the RAM-DB guard fires.
+- `2` when `--permission` is omitted or names an unknown permission
+  (usage errors; the command is not run at all).
 
 #### Examples
 
@@ -2853,7 +2911,9 @@ Revoke a single user's access:
 
 ```bash
 soliplex-cli room-authz delete-acl-entry \
-  --allow --email alice@example.com \
+  --allow \
+  --permission read \
+  --email alice@example.com \
   example/installation.yaml chat
 ```
 
@@ -2862,7 +2922,9 @@ policy's `default_allow_deny`:
 
 ```bash
 soliplex-cli room-authz delete-acl-entry \
-  --deny --email mallory@example.com \
+  --deny \
+  --permission read \
+  --email mallory@example.com \
   example/installation.yaml chat
 ```
 
@@ -2871,7 +2933,9 @@ to widen access while keeping the policy private:
 
 ```bash
 soliplex-cli room-authz delete-acl-entry \
-  --allow --authenticated \
+  --allow \
+  --permission read \
+  --authenticated \
   example/installation.yaml chat
 ```
 
@@ -2879,7 +2943,9 @@ Remove a stale ACL entry reported by `audit room-authz`:
 
 ```bash
 soliplex-cli room-authz delete-acl-entry \
-  --allow --json-path '$[?stale_filter_func($.email)]' \
+  --allow \
+  --permission read \
+  --json-path '$[?stale_filter_func($.email)]' \
   --allow-invalid-json-path \
   example/installation.yaml chat
 ```
