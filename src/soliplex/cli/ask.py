@@ -13,6 +13,7 @@ from ag_ui import core as agui_core
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+from soliplex import authz
 from soliplex import loggers
 from soliplex import models
 from soliplex.agui import persistence as agui_persistence
@@ -135,7 +136,7 @@ async def _run_ask(the_installation, room_id, prompt, claims) -> _AskResult:
         )
         # Record the access *before* the run begins, so an aborted or
         # crashed run still leaves a trace that the agent was invoked.
-        audit.room_access_allowed(room_id)
+        audit.room_access_allowed(room_id, permission=authz.Permission.READ)
 
         run_input = agui_core.RunAgentInput(
             thread_id=thread_id,

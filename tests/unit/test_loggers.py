@@ -4,6 +4,7 @@ from unittest import mock
 
 import pytest
 
+from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 
@@ -933,10 +934,11 @@ def test_roomaccessauditlog_ctor(w_claims):
     assert found.extra["claims"] == w_claims
 
 
-def test_room_access_allowed(audit_records):
+@pytest.mark.parametrize("w_perm", authz.Permission.__members__)
+def test_room_access_allowed(audit_records, w_perm):
     wrapper = loggers.RoomAccessAuditLog(claims=CLAIMS)
 
-    wrapper.room_access_allowed("r1")
+    wrapper.room_access_allowed("r1", permission=w_perm)
 
     _assert_audit_record(
         audit_records[-1],
@@ -947,14 +949,16 @@ def test_room_access_allowed(audit_records):
         fields={
             "claims": CLAIMS,
             "room_id": "r1",
+            "permission": w_perm,
         },
     )
 
 
-def test_room_access_denied(audit_records):
+@pytest.mark.parametrize("w_perm", authz.Permission.__members__)
+def test_room_access_denied(audit_records, w_perm):
     wrapper = loggers.RoomAccessAuditLog(claims=CLAIMS)
 
-    wrapper.room_access_denied("r1")
+    wrapper.room_access_denied("r1", permission=w_perm)
 
     _assert_audit_record(
         audit_records[-1],
@@ -965,6 +969,7 @@ def test_room_access_denied(audit_records):
         fields={
             "claims": CLAIMS,
             "room_id": "r1",
+            "permission": w_perm,
         },
     )
 

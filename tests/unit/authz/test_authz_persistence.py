@@ -515,18 +515,25 @@ async def test_room_authz_check_room_access_public(the_async_session):
     granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
 
     assert granted
-    rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_allowed.assert_called_once_with(
+        ROOM_ID,
+        permission=READ,
+    )
     rap._access_audit.room_access_denied.assert_not_called()
 
     # No policy: WRITE and ADMIN remain default-denied.
     assert not await rap.check_room_access(ROOM_ID, None, permission=WRITE)
-    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_denied.assert_called_once_with(
+        ROOM_ID,
+        permission=WRITE,
+    )
 
     rap._access_audit.room_access_denied.reset_mock()
-    assert not await rap.check_room_access(
-        ROOM_ID, None, permission=authz.Permission.ADMIN
+    assert not await rap.check_room_access(ROOM_ID, None, permission=ADMIN)
+    rap._access_audit.room_access_denied.assert_called_once_with(
+        ROOM_ID,
+        permission=ADMIN,
     )
-    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
 
     # The room-policy CRUD audit log is not touched by an access check.
     assert rap._audit.method_calls == []
@@ -541,7 +548,10 @@ async def test_room_authz_check_room_access_denied(the_async_session):
     granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
 
     assert not granted
-    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_denied.assert_called_once_with(
+        ROOM_ID,
+        permission=READ,
+    )
     rap._access_audit.room_access_allowed.assert_not_called()
     assert rap._audit.method_calls == []
 
@@ -562,7 +572,10 @@ async def test_room_authz_check_room_access_allowed(the_async_session):
     granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
 
     assert granted
-    rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_allowed.assert_called_once_with(
+        ROOM_ID,
+        permission=READ,
+    )
     rap._access_audit.room_access_denied.assert_not_called()
     assert rap._audit.method_calls == []
 
@@ -578,12 +591,7 @@ async def test_room_authz_filter_room_ids(the_async_session):
         await rap.filter_room_ids(room_ids, None, permission=READ) == room_ids
     )
     assert await rap.filter_room_ids(room_ids, None, permission=WRITE) == []
-    assert (
-        await rap.filter_room_ids(
-            room_ids, None, permission=authz.Permission.ADMIN
-        )
-        == []
-    )
+    assert await rap.filter_room_ids(room_ids, None, permission=ADMIN) == []
 
     # Policy w/ deny as default, no ACL entries
     denier = authz_schema.RoomPolicy(room_id=ROOM_ID)
@@ -629,14 +637,20 @@ async def test_room_authz_check_room_access_w_permission(the_async_session):
     granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
 
     assert granted
-    rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_allowed.assert_called_once_with(
+        ROOM_ID,
+        permission=READ,
+    )
 
     rap._access_audit.room_access_allowed.reset_mock()
 
     denied = await rap.check_room_access(ROOM_ID, None, permission=WRITE)
 
     assert not denied
-    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_denied.assert_called_once_with(
+        ROOM_ID,
+        permission=WRITE,
+    )
     rap._access_audit.room_access_allowed.assert_not_called()
     # The room-policy CRUD audit log is not touched by an access check.
     assert rap._audit.method_calls == []
@@ -664,7 +678,10 @@ async def test_room_authz_check_room_access_w_write_grant(
     granted = await rap.check_room_access(ROOM_ID, None, permission=READ)
 
     assert not granted
-    rap._access_audit.room_access_denied.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_denied.assert_called_once_with(
+        ROOM_ID,
+        permission=READ,
+    )
 
     rap._access_audit.room_access_denied.reset_mock()
 
@@ -673,7 +690,10 @@ async def test_room_authz_check_room_access_w_write_grant(
     )
 
     assert allowed
-    rap._access_audit.room_access_allowed.assert_called_once_with(ROOM_ID)
+    rap._access_audit.room_access_allowed.assert_called_once_with(
+        ROOM_ID,
+        permission=WRITE,
+    )
     rap._access_audit.room_access_denied.assert_not_called()
     assert rap._audit.method_calls == []
 
@@ -701,9 +721,7 @@ async def test_room_authz_check_room_access_write_default_denied(
 
     assert await rap.check_room_access(ROOM_ID, None, permission=READ)
     assert not await rap.check_room_access(ROOM_ID, None, permission=WRITE)
-    assert not await rap.check_room_access(
-        ROOM_ID, None, permission=authz.Permission.ADMIN
-    )
+    assert not await rap.check_room_access(ROOM_ID, None, permission=ADMIN)
 
 
 @pytest.mark.asyncio

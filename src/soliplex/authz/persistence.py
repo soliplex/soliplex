@@ -279,9 +279,15 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
                 result = permission is authz.Permission.READ
 
         if result:
-            self._access_audit.room_access_allowed(room_id)
+            self._access_audit.room_access_allowed(
+                room_id,
+                permission=permission,
+            )
         else:
-            self._access_audit.room_access_denied(room_id)
+            self._access_audit.room_access_denied(
+                room_id,
+                permission=permission,
+            )
 
         return result
 
