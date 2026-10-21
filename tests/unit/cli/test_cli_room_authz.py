@@ -1091,6 +1091,8 @@ def test_add_acl_entry_requires_existing_policy(
         "add-acl-entry",
         "chat",
         "--allow",
+        "--permission",
+        "read",
         "--everyone",
     )
 
@@ -1121,6 +1123,8 @@ def test_add_acl_entry_replaces_matching_discriminators(
         "add-acl-entry",
         "chat",
         "--deny",
+        "--permission",
+        "read",
         "--everyone",
     )
     assert res.exit_code == 0
@@ -1132,6 +1136,8 @@ def test_add_acl_entry_replaces_matching_discriminators(
         "add-acl-entry",
         "chat",
         "--allow",
+        "--permission",
+        "read",
         "--authenticated",
     )
     assert res.exit_code == 0
@@ -1143,6 +1149,8 @@ def test_add_acl_entry_replaces_matching_discriminators(
         "add-acl-entry",
         "chat",
         "--allow",
+        "--permission",
+        "read",
         "--email",
         ALICE_EMAIL,
     )
@@ -1170,6 +1178,8 @@ def test_delete_acl_entry_requires_existing_policy(
         "delete-acl-entry",
         "chat",
         "--allow",
+        "--permission",
+        "read",
         "--everyone",
     )
 
@@ -1191,6 +1201,8 @@ def test_delete_acl_entry_no_match_errors(scratch_installation, cli_runner):
         "delete-acl-entry",
         "chat",
         "--allow",
+        "--permission",
+        "read",
         "--everyone",
     )
 
@@ -1226,6 +1238,8 @@ def test_delete_acl_entry_removes_matching(scratch_installation, cli_runner):
             "delete-acl-entry",
             "chat",
             "--allow",
+            "--permission",
+            "read",
             *discriminator,
         )
         assert res.exit_code == 0
@@ -1250,6 +1264,8 @@ def test_delete_acl_entry_invalid_json_path_requires_flag(
         "delete-acl-entry",
         "chat",
         "--deny",
+        "--permission",
+        "read",
         "--json-path",
         STALE_JP,
     )
@@ -1265,6 +1281,8 @@ def test_delete_acl_entry_invalid_json_path_requires_flag(
         "delete-acl-entry",
         "chat",
         "--deny",
+        "--permission",
+        "read",
         "--json-path",
         STALE_JP,
         "--allow-invalid-json-path",

@@ -25,9 +25,9 @@ app = typer.Typer(
 
 
 PermissionOption: authz.Permission = typer.Option(
-    authz.Permission.READ,
+    ...,
     "--permission",
-    help="Permission",
+    help="Permission scope",
 )
 
 
@@ -106,19 +106,19 @@ def _human_dump_room_policy(room_id, policy):  # pragma NO COVER UI ONLY
     if policy is None:
         the_console.print(
             "No policy row exists. Room is in default public "
-            "state (all authenticated users allowed).",
+            "read-only state (all authenticated users allowed READ).",
         )
         return
 
     if policy.default_allow_deny == authz.AllowDeny.DENY:
         the_console.print(
-            "Default: DENY (private -- denies callers that don't "
-            "match an ALLOW entry).",
+            "Default: DENY READ (private -- denies callers that don't "
+            "match an ALLOW READ entry).",
         )
     else:
         the_console.print(
-            "Default: ALLOW (public-by-policy -- admits callers "
-            "that don't match a DENY entry).",
+            "Default: ALLOW READ (public-by-policy -- admits callers "
+            "that don't match a DENY READ entry).",
         )
 
     if not policy.acl_entries:
@@ -128,8 +128,9 @@ def _human_dump_room_policy(room_id, policy):  # pragma NO COVER UI ONLY
     the_console.print(f"ACL entries ({len(policy.acl_entries)}):")
     for index, entry in enumerate(policy.acl_entries, 1):
         flag = entry.allow_deny.name
+        perm = entry.permission.name
         discriminator = _describe_discriminator(entry)
-        the_console.print(f"  {index}. {flag:<5}  {discriminator}")
+        the_console.print(f"  {index}. {flag:<5} {perm:<5}  {discriminator}")
 
 
 def _dump_room_policy(policy):  # pragma NO COVER UI ONLY
