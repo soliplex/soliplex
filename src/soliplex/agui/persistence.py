@@ -131,79 +131,88 @@ class ThreadStorage(agui.ThreadStorage):
         user_name: str,
         room_ids: list[str],
         limit: int,
-        offset: int,
-    ) -> tuple[list[agui_schema.Thread], int]:
+        after: agui.ThreadPagePosition | None = None,
+    ) -> tuple[
+        list[tuple[agui_schema.Thread, datetime.datetime]],
+        agui.ThreadPagePosition | None,
+    ]:
         room_ids = list(room_ids)
 
         if not room_ids:
             # No accessible rooms: short-circuit rather than emitting an
             # 'IN ()', which SQLAlchemy warns about and which reads as
             # "unfiltered" to anyone skimming the SQL.
-            return [], 0
+            return [], None
 
         async with self.session as session:
-            base = (
-                sqla_sql.select(agui_schema.Thread)
-                .where(agui_schema.Thread.user_name == user_name)
-                .where(agui_schema.Thread.room_id.in_(room_ids))
-            )
-
-            total = await session.scalar(
-                sqla_sql.select(sqla_sql.func.count()).select_from(
-                    base.subquery()
-                )
-            )
-
-            # Rooms sort by their latest activity, so the ordering has to
-            # come from an aggregate over runs. Doing it as a grouped
-            # subquery -- rather than joining runs directly -- keeps one
-            # row per thread: a direct join would multiply each thread by
-            # its run count and corrupt LIMIT/OFFSET.
-            room_activity = (
+            # One row per thread: a grouped subquery rather than joining
+            # runs directly, which would multiply each thread by its run
+            # count and corrupt LIMIT.
+            thread_activity = (
                 sqla_sql.select(
-                    agui_schema.Thread.room_id.label("room_id"),
+                    agui_schema.Run.thread_id_.label("thread_id_"),
                     _LAST_ACTIVITY.label("last_activity"),
                 )
                 .join(agui_schema.Run.thread)
                 .where(agui_schema.Thread.user_name == user_name)
-                .group_by(agui_schema.Thread.room_id)
+                .group_by(agui_schema.Run.thread_id_)
                 .subquery()
             )
 
-            # LEFT OUTER on both: a room whose threads have no runs yet
-            # still has to appear, and so does a thread with no metadata
-            # row (one exists only once a name has been set).
-            query = (
-                base.outerjoin(
-                    room_activity,
-                    room_activity.c.room_id == agui_schema.Thread.room_id,
-                )
-                .outerjoin(agui_schema.Thread.thread_metadata)
-                .order_by(
-                    # Rooms with no activity sort last: 'NULLS LAST' is
-                    # not portable to SQLite, so order on the computed
-                    # is-null flag first.
-                    room_activity.c.last_activity.is_(None),
-                    room_activity.c.last_activity.desc(),
-                    # Tie-break on room_id so that rooms sharing an
-                    # activity timestamp still come out contiguous.
-                    agui_schema.Thread.room_id,
-                    sqla_sql.func.lower(
-                        sqla_sql.func.coalesce(
-                            agui_schema.ThreadMetadata.name, ""
-                        )
-                    ),
-                    # Final tie-break: two same-named threads in a room
-                    # must still page deterministically.
-                    agui_schema.Thread.id_,
-                )
-                .limit(limit)
-                .offset(offset)
+            # A thread with no runs yet is as recent as its creation.
+            activity = sqla_sql.func.coalesce(
+                thread_activity.c.last_activity,
+                agui_schema.Thread.created,
             )
 
-            threads = list(await session.scalars(query))
+            query = (
+                sqla_sql.select(agui_schema.Thread, activity)
+                .outerjoin(
+                    thread_activity,
+                    thread_activity.c.thread_id_ == agui_schema.Thread.id_,
+                )
+                .where(agui_schema.Thread.user_name == user_name)
+                .where(agui_schema.Thread.room_id.in_(room_ids))
+            )
 
-        return threads, total
+            if after is not None:
+                # Strictly past the previous page's last thread in the
+                # same order the page is sorted in; spelled out rather
+                # than as a row-value comparison, which not every
+                # backend supports.
+                query = query.where(
+                    sqla_sql.or_(
+                        activity < after.last_activity,
+                        sqla_sql.and_(
+                            activity == after.last_activity,
+                            agui_schema.Thread.thread_id < after.thread_id,
+                        ),
+                    )
+                )
+
+            # One row past the page says whether another page follows,
+            # without a separate count.
+            query = query.order_by(
+                activity.desc(),
+                agui_schema.Thread.thread_id.desc(),
+            ).limit(limit + 1)
+
+            rows = [
+                (a_thread, _as_utc(last_activity))
+                for a_thread, last_activity in (
+                    await session.execute(query)
+                ).all()
+            ]
+
+        if len(rows) <= limit:
+            return rows, None
+
+        rows = rows[:limit]
+        last_thread, last_activity = rows[-1]
+        return rows, agui.ThreadPagePosition(
+            last_activity=last_activity,
+            thread_id=last_thread.thread_id,
+        )
 
     async def get_thread(
         self,

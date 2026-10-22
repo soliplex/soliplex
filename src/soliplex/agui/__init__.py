@@ -261,6 +261,20 @@ class Thread(abc.ABC):
         """Return runs for this thread"""
 
 
+class ThreadPagePosition(typing.NamedTuple):
+    """Where one page of a cross-room thread listing ended.
+
+    The listing's own sort key, so the next page resumes strictly after
+    it no matter what was created, deleted or reordered in between.
+    """
+
+    last_activity: datetime.datetime
+    """The last thread's activity time"""
+
+    thread_id: str
+    """The last thread's ID, ordering threads sharing that time"""
+
+
 class ThreadStorage(abc.ABC):
     @abc.abstractmethod
     async def list_user_threads(
@@ -282,8 +296,11 @@ class ThreadStorage(abc.ABC):
         user_name: str,
         room_ids: list[str],
         limit: int,
-        offset: int,
-    ) -> tuple[list[Thread], int]:
+        after: ThreadPagePosition | None = None,
+    ) -> tuple[
+        list[tuple[Thread, datetime.datetime]],
+        ThreadPagePosition | None,
+    ]:
         """Return one page of the user's threads across several rooms.
 
         Unlike 'list_user_threads', which is scoped to a single room,
@@ -292,14 +309,17 @@ class ThreadStorage(abc.ABC):
         An empty 'room_ids' therefore yields an empty page rather than
         every room's threads.
 
-        Threads are ordered so that each room's threads are contiguous:
-        rooms by their latest run activity (most recent first, rooms with
-        no activity last), then -- within a room -- by thread name,
-        case-insensitively. Contiguity is what lets a client emit a
-        section divider whenever the room changes.
+        Threads are ordered by their own last activity, most recent
+        first: the latest of each run's finish (or, while unfinished, its
+        start), falling back to the thread's creation for a thread with
+        no runs. Each thread comes back paired with that time.
 
-        Returns the page and the total number of threads matching, so a
-        caller can tell whether more pages remain.
+        Paging is by position rather than by offset: 'after' is the
+        position of the last thread on the previous page, and the second
+        element returned is the position to pass for the next page, or
+        'None' when this page is the last. A thread created, deleted or
+        moved to the top by new activity between two requests therefore
+        never shifts the rest of the listing under the reader.
         """
 
     @abc.abstractmethod
