@@ -2650,6 +2650,7 @@ def test_installationconfig_from_yaml_reraises_nested_from_yaml_exception(
 
 AS_YAML_ONLY_AGENT_CONFIG_ID = "test-agent"
 AS_YAML_ONLY_TITLE_AGENT_CONFIG_ID = "title"
+AS_YAML_ONLY_LABEL_AGENT_CONFIG_ID = "label"
 AS_YAML_ONLY_OIDC_PATH = "./oidc-test"
 AS_YAML_ONLY_ROOM_PATHS = ["/path/to/rooms", "./other/rooms"]
 AS_YAML_ONLY_COMPLETION_PATH = "/path/to/completions"
@@ -2834,6 +2835,13 @@ def _as_yaml_only_w_title_agent_config_id(config_path):
     )
 
 
+def _as_yaml_only_w_label_agent_config_id(config_path):
+    return (
+        {"label_agent_config_id": AS_YAML_ONLY_LABEL_AGENT_CONFIG_ID},
+        {"label_agent_config_id": AS_YAML_ONLY_LABEL_AGENT_CONFIG_ID},
+    )
+
+
 def _as_yaml_only_w_logfire_config(config_path):
     logfire_config = config_logfire.LogfireConfig(
         **test_logfire.W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
@@ -2942,6 +2950,7 @@ AS_YAML_ONLY_STANZA_CASES = (
     _as_yaml_only_w_upload_paths,
     _as_yaml_only_w_sandbox_config,
     _as_yaml_only_w_title_agent_config_id,
+    _as_yaml_only_w_label_agent_config_id,
     _as_yaml_only_w_logfire_config,
     _as_yaml_only_w_app_router_operations,
     _as_yaml_only_w_tp_db,
@@ -3029,6 +3038,7 @@ INSTALLATION_STATE_ATTRS = (
     "rooms_upload_path",
     "threads_upload_path",
     "title_agent_config_id",
+    "label_agent_config_id",
     "app_router_operations",
     "agent_configs",
     "secrets",

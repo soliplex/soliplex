@@ -384,6 +384,11 @@ agent_configs:
 
 title_agent_config_id: "title"
 
+# Attach labels from the catalogue to a thread after its first run. The
+# agent may only choose existing labels, so this does nothing until an
+# administrator has created some.
+label_agent_config_id: "title"
+
 #==========================================================================
 # Upload directory configuraition
 #==========================================================================
