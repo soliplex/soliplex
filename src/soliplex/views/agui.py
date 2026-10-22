@@ -252,7 +252,6 @@ async def get_room_agui_thread_id(
 
     for a_run in await thread.list_runs():
         await a_run.awaitable_attrs.thread
-        await a_run.awaitable_attrs.parent  # for 'parent_run_id'
         usage = await a_run.awaitable_attrs.run_usage
         a_thread_runs[a_run.run_id] = models.AGUI_Run.from_run(
             a_run=a_run,
@@ -311,7 +310,6 @@ async def get_room_agui_thread_id_run_id(
         ) from None
 
     await run.awaitable_attrs.thread
-    await run.awaitable_attrs.parent  # for 'parent_run_id'
     usage = await run.awaitable_attrs.run_usage
 
     return models.AGUI_Run.from_run(

@@ -291,7 +291,7 @@ async def test_threadstorage_thread_crud(the_async_session, unit_of_work):
 
 
 @pytest.mark.asyncio
-async def test_threadstorage_thread_run_cru(the_async_session, unit_of_work):
+async def test_threadstorage_thread_run_crud(the_async_session, unit_of_work):
     ts = agui_persistence.ThreadStorage(the_async_session)
 
     thread = await ts.new_thread(
@@ -438,7 +438,7 @@ async def test_threadstorage_thread_run_cru(the_async_session, unit_of_work):
         run_metadata=agui_schema.RunMetadata(label="spare"),
         parent_run_id=parent_id,
     )
-    await spare.awaitable_attrs.run_id
+    spare_run_id = await spare.awaitable_attrs.run_id
 
     rmd = await spare.awaitable_attrs.run_metadata
     assert rmd.label == "spare"
@@ -492,6 +492,32 @@ async def test_threadstorage_thread_run_cru(the_async_session, unit_of_work):
     assert after_usage.output_tokens == 2
     assert after_usage.requests == 3
     assert after_usage.tool_calls == 4
+
+    # Each request gets a fresh session, so nothing is loaded yet.
+    the_async_session.expunge_all()
+
+    spare_again = await ts.get_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=spare_run_id,
+    )
+    # No 'awaitable_attrs' needed: 'get_run' does it for us
+    assert spare_again.parent_run_id == parent_id
+
+    # Check that runs retrieved via 'Thread.list_runs' already find
+    # 'parent_run_id' without an extra 'awaitable_attrs'.
+    the_async_session.expunge_all()
+
+    run_lister = await ts.get_thread(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    runs_by_id = {run.run_id: run for run in await run_lister.list_runs()}
+    assert runs_by_id[spare_run_id].parent_run_id == parent_id
+    assert runs_by_id[spare_run_id].parent is runs_by_id[parent_id]
 
 
 @pytest.mark.asyncio

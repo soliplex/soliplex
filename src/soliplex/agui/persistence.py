@@ -341,6 +341,7 @@ class ThreadStorage(agui.ThreadStorage):
             await run.awaitable_attrs.events
             await run.awaitable_attrs.run_agent_input
             await run.awaitable_attrs.run_metadata
+            await run.awaitable_attrs.parent
 
         return run
 
