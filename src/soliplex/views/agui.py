@@ -435,7 +435,10 @@ async def post_room_agui_thread_id(
         the_logger=the_logger,
     )
 
+    # Persistence compares run IDs as strings.
     parent_run_id = new_run_request.parent_run_id
+    if parent_run_id is not None:
+        parent_run_id = str(parent_run_id)
 
     if new_run_request.metadata is not None:
         r_metadata = new_run_request.metadata.model_dump()

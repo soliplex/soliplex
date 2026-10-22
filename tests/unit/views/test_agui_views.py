@@ -773,6 +773,11 @@ async def test_get_room_agui_thread_id_run_id(
 
         assert found.events == w_events
 
+        if w_parent:
+            assert found.parent_run_id == TEST_PARENT_RUN_ID_UUID
+        else:
+            assert found.parent_run_id is None
+
         if w_run_meta:
             assert found.metadata.label == TEST_RUN_LABEL
         else:
@@ -1020,7 +1025,8 @@ async def test_post_room_agui_thread_id_only(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_STR,
             run_metadata=run_meta_kw,
-            parent_run_id=w_parent_id,
+            # Persistence compares run IDs as strings.
+            parent_run_id=str(w_parent_id) if w_parent_id else None,
         )
 
     cuir.assert_called_once_with(
