@@ -289,7 +289,11 @@ class RoomConfig:
 
     @property
     def has_thread_uploads(self) -> bool:
-        """Can files be uploaded to threads in this room at all?"""
+        """Can files be uploaded to threads in this room?
+
+        Thread uploads do not require extra permissions, but they are
+        allowed only in rooms which configure the sandbox skill.
+        """
         upload_path = getattr(
             self._installation_config,
             "threads_upload_path",
@@ -299,13 +303,18 @@ class RoomConfig:
 
     @property
     def has_room_uploads(self) -> bool:
-        """Can files be uploaded to this room at all?"""
+        """Can files be uploaded to this room?
+
+        Room uploads require only that the installation's uploads tree
+        is configured: upload is permitted by the room authorization
+        policy's 'ALLOW WRITE' ACL entries.
+        """
         upload_path = getattr(
             self._installation_config,
             "rooms_upload_path",
             None,
         )
-        return self.has_sandbox and upload_path is not None
+        return upload_path is not None
 
     @property
     def agui_feature_names(self) -> tuple[str]:

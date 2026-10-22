@@ -236,12 +236,11 @@ def test_get_the_room_upload_audit_log(rual_klass):
     ],
 )
 @pytest.mark.parametrize(
-    "w_admin_access, w_allow_write, w_sandbox, w_upload_path, expectation",
+    "w_admin_access, w_allow_write, w_upload_path, expectation",
     [
         pytest.param(
             False,
             False,
-            True,
             True,
             raises_httpexc(
                 code=403,
@@ -249,23 +248,10 @@ def test_get_the_room_upload_audit_log(rual_klass):
             ),
             id="noperm",
         ),
-        pytest.param(True, False, True, True, no_error(204), id="admin_ok"),
-        pytest.param(False, True, True, True, no_error(204), id="write_ok"),
+        pytest.param(True, False, True, no_error(204), id="admin_ok"),
+        pytest.param(False, True, True, no_error(204), id="write_ok"),
         pytest.param(
             False,
-            True,
-            False,
-            True,
-            raises_httpexc(
-                code=405,
-                match="Sandbox not configured",
-                headers={"Allow": "GET"},
-            ),
-            id="no_sandbox",
-        ),
-        pytest.param(
-            False,
-            True,
             True,
             False,
             raises_httpexc(
@@ -281,16 +267,12 @@ async def test_post_uploads_room(
     uploads_path,
     w_admin_access,
     w_allow_write,
-    w_sandbox,
     w_upload_path,
     expectation,
     w_filename,
     exp_filename,
 ):
-    room_config = mock.create_autospec(
-        config_rooms.RoomConfig,
-        has_sandbox=w_sandbox,
-    )
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),
         filename=w_filename,

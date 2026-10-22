@@ -218,13 +218,6 @@ async def post_uploads_room(
             detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
-    if not _room_config.has_sandbox:
-        raise fastapi.HTTPException(
-            status_code=405,
-            detail="Sandbox not configured",
-            headers={"Allow": "GET"},
-        )
-
     uploads_path = the_installation.rooms_upload_path
 
     if uploads_path is None:
