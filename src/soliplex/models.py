@@ -894,15 +894,12 @@ class AGUI_Threads(pydantic.BaseModel):
 class AGUI_ThreadPage(pydantic.BaseModel):
     """One page of the user's threads, spanning every room they may see.
 
-    'total' counts every thread the user has across those rooms, not
-    just the ones on this page, so a client can tell whether to keep
-    paging without probing for a short page.
+    'next_cursor' is an opaque token to pass back as 'cursor' for the
+    following page; it is absent on the last page.
     """
 
     threads: list[AGUI_Thread]
-    total: int = KW_ONLY
-    limit: int = KW_ONLY
-    offset: int = KW_ONLY
+    next_cursor: str | None = None
 
 
 # ----------------------------------------------------------------------------

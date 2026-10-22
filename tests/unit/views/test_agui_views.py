@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import contextlib
 import datetime
 import functools
@@ -2498,8 +2499,14 @@ async def test_get_room_agui_thread_id_run_id_usage(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_more", [False, True])
 @pytest.mark.parametrize("w_thread_meta", [False, True])
-async def test_get_agui_threads(the_threads, test_thread, w_thread_meta):
+async def test_get_agui_threads(
+    the_threads,
+    test_thread,
+    w_thread_meta,
+    w_more,
+):
     the_installation = mock.create_autospec(installation.Installation)
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -2520,14 +2527,18 @@ async def test_get_agui_threads(the_threads, test_thread, w_thread_meta):
             None,
         )
 
-    the_threads.list_user_threads_page.return_value = ([test_thread], 1)
-    the_threads.get_threads_last_activity.return_value = {
-        TEST_THREAD_ID_STR: NOW,
-    }
+    position = agui.ThreadPagePosition(
+        last_activity=NOW,
+        thread_id=TEST_THREAD_ID_STR,
+    )
+    the_threads.list_user_threads_page.return_value = (
+        [(test_thread, NOW)],
+        position if w_more else None,
+    )
 
     found = await agui_views.get_agui_threads(
         limit=25,
-        offset=0,
+        cursor=None,
         the_installation=the_installation,
         the_threads=the_threads,
         the_room_authz=the_room_authz,
@@ -2547,20 +2558,83 @@ async def test_get_agui_threads(the_threads, test_thread, w_thread_meta):
     else:
         assert m_thread.metadata is None
 
-    # The page echoes its own bounds so a client can page without
-    # tracking what it asked for.
-    assert found.total == 1
-    assert found.limit == 25
-    assert found.offset == 0
+    if w_more:
+        # The token round-trips to the position the storage reported.
+        assert agui_views._decode_threads_cursor(found.next_cursor) == (
+            position
+        )
+    else:
+        assert found.next_cursor is None
 
     the_threads.list_user_threads_page.assert_called_once_with(
         user_name=USER_NAME,
         room_ids=[TEST_ROOM_ID],
         limit=25,
-        offset=0,
+        after=None,
     )
 
     the_logger.debug.assert_called_once_with(loggers.AGUI_GET_THREADS)
+
+
+@pytest.mark.anyio
+async def test_get_agui_threads_resumes_after_cursor(the_threads):
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    the_installation.get_room_configs.return_value = {
+        TEST_ROOM_ID: mock.create_autospec(config_rooms.RoomConfig),
+    }
+    the_threads.list_user_threads_page.return_value = ([], None)
+    position = agui.ThreadPagePosition(
+        last_activity=NOW,
+        thread_id=TEST_THREAD_ID_STR,
+    )
+
+    await agui_views.get_agui_threads(
+        limit=50,
+        cursor=agui_views._encode_threads_cursor(position),
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=the_room_authz,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    _args, kwargs = the_threads.list_user_threads_page.call_args
+    assert kwargs["after"] == position
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "not base64!",
+        base64.urlsafe_b64encode(b"not json").decode(),
+        base64.urlsafe_b64encode(b"[1]").decode(),
+        base64.urlsafe_b64encode(b'[1, "thread"]').decode(),
+        base64.urlsafe_b64encode(b'["yesterday", "thread"]').decode(),
+    ],
+    ids=["base64", "json", "shape", "type", "timestamp"],
+)
+async def test_get_agui_threads_rejects_a_foreign_cursor(the_threads, cursor):
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await agui_views.get_agui_threads(
+            limit=50,
+            cursor=cursor,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    assert exc.value.status_code == 400
+    the_threads.list_user_threads_page.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -2572,17 +2646,20 @@ async def test_get_agui_threads_restricts_to_authorized_rooms(the_threads):
     the_installation.get_room_configs.return_value = {
         TEST_ROOM_ID: mock.create_autospec(config_rooms.RoomConfig),
     }
-    the_threads.list_user_threads_page.return_value = ([], 0)
+    the_threads.list_user_threads_page.return_value = ([], None)
 
-    await agui_views.get_agui_threads(
+    found = await agui_views.get_agui_threads(
         limit=50,
-        offset=0,
+        cursor=None,
         the_installation=the_installation,
         the_threads=the_threads,
         the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
+
+    assert found.threads == []
+    assert found.next_cursor is None
 
     # The room set must come from the authz-filtering helper, and only
     # those rooms may reach the query -- this is the boundary that stops
@@ -2594,81 +2671,3 @@ async def test_get_agui_threads_restricts_to_authorized_rooms(the_threads):
     )
     _args, kwargs = the_threads.list_user_threads_page.call_args
     assert kwargs["room_ids"] == [TEST_ROOM_ID]
-
-
-@pytest.mark.anyio
-async def test_get_agui_threads_with_no_visible_rooms(the_threads):
-    the_installation = mock.create_autospec(installation.Installation)
-    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
-    the_logger = mock.create_autospec(loggers.LogWrapper)
-
-    the_installation.get_room_configs.return_value = {}
-    the_threads.list_user_threads_page.return_value = ([], 0)
-
-    found = await agui_views.get_agui_threads(
-        limit=50,
-        offset=0,
-        the_installation=the_installation,
-        the_threads=the_threads,
-        the_room_authz=the_room_authz,
-        the_user_claims=THE_USER_CLAIMS,
-        the_logger=the_logger,
-    )
-
-    assert found.threads == []
-    assert found.total == 0
-
-    # No rooms on the page means no activity lookups at all.
-    the_threads.get_threads_last_activity.assert_not_called()
-
-
-@pytest.mark.anyio
-async def test_get_agui_threads_groups_activity_lookups_by_room(
-    the_threads,
-):
-    the_installation = mock.create_autospec(installation.Installation)
-    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
-    the_logger = mock.create_autospec(loggers.LogWrapper)
-
-    the_installation.get_room_configs.return_value = {
-        TEST_ROOM_ID: mock.create_autospec(config_rooms.RoomConfig),
-    }
-
-    def _thread(thread_id):
-        a_thread = mock.create_autospec(
-            agui.Thread,
-            room_id=TEST_ROOM_ID,
-            thread_id=thread_id,
-            thread_metadata=None,
-            created=NOW,
-            awaitable_attrs=mock.AsyncMock(),
-            instance=True,
-        )
-        a_thread.awaitable_attrs.thread_metadata = _awaitable(
-            "thread_metadata",
-            None,
-        )
-        return a_thread
-
-    threads = [_thread(TEST_THREAD_ID_STR), _thread(str(uuid.uuid4()))]
-    the_threads.list_user_threads_page.return_value = (threads, 2)
-    the_threads.get_threads_last_activity.return_value = {}
-
-    found = await agui_views.get_agui_threads(
-        limit=50,
-        offset=0,
-        the_installation=the_installation,
-        the_threads=the_threads,
-        the_room_authz=the_room_authz,
-        the_user_claims=THE_USER_CLAIMS,
-        the_logger=the_logger,
-    )
-
-    assert len(found.threads) == 2
-
-    # Two threads sharing a room cost one activity query, not two: the
-    # lookup is per room on the page, not per thread.
-    the_threads.get_threads_last_activity.assert_called_once_with(
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-    )
