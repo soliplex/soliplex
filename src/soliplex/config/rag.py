@@ -84,7 +84,8 @@ class RagDbFileNotFound(ValueError):
         self._config_path = _config_path
         super().__init__(
             f"RAG DB file not found: {rag_db_filename} "
-            f"(configured in {_config_path})"
+            f"(configured in {_config_path}). "
+            "Run 'haiku-rag init' to create."
         )
 
 
