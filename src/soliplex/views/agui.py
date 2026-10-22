@@ -19,6 +19,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
+from soliplex import auto_labels
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -818,6 +819,7 @@ async def drive_llm_stream(
     run_id: str,
     title_agent_config: config_agents.AgentConfig | None = None,
     messages: list[agui_core.Message] | None = None,
+    label_agent_config: config_agents.AgentConfig | None = None,
 ):
     """Primary consumer of LLM event stream
 
@@ -898,9 +900,10 @@ async def drive_llm_stream(
             else:
                 logfire.info("Stream status: {status}", status=status)
 
-            if status == "FINISHED" and title_agent_config is not None:
-                await titles.maybe_generate_title(
+            if status == "FINISHED":
+                await _after_finished_run(
                     title_agent_config=title_agent_config,
+                    label_agent_config=label_agent_config,
                     threads_engine=sqla_engine,
                     room_id=room_id,
                     thread_id=thread_id,
@@ -908,6 +911,39 @@ async def drive_llm_stream(
                     messages=messages,
                     event_list=event_list,
                 )
+
+
+async def _after_finished_run(
+    *,
+    title_agent_config: config_agents.AgentConfig | None,
+    label_agent_config: config_agents.AgentConfig | None,
+    **run_kwargs,
+):
+    """Name and label the thread, side by side.
+
+    Both run after the stream's sentinel, so neither delays the reply;
+    gathering them only finishes the thread sooner. Each helper logs and
+    swallows its own failure, so one cannot cancel the other.
+    """
+    pending = []
+
+    if title_agent_config is not None:
+        pending.append(
+            titles.maybe_generate_title(
+                title_agent_config=title_agent_config,
+                **run_kwargs,
+            )
+        )
+
+    if label_agent_config is not None:
+        pending.append(
+            auto_labels.maybe_apply_labels(
+                label_agent_config=label_agent_config,
+                **run_kwargs,
+            )
+        )
+
+    await asyncio.gather(*pending)
 
 
 async def stream_llm_events(event_queue: asyncio.Queue):
@@ -1097,6 +1133,7 @@ async def post_room_agui_thread_id_run_id(
     # Drive the LLM stream in a background task, in order to save
     # the thread persistence and usage at the end.
     title_agent_config = the_installation.get_title_agent_config()
+    label_agent_config = the_installation.get_label_agent_config()
 
     bg_tasks = request.app.state.agui_background_tasks
     task = asyncio.create_task(
@@ -1122,6 +1159,7 @@ async def post_room_agui_thread_id_run_id(
             run_id=run_id,
             title_agent_config=title_agent_config,
             messages=agui_adapter.run_input.messages,
+            label_agent_config=label_agent_config,
         )
     )
     bg_tasks.add(task)
