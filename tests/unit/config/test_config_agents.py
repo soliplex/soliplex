@@ -2069,6 +2069,30 @@ def test_agentconfig_from_yaml_deprecates_thinking_in_model_settings(
     assert agent_config.model_settings["thinking"] == "low"
 
 
+def test_agentconfig_from_yaml_thinking_default_wins_over_model_settings(
+    installation_config,
+    temp_dir,
+):
+    with pytest.warns(DeprecationWarning, match="this setting is ignored"):
+        agent_config = config_agents.AgentConfig.from_yaml(
+            installation_config,
+            temp_dir / "room_config.yaml",
+            {
+                "id": AGENT_ID,
+                "provider_type": "google",
+                "model_name": "gemini-2.5-flash",
+                "model_settings": {"thinking": "high"},
+                "thinking_default": "low",
+            },
+        )
+
+    found = config_agents.get_model_settings_from_config(
+        agent_config=agent_config,
+    )
+
+    assert found["thinking"] == "low"
+
+
 def test_agentconfig_from_yaml_allows_other_model_settings(
     installation_config,
     temp_dir,
@@ -2082,6 +2106,15 @@ def test_agentconfig_from_yaml_allows_other_model_settings(
         )
 
     assert agent_config.model_settings["temperature"] == 0.5
+
+
+def test_agentconfig_orders_and_dedupes_thinking_levels():
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        thinking_levels=["high", "low", "low", "off"],
+    )
+
+    assert agent_config.thinking_levels == ["off", "low", "high"]
 
 
 def test_agentconfig_rejects_a_default_it_does_not_offer():

@@ -129,7 +129,7 @@ class LLMProviderType(enum.StrEnum):
 #   only authority on the matter:  Qwen3.8 takes 'xhigh', 'medium' and
 #   'low' and rejects 'high'; gpt-oss takes 'low', 'medium' and 'high'.
 #   A rung the template rejects fails the run, so what a room offers is
-#   resolved per model rather than assumed.
+#   declared per room ('thinking_levels') rather than assumed.
 #
 class ThinkingLevelName(enum.StrEnum):
     OFF = "off"
@@ -148,7 +148,8 @@ THINKING_IN_MODEL_SETTINGS_DEPRECATION = """\
 Setting 'thinking' in an agent's 'model_settings' is deprecated, and will
 stop being honored in a future release (configured in {config_path}).
 Use the 'thinking_default' agent configuration property instead, which a
-client can also read and override per run.
+client can also read and override per run.  Where both are set,
+'thinking_default' wins and this setting is ignored.
 """
 
 
@@ -316,6 +317,14 @@ class AgentConfig:
                     level,
                     self._config_path,
                 )
+
+        # Offered lowest first, each once, whatever order it was written in.
+        if self.thinking_levels:
+            self.thinking_levels = [
+                level
+                for level in THINKING_LEVELS
+                if level in self.thinking_levels
+            ]
 
         # Every run that asks for nothing is sent the default, and the
         # run refuses a level outside 'thinking_levels':  a default

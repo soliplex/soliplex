@@ -126,7 +126,8 @@ agent:
 
   Setting `thinking` here is **deprecated**:  use `thinking_default`
   below, which a client can also read and override for a single run.
-  It still takes effect, and warns.
+  It still takes effect, and warns.  Where `thinking_default` is also
+  set, `thinking_default` wins and this setting is ignored.
 
 - `thinking_default` (a string, default unset):  how hard the model
   thinks when a run asks for nothing.  One of `off`, `minimal`, `low`,
