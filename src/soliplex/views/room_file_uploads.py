@@ -174,27 +174,49 @@ async def post_uploads_room(
 
     Body of request must be a file matching the `Content-Type' header
     of the request.
+
+    Requires room 'WRITE' permission (or admin access):  'READ' access
+    is not required, allowing narrowly-scoped automation tokens to push
+    files into the room without being able to read other resources in
+    it.
     """
     the_logger.debug(loggers.UPLOADS_POST_ROOM)
     the_authz_logger.debug(loggers.UPLOADS_POST_ROOM)
 
-    if not await the_admin_users.check_admin_access(
+    if await the_admin_users.check_admin_access(
         the_user_claims,
         resource=loggers.AUDIT_RESOURCE_ROOM_UPLOAD,
         action=loggers.AUDIT_ACTION_CREATE,
-    ):
+    ):  # admins have 'ALLOW WRITE' implicitly
+        has_write = True
+    else:
+        has_write = await the_room_authz.check_room_access(
+            room_id=room_id,
+            user_token=the_user_claims,
+            permission=authz.Permission.WRITE,
+        )
+
+    if not has_write:
         raise fastapi.HTTPException(
             status_code=403,
-            detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
+            detail=loggers.AUTHZ_ROOM_ALLOW_WRITE_REQUIRED,
         ) from None
 
-    _room_config = await soliplex_views_agui._check_user_in_room(
-        room_id=room_id,
-        the_installation=the_installation,
-        the_room_authz=the_room_authz,
-        the_user_claims=the_user_claims,
-        the_logger=the_logger,
-    )
+    # No authz check here:  the gate above has already established room
+    # 'WRITE' (or admin) access, and uploading is a write-only operation,
+    # so 'READ' access is not required.  A KeyError can only mean that
+    # the room is not (or no longer) configured.
+    try:
+        _room_config = await the_installation.get_room_config(
+            room_id=room_id,
+            user=the_user_claims,
+        )
+    except KeyError:
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
+        ) from None
 
     if not _room_config.has_sandbox:
         raise fastapi.HTTPException(
