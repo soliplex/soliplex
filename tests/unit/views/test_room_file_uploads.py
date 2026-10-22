@@ -236,10 +236,24 @@ def test_get_the_room_upload_audit_log(rual_klass):
     ],
 )
 @pytest.mark.parametrize(
-    "w_sandbox, w_upload_path, expectation",
+    "w_admin_access, w_allow_write, w_sandbox, w_upload_path, expectation",
     [
-        (True, True, no_error(204)),
-        (
+        pytest.param(
+            False,
+            False,
+            True,
+            True,
+            raises_httpexc(
+                code=403,
+                match=loggers.AUTHZ_ROOM_ALLOW_WRITE_REQUIRED,
+            ),
+            id="noperm",
+        ),
+        pytest.param(True, False, True, True, no_error(204), id="admin_ok"),
+        pytest.param(False, True, True, True, no_error(204), id="write_ok"),
+        pytest.param(
+            False,
+            True,
             False,
             True,
             raises_httpexc(
@@ -247,8 +261,11 @@ def test_get_the_room_upload_audit_log(rual_klass):
                 match="Sandbox not configured",
                 headers={"Allow": "GET"},
             ),
+            id="no_sandbox",
         ),
-        (
+        pytest.param(
+            False,
+            True,
             True,
             False,
             raises_httpexc(
@@ -256,15 +273,14 @@ def test_get_the_room_upload_audit_log(rual_klass):
                 match="Room uploads not configured",
                 headers={"Allow": "GET"},
             ),
+            id="no_uploads",
         ),
     ],
 )
-@pytest.mark.parametrize("w_admin_access", [False, True])
-@mock.patch("soliplex.views.agui._check_user_in_room")
 async def test_post_uploads_room(
-    cuir,
     uploads_path,
     w_admin_access,
+    w_allow_write,
     w_sandbox,
     w_upload_path,
     expectation,
@@ -275,7 +291,6 @@ async def test_post_uploads_room(
         config_rooms.RoomConfig,
         has_sandbox=w_sandbox,
     )
-    cuir.return_value = room_config
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),
         filename=w_filename,
@@ -285,6 +300,7 @@ async def test_post_uploads_room(
     the_installation = mock.create_autospec(
         installation.Installation,
     )
+    the_installation.get_room_config.return_value = room_config
 
     if w_upload_path:
         the_installation.rooms_upload_path = str(uploads_path / "rooms")
@@ -294,54 +310,56 @@ async def test_post_uploads_room(
     the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
     the_admin_users.check_admin_access.return_value = w_admin_access
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_room_authz.check_room_access.return_value = w_allow_write
     the_logger = mock.create_autospec(loggers.LogWrapper)
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
     the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
 
-    if not w_admin_access:
-        with pytest.raises(fastapi.HTTPException) as exc:
-            await room_views.post_uploads_room(
-                room_id=TEST_ROOM_ID,
-                upload_file=upload_file,
-                the_installation=the_installation,
-                the_admin_users=the_admin_users,
-                the_room_authz=the_room_authz,
-                the_user_claims=THE_USER_CLAIMS,
-                the_logger=the_logger,
-                the_authz_logger=the_authz_logger,
-                the_audit=the_audit,
-            )
+    with expectation as expected:
+        response = await room_views.post_uploads_room(
+            room_id=TEST_ROOM_ID,
+            upload_file=upload_file,
+            the_installation=the_installation,
+            the_admin_users=the_admin_users,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+            the_authz_logger=the_authz_logger,
+            the_audit=the_audit,
+        )
 
-        assert exc.value.status_code == 403
-        assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
-        # A refused (non-admin) attempt records no privileged-upload event.
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert response.status_code == expected
+        exp_file = uploads_path / "rooms" / TEST_ROOM_ID / exp_filename
+        assert exp_file.read_bytes() == TEST_CONTENT
+        the_audit.room_upload_added.assert_called_once_with(
+            room_id=TEST_ROOM_ID,
+            filename=exp_filename,
+        )
+        # The config lookup consults no authz policy:  room 'WRITE'
+        # (checked above) or admin alone suffices to upload.
+        the_installation.get_room_config.assert_called_once_with(
+            room_id=TEST_ROOM_ID,
+            user=THE_USER_CLAIMS,
+        )
+    else:
+        # No permission / no sandbox / no upload dir -> no upload
+        # occurred, and therefore we have no audit record of one.
         the_audit.room_upload_added.assert_not_called()
 
-    else:
-        with expectation as expected:
-            response = await room_views.post_uploads_room(
-                room_id=TEST_ROOM_ID,
-                upload_file=upload_file,
-                the_installation=the_installation,
-                the_admin_users=the_admin_users,
-                the_room_authz=the_room_authz,
-                the_user_claims=THE_USER_CLAIMS,
-                the_logger=the_logger,
-                the_authz_logger=the_authz_logger,
-                the_audit=the_audit,
-            )
+        if not w_admin_access and not w_allow_write:
+            # Denied by the permission gate, which precedes the lookup.
+            the_installation.get_room_config.assert_not_called()
 
-        if not isinstance(expected, pytest.ExceptionInfo):
-            assert response.status_code == expected
-            exp_file = uploads_path / "rooms" / TEST_ROOM_ID / exp_filename
-            assert exp_file.read_bytes() == TEST_CONTENT
-            the_audit.room_upload_added.assert_called_once_with(
-                room_id=TEST_ROOM_ID,
-                filename=exp_filename,
-            )
-        else:
-            # No upload occurred (uploads not configured) -> no audit record.
-            the_audit.room_upload_added.assert_not_called()
+    if w_admin_access:
+        # The gate is not even consulted for admins.
+        the_room_authz.check_room_access.assert_not_called()
+    else:
+        the_room_authz.check_room_access.assert_called_once_with(
+            room_id=TEST_ROOM_ID,
+            user_token=THE_USER_CLAIMS,
+            permission=authz.Permission.WRITE,
+        )
 
     the_authz_logger.debug.assert_called_once_with(
         loggers.UPLOADS_POST_ROOM,
@@ -350,3 +368,53 @@ async def test_post_uploads_room(
     the_logger.debug.assert_called_once_with(
         loggers.UPLOADS_POST_ROOM,
     )
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_unknown_room(
+    uploads_path,
+):
+    # Admins bypass the room 'WRITE' gate entirely;  an admin attempting
+    # to upload into a room which is not (or no longer) configured gets
+    # a 404 from the room config lookup.
+    upload_file = fastapi.UploadFile(
+        file=io.BytesIO(TEST_CONTENT),
+        filename=TEST_FILENAME,
+        headers={"Content-Type": "text/plain"},
+    )
+
+    the_installation = mock.create_autospec(
+        installation.Installation,
+    )
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+    the_installation.get_room_config.side_effect = KeyError(TEST_ROOM_ID)
+
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = True
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_room_authz.check_room_access.return_value = False
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
+    the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await room_views.post_uploads_room(
+            room_id=TEST_ROOM_ID,
+            upload_file=upload_file,
+            the_installation=the_installation,
+            the_admin_users=the_admin_users,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+            the_authz_logger=the_authz_logger,
+            the_audit=the_audit,
+        )
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == (
+        f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {TEST_ROOM_ID}"
+    )
+    # The gate is not even consulted for admins;  the denied 'WRITE'
+    # check would not have covered a missing room config, either way.
+    the_room_authz.check_room_access.assert_not_called()
+    the_audit.room_upload_added.assert_not_called()
