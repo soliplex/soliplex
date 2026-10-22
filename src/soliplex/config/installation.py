@@ -637,6 +637,10 @@ class InstallationConfig:
 
     title_agent_config_id: str | None = None
 
+    # Agent which attaches catalogue labels to a thread after its first
+    # run; unset leaves labelling to the user.
+    label_agent_config_id: str | None = None
+
     @property
     def agent_configs_map(self) -> config_agents.AgentConfigMap:
         if self._agent_configs_map is None:
@@ -1359,6 +1363,9 @@ class InstallationConfig:
 
         if self.title_agent_config_id is not None:
             result["title_agent_config_id"] = self.title_agent_config_id
+
+        if self.label_agent_config_id is not None:
+            result["label_agent_config_id"] = self.label_agent_config_id
 
         if self.logfire_config is not None:
             result["logfire_config"] = self.logfire_config.as_yaml
