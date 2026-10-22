@@ -4,9 +4,11 @@ import time
 import uuid
 
 import pydantic
+import pytest
 from ag_ui import core as agui_core
 
 from soliplex.agui import parser as agui_parser
+from soliplex.views import agui as views_agui  # _DELIVERY_PROP
 
 EVENT_DESERIALIZER = pydantic.TypeAdapter(agui_core.Event)
 
@@ -16,7 +18,15 @@ SSE_ID_PREFIX = "id: "
 SSE_DATA_PREFIX = "data: "
 
 
-def test_post_rooms_roomid_agui_etc(client_no_llm):
+@pytest.mark.parametrize(
+    "w_delivery",
+    [
+        None,
+        "low_latency",
+        "low_bandwidth",
+    ],
+)
+def test_post_rooms_roomid_agui_etc(client_no_llm, w_delivery):
     new_thread_request = {"metadata": {"name": "functest"}}
 
     room_id = "faux"
@@ -35,6 +45,7 @@ def test_post_rooms_roomid_agui_etc(client_no_llm):
 
     (run_id,) = new_thread_json["runs"]
 
+    fw_props = {}
     initial_run_request = {
         "thread_id": thread_id,
         "run_id": run_id,
@@ -48,8 +59,10 @@ def test_post_rooms_roomid_agui_etc(client_no_llm):
         ],
         "context": [],
         "tools": [],
-        "forwarded_props": None,
+        "forwarded_props": fw_props,
     }
+    if w_delivery is not None:
+        fw_props[views_agui._DELIVERY_PROP] = w_delivery
 
     with client_no_llm.stream(
         method="POST",

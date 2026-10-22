@@ -416,6 +416,67 @@ entirely can **disable room uploads** by leaving `rooms_upload_path` unset: the
 room-upload endpoint then returns `404` and no `room` volume is mounted into
 the sandbox.
 
+## AG-UI SSE Delivery
+
+The optional `sse_delivery` stanza declares *named* delivery profiles: how
+the AG-UI run endpoint groups the model's streamed deltas (text, thinking,
+reasoning and tool-call arguments) into SSE events. Each profile shares the
+shape of the strategies below, plus a short `description` for delivery
+to clients (the name is the mapping key): clients may name one profile in
+the run request's `forwarded_props` (see [Room Configuration](
+rooms.md#ag-ui-sse-delivery)); a room without its own choice uses the
+stanza's `default` profile. Unknown profile names, at either level, fall
+back to the next level's default; with no stanza at all, runs use
+`strategy: "message"`.
+
+- `strategy: "message"` merges adjacent deltas of one message, or of one
+  tool call's arguments, and sends them when any other event arrives --
+  normally the message's end. This keeps bytes, events and stored rows
+  low, but text generally reaches the client only when the message ends.
+
+- `strategy: "bounded"` merges adjacent deltas of one message or tool call
+  in the same way, and also sends the merged event as soon as it holds
+  `max_deltas` deltas, or `max_bytes` bytes of UTF-8 text, or has been
+  held for `max_ms` milliseconds, whichever comes first. All three are
+  required, as positive integers. A single delta is never split, so one
+  large delta can exceed `max_bytes`. (One difference: after a different
+  message's delta, `message` sends the next delta on its own, while
+  `bounded` starts merging again.)
+
+```yaml
+sse_delivery:
+    default: "fine-grained"
+    configs:
+        "whole-message":
+            strategy: "message"
+            description: "Text arrives with each assistant message"
+        "fine-grained":
+            strategy: "bounded"
+            description: "Text streams a few deltas at a time"
+            max_deltas: 16
+            max_bytes: 1024
+            max_ms: 100
+```
+
+With a model producing about 25 deltas a second, these bounds send about
+eight updates a second, each holding about three deltas: on loopback, an
+80-delta answer took 27 events and about 3.8 times the bytes of
+`message`.
+
+`bounded` sends text sooner, at the cost of more SSE events, more bytes
+(each event carries its own envelope), and one stored row, saved in its
+own transaction, per event. `max_ms` is a target for how long merged text
+is held, not a guarantee: it is checked when the server's event loop gets
+to it, and time spent before the text is held, saving each event to the
+database, and the network all add to the delay a client sees. No default
+bounds are provided: suitable values depend on the pace at which the
+room's model produces deltas.
+
+Unknown keys, unknown strategies, bounds given with `message`, and
+missing or non-positive bounds with `bounded` are rejected when the
+configuration loads. A room naming a profile the installation does not
+declare is also rejected at load time.
+
 ## Room Configuration Paths
 
 The `room_paths` element specify one or more filesystem paths to

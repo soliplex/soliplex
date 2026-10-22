@@ -22,6 +22,7 @@ from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
+from soliplex.config import sse_delivery as config_sse_delivery
 from soliplex.config import tools as config_tools
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -1546,3 +1547,94 @@ def test_agui_run_usage_from_tuple_wo_final_request():
     assert found.final_input_tokens is None
     assert found.resolved_model_name is None
     assert found.final_output_tokens is None
+
+
+def test_sse_deliveryprofile_from_config():
+    sdc = config_sse_delivery.SSEDeliveryConfig(
+        strategy=config_sse_delivery.SSEDeliveryStrategy.BOUNDED,
+        max_deltas=8,
+        max_bytes=256,
+        max_ms=250,
+        description="Fine-grained deltas",
+    )
+
+    profile_model = models.SSE_DeliveryProfile.from_config("fast", sdc)
+
+    assert profile_model.name == "fast"
+    assert profile_model.strategy == "bounded"
+    assert profile_model.model_extra is None
+    assert profile_model.description == "Fine-grained deltas"
+
+
+def test_sse_deliveryprofiles_from_config():
+    profiles_config = config_sse_delivery.SSEDeliveryProfilesConfig(
+        default="plain",
+        configs={
+            "plain": config_sse_delivery.SSEDeliveryConfig(
+                strategy=config_sse_delivery.SSEDeliveryStrategy.MESSAGE,
+                description="Whole assistant messages",
+            ),
+            "fast": config_sse_delivery.SSEDeliveryConfig(
+                strategy=config_sse_delivery.SSEDeliveryStrategy.BOUNDED,
+                max_deltas=8,
+                max_bytes=256,
+                max_ms=250,
+                description="Fine-grained deltas",
+            ),
+        },
+    )
+
+    profiles_model = models.SSE_DeliveryProfiles.from_config(profiles_config)
+
+    assert profiles_model.default == "plain"
+    assert [profile.name for profile in profiles_model.profiles] == [
+        "plain",
+        "fast",
+    ]
+    assert profiles_model.profiles[0].strategy == "message"
+    assert profiles_model.profiles[1].strategy == "bounded"
+
+
+def test_installationinfo_from_config_bare(bare_installation_config):
+    info_model = models.InstallationInfo.from_config(bare_installation_config)
+
+    expected_features = [
+        models.AGUI_Feature.from_config(agui_feature)
+        for agui_feature in bare_installation_config.agui_features
+    ]
+    assert info_model.id == INSTALLATION_ID
+    assert info_model.agui_features == expected_features
+    assert info_model.sse_delivery_profiles is None
+
+
+def test_installationinfo_from_config_w_features_and_profiles(
+    installation_config,
+    the_agui_feature,
+):
+    profiles_config = config_sse_delivery.SSEDeliveryProfilesConfig(
+        default="plain",
+        configs={
+            "plain": config_sse_delivery.SSEDeliveryConfig(
+                strategy=config_sse_delivery.SSEDeliveryStrategy.MESSAGE,
+            ),
+            "fast": config_sse_delivery.SSEDeliveryConfig(
+                strategy=config_sse_delivery.SSEDeliveryStrategy.BOUNDED,
+                max_deltas=8,
+                max_bytes=256,
+                max_ms=250,
+                description="Fine-grained deltas",
+            ),
+        },
+    )
+    installation_config.agui_features = [the_agui_feature]
+    installation_config.sse_delivery = profiles_config
+
+    info_model = models.InstallationInfo.from_config(installation_config)
+
+    assert info_model.id == installation_config.id
+    assert info_model.agui_features == [
+        models.AGUI_Feature.from_config(the_agui_feature),
+    ]
+    assert info_model.sse_delivery_profiles == (
+        models.SSE_DeliveryProfiles.from_config(profiles_config)
+    )

@@ -20,6 +20,7 @@ from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
+from soliplex.config import sse_delivery as config_sse_delivery
 from soliplex.config import tools as config_tools
 
 KW_ONLY = pydantic.Field(kw_only=True)
@@ -410,6 +411,76 @@ class Secret(pydantic.BaseModel):
 
 
 DUMMY_TP_DBURI = "https://tp.example.com/"
+
+
+class SSE_DeliveryProfile(pydantic.BaseModel):
+    name: str
+    strategy: str
+    description: str | None
+
+    @classmethod
+    def from_config(
+        cls,
+        name: str,
+        config: config_sse_delivery.SSEDeliveryConfig,
+    ):
+        return cls(
+            name=name,
+            strategy=config.strategy,
+            description=config.description,
+        )
+
+
+class SSE_DeliveryProfiles(pydantic.BaseModel):
+    default: str
+    profiles: list[SSE_DeliveryProfile] = []
+
+    @classmethod
+    def from_config(
+        cls,
+        profiles_config: config_sse_delivery.SSEDeliveryProfilesConfig,
+    ):
+        return cls(
+            default=profiles_config.default,
+            profiles=[
+                SSE_DeliveryProfile.from_config(name, sdc)
+                for name, sdc in profiles_config.configs.items()
+            ],
+        )
+
+
+class InstallationInfo(pydantic.BaseModel):
+    """Configuration needed by the client
+
+    The non-admin view of the installation: its id, the AG-UI features
+    its rooms can declare, and the names by which SSE delivery profiles
+    can be requested (bounds and other details stay server-side).
+    """
+
+    id: str
+    agui_features: list[AGUI_Feature] = []
+    sse_delivery_profiles: SSE_DeliveryProfiles | None = None
+
+    @classmethod
+    def from_config(
+        cls, installation_config: config_installation.InstallationConfig
+    ):
+        agui_features = [
+            AGUI_Feature.from_config(agui_feature)
+            for agui_feature in installation_config.agui_features
+        ]
+        sse_delivery_profiles = (
+            None
+            if installation_config.sse_delivery is None
+            else SSE_DeliveryProfiles.from_config(
+                installation_config.sse_delivery
+            )
+        )
+        return cls(
+            id=installation_config.id,
+            agui_features=agui_features,
+            sse_delivery_profiles=sse_delivery_profiles,
+        )
 
 
 class Installation(pydantic.BaseModel):

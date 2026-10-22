@@ -14,6 +14,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from soliplex import agui
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
+from soliplex.agui import sse_delivery as agui_sse_delivery
 from soliplex.agui import util as agui_util
 
 FeedbackReviewStatus = agui.FeedbackReviewStatus
@@ -1025,11 +1026,11 @@ async def drive_agui_turn(
     ``run_stream_kwargs`` is forwarded verbatim to the Pydantic AI adapter.
     """
     stream_kwargs = run_stream_kwargs or {}
-    event_stream = agui.with_final_state(
+    event_stream = agui_sse_delivery.with_final_state(
         stream=adapter.run_stream(**stream_kwargs),
         deps=stream_kwargs.get("deps"),
     )
-    compacted = agui.compact_event_stream(event_stream)
+    compacted = agui_sse_delivery.compact_event_stream(event_stream)
     async for event in compacted:
         try:
             await save_single_event(

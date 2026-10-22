@@ -32,6 +32,28 @@ def test_get_the_config_audit_log(cal_klass):
 
 
 @pytest.mark.anyio
+@mock.patch(
+    "soliplex.views.installation.models.InstallationInfo.from_config",
+)
+async def test_get_installation_info(ifc):
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    found = await installation_views.get_installation_info(
+        the_installation=the_installation,
+        the_logger=the_logger,
+    )
+
+    assert found is ifc.return_value
+
+    ifc.assert_called_once_with(i_config)
+    the_logger.debug.assert_called_once_with(
+        loggers.INST_GET_INSTALLATION_INFO,
+    )
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("w_admin_access", [False, True])
 @mock.patch("soliplex.models.Installation.from_config")
 async def test_get_installation(fc, w_admin_access):

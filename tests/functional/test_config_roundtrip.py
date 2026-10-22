@@ -19,6 +19,7 @@ import yaml
 
 from soliplex.config import installation as config_installation
 from soliplex.config import rooms as config_rooms
+from soliplex.config import sse_delivery as config_sse_delivery
 
 MINIMAL_CONFIG = pathlib.Path("example/minimal.yaml")
 OLLAMA_BASE_URL = "http://ollama.example.com:11434"
@@ -70,3 +71,73 @@ def test_room_config_roundtrips(
     )
 
     assert reloaded.as_yaml == original.as_yaml
+
+
+AGUI_SSE_DELIVERY_BLOCK = {
+    "strategy": "bounded",
+    "max_deltas": 8,
+    "max_bytes": 256,
+    "max_ms": 250,
+}
+
+SSE_DELIVERY_STANZA = {
+    "default": "bounded",
+    "configs": {"bounded": AGUI_SSE_DELIVERY_BLOCK},
+}
+
+SSE_PROFILES_CONFIG = config_sse_delivery.SSEDeliveryProfilesConfig(
+    default="bounded",
+    configs={
+        "bounded": config_sse_delivery.SSEDeliveryConfig(
+            strategy=config_sse_delivery.SSEDeliveryStrategy.BOUNDED,
+            max_deltas=8,
+            max_bytes=256,
+            max_ms=250,
+        ),
+    },
+)
+
+
+def test_installation_config_roundtrips_w_sse_delivery(
+    tmp_path,
+    os_env_with_ollama_base_url,
+):
+    original = config_installation.load_installation(MINIMAL_CONFIG)
+    dumped = original.as_yaml | {"sse_delivery": SSE_DELIVERY_STANZA}
+    dumped_path = tmp_path / "installation.yaml"
+    dumped_path.write_text(yaml.safe_dump(dumped))
+
+    reloaded = config_installation.load_installation(dumped_path)
+
+    assert reloaded.as_yaml == dumped
+    for room_config in reloaded.room_configs.values():
+        assert "sse_delivery_config_name" not in room_config.as_yaml
+        assert room_config.effective_agui_sse_delivery == (
+            reloaded.sse_delivery.default_config
+        )
+
+
+@pytest.mark.parametrize("room_id", _minimal_room_ids())
+def test_room_config_roundtrips_w_sse_delivery(
+    tmp_path,
+    minimal_installation,
+    room_id,
+):
+    minimal_installation.sse_delivery = SSE_PROFILES_CONFIG
+
+    original = minimal_installation.room_configs[room_id]
+    dumped = original.as_yaml | {"sse_delivery_config_name": "bounded"}
+    dumped_path = tmp_path / "room_config.yaml"
+    dumped_path.write_text(yaml.safe_dump(dumped))
+
+    reloaded = config_rooms.RoomConfig.from_yaml(
+        minimal_installation,
+        dumped_path,
+        yaml.safe_load(dumped_path.read_text()),
+    )
+
+    assert reloaded.as_yaml == dumped
+    assert (
+        reloaded.effective_agui_sse_delivery
+        == (SSE_PROFILES_CONFIG.configs["bounded"])
+    )

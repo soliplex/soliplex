@@ -1,0 +1,18 @@
+id: <id-0>:0
+data: {"type":"RUN_STARTED","timestamp":0,"threadId":"<id-1>","runId":"<id-0>"}
+
+id: <id-0>:1
+data: {"type":"TEXT_MESSAGE_START","timestamp":0,"messageId":"<id-2>","role":"assistant"}
+
+id: <id-0>:2
+data: {"type":"TEXT_MESSAGE_CONTENT","timestamp":0,"messageId":"<id-2>","delta":"Hello, world!"}
+
+id: <id-0>:3
+data: {"type":"TEXT_MESSAGE_END","timestamp":0,"messageId":"<id-2>"}
+
+id: <id-0>:4
+data: {"type":"STATE_SNAPSHOT","snapshot":{"counter":1}}
+
+id: <id-0>:5
+data: {"type":"RUN_FINISHED","timestamp":0,"threadId":"<id-1>","runId":"<id-0>"}
+

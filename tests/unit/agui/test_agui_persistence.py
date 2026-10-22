@@ -11,6 +11,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from soliplex import agui
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
+from soliplex.agui import sse_delivery as agui_sse_delivery
 from soliplex.config import installation as config_installation
 from tests.unit.agui import agui_constants
 
@@ -1398,9 +1399,7 @@ def _adapter(events):
 @pytest.fixture
 def identity_compact(monkeypatch):
     # Bypass compaction so the test controls the exact event sequence.
-    monkeypatch.setattr(
-        agui_persistence.agui, "compact_event_stream", lambda s: s
-    )
+    monkeypatch.setattr(agui_sse_delivery, "compact_event_stream", lambda s: s)
 
 
 @pytest.mark.anyio

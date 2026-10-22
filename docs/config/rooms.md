@@ -329,6 +329,24 @@ The per-question budgets and the sandbox's limits come from the room's
 `haiku.rag` configuration: `qa.max_searches`, `qa.max_executions`,
 `sandbox.code_timeout` and `sandbox.max_output_chars`.
 
+### AG-UI SSE Delivery
+
+- `sse_delivery_config_name` (a string, optional); names one of the
+  installation's `sse_delivery` profiles (see
+  [Installation Configuration](installation.md#ag-ui-sse-delivery)) as
+  the default delivery profile for this room's threads. If unset, the
+  room uses the installation's `default` profile; with no installation
+  stanza at all, runs use `strategy: "message"`. The name is validated
+  when the configuration loads: naming a profile the installation does
+  not declare is an error.
+
+E.g., to keep whole-message delivery in one room of an installation
+whose default profile delivers bounded deltas:
+
+  ```yaml
+  sse_delivery_config_name: "whole-message"
+  ```
+
 ### Quiz-related elements
 
 - `quizzes` is a list of mappings (default `()`):  each mapping defines a

@@ -15,6 +15,7 @@ from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rag as config_rag
 from soliplex.config import rooms as config_rooms
 from soliplex.config import skills as config_skills
+from soliplex.config import sse_delivery as config_sse_delivery
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_quizzes as test_quizzes
@@ -73,6 +74,51 @@ skills:
     installation_skill_names:
         - "{test_skills.SKILL_NAME}"
 """
+
+
+SSE_MESSAGE = config_sse_delivery.SSEDeliveryConfig(
+    strategy=config_sse_delivery.SSEDeliveryStrategy.MESSAGE,
+)
+SSE_BOUNDED_8 = config_sse_delivery.SSEDeliveryConfig(
+    strategy=config_sse_delivery.SSEDeliveryStrategy.BOUNDED,
+    max_deltas=8,
+    max_bytes=256,
+    max_ms=250,
+)
+SSE_BOUNDED_16 = config_sse_delivery.SSEDeliveryConfig(
+    strategy=config_sse_delivery.SSEDeliveryStrategy.BOUNDED,
+    max_deltas=16,
+    max_bytes=512,
+    max_ms=500,
+)
+
+W_SSE_DELIVERY_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
+    "sse_delivery_config_name": "fast",
+}
+W_SSE_DELIVERY_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+sse_delivery_config_name: "fast"
+"""
+
+W_INVALID_SSE_DELIVERY_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+sse_delivery_config_name: "nonexistent"
+"""
+
+W_NULL_SSE_DELIVERY_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+sse_delivery_config_name: null
+"""
+
+
+SSE_PROFILES = config_sse_delivery.SSEDeliveryProfilesConfig(
+    default="plain",
+    configs={
+        "plain": SSE_MESSAGE,
+        "fast": SSE_BOUNDED_8,
+        "faster": SSE_BOUNDED_16,
+    },
+)
 
 
 def _replace_w_entries(config, **changes):
@@ -295,6 +341,18 @@ NoRaise = contextlib.nullcontext()
             contextlib.nullcontext(W_NON_HR_TOOLS_ROOM_CONFIG_KW),
         ),
         (
+            W_SSE_DELIVERY_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(W_SSE_DELIVERY_ROOM_CONFIG_KW),
+        ),
+        (
+            W_INVALID_SSE_DELIVERY_ROOM_CONFIG_YAML,
+            pytest.raises(config_exc.FromYamlException),
+        ),
+        (
+            W_NULL_SSE_DELIVERY_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(BARE_ROOM_CONFIG_KW),
+        ),
+        (
             FULL_ROOM_CONFIG_YAML,
             contextlib.nullcontext(FULL_ROOM_CONFIG_KW),
         ),
@@ -314,6 +372,7 @@ def test_roomconfig_from_yaml(
         test_skills.SKILL_NAME: skill_config,
         "other_skill": object(),
     }
+    installation_config.sse_delivery = SSE_PROFILES
 
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
@@ -395,6 +454,7 @@ def test_roomconfig_from_yaml(
         W_NON_HR_SKILLS_ROOM_CONFIG_KW.copy(),
         W_HR_SKILLS_ROOM_CONFIG_KW.copy(),
         W_NON_HR_TOOLS_ROOM_CONFIG_KW.copy(),
+        W_SSE_DELIVERY_ROOM_CONFIG_KW.copy(),
         FULL_ROOM_CONFIG_KW.copy(),
     ],
 )
@@ -452,6 +512,9 @@ def test_roomconfig_as_yaml(temp_dir, installation_config, w_kw):
     if inst.skills:
         expected["skills"] = inst.skills.as_yaml
 
+    if "sse_delivery_config_name" in w_kw:
+        expected["sse_delivery_config_name"] = w_kw["sse_delivery_config_name"]
+
     found = inst.as_yaml
 
     assert found == expected
@@ -486,6 +549,7 @@ def _round_trip_room_config(installation_config, config_path, config_dict):
         W_NON_HR_SKILLS_ROOM_CONFIG_YAML,
         W_HR_SKILLS_ROOM_CONFIG_YAML,
         W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
+        W_SSE_DELIVERY_ROOM_CONFIG_YAML,
     ],
 )
 def test_roomconfig_as_yaml_round_trips(
@@ -499,6 +563,7 @@ def test_roomconfig_as_yaml_round_trips(
         ),
         "other_skill": object(),
     }
+    installation_config.sse_delivery = SSE_PROFILES
 
     original, reloaded = _round_trip_room_config(
         installation_config,
@@ -526,6 +591,95 @@ def test_roomconfig_as_yaml_round_trips_w_agent_agui_feature_names(
     )
 
     assert reloaded == original
+
+
+@pytest.mark.parametrize(
+    "room_name, expected",
+    [
+        (None, SSE_MESSAGE),
+        ("fast", SSE_BOUNDED_8),
+        ("faster", SSE_BOUNDED_16),
+    ],
+)
+def test_roomconfig_effective_agui_sse_delivery(
+    installation_config,
+    room_name,
+    expected,
+):
+    installation_config.sse_delivery = SSE_PROFILES
+    room_config = config_rooms.RoomConfig(
+        **BARE_ROOM_CONFIG_KW,
+        sse_delivery_config_name=room_name,
+        _installation_config=installation_config,
+    )
+
+    assert room_config.effective_agui_sse_delivery == expected
+
+
+def test_roomconfig_effective_agui_sse_delivery_wo_profiles(
+    installation_config,
+):
+    installation_config.sse_delivery = None
+    room_config = config_rooms.RoomConfig(
+        **BARE_ROOM_CONFIG_KW,
+        _installation_config=installation_config,
+    )
+
+    assert room_config.effective_agui_sse_delivery == (
+        config_sse_delivery.DEFAULT_SSE_DELIVERY
+    )
+
+
+@pytest.mark.parametrize("room_name", [None, "fast"])
+def test_roomconfig_effective_agui_sse_delivery_wo_installation_config(
+    room_name,
+):
+    room_config = config_rooms.RoomConfig(
+        **BARE_ROOM_CONFIG_KW,
+        sse_delivery_config_name=room_name,
+    )
+
+    assert room_config.effective_agui_sse_delivery == (
+        config_sse_delivery.DEFAULT_SSE_DELIVERY
+    )
+
+
+def test_roomconfig_from_yaml_unknown_profile_name(
+    installation_config,
+    temp_dir,
+):
+    yaml_file = temp_dir / "test.yaml"
+
+    with pytest.raises(config_exc.FromYamlException) as exc_info:
+        config_rooms.RoomConfig.from_yaml(
+            installation_config,
+            yaml_file,
+            yaml.safe_load(W_INVALID_SSE_DELIVERY_ROOM_CONFIG_YAML),
+        )
+
+    cause = exc_info.value.__cause__
+    assert isinstance(
+        cause,
+        config_sse_delivery.SSEDeliveryUnknownProfileName,
+    )
+    assert "unknown profile name: 'nonexistent'" in str(cause)
+
+
+def test_roomconfig_as_yaml_round_trip_keeps_installation_sse_default(
+    installation_config,
+    temp_dir,
+):
+    installation_config.sse_delivery = SSE_PROFILES
+
+    original, reloaded = _round_trip_room_config(
+        installation_config,
+        temp_dir / "test.yaml",
+        yaml.safe_load(BARE_ROOM_CONFIG_YAML),
+    )
+
+    assert "sse_delivery_config_name" not in original.as_yaml
+    assert reloaded.sse_delivery_config_name is None
+    assert reloaded.effective_agui_sse_delivery == SSE_PROFILES.default_config
 
 
 @pytest.mark.parametrize("w_order", [False, True])
@@ -567,6 +721,7 @@ def test_roomconfig_skill_configs_w_hit(installation_config):
         test_skills.SKILL_NAME: skill_config,
         "other_skill": object(),
     }
+    installation_config.sse_delivery = SSE_PROFILES
 
     room_config_kw = FULL_ROOM_CONFIG_KW.copy()
     room_config_kw["skills"] = dataclasses.replace(

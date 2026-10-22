@@ -1,37 +1,17 @@
 from __future__ import annotations
 
 import abc
-import collections.abc
+import collections
 import datetime
 import enum
 import typing
 
 import fastapi
 from ag_ui import core as agui_core
-from pydantic_ai import ui as ai_ui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 AGUI_Events = list[agui_core.Event]
-AGUI_EventStream = collections.abc.AsyncIterator[agui_core.Event]
 AGUI_State = dict[str, typing.Any]
-
-
-_COMPACTIBLE_TYPES = {  # event_type: compacting_attr
-    agui_core.EventType.TEXT_MESSAGE_CONTENT: "message_id",
-    agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT: "message_id",
-    agui_core.EventType.REASONING_MESSAGE_CONTENT: "message_id",
-    agui_core.EventType.TOOL_CALL_ARGS: "tool_call_id",
-}
-
-#
-#   Events which terminate a run's event stream
-#
-TERMINAL_EVENT_TYPES = frozenset(
-    [
-        agui_core.EventType.RUN_FINISHED,
-        agui_core.EventType.RUN_ERROR,
-    ]
-)
 
 
 class AGUI_Exception(ValueError):
@@ -615,48 +595,6 @@ class ThreadStorage(abc.ABC):
         thread_id: str,
         run_id: str,
     ) -> RunFeedbackReviewEntry: ...
-
-
-async def compact_event_stream(stream: AGUI_EventStream):
-    compacting: agui_core.Event = None
-    compacting_id: str = None
-    compacting_attr: str = None
-
-    async for event in stream:
-        if compacting is not None:
-            event_id = getattr(event, compacting_attr, None)
-            if event.type == compacting.type and event_id == compacting_id:
-                compacting.delta += event.delta
-            else:
-                to_yield, compacting = compacting, None
-                yield to_yield
-                yield event
-
-        else:
-            compacting_attr = _COMPACTIBLE_TYPES.get(event.type)
-            if compacting_attr is not None:
-                compacting = event.model_copy()
-                compacting_id = getattr(event, compacting_attr, None)
-            else:
-                yield event
-
-
-async def with_final_state(
-    *,
-    stream: AGUI_EventStream,
-    deps: ai_ui.StateHandler | None,
-) -> AGUI_EventStream:
-    """Yield events from 'stream', adding a final AG-UI state snapshot.
-
-    The snapshot precedes the run's terminal event: AG-UI clients may stop
-    reading after a terminal event, and on replay the parser only accepts a
-    snapshot while the run is still in the RUNNING state.
-    """
-    async for event in stream:
-        if deps is not None and event.type in TERMINAL_EVENT_TYPES:
-            yield agui_core.StateSnapshotEvent(snapshot=deps.state)
-
-        yield event
 
 
 async def get_the_threads(request: fastapi.Request) -> ThreadStorage:

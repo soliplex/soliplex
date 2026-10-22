@@ -32,6 +32,17 @@ def get_the_config_audit_log(
 depend_the_config_audit_log = fastapi.Depends(get_the_config_audit_log)
 
 
+@util.logfire_span("GET /v1/installation/info")
+@router.get("/v1/installation/info")
+async def get_installation_info(
+    the_installation: installation.Installation = depend_the_installation,
+    the_logger: loggers.LogWrapper = depend_the_unauth_logger,
+) -> models.InstallationInfo:
+    """Return the installation's client-centric config"""
+    the_logger.debug(loggers.INST_GET_INSTALLATION_INFO)
+    return models.InstallationInfo.from_config(the_installation._config)
+
+
 @util.logfire_span("GET /v1/installation")
 @router.get("/v1/installation")
 async def get_installation(

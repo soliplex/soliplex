@@ -99,6 +99,24 @@ agent_configs:
       Always provide code or examples in Markdown blocks.
 
 #==========================================================================
+# SSE Delivery configurations
+#==========================================================================
+sse_delivery:
+  default: low_latency
+  configs:
+    low_latency:
+      description: >-
+        Minimize latency by coalescing messages sooner.
+      strategy: "bounded"
+      max_deltas: 5
+      max_ms: 100
+      max_bytes: 1000
+    low_bandwidth:
+      description: >-
+        Minimize latency by compacting message deltas until complete.
+      strategy: "message"
+
+#==========================================================================
 # OIDC authentication provider configuration
 #==========================================================================
 

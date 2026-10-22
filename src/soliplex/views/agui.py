@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 
 import fastapi
@@ -23,9 +24,11 @@ from soliplex import titles
 from soliplex import util
 from soliplex import views
 from soliplex.agui import persistence as agui_persistence
+from soliplex.agui import sse_delivery as agui_sse_delivery
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
+from soliplex.config import sse_delivery as config_sse_delivery
 from soliplex.views import streaming as streaming_views
 
 router = fastapi.APIRouter(tags=["rooms"])
@@ -715,14 +718,51 @@ async def init_agent_stream(
     *,
     agui_adapter: ai_ag_ui.AGUIAdapter,
     run_stream_kwargs: dict,
+    delivery: config_sse_delivery.SSEDeliveryConfig,
     **drive_kwargs,
 ):
-    w_final_state = agui.with_final_state(
+    w_final_state = agui_sse_delivery.with_final_state(
         stream=agui_adapter.run_stream(**run_stream_kwargs),
         deps=run_stream_kwargs.get("deps"),
     )
-    compacted = agui.compact_event_stream(w_final_state)
-    await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
+    delivered = agui_sse_delivery.apply_delivery_strategy(
+        w_final_state, delivery
+    )
+    async with contextlib.aclosing(delivered):
+        await drive_llm_stream(llm_stream=delivered, **drive_kwargs)
+
+
+_DELIVERY_PROP = "agui_sse_delivery"
+
+
+def _resolve_delivery(
+    forwarded_props,
+    profiles: config_sse_delivery.SSEDeliveryProfilesConfig | None,
+    room_config: config_rooms.RoomConfig,
+) -> config_sse_delivery.SSEDeliveryConfig:
+    """Delivery for one run: the request-named profile, else the room's.
+
+    The request may carry a profile name in 'forwardedProps': either the
+    bare name, or under the 'delivery' key of a mapping.  Non-string,
+    unknown, or absent names fall back to the room's effective delivery
+    (its named profile, else the installation's default, else 'message');
+    they are never an error.
+    """
+    if isinstance(forwarded_props, dict):
+        delivery_name = forwarded_props.get(_DELIVERY_PROP)
+    else:
+        delivery_name = forwarded_props
+
+    delivery = (
+        profiles.get(delivery_name)
+        if profiles is not None and isinstance(delivery_name, str)
+        else None
+    )
+
+    if delivery is None:
+        delivery = room_config.effective_agui_sse_delivery
+
+    return delivery
 
 
 def parse_last_event_id(header_value: str | None):
@@ -877,6 +917,19 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
+    room_config = await the_installation.get_room_config(
+        room_id=room_id,
+        user=the_user_claims,
+    )
+
+    # The SSE delivery policy: a profile named by the client in
+    # 'run_input.forwarded_props', else the room's effective policy.
+    delivery = _resolve_delivery(
+        run_input.forwarded_props,
+        the_installation._config.sse_delivery,
+        room_config,
+    )
+
     # We use an unbounded queue here, so that the 'drive_llm_stream'
     # task completes even when the SSE stream gets cancelled due to a
     # client disconnect, thereby permitting the client to see the
@@ -911,6 +964,7 @@ async def post_room_agui_thread_id_run_id(
             run_id=run_id,
             title_agent_config=title_agent_config,
             messages=agui_adapter.run_input.messages,
+            delivery=delivery,
         )
     )
     bg_tasks.add(task)

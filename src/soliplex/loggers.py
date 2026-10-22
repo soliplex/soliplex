@@ -97,6 +97,8 @@ AUTHZ_GET_INSTALLATION_AUTHZ = "get installation authz"
 AUTHZ_GET_USER_AUTHZ = "get user authz"
 AUTHZ_ROOM_ALLOW_WRITE_REQUIRED = "room allow write required"
 
+INST_GET_INSTALLATION_INFO = "get installation info"
+
 INST_GET_INSTALLATION = "get installation"
 INST_GET_INSTALLATION_VERSIONS = "get installation versions"
 INST_SUBPROCESS_PIP = "subprocess pip failed"
