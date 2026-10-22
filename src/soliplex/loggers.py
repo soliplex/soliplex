@@ -40,6 +40,7 @@ UPLOADS_GET_ROOM_FILE = "uploads get room file"
 UPLOADS_GET_ROOM_THREAD = "uploads get room thread"
 UPLOADS_GET_ROOM_THREAD_FILE = "uploads get room thread file"
 UPLOADS_POST_ROOM = "uploads post room"
+UPLOADS_DELETE_ROOM_FILE = "uploads delete room file"
 UPLOADS_POST_ROOM_THREAD = "uploads post room thread"
 
 WORKDIRS_GET_ROOM_THREAD = "workdirs get room thread"
@@ -213,9 +214,10 @@ AUDIT_SANDBOX_ACTION_READ_IMAGE = "read-image"
 AUDIT_SANDBOX_REASON_TIMEOUT = "timeout"
 AUDIT_SANDBOX_REASON_EXIT_CODE = "exit-code"
 
-# room-upload audit events: an admin (privileged) adds shared reference
+# room-upload audit events: an admin / privileged user adds shared reference
 # material to a room, changing what the room's agent and members can access.
 AUDIT_ROOM_UPLOAD_ADDED = "room upload added"
+AUDIT_ROOM_UPLOAD_DELETED = "room upload deleted"
 
 # room-access audit events. 'AUDIT_ROOM_ACCESS' is the single "a principal
 # accessed room X" event, emitted across every entry path: the authenticated
@@ -765,6 +767,15 @@ class RoomUploadAuditLog(AuditLogWrapper):
         # file is recorded under 'upload_filename'.
         self._succeeded(
             AUDIT_ROOM_UPLOAD_ADDED,
+            room_id=room_id,
+            upload_filename=filename,
+        )
+
+    def room_upload_deleted(self, room_id: str, filename: str):
+        # NB: 'filename' is a reserved LogRecord attribute, so the stored
+        # file is recorded under 'upload_filename'.
+        self._succeeded(
+            AUDIT_ROOM_UPLOAD_DELETED,
             room_id=room_id,
             upload_filename=filename,
         )
