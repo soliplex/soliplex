@@ -162,7 +162,6 @@ async def post_uploads_room(
     room_id: str,
     upload_file: fastapi.UploadFile,
     the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui.ThreadStorage = depend_the_threads,
     the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
@@ -224,7 +223,7 @@ async def post_uploads_room(
         raise fastapi.HTTPException(
             status_code=405,
             detail="Room uploads not configured",
-            headers={"Allow": "GET"},
+            headers={"Allow": ""},
         )
 
     room_dir = pathlib.Path(uploads_path) / room_id
@@ -234,5 +233,103 @@ async def post_uploads_room(
     upload_target.write_bytes(await upload_file.read())
 
     the_audit.room_upload_added(room_id=room_id, filename=stripped_filename)
+
+    return fastapi.Response(status_code=204)
+
+
+@soliplex_views_util.logfire_span(
+    "DELETE /v1/uploads/{room_id}/{filename}",
+)
+@router.delete("/v1/uploads/{room_id}/{filename}", status_code=204)
+async def delete_uploads_room(
+    room_id: str,
+    filename: str,
+    the_installation: installation.Installation = depend_the_installation,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
+    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+    the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
+    the_audit: RoomUploadAuditLog = depend_the_room_upload_audit_log,
+) -> fastapi.Response:
+    """Delete one uploaded file from the room.
+
+    The room has to have an upload with the given name:  a delete of
+    anything else answers 404, leaving the rest of the room's uploads
+    alone.
+
+    Requires the room's 'WRITE' permission (or admin access):  'READ'
+    access is not required, allowing narrowly-scoped automation tokens
+    to manage the room's contents without being able to read other
+    resources in it.
+    """
+    the_logger.debug(loggers.UPLOADS_DELETE_ROOM_FILE)
+    the_authz_logger.debug(loggers.UPLOADS_DELETE_ROOM_FILE)
+
+    if await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_ROOM_UPLOAD,
+        action=loggers.AUDIT_ACTION_DELETE,
+    ):  # admins have 'ALLOW WRITE' implicitly
+        has_write = True
+    else:
+        has_write = await the_room_authz.check_room_access(
+            room_id=room_id,
+            user_token=the_user_claims,
+            permission=authz.Permission.WRITE,
+        )
+
+    if not has_write:
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail=loggers.AUTHZ_ROOM_ALLOW_WRITE_REQUIRED,
+        ) from None
+
+    # No authz check here:  the gate above has already established room
+    # 'WRITE' (or admin) access, and deleting a room upload is a
+    # write-level operation, so 'READ' access is not required.  A
+    # KeyError can only mean that the room is not (or no longer)
+    # configured.
+    try:
+        _room_config = await the_installation.get_room_config(
+            room_id=room_id,
+            user=the_user_claims,
+        )
+    except KeyError:
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
+        ) from None
+
+    uploads_path = the_installation.rooms_upload_path
+
+    if uploads_path is None:
+        raise fastapi.HTTPException(
+            status_code=405,
+            detail="Room uploads not configured",
+            headers={"Allow": ""},
+        )
+
+    room_dir = pathlib.Path(uploads_path) / room_id
+
+    if not room_dir.is_dir():
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=f"No uploads in room: {room_id}",
+        )
+
+    stripped_filename = pathlib.Path(filename).name
+    file_path = room_dir / stripped_filename
+
+    if not file_path.is_file():
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=f"No room upload: {filename}",
+        )
+
+    file_path.unlink()
+
+    the_audit.room_upload_deleted(room_id=room_id, filename=stripped_filename)
 
     return fastapi.Response(status_code=204)

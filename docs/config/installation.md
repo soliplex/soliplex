@@ -413,8 +413,8 @@ behind them, so each read is recorded on its own.
 Nothing technically prevents an administrator from uploading information that
 *should* be protected. An installation that wants to remove that risk
 entirely can **disable room uploads** by leaving `rooms_upload_path` unset: the
-room-upload endpoint then returns `404` and no `room` volume is mounted into
-the sandbox.
+room-upload endpoint then returns `405` for `POST`, and no `room` volume
+is mounted into the sandbox.
 
 ## AG-UI SSE Delivery
 

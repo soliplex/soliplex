@@ -921,6 +921,25 @@ def test_room_upload_added(audit_records):
     )
 
 
+def test_room_upload_deleted(audit_records):
+    wrapper = loggers.RoomUploadAuditLog(claims=CLAIMS)
+
+    wrapper.room_upload_deleted("test-room", "model.md")
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_UPLOAD_DELETED,
+        levelno=logging.INFO,
+        outcome=loggers.AUDIT_OUTCOME_SUCCESS,
+        scope=SCOPE_ROOM_UPLOAD,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "test-room",
+            "upload_filename": "model.md",
+        },
+    )
+
+
 # --- RoomAccessAuditLog --------------------------------------------------
 
 
