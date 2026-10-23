@@ -107,6 +107,11 @@ INST_GET_INSTALLATION_PROVIDERS = "get installation providers"
 INST_GET_INSTALLATION_GIT_METADATA = "get installation git metadata"
 INST_GET_INSTALLATION_IDENTITY = "get installation identity"
 INST_NO_INSTALLATION_IDENTITY = "installation identity not configured"
+INST_POST_RELOAD_ROOMS = "installation reload rooms"
+INST_RELOAD_ROOMS_MULTI_WRITER = (
+    "room configs reload unsupported with multiple workers: restart"
+    " the server to reload"
+)
 
 LOG_INGEST_INGEST_LOGS = "ingest logs"
 LOG_INGEST_PAYLOAD_TOO_BIG = "payload too big"
@@ -164,6 +169,7 @@ AUDIT_RESOURCE_INSTALLATION = "installation"
 AUDIT_RESOURCE_INSTALLATION_VERSIONS = "installation-versions"
 AUDIT_RESOURCE_INSTALLATION_PROVIDERS = "installation-providers"
 AUDIT_RESOURCE_INSTALLATION_GIT_METADATA = "installation-git-metadata"
+AUDIT_RESOURCE_INSTALLATION_ROOMS = "installation-rooms"
 AUDIT_RESOURCE_ROOM_UPLOAD = "room-upload"
 
 # room-authz audit events
@@ -181,6 +187,7 @@ AUDIT_INSTALLATION_READ = "installation read"
 AUDIT_INSTALLATION_VERSIONS_READ = "installation versions read"
 AUDIT_INSTALLATION_PROVIDERS_READ = "installation providers read"
 AUDIT_INSTALLATION_GIT_METADATA_READ = "installation git metadata read"
+AUDIT_INSTALLATION_ROOMS_RELOADED = "installation rooms reloaded"
 
 # server-lifecycle audit events
 AUDIT_SERVER_STARTING = "server starting"
@@ -548,6 +555,14 @@ class InstallationConfigAuditLog(AuditLogWrapper):
 
     def installation_git_metadata_read(self):
         self._succeeded(AUDIT_INSTALLATION_GIT_METADATA_READ)
+
+    def rooms_reloaded(self, added, removed, changed):
+        self._succeeded(
+            AUDIT_INSTALLATION_ROOMS_RELOADED,
+            rooms_added=added,
+            rooms_removed=removed,
+            rooms_changed=changed,
+        )
 
 
 class RAGAccessAuditLog(AuditLogWrapper):

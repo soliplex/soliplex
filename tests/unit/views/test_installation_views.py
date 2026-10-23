@@ -102,6 +102,159 @@ async def test_get_installation(fc, w_admin_access):
 
 
 @pytest.mark.anyio
+async def test_reload_rooms_configs(
+    monkeypatch,
+):
+    """An admin reload answers the added / removed / changed rooms."""
+    monkeypatch.delenv("_SOLIPLEX_MULTIPLE_WRITERS", raising=False)
+
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+    reloaded = installation.RoomConfigsReloaded(
+        added=("new-room",),
+        removed=("old-room",),
+        changed=("changed-room",),
+    )
+    the_installation.reload_room_configs = mock.AsyncMock(
+        return_value=reloaded,
+    )
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = True
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+    the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
+
+    found = await installation_views.reload_rooms_configs(
+        the_installation=the_installation,
+        the_admin_users=the_admin_users,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+        the_audit=the_audit,
+    )
+
+    assert found == models.RoomConfigsReloaded(
+        added=["new-room"],
+        removed=["old-room"],
+        changed=["changed-room"],
+    )
+
+    the_installation.reload_room_configs.assert_awaited_once_with()
+    the_audit.rooms_reloaded.assert_called_once_with(
+        added=["new-room"],
+        removed=["old-room"],
+        changed=["changed-room"],
+    )
+
+    the_admin_users.check_admin_access.assert_awaited_once_with(
+        THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_ROOMS,
+        action=loggers.AUDIT_ACTION_UPDATE,
+    )
+
+    bound_logger = the_logger.bind.return_value
+    the_logger.bind.assert_called_once_with(loggers.AUTHZ_LOGGER_NAME)
+    bound_logger.debug.assert_called_once_with(
+        loggers.INST_POST_RELOAD_ROOMS,
+    )
+
+
+@pytest.mark.anyio
+async def test_reload_rooms_configs_empty_delta(
+    monkeypatch,
+):
+    """A reload which changes nothing answers empty lists."""
+    monkeypatch.delenv("_SOLIPLEX_MULTIPLE_WRITERS", raising=False)
+
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+    the_installation.reload_room_configs = mock.AsyncMock(
+        return_value=installation.RoomConfigsReloaded(
+            added=(),
+            removed=(),
+            changed=(),
+        ),
+    )
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = True
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+    the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
+
+    found = await installation_views.reload_rooms_configs(
+        the_installation=the_installation,
+        the_admin_users=the_admin_users,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+        the_audit=the_audit,
+    )
+
+    assert found == models.RoomConfigsReloaded()
+    the_audit.rooms_reloaded.assert_called_once_with(
+        added=[],
+        removed=[],
+        changed=[],
+    )
+
+
+@pytest.mark.anyio
+async def test_reload_rooms_configs_not_admin(
+    monkeypatch,
+):
+    """A non-admin reload answers 403 and reloads nothing."""
+    monkeypatch.delenv("_SOLIPLEX_MULTIPLE_WRITERS", raising=False)
+
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+    the_installation.reload_room_configs = mock.AsyncMock()
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = False
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+    the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await installation_views.reload_rooms_configs(
+            the_installation=the_installation,
+            the_admin_users=the_admin_users,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+            the_audit=the_audit,
+        )
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+    the_installation.reload_room_configs.assert_not_awaited()
+    the_audit.rooms_reloaded.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_reload_rooms_configs_multi_writer(
+    monkeypatch,
+):
+    """A multi-writer deployment answers 409 with no in-process swap."""
+    monkeypatch.setenv("_SOLIPLEX_MULTIPLE_WRITERS", "Y")
+
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+    the_installation.reload_room_configs = mock.AsyncMock()
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = True
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+    the_audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await installation_views.reload_rooms_configs(
+            the_installation=the_installation,
+            the_admin_users=the_admin_users,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+            the_audit=the_audit,
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == loggers.INST_RELOAD_ROOMS_MULTI_WRITER
+    the_installation.reload_room_configs.assert_not_awaited()
+    the_audit.rooms_reloaded.assert_not_called()
+
+
+@pytest.mark.anyio
 @mock.patch("soliplex.views.installation.subprocess")
 async def test_get_installation_versions_w_error(sp):
     sp.check_output.side_effect = ValueError("testing")

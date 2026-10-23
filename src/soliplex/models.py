@@ -483,6 +483,18 @@ class InstallationInfo(pydantic.BaseModel):
         )
 
 
+class RoomConfigsReloaded(pydantic.BaseModel):
+    """The room IDs the last room-configs reload changed
+
+    'changed' means the reloaded config compares unequal to the one it
+    replaced;  unchanged rooms appear in none of the three fields.
+    """
+
+    added: list[str] = []
+    removed: list[str] = []
+    changed: list[str] = []
+
+
 class Installation(pydantic.BaseModel):
     """Configuration for a set of rooms, completions, etc."""
 
