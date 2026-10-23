@@ -5,6 +5,7 @@
 """
 
 import contextlib
+import dataclasses
 import datetime
 import enum
 import typing
@@ -75,11 +76,10 @@ class RunFeedbackEntry(pydantic.BaseModel):
 
 #   What a run's recovered status means for the info we can show, keyed by
 #   the status replaying its events leaves behind.  Phrased to stand alone:
-#   these are reported to the user via 'RunFeedbackInfo.run_status_note'.
+#   these are reported to the user via the 'run_status_note' of
+#   'RunFeedbackInfo' and 'TranscriptRun'.
 RUN_STATUS_NOTES = {
-    agui_parser.RunStatus.INITIALIZED: (
-        "The run never started:  nothing was recorded for it."
-    ),
+    agui_parser.RunStatus.INITIALIZED: ("The run never started."),
     agui_parser.RunStatus.RUNNING: (
         "The run never finished:  it may still be running, or resumable."
     ),
@@ -91,8 +91,16 @@ RUN_STATUS_NOTES = {
 #   could not be applied, and which no later snapshot superseded:  the
 #   recovered state is missing whatever those deltas carried.
 INCOMPLETE_STATE_NOTE = (
-    "The recovered 'agui_state' is incomplete:  {count} recorded state "
-    "update(s) could not be applied."
+    "The state recovered for this run is incomplete:  {count} recorded "
+    "state update(s) could not be applied."
+)
+
+#   Appended to the note when replaying the run skipped recorded events,
+#   either unreadable or rejected by the parser:  what is shown for the run,
+#   its status included, is missing whatever those events carried.
+SKIPPED_EVENTS_NOTE = (
+    "{count} recorded event(s) could not be replayed, so what is shown for "
+    "this run, its status included, may be incomplete or wrong."
 )
 
 
@@ -131,9 +139,9 @@ class RunFeedbackInfo(pydantic.BaseModel):
         the run's status, recovered by replaying its recorded events.
 
       'run_status_note' (string):  what that status means for this run, and
-        whether 'agui_state' came back incomplete.  Report it to the user
-        when 'user_prompt' or 'agent_response' is None, or when relaying
-        'agui_state':  it explains what became of the run.
+        whether what was recovered for it is incomplete.  Report it to the
+        user unless it is just "The run finished normally.":  it explains
+        what became of the run.
     """
 
     user_name: str
@@ -223,6 +231,9 @@ class TranscriptRun(pydantic.BaseModel):
       'run_status' (one of "INITIALIZED", "RUNNING", "FINISHED", "ERROR"):
         the run's status, recovered by replaying its recorded events.
 
+      'run_status_note' (string):  what that status means for this run,
+        and whether what was recovered for it is incomplete.
+
       'feedback' (one of None, "thumbs_up", "thumbs_down"):  feedback
         given by the user for this run, if any.
 
@@ -237,6 +248,7 @@ class TranscriptRun(pydantic.BaseModel):
     parent_run_id: str | None = None
     created: datetime.datetime
     run_status: str
+    run_status_note: str
     feedback: str | None = None
     feedback_reason: str | None = None
     messages: list[TranscriptMessage] = []
@@ -257,8 +269,12 @@ class ThreadTranscript(pydantic.BaseModel):
 
       'runs' (list):  the thread's runs, oldest first.
 
-      'agui_state' (mapping or None):  the AG-UI state as of the end of
-        the thread's last run, if requested.
+      'agui_state' (mapping or None):  the AG-UI state recovered from the
+        thread's last run with recorded input, if requested;  None if no
+        run recorded input.
+
+      'agui_state_run_id' (string or None):  UUID of the run 'agui_state'
+        came from;  its 'run_status_note' says whether it is incomplete.
     """
 
     user_name: str
@@ -267,6 +283,7 @@ class ThreadTranscript(pydantic.BaseModel):
     thread_id: str
     runs: list[TranscriptRun] = []
     agui_state: dict[str, typing.Any] | None = None
+    agui_state_run_id: str | None = None
 
 
 class RecentRunFeedbackQuery(pydantic.BaseModel):
@@ -510,22 +527,83 @@ def _find_feedback_by_run_id(
     raise UnknownFeedback(run_id)
 
 
-async def _replay_run(run) -> agui_parser.EventStreamParser:
-    """Replay a run's recorded input and events through a parser"""
-    run_input = await run.awaitable_attrs.run_agent_input
-    events = await run.awaitable_attrs.events
+@dataclasses.dataclass
+class _ReplayedRun:
+    """A run replayed in its thread, with the messages first appearing in it"""
 
-    esp = agui_parser.EventStreamParser(run_input)
+    run: agui.Run
+    run_id: str
+    esp: agui_parser.EventStreamParser
+    skipped_events: int
+    new_messages: list
 
-    for event in events:
-        try:
-            e_model = event.to_agui_model()
-        # agui_core.events.Event is not all-inclusive :<
-        except pydantic.ValidationError:  # pragma: NO COVER
-            continue
-        esp(e_model)
+    @property
+    def run_status_note(self) -> str:
+        notes = [RUN_STATUS_NOTES[self.esp.run_status]]
 
-    return esp
+        if self.esp.invalid_state_deltas:
+            notes.append(
+                INCOMPLETE_STATE_NOTE.format(
+                    count=len(self.esp.invalid_state_deltas),
+                )
+            )
+
+        if self.skipped_events:
+            notes.append(SKIPPED_EVENTS_NOTE.format(count=self.skipped_events))
+
+        return "  ".join(notes)
+
+
+async def _replay_thread(
+    thread: agui.Thread,
+) -> typing.AsyncIterator[_ReplayedRun]:
+    """Replay each of a thread's runs, oldest first
+
+    A run's input normally repeats the messages before it:  a run's
+    'new_messages' are those which no earlier run held.
+    """
+    seen_message_ids = set()
+
+    for run in await thread.awaitable_attrs.runs:
+        run_input = await run.awaitable_attrs.run_agent_input
+        esp = agui_parser.EventStreamParser(run_input)
+        skipped_events = 0
+
+        for event in await run.awaitable_attrs.events:
+            # The parser raises 'EPSError' before changing anything, so
+            # replay can go on past a rejected event, as it does past an
+            # unreadable one.
+            try:
+                esp(event.to_agui_model())
+            except (pydantic.ValidationError, agui_parser.EPSError):
+                skipped_events += 1
+
+        new_messages = [
+            message
+            for message in esp.messages
+            if message.id not in seen_message_ids
+        ]
+        seen_message_ids.update(message.id for message in new_messages)
+
+        yield _ReplayedRun(
+            run=run,
+            run_id=await run.awaitable_attrs.run_id,
+            esp=esp,
+            skipped_events=skipped_events,
+            new_messages=new_messages,
+        )
+
+
+async def _get_entry_thread(the_threads, to_query: RunFeedbackEntry):
+    try:
+        return await the_threads.get_thread(
+            user_name=to_query.user_name,
+            room_id=to_query.room_id,
+            thread_id=to_query.thread_id,
+        )
+    except agui.UnknownThread:
+        # The entry's thread no longer exists.
+        raise UnknownFeedback(to_query.run_id) from None
 
 
 def _content_text(content) -> str | None:
@@ -573,9 +651,12 @@ async def get_feedback_run_info(
 ) -> RunFeedbackInfo:
     """Return information about the run against which the feedback was created
 
-    'user_prompt' and / or 'agent_response' come back as None for a run
-    which recorded neither;  'run_status_note' explains what became of it,
-    and should be reported to the user in that case.
+    'user_prompt' is the run's own last prompt, and 'agent_response' its
+    last reply;  either is None if the run recorded none of its own.  E.g.
+    a run resumed to supply a tool result (a human-in-the-loop approval)
+    has no prompt of its own:  'get_feedback_thread_transcript' shows the
+    earlier run holding it.  Report 'run_status_note' to the user unless
+    it is just "The run finished normally.".
 
     Args:
 
@@ -590,44 +671,34 @@ async def get_feedback_run_info(
     to_query, _ = _find_feedback_by_run_id(our_state, run_id)
 
     async with _get_threads_storage(ctx) as the_threads:
-        run = await the_threads.get_run(
-            user_name=to_query.user_name,
-            room_id=to_query.room_id,
-            thread_id=to_query.thread_id,
-            run_id=to_query.run_id,
-        )
-
-        thread = await run.awaitable_attrs.thread
+        thread = await _get_entry_thread(the_threads, to_query)
         email = await thread.awaitable_attrs.email
-        parent_run_id = await run.awaitable_attrs.parent_run_id
-        esp = await _replay_run(run)
+
+        async with contextlib.aclosing(_replay_thread(thread)) as replayed:
+            async for replayed_run in replayed:
+                if replayed_run.run_id == to_query.run_id:
+                    break
+            else:
+                raise UnknownFeedback(run_id)
+
+        parent_run_id = await replayed_run.run.awaitable_attrs.parent_run_id
 
     user_prompts = [
-        message.content for message in esp.messages if message.role == "user"
+        _content_text(message.content)
+        for message in replayed_run.new_messages
+        if message.role == "user"
     ]
 
     agent_responses = [
         message.content
-        for message in esp.messages
+        for message in replayed_run.new_messages
         if message.role == "assistant" and message.content is not None
     ]
 
-    # A degenerate run (never started, died, errored, or answered only via
-    # tool calls) may have recorded neither:  report what it did record,
-    # explaining the gap via the run's status, rather than failing.
-    run_status = esp.run_status
-    run_status_note = RUN_STATUS_NOTES[run_status]
-
-    if esp.invalid_state_deltas:
-        run_status_note = "  ".join(
-            [
-                run_status_note,
-                INCOMPLETE_STATE_NOTE.format(
-                    count=len(esp.invalid_state_deltas),
-                ),
-            ]
-        )
-
+    # A degenerate run (never started, died, errored, resumed without a
+    # prompt, or answered only via tool calls) may lack a prompt, a reply,
+    # or both:  report what it did record, explaining the gap via the run's
+    # status note, rather than failing.
     return RunFeedbackInfo(
         user_name=to_query.user_name,
         email=email,
@@ -635,11 +706,11 @@ async def get_feedback_run_info(
         thread_id=to_query.thread_id,
         run_id=run_id,
         parent_run_id=parent_run_id,
-        agui_state=esp.state,
+        agui_state=replayed_run.esp.state,
         user_prompt=user_prompts[-1] if user_prompts else None,
         agent_response=agent_responses[-1] if agent_responses else None,
-        run_status=run_status.name,
-        run_status_note=run_status_note,
+        run_status=replayed_run.esp.run_status.name,
+        run_status_note=replayed_run.run_status_note,
     )
 
 
@@ -655,7 +726,10 @@ async def get_feedback_thread_transcript(
     holds the messages which first appear in it:  the user's prompts, the
     agent's replies and tool calls, and (if requested) the tool results.
     Runs which received feedback carry it in 'feedback' and
-    'feedback_reason'.
+    'feedback_reason'.  Each run's 'run_status_note' explains its
+    'run_status':  report it unless it is just "The run finished
+    normally.".
+    System, developer, reasoning, and activity messages are left out.
 
     Args:
 
@@ -663,11 +737,14 @@ async def get_feedback_thread_transcript(
 
       'include_tool_results' (default False):  if True, include "tool"
         messages holding tool results.  They can be large:  request them
-        only when the user asks what a tool returned.
+        only when the user asks what a tool returned.  Long results are
+        cut short, ending with '... [<n> characters omitted]'.
 
       'include_agui_state' (default False):  if True, include the AG-UI
-        state as of the end of the thread's last run.  It can be very
-        large:  request it only when the user asks about the state.
+        state recovered from the thread's last run with recorded input
+        (None if no run recorded any), and that run's ID in
+        'agui_state_run_id'.  It can be very large:
+        request it only when the user asks about the state.
         'get_feedback_run_info' returns the state as of the end of the
         feedback entry's own run.
     """
@@ -679,35 +756,26 @@ async def get_feedback_thread_transcript(
 
     to_query, _ = _find_feedback_by_run_id(our_state, run_id)
 
+    if include_tool_results:
+        roles = TRANSCRIPT_ROLES
+    else:
+        roles = tuple(role for role in TRANSCRIPT_ROLES if role != "tool")
+
     transcript_runs = []
-    seen_message_ids = set()
-    last_state = None
+    last_state = last_state_run_id = None
 
     async with _get_threads_storage(ctx) as the_threads:
-        thread = await the_threads.get_thread(
-            user_name=to_query.user_name,
-            room_id=to_query.room_id,
-            thread_id=to_query.thread_id,
-        )
+        thread = await _get_entry_thread(the_threads, to_query)
         email = await thread.awaitable_attrs.email
 
-        for run in await thread.awaitable_attrs.runs:
-            esp = await _replay_run(run)
-            last_state = esp.state
+        async for replayed in _replay_thread(thread):
+            # A run with no recorded input replays from empty state, not
+            # from the thread's.
+            if replayed.esp.run_input is not None:
+                last_state = replayed.esp.state
+                last_state_run_id = replayed.run_id
 
-            messages = []
-            for message in esp.messages:
-                if message.id in seen_message_ids:
-                    continue
-                seen_message_ids.add(message.id)
-
-                if message.role == "tool" and not include_tool_results:
-                    continue
-
-                if message.role in TRANSCRIPT_ROLES:
-                    messages.append(_transcript_message(message))
-
-            run_feedback = await run.awaitable_attrs.run_feedback
+            run_feedback = await replayed.run.awaitable_attrs.run_feedback
 
             if run_feedback is not None:
                 feedback = await run_feedback.awaitable_attrs.feedback
@@ -717,13 +785,20 @@ async def get_feedback_thread_transcript(
 
             transcript_runs.append(
                 TranscriptRun(
-                    run_id=await run.awaitable_attrs.run_id,
-                    parent_run_id=await run.awaitable_attrs.parent_run_id,
-                    created=await run.awaitable_attrs.created,
-                    run_status=esp.run_status.name,
+                    run_id=replayed.run_id,
+                    parent_run_id=(
+                        await replayed.run.awaitable_attrs.parent_run_id
+                    ),
+                    created=await replayed.run.awaitable_attrs.created,
+                    run_status=replayed.esp.run_status.name,
+                    run_status_note=replayed.run_status_note,
                     feedback=feedback,
                     feedback_reason=feedback_reason,
-                    messages=messages,
+                    messages=[
+                        _transcript_message(message)
+                        for message in replayed.new_messages
+                        if message.role in roles
+                    ],
                 )
             )
 
@@ -734,6 +809,7 @@ async def get_feedback_thread_transcript(
         thread_id=to_query.thread_id,
         runs=transcript_runs,
         agui_state=last_state if include_agui_state else None,
+        agui_state_run_id=last_state_run_id if include_agui_state else None,
     )
 
 
