@@ -16,6 +16,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
 from soliplex.config import sse_delivery as config_sse_delivery
@@ -241,13 +242,15 @@ async def test__check_user_in_room(w_miss, expectation):
         (True, raises_httpexc(code=404, match="No such room")),
     ],
 )
-async def test__check_user_room_agent(w_miss, expectation):
+@mock.patch("soliplex.agents.get_agent_from_configs")
+async def test__check_user_room_agent(gafc, w_miss, expectation):
     the_installation = mock.create_autospec(installation.Installation)
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
+    room_config = the_installation.get_room_config.return_value
 
     if w_miss:
-        the_installation.get_agent_for_room.side_effect = KeyError("testing")
+        the_installation.get_room_config.side_effect = KeyError("testing")
 
     with expectation as expected:
         found = await agui_views._check_user_room_agent(
@@ -259,16 +262,28 @@ async def test__check_user_room_agent(w_miss, expectation):
         )
 
     if isinstance(expected, str):
-        user_profile, agent = found
-        assert agent is the_installation.get_agent_for_room.return_value
+        user_profile, agent, found_room_config = found
+        assert agent is gafc.return_value
+        assert found_room_config is room_config
         assert user_profile.preferred_username == expected
 
-    the_installation.get_agent_for_room.assert_awaited_once_with(
+        gafc.assert_called_once_with(
+            agent_config=room_config.agent_config,
+            tool_configs=room_config.tool_configs,
+            mcp_client_toolset_configs=room_config.mcp_client_toolset_configs,
+            capability_config=room_config.skills,
+        )
+    else:
+        gafc.assert_not_called()
+
+    # Fetched, and authorized, once per run.
+    the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         user=THE_USER_CLAIMS,
         the_room_authz=the_room_authz,
         the_logger=the_logger,
     )
+    the_installation.get_agent_for_room.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -1669,7 +1684,11 @@ async def test_post_room_agui_thread_id_run_id_w_bogus_ids(
 
     USER_PROFILE = models.UserProfile(**AUTH_USER)
     agent = object()
-    cura.return_value = (USER_PROFILE, agent)
+    # A room whose model is not known to reason, so the run asks
+    # nothing of it:  what these tests are about is elsewhere.
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.agent_config = config_agents.AgentConfig(id="test-agent")
+    cura.return_value = (USER_PROFILE, agent, room_config)
 
     request = fastapi.Request(
         scope={
@@ -1740,7 +1759,11 @@ async def test_post_room_agui_thread_id_run_id_streaming(
 ):
     USER_PROFILE = models.UserProfile(**AUTH_USER)
     agent = object()
-    cura.return_value = (USER_PROFILE, agent)
+    # A room whose model is not known to reason, so the run asks
+    # nothing of it:  what these tests are about is elsewhere.
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.agent_config = config_agents.AgentConfig(id="test-agent")
+    cura.return_value = (USER_PROFILE, agent, room_config)
 
     state = mock.Mock()
     global_agui_bg_tasks = state.agui_background_tasks = set()
@@ -2665,3 +2688,175 @@ async def test_get_room_agui_thread_id_run_id_usage(
     the_logger.debug.assert_called_once_with(
         loggers.AGUI_GET_ROOM_THREAD_RUN_USAGE,
     )
+
+
+#
+#   Thinking level
+#
+
+
+def _room_config_with_thinking(**agent_kw):
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.id = TEST_ROOM_ID
+    room_config.agent_config = config_agents.AgentConfig(
+        id="test-agent",
+        **agent_kw,
+    )
+    return room_config
+
+
+DECLARED_AGENT_KW = dict(
+    model_name="Qwen/Qwen3.8-27B",
+    provider_type="vllm",
+    provider_base_url="http://vllm.example.com",
+    thinking_levels=["low", "medium", "xhigh"],
+)
+
+
+@pytest.mark.parametrize(
+    "state, expected",
+    [
+        # Nothing asked: nothing added, so the default already in the
+        # agent's own model settings stands.
+        (None, {}),
+        ({}, {}),
+        ({"thinking": {}}, {}),
+        ({"thinking": {"level": None}}, {}),
+        ("not-a-mapping", {}),
+        # What the client asked for, as a self-hosted model is sent it.
+        (
+            {"thinking": {"level": "low"}},
+            {"model_settings": {"openai_reasoning_effort": "low"}},
+        ),
+        (
+            {"thinking": {"level": "xhigh"}},
+            {"model_settings": {"openai_reasoning_effort": "xhigh"}},
+        ),
+    ],
+)
+def test__thinking_model_settings(state, expected):
+    found = agui_views._thinking_model_settings(
+        room_config=_room_config_with_thinking(**DECLARED_AGENT_KW),
+        run_input=mock.Mock(state=state),
+    )
+
+    assert found == expected
+
+
+def test__thinking_model_settings_leaves_the_default_to_the_agent():
+    """A run asking for nothing adds nothing, even with a default.
+
+    'get_model_settings_from_config' puts the default in the agent's
+    own settings, where every runner -- not only this view -- sees it.
+    """
+    found = agui_views._thinking_model_settings(
+        room_config=_room_config_with_thinking(
+            **DECLARED_AGENT_KW,
+            thinking_default="medium",
+        ),
+        run_input=mock.Mock(state={}),
+    )
+
+    assert found == {}
+
+
+@pytest.mark.parametrize(
+    "agent_kw, expected",
+    [
+        (
+            dict(
+                model_name="Qwen/Qwen3-32B",
+                provider_type="vllm",
+                provider_base_url="http://vllm.example.com",
+            ),
+            {"openai_reasoning_effort": "none"},
+        ),
+        (
+            dict(model_name="gemini-2.5-flash", provider_type="google"),
+            {"thinking": False},
+        ),
+    ],
+)
+def test__thinking_model_settings_renders_off_for_the_provider(
+    agent_kw,
+    expected,
+):
+    found = agui_views._thinking_model_settings(
+        room_config=_room_config_with_thinking(
+            **agent_kw,
+            thinking_levels=["off", "low"],
+        ),
+        run_input=mock.Mock(state={"thinking": {"level": "off"}}),
+    )
+
+    assert found == {"model_settings": expected}
+
+
+def test__thinking_model_settings_ignores_a_level_where_none_is_offered():
+    """Dropped rather than refused.
+
+    A room's model can be changed under a thread that still carries a
+    level, and failing that thread's next run gains nothing: the level
+    would have been discarded on the way to the wire anyway.
+    """
+    found = agui_views._thinking_model_settings(
+        room_config=_room_config_with_thinking(),
+        run_input=mock.Mock(state={"thinking": {"level": "high"}}),
+    )
+
+    assert found == {}
+
+
+def test__thinking_model_settings_ignores_a_level_for_a_factory_agent():
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.id = TEST_ROOM_ID
+    room_config.agent_config = config_agents.FactoryAgentConfig(
+        id="test-agent",
+        factory_name="soliplex.examples.faux_agent_factory",
+    )
+
+    found = agui_views._thinking_model_settings(
+        room_config=room_config,
+        run_input=mock.Mock(state={"thinking": {"level": "high"}}),
+    )
+
+    assert found == {}
+
+
+@pytest.mark.parametrize(
+    "feature",
+    [
+        {"level": "high"},
+        {"level": "banana"},
+        {"level": 3},
+        "not-a-mapping",
+    ],
+)
+def test__thinking_model_settings_refuses_a_level_not_offered(feature):
+    """Refused where a control exists but not that setting.
+
+    A client reads the offered set from the room, so asking outside it
+    is a bug worth seeing -- and the alternative, quietly running at
+    some other level, answers a question nobody asked.
+    """
+    with raises_httpexc(code=400, match="Unsupported thinking level"):
+        agui_views._thinking_model_settings(
+            room_config=_room_config_with_thinking(**DECLARED_AGENT_KW),
+            run_input=mock.Mock(state={"thinking": feature}),
+        )
+
+
+def test__thinking_model_settings_does_not_echo_the_rejected_value():
+    """The rejected value arrived from a client and is not repeated.
+
+    Naming what the room does offer is the part that says how to fix
+    it; repeating the input only carries it further.
+    """
+    with pytest.raises(fastapi.HTTPException) as exc_info:
+        agui_views._thinking_model_settings(
+            room_config=_room_config_with_thinking(**DECLARED_AGENT_KW),
+            run_input=mock.Mock(state={"thinking": {"level": "sekrit"}}),
+        )
+
+    assert "sekrit" not in exc_info.value.detail
+    assert "xhigh" in exc_info.value.detail

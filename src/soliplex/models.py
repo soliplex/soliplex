@@ -173,6 +173,33 @@ class Skill(pydantic.BaseModel):
 ConfiguredSkills = dict[str, Skill]
 
 
+class AgentThinking(pydantic.BaseModel):
+    """How hard this agent's model may be asked to think.
+
+    Absent from an agent whose configuration declares no
+    'thinking_levels', so a client offers a control only where an
+    operator has said which levels the model takes.
+    """
+
+    levels: list[str]
+    """Offerable levels, lowest first, and the complete set.
+
+    A client offers these and nothing else.  Which levels a model
+    accepts belongs to its chat template rather than to any catalogue,
+    so the run refuses a level absent here.
+    """
+
+    default: str | None = None
+    """What the room asks for when a run asks for nothing."""
+
+    @classmethod
+    def from_support(cls, support: config_agents.ThinkingSupport | None):
+        if support is None:
+            return None
+
+        return cls(levels=list(support.levels), default=support.default)
+
+
 class DefaultAgent(pydantic.BaseModel):
     id: str
     model_name: str | None
@@ -185,6 +212,10 @@ class DefaultAgent(pydantic.BaseModel):
     # it. Fixed for the life of the process, so a client reads it once
     # with the room rather than asking per thread.
     context_window: int | None = None
+    # What the model offers for how hard it thinks, or null where it
+    # offers nothing. Declared with the agent, so a client reads it
+    # once with the room rather than guessing from the model name.
+    thinking: AgentThinking | None = None
     agui_feature_names: list[str] = pydantic.Field(default_factory=list)
 
     @classmethod
@@ -200,6 +231,11 @@ class DefaultAgent(pydantic.BaseModel):
             provider_key=agent_config.provider_key or "dummy",
             context_window=config_agents.get_context_window_from_config(
                 agent_config=agent_config,
+            ),
+            thinking=AgentThinking.from_support(
+                config_agents.get_thinking_from_config(
+                    agent_config=agent_config,
+                ),
             ),
         )
 

@@ -204,6 +204,7 @@ def test_get_default_agent_from_configs(
     agent_config.kind = "default"
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
     agent_config.model_settings = w_model_settings
+    agent_config.thinking_default = None
     exp_retries = agent_config.retries = 7  # See #926
 
     if w_capabilities:
