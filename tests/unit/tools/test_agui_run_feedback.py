@@ -861,6 +861,7 @@ ORPHAN_RUN_ID = "test-orphan-run-id"
 ERRORED_RUN_ID = "test-errored-run-id"
 REJECTED_RUN_ID = "test-rejected-run-id"
 RESUMED_RUN_ID = "test-resumed-run-id"
+UNFINISHED_RUN_ID = "test-unfinished-run-id"
 NEVER_STARTED_RUN_ID = "test-never-started-run-id"
 
 CREATED = {
@@ -869,6 +870,7 @@ CREATED = {
         [
             NEVER_STARTED_RUN_ID,
             RUN_ID,
+            UNFINISHED_RUN_ID,
             RESUMED_RUN_ID,
             REJECTED_RUN_ID,
             ERRORED_RUN_ID,
@@ -882,7 +884,8 @@ PARENT_RUN_IDS = {
     ERRORED_RUN_ID: PARENT_RUN_ID,
     REJECTED_RUN_ID: ERRORED_RUN_ID,
     RESUMED_RUN_ID: REJECTED_RUN_ID,
-    RUN_ID: RESUMED_RUN_ID,
+    UNFINISHED_RUN_ID: RESUMED_RUN_ID,
+    RUN_ID: UNFINISHED_RUN_ID,
     NEVER_STARTED_RUN_ID: RUN_ID,
 }
 
@@ -952,6 +955,20 @@ RESUMED_RESPONSE = agui_core.types.AssistantMessage(
     id=RESUMED_RESPONSE_MESSAGE_ID,
     content="test resumed response",
 )
+UNFINISHED_PROMPTS = [
+    agui_core.types.UserMessage(
+        id=f"message-unfinished-prompt-{n}",
+        content=f"test unfinished prompt {n}",
+    )
+    for n in (1, 2)
+]
+UNFINISHED_RESPONSES = [
+    agui_core.types.AssistantMessage(
+        id=f"message-unfinished-response-{n}",
+        content=f"test unfinished response {n}",
+    )
+    for n in (1, 2)
+]
 PROMPT = agui_core.types.UserMessage(
     id=USER_PROMPT_MESSAGE_ID,
     content=USER_PROMPT,
@@ -967,7 +984,8 @@ EARLIER_HISTORY = HIDDEN_ROLE_MESSAGES + [
 ERRORED_HISTORY = EARLIER_HISTORY + [EARLIER_RESPONSE, ERRORED_PROMPT]
 REJECTED_HISTORY = ERRORED_HISTORY + [REJECTED_PROMPT]
 RESUMED_HISTORY = REJECTED_HISTORY + [REJECTED_RESPONSE, HITL_ANSWER]
-FEEDBACK_HISTORY = RESUMED_HISTORY + [RESUMED_RESPONSE, PROMPT]
+UNFINISHED_HISTORY = RESUMED_HISTORY + [RESUMED_RESPONSE] + UNFINISHED_PROMPTS
+FEEDBACK_HISTORY = UNFINISHED_HISTORY + UNFINISHED_RESPONSES + [PROMPT]
 
 #   Recorded against state the run did not have, so cannot be applied.
 UNAPPLIABLE_STATE_DELTA = agui_core.events.StateDeltaEvent(
@@ -1051,6 +1069,33 @@ def _thread_runs():
                 RESUMED_RESPONSE.content,
                 _finished(RESUMED_RUN_ID),
             ),
+        ),
+        # replied twice to two prompts, but never finished
+        _stored_run(
+            UNFINISHED_RUN_ID,
+            _stored_input(UNFINISHED_RUN_ID, AGUI_STATE, UNFINISHED_HISTORY),
+            [
+                agui_core.events.RunStartedEvent(
+                    thread_id=THREAD_ID,
+                    run_id=UNFINISHED_RUN_ID,
+                ),
+                *[
+                    event
+                    for response in UNFINISHED_RESPONSES
+                    for event in (
+                        agui_core.events.TextMessageStartEvent(
+                            message_id=response.id,
+                        ),
+                        agui_core.events.TextMessageContentEvent(
+                            message_id=response.id,
+                            delta=response.content,
+                        ),
+                        agui_core.events.TextMessageEndEvent(
+                            message_id=response.id,
+                        ),
+                    )
+                ],
+            ],
         ),
         _stored_run(
             RUN_ID,
@@ -1138,6 +1183,15 @@ FEEDBACK_RUN_NOTE = "  ".join(
             RESUMED_RESPONSE.content,
             "FINISHED",
             arf_tools.RUN_STATUS_NOTES[RS.FINISHED],
+            AGUI_STATE,
+        ),
+        # the last of its prompts and of its replies
+        (
+            UNFINISHED_RUN_ID,
+            UNFINISHED_PROMPTS[-1].content,
+            UNFINISHED_RESPONSES[-1].content,
+            "RUNNING",
+            arf_tools.RUN_STATUS_NOTES[RS.RUNNING],
             AGUI_STATE,
         ),
         (
@@ -1279,6 +1333,17 @@ async def test_get_feedback_thread_transcript(
             "FINISHED",
             arf_tools.RUN_STATUS_NOTES[RS.FINISHED],
             [*tool_results(HITL_ANSWER.id), RESUMED_RESPONSE.id],
+            None,
+            None,
+        ),
+        (
+            UNFINISHED_RUN_ID,
+            "RUNNING",
+            arf_tools.RUN_STATUS_NOTES[RS.RUNNING],
+            [
+                *[prompt.id for prompt in UNFINISHED_PROMPTS],
+                *[response.id for response in UNFINISHED_RESPONSES],
+            ],
             None,
             None,
         ),
