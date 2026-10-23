@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import subprocess
 
@@ -68,6 +69,62 @@ async def get_installation(
 
     the_audit.installation_read()
     return models.Installation.from_config(the_installation._config)
+
+
+@util.logfire_span("POST /v1/installation/reload/rooms")
+@router.post("/v1/installation/reload/rooms")
+async def reload_rooms_configs(
+    the_installation: installation.Installation = depend_the_installation,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+    the_audit: ConfigAuditLog = depend_the_config_audit_log,
+) -> models.RoomConfigsReloaded:
+    """Reload the room configs from the filesystem, swapping in place.
+
+    Answers the room IDs the reload added, removed, or changed.
+
+    Reloads are admin-only.  With 'serve --workers N', N > 1, the
+    reload swaps the configs of only the worker which handles the
+    request:  such deployments answer 409, and reload via a restart
+    instead.
+    """
+    bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
+    bound_logger.debug(loggers.INST_POST_RELOAD_ROOMS)
+
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_INSTALLATION_ROOMS,
+        action=loggers.AUDIT_ACTION_UPDATE,
+    ):
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
+        ) from None
+
+    # 'serve --workers N', N > 1, sets this in the private env-var
+    # contract (see 'cli.serve'):  see the docstring above.
+    if os.environ.get("_SOLIPLEX_MULTIPLE_WRITERS") == "Y":
+        raise fastapi.HTTPException(
+            status_code=409,
+            detail=loggers.INST_RELOAD_ROOMS_MULTI_WRITER,
+        ) from None
+
+    reloaded = await the_installation.reload_room_configs()
+
+    delta = models.RoomConfigsReloaded(
+        added=list(reloaded.added),
+        removed=list(reloaded.removed),
+        changed=list(reloaded.changed),
+    )
+
+    the_audit.rooms_reloaded(
+        added=delta.added,
+        removed=delta.removed,
+        changed=delta.changed,
+    )
+
+    return delta
 
 
 @util.logfire_span("GET /v1/installation/versions")
