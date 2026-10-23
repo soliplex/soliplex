@@ -17,5 +17,6 @@ tools:
   - tool_name: "soliplex.tools.get_current_datetime"
   - tool_name: "soliplex.tools.agui_run_feedback.query_recent_feedback"
   - tool_name: "soliplex.tools.agui_run_feedback.get_feedback_run_info"
+  - tool_name: "soliplex.tools.agui_run_feedback.get_feedback_thread_transcript"
   - tool_name: "soliplex.tools.agui_run_feedback.review_recent_feedback"
   - tool_name: "soliplex.tools.agui_run_feedback.resolve_recent_feedback"
