@@ -4,6 +4,7 @@ import dataclasses
 import functools
 import pathlib
 import typing
+import warnings
 from unittest import mock
 
 import pytest
@@ -1194,6 +1195,8 @@ def test_agentconfig_as_yaml(
         "provider_type": agent_config_kw.get("provider_type", "ollama"),
         "provider_base_url": agent_config_kw.get("provider_base_url"),
         "provider_key": agent_config_kw.get("provider_key"),
+        "thinking_default": agent_config_kw.get("thinking_default"),
+        "thinking_levels": agent_config_kw.get("thinking_levels"),
         "agui_feature_names": agent_config_kw.get("agui_feature_names", ()),
     } | exp_cap
 
@@ -1694,6 +1697,10 @@ def test_get_model_from_config(
     agent_config.model_settings = w_model_settings
     agent_config.context_window = w_context_window
     agent_config.provider_type = provider_type
+    # Autospec hands back a Mock for anything unset, which would be
+    # read as declared levels and a default.
+    agent_config.thinking_levels = None
+    agent_config.thinking_default = None
     # A copy, so the assertions below compare against what was
     # configured rather than against anything the code did to it.
     agent_config.llm_provider_kw = dict(llm_provider_kw)
@@ -1993,3 +2000,281 @@ def test_vllm_model_sends_thinking_its_profile_does_not_claim():
     )
 
     assert model._translate_thinking(settings, params) == "high"
+
+
+#
+#   Thinking level configuration
+#
+
+
+@pytest.mark.parametrize(
+    "level, expected",
+    [
+        (None, None),
+        ("off", False),
+        ("low", "low"),
+        ("xhigh", "xhigh"),
+    ],
+)
+def test_as_thinking_level(level, expected):
+    assert config_agents.as_thinking_level(level) is expected
+
+
+@pytest.mark.parametrize(
+    "agent_kw, bad_name",
+    [
+        (dict(thinking_default="enthusiastic"), "thinking_default"),
+        (dict(thinking_levels=["low", "sideways"]), "thinking_levels"),
+    ],
+)
+def test_agentconfig_rejects_an_unknown_thinking_level(agent_kw, bad_name):
+    """A level nothing accepts is caught at load, not at run time.
+
+    Sent on a run it would fail it, from inside a chat template, which
+    says nothing about which configuration file to go and fix.
+    """
+    with pytest.raises(config_agents.UnknownThinkingLevel) as exc_info:
+        config_agents.AgentConfig(id=AGENT_ID, **agent_kw)
+
+    assert exc_info.value.name == bad_name
+
+
+def test_agentconfig_accepts_every_level_it_publishes():
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        thinking_levels=list(config_agents.THINKING_LEVELS),
+        thinking_default=config_agents.THINKING_OFF,
+    )
+
+    assert agent_config.thinking_default == "off"
+
+
+def test_agentconfig_from_yaml_deprecates_thinking_in_model_settings(
+    installation_config,
+    temp_dir,
+):
+    config_path = temp_dir / "room_config.yaml"
+
+    with pytest.warns(DeprecationWarning, match="thinking_default"):
+        agent_config = config_agents.AgentConfig.from_yaml(
+            installation_config,
+            config_path,
+            {
+                "id": AGENT_ID,
+                "model_settings": {"thinking": "low"},
+            },
+        )
+
+    # Deprecated, not ignored:  what it did before, it still does.
+    assert agent_config.model_settings["thinking"] == "low"
+
+
+def test_agentconfig_from_yaml_thinking_default_wins_over_model_settings(
+    installation_config,
+    temp_dir,
+):
+    with pytest.warns(DeprecationWarning, match="this setting is ignored"):
+        agent_config = config_agents.AgentConfig.from_yaml(
+            installation_config,
+            temp_dir / "room_config.yaml",
+            {
+                "id": AGENT_ID,
+                "provider_type": "google",
+                "model_name": "gemini-2.5-flash",
+                "model_settings": {"thinking": "high"},
+                "thinking_default": "low",
+            },
+        )
+
+    found = config_agents.get_model_settings_from_config(
+        agent_config=agent_config,
+    )
+
+    assert found["thinking"] == "low"
+
+
+def test_agentconfig_from_yaml_allows_other_model_settings(
+    installation_config,
+    temp_dir,
+):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        agent_config = config_agents.AgentConfig.from_yaml(
+            installation_config,
+            temp_dir / "room_config.yaml",
+            {"id": AGENT_ID, "model_settings": {"temperature": 0.5}},
+        )
+
+    assert agent_config.model_settings["temperature"] == 0.5
+
+
+def test_agentconfig_orders_and_dedupes_thinking_levels():
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        thinking_levels=["high", "low", "low", "off"],
+    )
+
+    assert agent_config.thinking_levels == ["off", "low", "high"]
+
+
+def test_agentconfig_rejects_a_default_it_does_not_offer():
+    """A default outside the declared levels would fail every run.
+
+    It is what a run asking for nothing is sent, and the run refuses a
+    level the room does not offer.
+    """
+    with pytest.raises(config_agents.UnofferedThinkingDefault) as exc_info:
+        config_agents.AgentConfig(
+            id=AGENT_ID,
+            thinking_levels=["low", "high"],
+            thinking_default="xhigh",
+        )
+
+    assert str(exc_info.value).endswith("one of ['low', 'high']")
+
+
+def test_agentconfig_allows_a_default_without_declared_levels():
+    """With nothing declared there is no offer for a default to miss."""
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        thinking_default="xhigh",
+    )
+
+    assert agent_config.thinking_default == "xhigh"
+
+
+def test_unknown_thinking_level_names_levels_as_strings():
+    with pytest.raises(config_agents.UnknownThinkingLevel) as exc_info:
+        config_agents.AgentConfig(id=AGENT_ID, thinking_default="bogus")
+
+    message = str(exc_info.value)
+    assert "ThinkingLevelName" not in message
+    assert "['off', 'minimal', 'low', 'medium', 'high', 'xhigh']" in message
+
+
+def test_profile_kw_leaves_thinking_support_alone():
+    """Declared levels do not touch the model's profile.
+
+    A self-hosted model is sent its level as 'openai_reasoning_effort',
+    which needs no profile claim, so the profile stays as resolved.
+    """
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="Inferact/Qwen3.8-27B-NVFP4",
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+        thinking_levels=["low", "medium", "xhigh"],
+    )
+
+    profile = config_agents.get_model_from_config(
+        agent_config=agent_config,
+    ).profile
+
+    assert not profile.get("supports_thinking", False)
+
+
+@pytest.mark.parametrize(
+    "agent_kw, expected",
+    [
+        # The default stands in for a 'thinking' in 'model_settings'.
+        (
+            dict(
+                model_settings={"temperature": 0.5, "thinking": "low"},
+                thinking_default="high",
+            ),
+            {"temperature": 0.5, "openai_reasoning_effort": "high"},
+        ),
+        # A default alone is still a setting.
+        (
+            dict(thinking_default="off"),
+            {"openai_reasoning_effort": "none"},
+        ),
+    ],
+)
+def test_get_model_settings_from_config_w_thinking_default(agent_kw, expected):
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        provider_type=config_agents.LLMProviderType.VLLM,
+        provider_base_url=BASE_URL,
+        **agent_kw,
+    )
+
+    found = config_agents.get_model_settings_from_config(
+        agent_config=agent_config,
+    )
+
+    assert found == expected
+
+
+def test_thinking_default_reaches_the_request():
+    """The default is sent by the model itself, wherever it runs.
+
+    Qwen3.8 resolves on 'vllm' with no thinking support, which is the
+    case the declaration exists for.
+    """
+    from pydantic_ai import models as ai_models
+
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="Inferact/Qwen3.8-27B-NVFP4",
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+        thinking_levels=["low", "medium", "xhigh"],
+        thinking_default="xhigh",
+    )
+    model = config_agents.get_model_from_config(agent_config=agent_config)
+
+    settings, params = model.prepare_request(
+        model.settings,
+        ai_models.ModelRequestParameters(),
+    )
+
+    assert model._translate_thinking(settings, params) == "xhigh"
+
+
+def test_get_thinking_from_config_offers_only_a_declaration():
+    """A model that reasons, but declares no levels, offers no control.
+
+    The profile says at most whether a model reasons, not which levels
+    its chat template accepts.
+    """
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="Qwen/Qwen3-32B",
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+        thinking_default="low",
+    )
+
+    assert (
+        config_agents.get_thinking_from_config(agent_config=agent_config)
+        is None
+    )
+
+
+def test_get_thinking_from_config_reports_the_declaration(monkeypatch):
+    """A declaration answers without building a model at all."""
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        provider_type="vllm",
+        provider_base_url=BASE_URL,
+        thinking_levels=["low", "xhigh"],
+        thinking_default="low",
+    )
+
+    get_model_from_config = mock.Mock()
+    monkeypatch.setattr(
+        config_agents,
+        "get_model_from_config",
+        get_model_from_config,
+    )
+
+    support = config_agents.get_thinking_from_config(
+        agent_config=agent_config,
+    )
+
+    assert support.levels == ("low", "xhigh")
+    assert support.default == "low"
+    get_model_from_config.assert_not_called()

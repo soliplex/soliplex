@@ -124,6 +124,42 @@ agent:
 - `model_settings`: a mapping, whose keys are determined by
   the `provider_type` above (see below).
 
+  Setting `thinking` here is **deprecated**:  use `thinking_default`
+  below, which a client can also read and override for a single run.
+  It still takes effect, and warns.  Where `thinking_default` is also
+  set, `thinking_default` wins and this setting is ignored.
+
+- `thinking_default` (a string, default unset):  how hard the model
+  thinks when a run asks for nothing.  One of `off`, `minimal`, `low`,
+  `medium`, `high`, `xhigh`.  Unset asserts nothing, leaving the model
+  whatever it does by default.  It applies wherever the agent runs --
+  AG-UI threads, completions, and `soliplex-cli ask` -- and is sent the
+  way a `thinking` in `model_settings` is (see the vLLM example below).
+  With `thinking_levels` declared, it must be one of them.
+
+  ```yaml
+  thinking_default: "low"
+  ```
+
+- `thinking_levels` (a list of strings, default unset):  the levels
+  this model accepts, from the same set, offered to a client so it can
+  choose one per run.  It is the *complete* set:  a run asking for a
+  level absent from the list is refused, `off` included.  Unset, the
+  room offers no control, whatever the model is.
+
+  Nothing resolves this set for you.  The levels a model accepts are
+  decided by its chat template, which is shipped with the weights and
+  is the only authority on the matter, and they differ:  Qwen3.8 takes
+  `xhigh`, `medium` and `low`, and rejects `high`; gpt-oss takes
+  `low`, `medium` and `high`.  A level the template rejects fails the
+  run, so list only levels you have seen the model accept.
+
+  ```yaml
+  # Qwen3.8's own ladder, which does not include 'high' or 'off'.
+  thinking_levels: ["low", "medium", "xhigh"]
+  thinking_default: "medium"
+  ```
+
 - `retries` (an integer, default `3`):  number of retries for LLM calls
   on recoverable errors.
 
