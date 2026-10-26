@@ -1703,3 +1703,199 @@ def test_final_request_usage_takes_the_last_response():
     found = agui_persistence._final_request_usage(result)
 
     assert found == (800, 120, "gpt-4o-2024-11-20")
+
+
+async def _thread_at(
+    session, *, created, room_id=ROOM_ID, user_name=USER_NAME
+):
+    """Create a thread with no runs, whose creation time is 'created'.
+
+    Built directly rather than through 'new_thread', which always starts
+    a thread with a run stamped 'now'.
+    """
+    thread = agui_schema.Thread(
+        user_name=user_name,
+        email=EMAIL,
+        room_id=room_id,
+        created=created,
+    )
+    session.add(thread)
+    await session.flush()
+    return thread.thread_id
+
+
+async def _run_at(ts, thread_id, *, created, finished, room_id=ROOM_ID):
+    run = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=room_id,
+        thread_id=thread_id,
+    )
+    run.created = created
+    run.finished = finished
+
+
+async def _page(ts, *, room_ids=(ROOM_ID,), limit=50, after=None):
+    """Return ([(thread_id, last_activity)], next position) for a page."""
+    rows, position = await ts.list_user_threads_page(
+        user_name=USER_NAME,
+        room_ids=list(room_ids),
+        limit=limit,
+        after=after,
+    )
+    return [
+        (a_thread.thread_id, last_activity) for a_thread, last_activity in rows
+    ], position
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_no_rooms_short_circuits(
+    the_async_session,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    # An empty room set means "the user may see nothing", which must not
+    # degrade into an unfiltered listing.
+    found, position = await _page(ts, room_ids=[])
+
+    assert found == []
+    assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_orders_by_thread_activity(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        # Created first but active last: activity, not creation, leads.
+        revived = await _thread_at(
+            the_async_session, created=T_OLD, room_id=ROOM_ID
+        )
+        # No runs at all: its creation time stands in for activity.
+        idle = await _thread_at(
+            the_async_session, created=T_MID, room_id=ROOM_ID_2
+        )
+        # Shares a room with 'revived' but not its activity: a busy room
+        # must not drag its stale threads up with it.
+        stale = await _thread_at(
+            the_async_session, created=T_OLD, room_id=ROOM_ID
+        )
+
+        # An unfinished run counts from its start, a finished one from
+        # its finish; the later of the two wins.
+        await _run_at(ts, revived, created=T_OLD, finished=T_NEW)
+        await _run_at(ts, revived, created=T_MID, finished=None)
+        await _run_at(ts, stale, created=T_OLD, finished=None)
+
+    found, position = await _page(ts, room_ids=[ROOM_ID, ROOM_ID_2])
+
+    assert found == [(revived, T_NEW), (idle, T_MID), (stale, T_OLD)]
+    assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_pages_by_position(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        # Every thread shares one activity time, so only the thread_id
+        # tie-break can keep the pages apart.
+        for _ in range(5):
+            await _thread_at(the_async_session, created=T_MID)
+
+    first, after_first = await _page(ts, limit=2)
+    second, after_second = await _page(ts, limit=2, after=after_first)
+    third, after_third = await _page(ts, limit=2, after=after_second)
+
+    assert len(first) == len(second) == 2
+    assert len(third) == 1
+    assert after_first == agui.ThreadPagePosition(
+        last_activity=T_MID,
+        thread_id=first[-1][0],
+    )
+    assert after_third is None
+
+    # Neither skips nor repeats a thread.
+    seen = [thread_id for thread_id, _ in first + second + third]
+    assert seen == sorted(seen, reverse=True)
+    assert len(set(seen)) == 5
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_is_stable_under_new_activity(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        newest = await _thread_at(the_async_session, created=T_NEW)
+        middle = await _thread_at(the_async_session, created=T_MID)
+        oldest = await _thread_at(the_async_session, created=T_OLD)
+
+    first, after_first = await _page(ts, limit=1)
+    assert first == [(newest, T_NEW)]
+
+    # Between pages, a thread from the first page gets a new run and
+    # another thread is started: both sort ahead of the position, so
+    # the next page neither repeats one nor skips the threads past it.
+    later = T_NEW + datetime.timedelta(hours=1)
+    async with unit_of_work():
+        await _run_at(ts, newest, created=later, finished=later)
+        await _thread_at(the_async_session, created=later)
+
+    rest, position = await _page(ts, after=after_first)
+
+    assert rest == [(middle, T_MID), (oldest, T_OLD)]
+    assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_excludes_unlisted_rooms(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        visible = await _thread_at(
+            the_async_session, created=T_OLD, room_id=ROOM_ID
+        )
+        await _thread_at(the_async_session, created=T_NEW, room_id=ROOM_ID_2)
+
+    found, _ = await _page(ts, room_ids=[ROOM_ID])
+
+    # A room absent from 'room_ids' contributes nothing -- this is the
+    # cross-room authorization boundary.
+    assert [thread_id for thread_id, _ in found] == [visible]
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_scopes_to_the_user(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        mine = await _thread_at(the_async_session, created=T_OLD)
+        theirs = await _thread_at(
+            the_async_session,
+            created=T_NEW,
+            user_name=OTHER_USER_NAME,
+        )
+        # Their activity must not leak into the ordering of mine.
+        await ts.new_run(
+            user_name=OTHER_USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=theirs,
+        )
+
+    found, _ = await _page(ts)
+
+    assert [thread_id for thread_id, _ in found] == [mine]

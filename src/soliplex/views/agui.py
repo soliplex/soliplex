@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
+import datetime
 import functools
+import json
 
 import fastapi
 import logfire
@@ -155,6 +158,110 @@ async def _check_thread_ownership(
             ) from None
 
     return _room_config
+
+
+#   Cap the page size so a client cannot ask for the whole table in one
+#   request; the default matches what the lobby's threads tab renders.
+_THREADS_PAGE_DEFAULT = 50
+_THREADS_PAGE_MAX = 200
+
+
+def _encode_threads_cursor(position: agui.ThreadPagePosition) -> str:
+    """Pack where a page ended into the token a client hands back.
+
+    Opaque to the client by contract: it only ever echoes the token, so
+    the sort key can change without a client change.
+    """
+    raw = json.dumps(
+        [position.last_activity.isoformat(), position.thread_id],
+    )
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_threads_cursor(cursor: str) -> agui.ThreadPagePosition:
+    try:
+        last_activity, thread_id = json.loads(
+            base64.urlsafe_b64decode(cursor.encode()),
+        )
+        return agui.ThreadPagePosition(
+            last_activity=datetime.datetime.fromisoformat(last_activity),
+            thread_id=str(thread_id),
+        )
+    except (ValueError, TypeError):
+        # A token this server did not issue: say so, without echoing it.
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Invalid cursor",
+        ) from None
+
+
+@util.logfire_span("GET /v1/agui/threads")
+@router.get("/v1/agui/threads")
+async def get_agui_threads(
+    limit: int = fastapi.Query(
+        default=_THREADS_PAGE_DEFAULT,
+        ge=1,
+        le=_THREADS_PAGE_MAX,
+    ),
+    cursor: str = fastapi.Query(default=None),
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui.ThreadStorage = depend_the_threads,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.AGUI_ThreadPage:
+    """Return a page of the user's threads across every room they may see
+
+    Most recently active first. Pass the previous page's 'next_cursor'
+    as 'cursor' to continue; a page without one is the last.
+    """
+    the_logger.debug(loggers.AGUI_GET_THREADS)
+
+    after = None if cursor is None else _decode_threads_cursor(cursor)
+
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+
+    # There is no room in the path to authorize against, so the room set
+    # has to be resolved up front. Going through 'get_room_configs' means
+    # this endpoint inherits exactly the filtering that 'GET /v1/rooms'
+    # already applies -- rather than reimplementing authz here, where a
+    # mistake would leak other users' threads.
+    room_configs = await the_installation.get_room_configs(
+        user=the_user_claims,
+        the_room_authz=the_room_authz,
+        the_logger=the_logger,
+    )
+
+    rows, next_position = await the_threads.list_user_threads_page(
+        user_name=user_name,
+        room_ids=list(room_configs),
+        limit=limit,
+        after=after,
+    )
+
+    model_threads = []
+    for a_thread, last_activity in rows:
+        thread_meta = await a_thread.awaitable_attrs.thread_metadata
+
+        model_threads.append(
+            models.AGUI_Thread.from_thread(
+                a_thread,
+                a_thread_meta=models.AGUI_ThreadMetadata.from_thread_meta(
+                    thread_meta,
+                ),
+                a_thread_runs=None,
+                a_thread_last_activity=last_activity,
+            )
+        )
+
+    return models.AGUI_ThreadPage(
+        threads=model_threads,
+        next_cursor=(
+            None
+            if next_position is None
+            else _encode_threads_cursor(next_position)
+        ),
+    )
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/agui")

@@ -974,6 +974,17 @@ class AGUI_Threads(pydantic.BaseModel):
     threads: list[AGUI_Thread]
 
 
+class AGUI_ThreadPage(pydantic.BaseModel):
+    """One page of the user's threads, spanning every room they may see.
+
+    'next_cursor' is an opaque token to pass back as 'cursor' for the
+    following page; it is absent on the last page.
+    """
+
+    threads: list[AGUI_Thread]
+    next_cursor: str | None = None
+
+
 # ----------------------------------------------------------------------------
 #   Room Authorization models
 # ----------------------------------------------------------------------------

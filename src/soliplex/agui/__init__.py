@@ -261,6 +261,20 @@ class Thread(abc.ABC):
         """Return runs for this thread"""
 
 
+class ThreadPagePosition(typing.NamedTuple):
+    """Where one page of a cross-room thread listing ended.
+
+    The listing's own sort key, so the next page resumes strictly after
+    it no matter what was created, deleted or reordered in between.
+    """
+
+    last_activity: datetime.datetime
+    """The last thread's activity time"""
+
+    thread_id: str
+    """The last thread's ID, ordering threads sharing that time"""
+
+
 class ThreadStorage(abc.ABC):
     @abc.abstractmethod
     async def list_user_threads(
@@ -273,6 +287,39 @@ class ThreadStorage(abc.ABC):
 
         If 'room_id' is passed, filter the threads to those created
         in that room.
+        """
+
+    @abc.abstractmethod
+    async def list_user_threads_page(
+        self,
+        *,
+        user_name: str,
+        room_ids: list[str],
+        limit: int,
+        after: ThreadPagePosition | None = None,
+    ) -> tuple[
+        list[tuple[Thread, datetime.datetime]],
+        ThreadPagePosition | None,
+    ]:
+        """Return one page of the user's threads across several rooms.
+
+        Unlike 'list_user_threads', which is scoped to a single room,
+        this spans every room in 'room_ids' -- the caller is responsible
+        for having already filtered those to the rooms the user may see.
+        An empty 'room_ids' therefore yields an empty page rather than
+        every room's threads.
+
+        Threads are ordered by their own last activity, most recent
+        first: the latest of each run's finish (or, while unfinished, its
+        start), falling back to the thread's creation for a thread with
+        no runs. Each thread comes back paired with that time.
+
+        Paging is by position rather than by offset: 'after' is the
+        position of the last thread on the previous page, and the second
+        element returned is the position to pass for the next page, or
+        'None' when this page is the last. A thread created, deleted or
+        moved to the top by new activity between two requests therefore
+        never shifts the rest of the listing under the reader.
         """
 
     @abc.abstractmethod
