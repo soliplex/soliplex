@@ -519,6 +519,9 @@ def image_label(path: str) -> str:
 
 
 def _relative_parts(base: pathlib.Path, path: str) -> tuple[str, ...]:
+    if "\x00" in path:
+        raise UnreadablePath(path, "it does not name a file in the sandbox")
+
     pure = pathlib.PurePosixPath(path)
 
     if pure.is_absolute():
@@ -535,18 +538,18 @@ def _relative_parts(base: pathlib.Path, path: str) -> tuple[str, ...]:
     return parts
 
 
-def read_beneath(
+def open_beneath(
     root: pathlib.Path,
     path: str,
-    limit: int,
-    *,
-    persistent: bool = True,
-) -> bytes:
-    """Read 'path' under 'root', opening no component through a symlink.
+) -> tuple[int, os.stat_result]:
+    """Open the regular file 'path' under 'root' through no symlink.
 
     Sandboxed code owns everything below 'root', so each component is
     opened relative to the last with 'O_NOFOLLOW': a symlink anywhere
-    along the way fails the read rather than redirecting it.
+    along the way fails the open rather than redirecting it.
+
+    Returns the open file descriptor, which the caller must close, and
+    its 'fstat'.
     """
     parts = _relative_parts(root, path)
     flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
@@ -577,13 +580,29 @@ def read_beneath(
         except OSError:
             raise UnreadablePath(path, "there is no such file") from None
 
-        opened.append(fd)
-
         stat_result = os.fstat(fd)
 
         if not stat.S_ISREG(stat_result.st_mode):
+            os.close(fd)
             raise UnreadablePath(path, "it is not a regular file")
 
+        return fd, stat_result
+    finally:
+        for dir_fd in opened:
+            os.close(dir_fd)
+
+
+def read_beneath(
+    root: pathlib.Path,
+    path: str,
+    limit: int,
+    *,
+    persistent: bool = True,
+) -> bytes:
+    """Read 'path' under 'root', opening no component through a symlink."""
+    fd, stat_result = open_beneath(root, path)
+
+    with open(fd, "rb") as handle:
         if stat_result.st_size > limit:
             raise ImageTooLarge(
                 path,
@@ -592,11 +611,7 @@ def read_beneath(
                 persistent=persistent,
             )
 
-        with open(fd, "rb", closefd=False) as handle:
-            return handle.read(limit)
-    finally:
-        for fd in opened:
-            os.close(fd)
+        return handle.read(limit)
 
 
 WORKDIR_VOLUME_NAME = "work"
@@ -664,16 +679,40 @@ def effective_volumes(
     return (static or {}) | (runtime or {})
 
 
+def downloadable_files(directory: pathlib.Path) -> list[str]:
+    """Return the paths, relative to 'directory', the workdir endpoint serves.
+
+    The walk enters no symlinked directory: it reports one as a file,
+    which 'is_downloadable' then refuses.
+    """
+    return sorted(
+        (dir_path / name).relative_to(directory).as_posix()
+        for dir_path, _dir_names, file_names in directory.walk()
+        for name in file_names
+        if is_downloadable(dir_path / name)
+    )
+
+
 def _downloadable_count(directory: pathlib.Path | None) -> int:
-    """Count the top-level files the workdir endpoint serves."""
+    """Count the files the workdir endpoint serves beneath 'directory'."""
+    if directory is None:
+        return 0
+
+    return len(downloadable_files(directory))
+
+
+def _top_level_file_count(volume: bs_models.VolumeInfo) -> int:
+    """Count the top-level files in 'volume'.
+
+    Unlike the workdir, a volume is not downloadable, so its count need not
+    match 'downloadable_files'.
+    """
+    directory = volume.host_path
+
     if directory is None or not directory.is_dir():
         return 0
 
     return sum(1 for entry in directory.glob("*") if is_downloadable(entry))
-
-
-def _file_count(volume: bs_models.VolumeInfo) -> int:
-    return _downloadable_count(volume.host_path)
 
 
 def _count_phrase(count: int) -> str:
@@ -760,7 +799,7 @@ def render_mount_table(
         (
             f"{SANDBOX_VOLUMES_PATH}/{name}",
             "read-write" if volume.writable else "read-only",
-            _count_phrase(_file_count(volume)),
+            _count_phrase(_top_level_file_count(volume)),
         )
         for name, volume in sorted(volumes.items())
     )
@@ -773,7 +812,7 @@ def render_mount_table(
 
     if persistent:
         preamble = (
-            "Sandbox: no network. Files you write at the top level of "
+            "Sandbox: no network. Files you write under "
             f"{SANDBOX_WORKDIR_PATH} are downloadable by the user -- name "
             "the file when you write one. Files from earlier turns are "
             "still there; do not assume they are current, and do not "

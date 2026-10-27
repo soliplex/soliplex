@@ -96,3 +96,24 @@ def test_get_workdir_file_404_when_file_missing(client_no_llm, thread_workdir):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "No workdir file: nope.txt"
+
+
+def test_get_workdir_lists_and_serves_nested_files(
+    client_no_llm,
+    thread_workdir,
+):
+    room_id, thread_id, thread_dir = thread_workdir
+    (thread_dir / "reports").mkdir()
+    (thread_dir / "reports" / "summary.txt").write_bytes(b"summary\n")
+
+    response = client_no_llm.get(
+        f"/api/v1/workdirs/{room_id}/thread/{thread_id}"
+    )
+
+    assert response.status_code == 200
+    (entry,) = response.json()["files"]
+    assert entry["filename"] == "reports/summary.txt"
+
+    download = client_no_llm.get(entry["url"])
+    assert download.status_code == 200
+    assert download.content == b"summary\n"

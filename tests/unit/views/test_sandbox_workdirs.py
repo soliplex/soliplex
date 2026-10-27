@@ -182,6 +182,51 @@ async def test_get_workdirs_room_thread_run_only(
     )
 
 
+@pytest.mark.anyio
+@mock.patch("soliplex.views.agui._check_thread_ownership")
+async def test_get_workdirs_room_thread_lists_nested_files(
+    cto,
+    the_threads,
+    sandbox_path,
+):
+    sandbox_workdirs_path = sandbox_path / "workdirs"
+    thread_path = sandbox_workdirs_path / TEST_ROOM_ID / TEST_THREAD_ID_STR
+    nested = ["crm_app/app.py", "reports/summary.txt"]
+
+    for relative in nested:
+        (thread_path / relative).parent.mkdir(parents=True, exist_ok=True)
+        (thread_path / relative).write_text(relative)
+
+    def download_url(name, room_id, thread_id, filename):
+        return f"{URL_PREFIX}/v1/workdir/{room_id}/{thread_id}/{filename}"
+
+    request = mock.create_autospec(fastapi.Request)
+    request.url_for.side_effect = download_url
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.sandbox_workdirs_path = str(sandbox_workdirs_path)
+
+    found = await workdir_views.get_workdirs_room_thread(
+        request=request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=mock.create_autospec(loggers.LogWrapper),
+    )
+
+    assert [(f_up.filename, str(f_up.url)) for f_up in found.files] == [
+        (
+            relative,
+            f"{URL_PREFIX}/v1/workdir/{TEST_ROOM_ID}/"
+            f"{TEST_THREAD_ID_STR}/{relative}",
+        )
+        for relative in nested
+    ]
+
+
 not_a_workdir_file = raises_httpexc(
     code=404,
     match=f"No workdir file: {TEST_FILENAME}",
@@ -234,7 +279,7 @@ def test__open_no_symlinks(
                 file_path.write_text(f"filename: {TEST_FILENAME}")
 
     with expectation as expected:
-        found = workdir_views._open_no_symlinks(file_path)
+        found = workdir_views._open_no_symlinks(workdir_path, TEST_FILENAME)
 
     if expected is None:
         streamer, size = found
@@ -334,8 +379,10 @@ async def test_get_workdirs_room_thread_filename(
                 "x-content-type-options": "nosniff",
             },
         )
-        disposition.assert_called_once_with(file_path)
-        open_no_symlinks.assert_called_once_with(file_path)
+        disposition.assert_called_once_with(
+            pathlib.PurePosixPath(TEST_FILENAME)
+        )
+        open_no_symlinks.assert_called_once_with(workdir_path, TEST_FILENAME)
 
     cto.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
@@ -384,3 +431,45 @@ async def test_get_workdirs_room_thread_filename_w_script_snapshot(
         )
 
     open_no_symlinks.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_filename",
+    [
+        # 'O_NOFOLLOW' on the final component alone would follow 'evil'.
+        "evil/secret.txt",
+        "../outside/secret.txt",
+        "sub/.soliplex-script-x.py",
+    ],
+)
+@mock.patch("soliplex.views.agui._check_thread_ownership")
+async def test_get_workdirs_room_thread_filename_rejects_unsafe_paths(
+    cto,
+    the_threads,
+    sandbox_path,
+    w_filename,
+):
+    sandbox_workdirs_path = sandbox_path / "workdirs"
+    workdir_path = sandbox_workdirs_path / TEST_ROOM_ID / TEST_THREAD_ID_STR
+    outside = sandbox_workdirs_path / TEST_ROOM_ID / "outside"
+    outside.mkdir(parents=True)
+    (outside / "secret.txt").write_text("secret")
+    (workdir_path / "sub").mkdir(parents=True)
+    (workdir_path / "sub" / ".soliplex-script-x.py").write_text("print(1)")
+    (workdir_path / "evil").symlink_to(outside)
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.sandbox_workdirs_path = str(sandbox_workdirs_path)
+
+    with raises_httpexc(code=404, match="No workdir file: "):
+        await workdir_views.get_workdirs_room_thread_filename(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            filename=w_filename,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=mock.create_autospec(loggers.LogWrapper),
+        )

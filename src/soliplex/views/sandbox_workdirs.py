@@ -1,6 +1,5 @@
 import os
 import pathlib
-import stat
 import urllib.parse as url_parse
 
 import fastapi
@@ -75,17 +74,14 @@ async def get_workdirs_room_thread(
     thread_dir = pathlib.Path(workdirs_path) / room_id / thread_id
     filename_urls = {}
 
-    if thread_dir.is_dir():
-        for file_or_sub in thread_dir.glob("*"):
-            if skills_bwrap_sandbox.is_downloadable(file_or_sub):
-                filename = file_or_sub.name
-                filename_urls[filename] = request.url_for(
-                    # View function name, not the route path.
-                    "get_workdirs_room_thread_filename",
-                    room_id=room_id,
-                    thread_id=thread_id,
-                    filename=filename,
-                )
+    for filename in skills_bwrap_sandbox.downloadable_files(thread_dir):
+        filename_urls[filename] = request.url_for(
+            # View function name, not the route path.
+            "get_workdirs_room_thread_filename",
+            room_id=room_id,
+            thread_id=thread_id,
+            filename=filename,
+        )
 
     return models.ThreadWorkdirFiles(
         room_id=room_id,
@@ -100,28 +96,19 @@ async def get_workdirs_room_thread(
     )
 
 
-def _open_no_symlinks(file_path: pathlib.Path):
-    """Return a streaming generator for 'file_path'
+def _open_no_symlinks(workdir_path: pathlib.Path, filename: str):
+    """Return a streaming generator function for 'filename' under
+    'workdir_path', and the file's size
 
-    First ensure that it is a regular file (no symlinks, etc.)
+    First ensure that it is a regular file, reached through no symlink.
     """
-    not_found = f"No workdir file: {file_path.name}"
-
     try:
-        fd = os.open(
-            file_path,
-            os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
-        )
-    except OSError:  # ELOOP for a symlink, ENOENT, EACCES
+        fd, st = skills_bwrap_sandbox.open_beneath(workdir_path, filename)
+    except skills_bwrap_sandbox.UnreadablePath:
         raise fastapi.HTTPException(
             status_code=404,
-            detail=not_found,
+            detail=f"No workdir file: {filename}",
         ) from None
-
-    st = os.fstat(fd)
-    if not stat.S_ISREG(st.st_mode):  # directory, FIFO, device, socket
-        os.close(fd)
-        raise fastapi.HTTPException(status_code=404, detail=not_found)
 
     def _stream():  # now owns the fd
         with os.fdopen(fd, "rb") as fh:
@@ -131,16 +118,16 @@ def _open_no_symlinks(file_path: pathlib.Path):
     return _stream, st.st_size
 
 
-def _disposition(file_path: pathlib.Path) -> str:
+def _disposition(file_path: pathlib.PurePath) -> str:
     attachment_name = url_parse.quote(file_path.name, safe="")
     return f"{ATTACHMENT_PREFIX}{attachment_name}"
 
 
 @soliplex_views_util.logfire_span(
-    "GET /v1/workdirs/{room_id}/thread/{thread_id}/file/{filename}"
+    "GET /v1/workdirs/{room_id}/thread/{thread_id}/file/{filename:path}"
 )
 @router.get(
-    "/v1/workdirs/{room_id}/thread/{thread_id}/file/{filename}",
+    "/v1/workdirs/{room_id}/thread/{thread_id}/file/{filename:path}",
 )
 async def get_workdirs_room_thread_filename(
     room_id: str,
@@ -186,7 +173,9 @@ async def get_workdirs_room_thread_filename(
             detail="Sandbox workdirs not configured",
         )
 
-    if filename.startswith(skills_bwrap_sandbox.SCRIPT_SNAPSHOT_PREFIX):
+    file_path = pathlib.PurePosixPath(filename)
+
+    if file_path.name.startswith(skills_bwrap_sandbox.SCRIPT_SNAPSHOT_PREFIX):
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"No workdir file: {filename}",
@@ -194,9 +183,7 @@ async def get_workdirs_room_thread_filename(
 
     thread_dir = pathlib.Path(workdirs_path) / room_id / thread_id
 
-    file_path = thread_dir / filename
-
-    streamer, size = _open_no_symlinks(file_path)
+    streamer, size = _open_no_symlinks(thread_dir, filename)
 
     stream = streamer()
 
