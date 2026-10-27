@@ -183,20 +183,6 @@ _LABEL_IDS_QUERY = fastapi.Query(
 )
 
 
-async def _thread_labels(
-    the_threads: agui.ThreadStorage,
-    threads,
-) -> dict[str, list[agui.Label]]:
-    """Return labels for a page of threads, keyed by thread_id.
-
-    One query for the whole page rather than awaiting 'thread.labels'
-    per row, which would be an N+1 across the listing.
-    """
-    return await the_threads.get_threads_labels(
-        thread_ids=[a_thread.thread_id for a_thread in threads],
-    )
-
-
 def _encode_threads_cursor(position: agui.ThreadPagePosition) -> str:
     """Pack where a page ended into the token a client hands back.
 
@@ -274,9 +260,8 @@ async def get_agui_threads(
         name_query=q,
     )
 
-    labels = await _thread_labels(
-        the_threads,
-        [a_thread for a_thread, _last_activity in rows],
+    labels = await the_threads.get_threads_labels(
+        thread_ids=[a_thread.thread_id for a_thread, _ in rows],
     )
 
     model_threads = []
@@ -339,7 +324,9 @@ async def get_room_agui(
             room_id=room_id,
         )
     )
-    labels = await _thread_labels(the_threads, threads)
+    labels = await the_threads.get_threads_labels(
+        thread_ids=[a_thread.thread_id for a_thread in threads],
+    )
 
     model_threads = []
     for a_thread in threads:
