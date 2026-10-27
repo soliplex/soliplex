@@ -4,15 +4,15 @@ import fastapi
 from fastapi import responses
 
 from soliplex import agui
-from soliplex import authn as authn_package
+from soliplex import authn
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex import views
-from soliplex.views import agui as soliplex_views_agui
-from soliplex.views import authz as soliplex_views_authz
-from soliplex.views import util as soliplex_views_util
+from soliplex.views import agui as agui_views
+from soliplex.views import authz as authz_views
+from soliplex.views import util as views_util
 
 router = fastapi.APIRouter(tags=["uploads"])
 
@@ -22,13 +22,13 @@ depend_the_admin_users = views.depend_the_admin_user_policy
 depend_the_room_authz = views.depend_the_room_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
-depend_the_authz_logger = soliplex_views_authz.depend_the_authz_logger
+depend_the_authz_logger = authz_views.depend_the_authz_logger
 
 RoomUploadAuditLog = loggers.RoomUploadAuditLog
 
 
 def get_the_room_upload_audit_log(
-    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> RoomUploadAuditLog:
     return RoomUploadAuditLog(claims=the_user_claims)
 
@@ -38,7 +38,38 @@ depend_the_room_upload_audit_log = fastapi.Depends(
 )
 
 
-@soliplex_views_util.logfire_span(
+async def has_write_access_to_room(
+    *,
+    room_id: str,
+    the_user_claims: authn.UserClaims,
+    action: str,
+    the_admin_users: authz.AdminUserPolicy,
+    the_room_authz: authz.RoomAuthorizationPolicy,
+) -> bool:
+    """Does the user have write access to a given room?
+
+    This is a permission question:  the full answer also depends on
+    whether uploads are configured at all, which is checked separately.
+
+    It is used at the point where the permission is being exercised,
+    and so does the checks using the auditing versions.
+    """
+
+    if await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_ROOM_UPLOAD,
+        action=action,
+    ):  # admins have 'ALLOW WRITE' implicitly
+        return True
+    else:
+        return await the_room_authz.check_room_access(
+            room_id=room_id,
+            user_token=the_user_claims,
+            permission=authz.Permission.WRITE,
+        )
+
+
+@views_util.logfire_span(
     "GET /v1/uploads/{room_id}",
 )
 @router.get("/v1/uploads/{room_id}")
@@ -47,13 +78,13 @@ async def get_uploads_room(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
-    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.RoomUploads:
     """Return a list of files uploaded to the room"""
     the_logger.debug(loggers.UPLOADS_GET_ROOM)
 
-    _room_config = await soliplex_views_agui._check_user_in_room(
+    _room_config = await agui_views._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_room_authz=the_room_authz,
@@ -95,7 +126,7 @@ async def get_uploads_room(
     )
 
 
-@soliplex_views_util.logfire_span(
+@views_util.logfire_span(
     "GET /v1/uploads/{room_id}/file/{filename}",
 )
 @router.get(
@@ -107,7 +138,7 @@ async def get_uploads_room_filename(
     filename: str,
     the_installation: installation.Installation = depend_the_installation,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
-    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
     """Download a file from the room uploads directory
@@ -119,7 +150,7 @@ async def get_uploads_room_filename(
     """
     the_logger.debug(loggers.UPLOADS_GET_ROOM_FILE)
 
-    _room_config = await soliplex_views_agui._check_user_in_room(
+    _room_config = await agui_views._check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_room_authz=the_room_authz,
@@ -154,7 +185,7 @@ async def get_uploads_room_filename(
     return str(file_path)
 
 
-@soliplex_views_util.logfire_span(
+@views_util.logfire_span(
     "POST /v1/uploads/{room_id}/",
 )
 @router.post("/v1/uploads/{room_id}", status_code=204)
@@ -164,7 +195,7 @@ async def post_uploads_room(
     the_installation: installation.Installation = depend_the_installation,
     the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
-    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
     the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
     the_audit: RoomUploadAuditLog = depend_the_room_upload_audit_log,
@@ -182,18 +213,13 @@ async def post_uploads_room(
     the_logger.debug(loggers.UPLOADS_POST_ROOM)
     the_authz_logger.debug(loggers.UPLOADS_POST_ROOM)
 
-    if await the_admin_users.check_admin_access(
-        the_user_claims,
-        resource=loggers.AUDIT_RESOURCE_ROOM_UPLOAD,
+    has_write = await has_write_access_to_room(
+        room_id=room_id,
+        the_user_claims=the_user_claims,
+        the_admin_users=the_admin_users,
+        the_room_authz=the_room_authz,
         action=loggers.AUDIT_ACTION_CREATE,
-    ):  # admins have 'ALLOW WRITE' implicitly
-        has_write = True
-    else:
-        has_write = await the_room_authz.check_room_access(
-            room_id=room_id,
-            user_token=the_user_claims,
-            permission=authz.Permission.WRITE,
-        )
+    )
 
     if not has_write:
         raise fastapi.HTTPException(
@@ -237,7 +263,7 @@ async def post_uploads_room(
     return fastapi.Response(status_code=204)
 
 
-@soliplex_views_util.logfire_span(
+@views_util.logfire_span(
     "DELETE /v1/uploads/{room_id}/{filename}",
 )
 @router.delete("/v1/uploads/{room_id}/{filename}", status_code=204)
@@ -247,7 +273,7 @@ async def delete_uploads_room(
     the_installation: installation.Installation = depend_the_installation,
     the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
-    the_user_claims: authn_package.UserClaims = depend_the_user_claims,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
     the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
     the_audit: RoomUploadAuditLog = depend_the_room_upload_audit_log,
@@ -266,18 +292,13 @@ async def delete_uploads_room(
     the_logger.debug(loggers.UPLOADS_DELETE_ROOM_FILE)
     the_authz_logger.debug(loggers.UPLOADS_DELETE_ROOM_FILE)
 
-    if await the_admin_users.check_admin_access(
-        the_user_claims,
-        resource=loggers.AUDIT_RESOURCE_ROOM_UPLOAD,
+    has_write = await has_write_access_to_room(
+        room_id=room_id,
+        the_user_claims=the_user_claims,
+        the_admin_users=the_admin_users,
+        the_room_authz=the_room_authz,
         action=loggers.AUDIT_ACTION_DELETE,
-    ):  # admins have 'ALLOW WRITE' implicitly
-        has_write = True
-    else:
-        has_write = await the_room_authz.check_room_access(
-            room_id=room_id,
-            user_token=the_user_claims,
-            permission=authz.Permission.WRITE,
-        )
+    )
 
     if not has_write:
         raise fastapi.HTTPException(

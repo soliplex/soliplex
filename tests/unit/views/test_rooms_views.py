@@ -64,29 +64,50 @@ def room_configs(request):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_is_admin, w_has_write, exp_has_write",
+    [
+        pytest.param(False, False, False, id="nada"),
+        pytest.param(True, False, True, id="w_admin"),
+        pytest.param(False, True, True, id="w_write"),
+        pytest.param(True, True, True, id="tada"),
+    ],
+)
 @mock.patch("soliplex.models.Room.from_config")
-async def test_get_rooms(fc, room_configs):
+async def test_get_rooms(
+    fc,
+    room_configs,
+    w_is_admin,
+    w_has_write,
+    exp_has_write,
+):
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = room_configs
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.is_admin.return_value = w_is_admin
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_room_authz.has_room_permission.return_value = w_has_write
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     found = await rooms_views.get_rooms(
         the_installation=the_installation,
+        the_admin_users=the_admin_users,
         the_room_authz=the_room_authz,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
 
-    for (found_key, found_room), room_id, fc_call in zip(
+    for (found_key, found_room), room_id, fc_call, copy_call in zip(
         found.items(),  # should already be sorted
         sorted(room_configs),
         fc.call_args_list,
+        fc.return_value.model_copy.call_args_list,
         strict=True,
     ):
         assert found_key == room_id
-        assert found_room is fc.return_value
         assert fc_call == mock.call(room_configs[room_id])
+        assert found_room is fc.return_value.model_copy.return_value
+        assert copy_call == mock.call(update={"user_has_write": exp_has_write})
 
     the_installation.get_room_configs.assert_awaited_once_with(
         user=THE_USER_CLAIMS,
@@ -95,10 +116,38 @@ async def test_get_rooms(fc, room_configs):
     )
     the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOMS)
 
+    the_admin_users.is_admin.assert_called_once_with(THE_USER_CLAIMS)
+
+    if not w_is_admin:
+        for room_id in room_configs.keys():
+            assert (
+                mock.call(
+                    room_id=room_id,
+                    user_token=THE_USER_CLAIMS,
+                    permission=authz.Permission.WRITE,
+                )
+                in the_room_authz.has_room_permission.await_args_list
+            )
+
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_is_admin, w_has_write, exp_has_write",
+    [
+        pytest.param(False, False, False, id="nada"),
+        pytest.param(True, False, True, id="w_admin"),
+        pytest.param(False, True, True, id="w_perm"),
+        pytest.param(True, True, True, id="tada"),
+    ],
+)
 @mock.patch("soliplex.models.Room.from_config")
-async def test_get_room(fc, room_configs):
+async def test_get_room_only(
+    fc,
+    room_configs,
+    w_is_admin,
+    w_has_write,
+    exp_has_write,
+):
     ROOM_ID = "foo"
 
     the_installation = mock.create_autospec(installation.Installation)
@@ -108,7 +157,10 @@ async def test_get_room(fc, room_configs):
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.is_admin.return_value = w_is_admin
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_room_authz.has_room_permission.return_value = w_has_write
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if ROOM_ID not in room_configs:
@@ -116,6 +168,7 @@ async def test_get_room(fc, room_configs):
             await rooms_views.get_room(
                 ROOM_ID,
                 the_installation=the_installation,
+                the_admin_users=the_admin_users,
                 the_room_authz=the_room_authz,
                 the_user_claims=THE_USER_CLAIMS,
                 the_logger=the_logger,
@@ -129,18 +182,34 @@ async def test_get_room(fc, room_configs):
             loggers.ROOM_UNKNOWN_ROOM_ID,
             room_id=ROOM_ID,
         )
+        the_admin_users.is_admin.assert_not_awaited()
+        the_room_authz.has_room_permission.assert_not_awaited()
 
     else:
         found = await rooms_views.get_room(
             ROOM_ID,
             the_installation=the_installation,
+            the_admin_users=the_admin_users,
             the_room_authz=the_room_authz,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
 
-        assert found is fc.return_value
+        assert found is fc.return_value.model_copy.return_value
+        fc.return_value.model_copy.assert_called_once_with(
+            update={"user_has_write": exp_has_write},
+        )
         fc.assert_called_once_with(room_configs[ROOM_ID])
+        the_admin_users.is_admin.assert_awaited_once_with(THE_USER_CLAIMS)
+
+        if w_is_admin:
+            the_room_authz.has_room_permission.assert_not_awaited()
+        else:
+            the_room_authz.has_room_permission.assert_awaited_once_with(
+                room_id=ROOM_ID,
+                user_token=THE_USER_CLAIMS,
+                permission=authz.Permission.WRITE,
+            )
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,

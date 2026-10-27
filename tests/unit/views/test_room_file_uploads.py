@@ -45,6 +45,55 @@ def uploads_path(temp_dir):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
+    "w_admin_access, w_allow_write, expected",
+    [
+        pytest.param(False, False, False, id="noperm"),
+        pytest.param(True, False, True, id="admin_ok"),
+        pytest.param(False, True, True, id="write_ok"),
+        pytest.param(True, True, True, id="both_ok"),
+    ],
+)
+async def test_has_write_access_to_room(
+    w_admin_access,
+    w_allow_write,
+    expected,
+):
+    ROOM_ID = "foo"
+    ACTION = "test-action"
+
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_room_authz.check_room_access.return_value = w_allow_write
+
+    found = await room_views.has_write_access_to_room(
+        room_id=ROOM_ID,
+        the_user_claims=THE_USER_CLAIMS,
+        the_admin_users=the_admin_users,
+        the_room_authz=the_room_authz,
+        action=ACTION,
+    )
+
+    assert found is expected
+
+    the_admin_users.check_admin_access.assert_awaited_once_with(
+        THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_ROOM_UPLOAD,
+        action=ACTION,
+    )
+
+    if w_admin_access:
+        the_room_authz.check_room_access.assert_not_awaited()
+    else:
+        the_room_authz.check_room_access.assert_awaited_once_with(
+            room_id=ROOM_ID,
+            user_token=THE_USER_CLAIMS,
+            permission=authz.Permission.WRITE,
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
     "w_filenames",
     [
         [],
@@ -236,22 +285,19 @@ def test_get_the_room_upload_audit_log(rual_klass):
     ],
 )
 @pytest.mark.parametrize(
-    "w_admin_access, w_allow_write, w_upload_path, expectation",
+    "w_has_write, w_upload_path, expectation",
     [
         pytest.param(
             False,
             False,
-            True,
             raises_httpexc(
                 code=403,
                 match=loggers.AUTHZ_ROOM_ALLOW_WRITE_REQUIRED,
             ),
             id="noperm",
         ),
-        pytest.param(True, False, True, no_error(204), id="admin_ok"),
-        pytest.param(False, True, True, no_error(204), id="write_ok"),
+        pytest.param(True, True, no_error(204), id="write_ok"),
         pytest.param(
-            False,
             True,
             False,
             raises_httpexc(
@@ -263,15 +309,17 @@ def test_get_the_room_upload_audit_log(rual_klass):
         ),
     ],
 )
+@mock.patch("soliplex.views.room_file_uploads.has_write_access_to_room")
 async def test_post_uploads_room(
+    hwatr,
     uploads_path,
-    w_admin_access,
-    w_allow_write,
+    w_has_write,
     w_upload_path,
     expectation,
     w_filename,
     exp_filename,
 ):
+    hwatr.return_value = w_has_write
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),
@@ -290,9 +338,7 @@ async def test_post_uploads_room(
         the_installation.rooms_upload_path = None
 
     the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
-    the_admin_users.check_admin_access.return_value = w_admin_access
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
-    the_room_authz.check_room_access.return_value = w_allow_write
     the_logger = mock.create_autospec(loggers.LogWrapper)
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
     the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
@@ -329,19 +375,17 @@ async def test_post_uploads_room(
         # occurred, and therefore there is no audit record of one.
         the_audit.room_upload_added.assert_not_called()
 
-        if not w_admin_access and not w_allow_write:
+        if not w_has_write:
             # Denied by the permission gate, which precedes the lookup.
             the_installation.get_room_config.assert_not_called()
 
-    if w_admin_access:
-        # The gate is not even consulted for admins.
-        the_room_authz.check_room_access.assert_not_called()
-    else:
-        the_room_authz.check_room_access.assert_called_once_with(
-            room_id=TEST_ROOM_ID,
-            user_token=THE_USER_CLAIMS,
-            permission=authz.Permission.WRITE,
-        )
+    hwatr.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
+        the_user_claims=THE_USER_CLAIMS,
+        action=loggers.AUDIT_ACTION_CREATE,
+        the_admin_users=the_admin_users,
+        the_room_authz=the_room_authz,
+    )
 
     the_authz_logger.debug.assert_called_once_with(
         loggers.UPLOADS_POST_ROOM,
@@ -353,12 +397,14 @@ async def test_post_uploads_room(
 
 
 @pytest.mark.anyio
+@mock.patch("soliplex.views.room_file_uploads.has_write_access_to_room")
 async def test_post_uploads_room_unknown_room(
+    hwatr,
     uploads_path,
 ):
-    # Admins bypass the room 'WRITE' gate entirely;  an admin attempting
-    # to upload into a room which is not (or no longer) configured gets
-    # a 404 from the room config lookup.
+    hwatr.return_value = True
+    # A user with write access attempting to upload into a room which is not
+    # (or no longer) configured gets a 404 from the room config lookup.
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),
         filename=TEST_FILENAME,
@@ -396,9 +442,14 @@ async def test_post_uploads_room_unknown_room(
     assert exc.value.detail == (
         f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {TEST_ROOM_ID}"
     )
-    # The gate is not even consulted for admins;  the denied 'WRITE'
-    # check would not have covered a missing room config, either way.
-    the_room_authz.check_room_access.assert_not_called()
+
+    hwatr.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
+        the_user_claims=THE_USER_CLAIMS,
+        action=loggers.AUDIT_ACTION_CREATE,
+        the_admin_users=the_admin_users,
+        the_room_authz=the_room_authz,
+    )
     the_audit.room_upload_added.assert_not_called()
 
 
@@ -411,10 +462,9 @@ async def test_post_uploads_room_unknown_room(
     ],
 )
 @pytest.mark.parametrize(
-    "w_admin_access, w_allow_write, w_upload_path, expectation",
+    "w_has_write, w_upload_path, expectation",
     [
         pytest.param(
-            False,
             False,
             True,
             raises_httpexc(
@@ -423,10 +473,8 @@ async def test_post_uploads_room_unknown_room(
             ),
             id="noperm",
         ),
-        pytest.param(True, False, True, no_error(204), id="admin_ok"),
-        pytest.param(False, True, True, no_error(204), id="write_ok"),
+        pytest.param(True, True, no_error(204), id="write_ok"),
         pytest.param(
-            False,
             True,
             False,
             raises_httpexc(
@@ -438,15 +486,17 @@ async def test_post_uploads_room_unknown_room(
         ),
     ],
 )
+@mock.patch("soliplex.views.room_file_uploads.has_write_access_to_room")
 async def test_delete_uploads_room(
+    hwatr,
     uploads_path,
-    w_admin_access,
-    w_allow_write,
+    w_has_write,
     w_upload_path,
     expectation,
     w_filename,
     exp_filename,
 ):
+    hwatr.return_value = w_has_write
     room_config = mock.create_autospec(config_rooms.RoomConfig)
 
     the_installation = mock.create_autospec(
@@ -464,9 +514,7 @@ async def test_delete_uploads_room(
         the_installation.rooms_upload_path = None
 
     the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
-    the_admin_users.check_admin_access.return_value = w_admin_access
     the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
-    the_room_authz.check_room_access.return_value = w_allow_write
     the_logger = mock.create_autospec(loggers.LogWrapper)
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
     the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
@@ -502,19 +550,17 @@ async def test_delete_uploads_room(
         # occurred, and therefore there is no audit record of one.
         the_audit.room_upload_deleted.assert_not_called()
 
-        if not w_admin_access and not w_allow_write:
+        if not w_has_write:
             # Denied by the permission gate, which precedes the lookup.
             the_installation.get_room_config.assert_not_called()
 
-    if w_admin_access:
-        # The gate is not even consulted for admins.
-        the_room_authz.check_room_access.assert_not_called()
-    else:
-        the_room_authz.check_room_access.assert_called_once_with(
-            room_id=TEST_ROOM_ID,
-            user_token=THE_USER_CLAIMS,
-            permission=authz.Permission.WRITE,
-        )
+    hwatr.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
+        the_user_claims=THE_USER_CLAIMS,
+        action=loggers.AUDIT_ACTION_DELETE,
+        the_admin_users=the_admin_users,
+        the_room_authz=the_room_authz,
+    )
 
     the_authz_logger.debug.assert_called_once_with(
         loggers.UPLOADS_DELETE_ROOM_FILE,
@@ -526,12 +572,14 @@ async def test_delete_uploads_room(
 
 
 @pytest.mark.anyio
+@mock.patch("soliplex.views.room_file_uploads.has_write_access_to_room")
 async def test_delete_uploads_room_unknown_room(
+    hwatr,
     uploads_path,
 ):
-    # Admins bypass the room 'WRITE' gate entirely;  an admin attempting
-    # to upload into a room which is not (or no longer) configured gets
-    # a 404 from the room config lookup.
+    hwatr.return_value = True
+    # Attempting to delete into a room which is not (or no longer)
+    # configured gets a 404 from the room config lookup.
     the_installation = mock.create_autospec(
         installation.Installation,
     )
@@ -563,9 +611,13 @@ async def test_delete_uploads_room_unknown_room(
     assert exc.value.detail == (
         f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {TEST_ROOM_ID}"
     )
-    # The gate is not even consulted for admins;  the denied 'WRITE'
-    # check would not have covered a missing room config, either way.
-    the_room_authz.check_room_access.assert_not_called()
+    hwatr.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
+        the_user_claims=THE_USER_CLAIMS,
+        action=loggers.AUDIT_ACTION_DELETE,
+        the_admin_users=the_admin_users,
+        the_room_authz=the_room_authz,
+    )
     the_audit.room_upload_deleted.assert_not_called()
 
 

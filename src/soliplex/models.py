@@ -272,6 +272,7 @@ class Room(pydantic.BaseModel):
     allow_mcp: bool
     has_thread_uploads: bool
     has_room_uploads: bool
+    user_has_write: bool = False
 
     @classmethod
     def from_config(cls, room_config: config_rooms.RoomConfig):

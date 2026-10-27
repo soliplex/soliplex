@@ -189,11 +189,7 @@ async def get_user_authz(
 ) -> models.UserAuthorization:
     the_authz_logger.debug(loggers.AUTHZ_GET_USER_AUTHZ)
 
-    is_admin_user = await the_admin_users.check_admin_access(
-        the_user_claims,
-        resource=loggers.AUDIT_RESOURCE_USER_AUTHZ,
-        action=loggers.AUDIT_ACTION_READ,
-    )
+    is_admin_user = await the_admin_users.is_admin(the_user_claims)
 
     return models.UserAuthorization(is_admin_user=is_admin_user)
 

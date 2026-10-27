@@ -18,6 +18,7 @@ from soliplex import views
 
 router = fastapi.APIRouter(tags=["rooms"])
 
+depend_the_admin_users = views.depend_the_admin_user_policy
 depend_the_installation = installation.depend_the_installation
 depend_the_room_authz = views.depend_the_room_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
@@ -28,6 +29,7 @@ depend_the_logger = views.depend_the_logger
 @router.get("/v1/rooms", summary="Get available rooms")
 async def get_rooms(
     the_installation: installation.Installation = depend_the_installation,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -47,8 +49,20 @@ async def get_rooms(
 
     rc_items = sorted(room_configs.items(), key=_key)
 
+    is_admin = await the_admin_users.is_admin(the_user_claims)
+
+    async def _user_has_write(room_id, room):
+        return is_admin or await the_room_authz.has_room_permission(
+            room_id=room_id,
+            user_token=the_user_claims,
+            permission=authz.Permission.WRITE,
+        )
+
     return {
-        room_id: models.Room.from_config(room) for room_id, room in rc_items
+        room_id: models.Room.from_config(room).model_copy(
+            update={"user_has_write": await _user_has_write(room_id, room)}
+        )
+        for room_id, room in rc_items
     }
 
 
@@ -57,6 +71,7 @@ async def get_rooms(
 async def get_room(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
     the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
@@ -80,7 +95,17 @@ async def get_room(
             detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
-    return models.Room.from_config(room_config)
+    user_has_write = await the_admin_users.is_admin(
+        the_user_claims
+    ) or await the_room_authz.has_room_permission(
+        room_id=room_id,
+        user_token=the_user_claims,
+        permission=authz.Permission.WRITE,
+    )
+
+    return models.Room.from_config(room_config).model_copy(
+        update={"user_has_write": user_has_write},
+    )
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/bg_image")

@@ -217,6 +217,17 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
                 await session.delete(admin_user)
         self._audit.admin_users_cleared()
 
+    async def is_admin(
+        self,
+        user_token: authz.UserToken,
+    ) -> bool:
+        """Is the user represented by 'user_token' an admin user?
+
+        This test does not create an audit record.
+        """
+        async with self.session as session:
+            return await _user_is_admin(user_token, session)
+
     async def check_admin_access(
         self,
         user_token: authz.UserToken,
@@ -224,13 +235,14 @@ class AdminUserPolicy(_SessionPolicy, authz.AdminUserPolicy):
         resource: str,
         action: str,
     ) -> bool:
-        """Is the user represented by 'user_token' an admin user?
+        """Validate admin access at point of privileged use.
+
+        Calls the non-audit 'is_admin' query first.
 
         'resource' / 'action' name the privileged operation being gated;
         they are folded into the emitted 'admin access' audit record.
         """
-        async with self.session as session:
-            is_admin = await _user_is_admin(user_token, session)
+        is_admin = await self.is_admin(user_token)
         if is_admin:
             self._audit.admin_access_allowed(resource=resource, action=action)
         else:
@@ -248,14 +260,14 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
         self._audit = loggers.RoomAuthzAuditLog(claims=claims)
         self._access_audit = loggers.RoomAccessAuditLog(claims=claims)
 
-    async def check_room_access(
+    async def has_room_permission(
         self,
         room_id: str,
         user_token: authz.UserToken | None,
         *,
         permission: authz.Permission,
     ) -> bool:
-        """Can the user represented by 'user_token' access a room?
+        """Does the user have a 'permission' on a given room?
 
         For a room with an authorization policy, return whether the result
         of its ``check_token`` for the user token and permission is ALLOW.
@@ -265,6 +277,8 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
         - Return True for READ (such rooms are public for read).
 
         - Return False for WRITE and ADMIN.
+
+        This test does *not* create an audit record.
         """
         async with self.session as session:
             policy = await _find_room_policy(room_id, session)
@@ -274,9 +288,28 @@ class RoomAuthorizationPolicy(_SessionPolicy, authz.RoomAuthorizationPolicy):
                 allow_deny = policy.check_token(
                     user_token, permission=permission
                 )
-                result = allow_deny == authz.AllowDeny.ALLOW
+                return allow_deny == authz.AllowDeny.ALLOW
             else:
-                result = permission is authz.Permission.READ
+                return permission is authz.Permission.READ
+
+    async def check_room_access(
+        self,
+        room_id: str,
+        user_token: authz.UserToken | None,
+        *,
+        permission: authz.Permission,
+    ) -> bool:
+        """Validate that the user has the required permission for a room.
+
+        Calls the non-audit 'has_room_permission' check first.
+
+        Creates an audit record.
+        """
+        result = await self.has_room_permission(
+            room_id,
+            user_token,
+            permission=permission,
+        )
 
         if result:
             self._access_audit.room_access_allowed(

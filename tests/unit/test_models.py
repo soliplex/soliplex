@@ -803,6 +803,10 @@ def test_room_from_config_bare(room_ic, which_agent):
 
     room_model = models.Room.from_config(room_config)
 
+    # Not read from the config: only settable to True from view code
+    # which can check access.
+    assert not room_model.user_has_write
+
     assert room_model.id == ROOM_ID
     assert room_model.name == ROOM_NAME
     assert room_model.description == ROOM_DESCRIPTION
