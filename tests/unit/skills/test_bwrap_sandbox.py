@@ -1253,6 +1253,42 @@ def test_is_downloadable(temp_dir, w_name, w_make, expected):
     assert found is expected
 
 
+def _write(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("x", encoding="utf-8")
+
+
+def test_downloadable_files_lists_nested_files(temp_dir):
+    for relative in [
+        "report.txt",
+        "reports/summary.txt",
+        "crm_app/static/app.js",
+    ]:
+        _write(temp_dir / relative)
+
+    found = skills_bwrap_sandbox.downloadable_files(temp_dir)
+
+    assert found == [
+        "crm_app/static/app.js",
+        "report.txt",
+        "reports/summary.txt",
+    ]
+
+
+def test_downloadable_files_skips_symlinks_and_snapshots(temp_dir):
+    outside = temp_dir / "outside"
+    _write(outside / "secret.txt")
+    workdir = temp_dir / "work"
+    _write(workdir / "sub" / "keep.txt")
+    _write(workdir / "sub" / ".soliplex-script-x.py")
+    (workdir / "evil").symlink_to(outside)
+    (workdir / "link.txt").symlink_to(outside / "secret.txt")
+
+    found = skills_bwrap_sandbox.downloadable_files(workdir)
+
+    assert found == ["sub/keep.txt"]
+
+
 def test_write_transcript_uses_the_call_id(transcripts_path):
     call_id = uuid.uuid4()
 
@@ -1326,6 +1362,9 @@ def test_effective_volumes_matches_the_sandbox():
         ([], "empty"),
         (["a.csv"], "1 file"),
         (["a.csv", "b.csv"], "2 files"),
+        # Only the top level counts: unlike the workdir, a volume is not
+        # downloadable, so its count need not match a recursive listing.
+        (["a.csv", "sub/b.csv"], "1 file"),
     ],
 )
 def test_render_mount_table_counts_volume_files(
@@ -1336,6 +1375,7 @@ def test_render_mount_table_counts_volume_files(
     volume_dir = temp_dir / "room"
     volume_dir.mkdir()
     for name in w_specs:
+        (volume_dir / name).parent.mkdir(exist_ok=True)
         (volume_dir / name).write_text("x", encoding="utf-8")
 
     found = skills_bwrap_sandbox.render_mount_table(
@@ -1370,6 +1410,7 @@ def test_render_mount_table_counts_downloadable_workdir_files(temp_dir):
     (workdir / "report.csv").write_text("x", encoding="utf-8")
     (workdir / ".soliplex-script-x.py").write_text("x", encoding="utf-8")
     (workdir / "sub").mkdir()
+    (workdir / "sub" / "nested.csv").write_text("x", encoding="utf-8")
 
     found = skills_bwrap_sandbox.render_mount_table(
         workdir=workdir,
@@ -1377,9 +1418,23 @@ def test_render_mount_table_counts_downloadable_workdir_files(temp_dir):
         dependencies=[],
     )
 
-    # Only downloadable files count: no subdirectory or script snapshot.
-    assert "1 file" in found
+    # Only downloadable files count, at any depth: a directory or a script
+    # snapshot does not.
+    assert "2 files" in found
     assert SANDBOX_WORKDIR_PATH in found
+
+
+def test_render_mount_table_tells_where_downloads_go(temp_dir):
+    found = skills_bwrap_sandbox.render_mount_table(
+        workdir=temp_dir,
+        volumes={},
+        dependencies=[],
+    )
+
+    assert (
+        f"Files you write under {SANDBOX_WORKDIR_PATH} are downloadable"
+        in found
+    )
 
 
 def test_render_mount_table_names_dependencies_wo_specifiers():
@@ -1687,7 +1742,14 @@ def test_open_beneath_reads_a_nested_file(image_workdir):
 
 @pytest.mark.parametrize(
     "w_relative",
-    ["/etc/passwd", "../escape.png", "figures/../../escape.png", "", "."],
+    [
+        "/etc/passwd",
+        "../escape.png",
+        "figures/../../escape.png",
+        "",
+        ".",
+        "plot\x00.png",
+    ],
 )
 def test_open_beneath_rejects_escaping_paths(image_workdir, w_relative):
     with pytest.raises(skills_bwrap_sandbox.UnreadablePath):
@@ -1732,6 +1794,34 @@ def test_open_beneath_rejects_a_directory(image_workdir):
 def test_open_beneath_rejects_an_oversized_file(image_workdir):
     with pytest.raises(skills_bwrap_sandbox.ImageTooLarge):
         skills_bwrap_sandbox.read_beneath(image_workdir, "plot.png", 4)
+
+
+@pytest.mark.parametrize(
+    "w_relative, w_limit",
+    [
+        ("plot.png", 4096),
+        ("figures/plot.png", 4096),
+        ("plot.png", 4),  # 'ImageTooLarge'
+        ("sub.png", 4096),  # not a regular file
+    ],
+)
+def test_read_beneath_closes_every_descriptor(
+    image_workdir,
+    w_relative,
+    w_limit,
+):
+    (image_workdir / "figures").mkdir()
+    (image_workdir / "figures" / "plot.png").write_bytes(IMAGE_BYTES)
+    (image_workdir / "sub.png").mkdir()
+    before = set(os.listdir("/dev/fd"))
+
+    with contextlib.suppress(
+        skills_bwrap_sandbox.UnreadablePath,
+        skills_bwrap_sandbox.ImageTooLarge,
+    ):
+        skills_bwrap_sandbox.read_beneath(image_workdir, w_relative, w_limit)
+
+    assert set(os.listdir("/dev/fd")) == before
 
 
 def test_open_beneath_rejects_a_missing_file(image_workdir):

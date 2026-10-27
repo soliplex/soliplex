@@ -333,7 +333,7 @@ class SandboxConfig:
 
         Named with the thread ID, under a directory for the room ID.  The
         workspace persists across the thread's turns, and the workdirs
-        endpoint serves the files at its top level.
+        endpoint serves the files beneath it.
 
         If not set, each command gets a temporary directory instead, which
         is discarded when it ends and which the endpoint cannot serve.
