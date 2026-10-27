@@ -1,8 +1,7 @@
 """Attach labels from the catalogue to a thread after its first run.
 
 The counterpart of 'titles': the same throwaway agent, run at the same
-point, but choosing from the administrator-curated catalogue instead of
-writing free text, so the catalogue never grows without review.
+point, but choosing from the catalogue instead of writing free text.
 """
 
 from __future__ import annotations
@@ -13,6 +12,7 @@ import logfire
 import pydantic
 import pydantic_ai
 from ag_ui import core as agui_core
+from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import titles
@@ -31,13 +31,7 @@ Return an empty list if none of them fit.\
 
 
 def labels_output_type(names: list[str]) -> type[pydantic.BaseModel]:
-    """Build an output type which admits only the catalogue's names.
-
-    Built per call because the catalogue is data, not code: a 'Literal'
-    over the current names puts them in the schema the model answers
-    against, so it cannot invent a label, and pydantic rejects one it
-    tries to.
-    """
+    """Build an output type which admits only the catalogue's names."""
     choice = typing.Literal[tuple(names)]
     return pydantic.create_model(
         "ThreadLabels",
@@ -49,13 +43,7 @@ def labels_output_type(names: list[str]) -> type[pydantic.BaseModel]:
 
 
 def label_instructions(names: list[str]) -> str:
-    """The prompt, with the allowed names spelled out.
-
-    The schema alone constrains the answer but not the model's attention:
-    measured against gpt-oss, naming the labels in the instructions as
-    well took clear-cut conversations from two picks in three to every
-    time.
-    """
+    """The prompt, with the allowed names spelled out."""
     allowed = "\n".join(f"- {name}" for name in names)
     return f"{LABEL_PROMPT}\n\nAllowed labels:\n{allowed}"
 
@@ -75,26 +63,12 @@ async def generate_labels(
         output_type=labels_output_type(names),
         instructions=label_instructions(names),
     )
-    formatted = titles.format_messages(messages)
-    if assistant_text:
-        formatted += f"\nassistant: {assistant_text}"
-    result = await agent.run(formatted)
+    result = await agent.run(
+        titles.format_conversation(messages, assistant_text)
+    )
     return [
         ids_by_name[name] for name in dict.fromkeys(result.output.label_names)
     ]
-
-
-async def candidate_labels(
-    the_threads: agui_persistence.ThreadStorage,
-) -> list[agui_schema.Label]:
-    """The labels the agent may choose from.
-
-    Today the whole catalogue, which every user can already read. Kept
-    as its own step so that, should label visibility ever be restricted
-    per user, the restriction lands here once and auto-labelling cannot
-    attach a label its owner would not be shown.
-    """
-    return await the_threads.list_labels()
 
 
 async def maybe_apply_labels(
@@ -107,6 +81,12 @@ async def maybe_apply_labels(
     messages: list[agui_core.Message],
     event_list: list[agui_core.Event] = (),
 ):
+    """Label a thread from the catalogue once its first run finishes.
+
+    Only the first run: labelling again on later runs would put back
+    labels the owner has since removed. A thread whose first run does
+    not finish is therefore never labelled automatically.
+    """
     try:
         async with sqla_asyncio.AsyncSession(
             bind=threads_engine,
@@ -117,14 +97,17 @@ async def maybe_apply_labels(
                 room_id=room_id,
                 thread_id=thread_id,
             )
-            # Only after the first run: labelling a thread again on every
-            # run would put back labels its owner has since removed.
-            if len(await thread.awaitable_attrs.runs) != 1:
+            run_count = await session.scalar(
+                sqla_sql.select(sqla_sql.func.count()).where(
+                    agui_schema.Run.thread_id_ == thread.id_
+                )
+            )
+            if run_count != 1:
                 return
             # The owner got there first, during the run.
             if await thread.awaitable_attrs.labels:
                 return
-            catalogue = await candidate_labels(the_threads)
+            catalogue = await the_threads.list_labels()
 
         if not catalogue:
             return
