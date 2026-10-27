@@ -385,10 +385,8 @@ class ThreadStorage(abc.ABC):
     async def get_label_usage_counts(self) -> dict[int, int]:
         """Return how many threads carry each label, keyed by label ID.
 
-        Counts span every user's threads, so a caller must not expose
-        them to anyone who could not otherwise see that activity: a label
-        name beside a volume is a side channel into work the caller has
-        no access to. Labels nothing carries are omitted.
+        Counts span every user's threads. Labels nothing carries are
+        omitted.
         """
 
     @abc.abstractmethod
