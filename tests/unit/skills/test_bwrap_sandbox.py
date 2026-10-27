@@ -1223,6 +1223,7 @@ def test_script_snapshot_name_wo_run_id():
 
 
 def _make_regular(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("x")
 
 
@@ -1253,18 +1254,13 @@ def test_is_downloadable(temp_dir, w_name, w_make, expected):
     assert found is expected
 
 
-def _write(path):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("x", encoding="utf-8")
-
-
 def test_downloadable_files_lists_nested_files(temp_dir):
     for relative in [
         "report.txt",
         "reports/summary.txt",
         "crm_app/static/app.js",
     ]:
-        _write(temp_dir / relative)
+        _make_regular(temp_dir / relative)
 
     found = skills_bwrap_sandbox.downloadable_files(temp_dir)
 
@@ -1277,10 +1273,10 @@ def test_downloadable_files_lists_nested_files(temp_dir):
 
 def test_downloadable_files_skips_symlinks_and_snapshots(temp_dir):
     outside = temp_dir / "outside"
-    _write(outside / "secret.txt")
+    _make_regular(outside / "secret.txt")
     workdir = temp_dir / "work"
-    _write(workdir / "sub" / "keep.txt")
-    _write(workdir / "sub" / ".soliplex-script-x.py")
+    _make_regular(workdir / "sub" / "keep.txt")
+    _make_regular(workdir / "sub" / ".soliplex-script-x.py")
     (workdir / "evil").symlink_to(outside)
     (workdir / "link.txt").symlink_to(outside / "secret.txt")
 
@@ -1722,13 +1718,13 @@ def image_workdir(temp_dir):
     return result
 
 
-def test_open_beneath_reads_a_regular_file(image_workdir):
+def test_read_beneath_reads_a_regular_file(image_workdir):
     found = skills_bwrap_sandbox.read_beneath(image_workdir, "plot.png", 4096)
 
     assert found == IMAGE_BYTES
 
 
-def test_open_beneath_reads_a_nested_file(image_workdir):
+def test_read_beneath_reads_a_nested_file(image_workdir):
     nested = image_workdir / "figures"
     nested.mkdir()
     (nested / "plot.png").write_bytes(IMAGE_BYTES)
@@ -1751,12 +1747,12 @@ def test_open_beneath_reads_a_nested_file(image_workdir):
         "plot\x00.png",
     ],
 )
-def test_open_beneath_rejects_escaping_paths(image_workdir, w_relative):
+def test_read_beneath_rejects_escaping_paths(image_workdir, w_relative):
     with pytest.raises(skills_bwrap_sandbox.UnreadablePath):
         skills_bwrap_sandbox.read_beneath(image_workdir, w_relative, 4096)
 
 
-def test_open_beneath_rejects_a_symlinked_file(image_workdir, temp_dir):
+def test_read_beneath_rejects_a_symlinked_file(image_workdir, temp_dir):
     victim = temp_dir / "victim.png"
     victim.write_bytes(IMAGE_BYTES)
     (image_workdir / "sneaky.png").symlink_to(victim)
@@ -1765,7 +1761,7 @@ def test_open_beneath_rejects_a_symlinked_file(image_workdir, temp_dir):
         skills_bwrap_sandbox.read_beneath(image_workdir, "sneaky.png", 4096)
 
 
-def test_open_beneath_rejects_a_symlinked_parent(image_workdir, temp_dir):
+def test_read_beneath_rejects_a_symlinked_parent(image_workdir, temp_dir):
     outside = temp_dir / "outside"
     outside.mkdir()
     (outside / "plot.png").write_bytes(IMAGE_BYTES)
@@ -1777,21 +1773,21 @@ def test_open_beneath_rejects_a_symlinked_parent(image_workdir, temp_dir):
         )
 
 
-def test_open_beneath_rejects_a_fifo(image_workdir):
+def test_read_beneath_rejects_a_fifo(image_workdir):
     os.mkfifo(image_workdir / "pipe.png")
 
     with pytest.raises(skills_bwrap_sandbox.UnreadablePath):
         skills_bwrap_sandbox.read_beneath(image_workdir, "pipe.png", 4096)
 
 
-def test_open_beneath_rejects_a_directory(image_workdir):
+def test_read_beneath_rejects_a_directory(image_workdir):
     (image_workdir / "sub.png").mkdir()
 
     with pytest.raises(skills_bwrap_sandbox.UnreadablePath):
         skills_bwrap_sandbox.read_beneath(image_workdir, "sub.png", 4096)
 
 
-def test_open_beneath_rejects_an_oversized_file(image_workdir):
+def test_read_beneath_rejects_an_oversized_file(image_workdir):
     with pytest.raises(skills_bwrap_sandbox.ImageTooLarge):
         skills_bwrap_sandbox.read_beneath(image_workdir, "plot.png", 4)
 
@@ -1824,7 +1820,7 @@ def test_read_beneath_closes_every_descriptor(
     assert set(os.listdir("/dev/fd")) == before
 
 
-def test_open_beneath_rejects_a_missing_file(image_workdir):
+def test_read_beneath_rejects_a_missing_file(image_workdir):
     with pytest.raises(skills_bwrap_sandbox.UnreadablePath):
         skills_bwrap_sandbox.read_beneath(image_workdir, "nope.png", 4096)
 
@@ -2046,7 +2042,7 @@ async def test_read_image_wo_workspace_creates_none(
     assert not (workdirs_path / ROOM_ID).exists()
 
 
-def test_open_beneath_w_a_missing_root(temp_dir):
+def test_read_beneath_w_a_missing_root(temp_dir):
     with pytest.raises(skills_bwrap_sandbox.UnreadablePath) as exc_info:
         skills_bwrap_sandbox.read_beneath(
             temp_dir / "nonesuch", "plot.png", 4096
@@ -2055,7 +2051,7 @@ def test_open_beneath_w_a_missing_root(temp_dir):
     assert exc_info.value.reason == "there is no such file"
 
 
-def test_open_beneath_w_an_unreadable_root(temp_dir):
+def test_read_beneath_w_an_unreadable_root(temp_dir):
     not_a_dir = temp_dir / "not-a-dir"
     not_a_dir.write_text("x", encoding="utf-8")
 

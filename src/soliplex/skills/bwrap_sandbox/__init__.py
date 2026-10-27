@@ -701,8 +701,12 @@ def _downloadable_count(directory: pathlib.Path | None) -> int:
     return len(downloadable_files(directory))
 
 
-def _file_count(volume: bs_models.VolumeInfo) -> int:
-    """Count the top-level files in 'volume'."""
+def _top_level_file_count(volume: bs_models.VolumeInfo) -> int:
+    """Count the top-level files in 'volume'.
+
+    Unlike the workdir, a volume is not downloadable, so its count need not
+    match 'downloadable_files'.
+    """
     directory = volume.host_path
 
     if directory is None or not directory.is_dir():
@@ -795,7 +799,7 @@ def render_mount_table(
         (
             f"{SANDBOX_VOLUMES_PATH}/{name}",
             "read-write" if volume.writable else "read-only",
-            _count_phrase(_file_count(volume)),
+            _count_phrase(_top_level_file_count(volume)),
         )
         for name, volume in sorted(volumes.items())
     )
