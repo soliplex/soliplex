@@ -45,6 +45,17 @@ def format_messages(messages: list[agui_core.Message]) -> str:
     return "\n".join(filter(None, map(format_message, messages)))
 
 
+def format_conversation(
+    messages: list[agui_core.Message],
+    assistant_text: str = "",
+) -> str:
+    """Format a run's messages, followed by the assistant's reply."""
+    formatted = format_messages(messages)
+    if assistant_text:
+        formatted += f"\nassistant: {assistant_text}"
+    return formatted
+
+
 def extract_assistant_text(
     event_list: list[agui_core.Event],
 ) -> str:
@@ -68,10 +79,7 @@ async def generate_title(
         output_type=ThreadTitle,
         instructions=TITLE_PROMPT,
     )
-    formatted = format_messages(messages)
-    if assistant_text:
-        formatted += f"\nassistant: {assistant_text}"
-    result = await agent.run(formatted)
+    result = await agent.run(format_conversation(messages, assistant_text))
     return result.output.title
 
 

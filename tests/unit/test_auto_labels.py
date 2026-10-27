@@ -1,18 +1,18 @@
 from unittest import mock
 
 import pydantic
+import pydantic_ai
 import pytest
+import pytest_asyncio
 from ag_ui import core as agui_core
+from pydantic_ai import messages as ai_messages
+from pydantic_ai.models import function as ai_function
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import auto_labels
-
-
-def _awaitable(value):
-    async def getter():
-        return value
-
-    return getter()
+from soliplex.agui import persistence as agui_persistence
+from soliplex.agui import schema as agui_schema
+from soliplex.config import installation as config_installation
 
 
 def _label(id_, name):
@@ -22,47 +22,7 @@ def _label(id_, name):
     return label
 
 
-def _thread(*, runs=1, labels=()):
-    thread = mock.MagicMock()
-    thread.awaitable_attrs.runs = _awaitable([object()] * runs)
-    thread.awaitable_attrs.labels = _awaitable(list(labels))
-    return thread
-
-
 CATALOGUE = [_label(1, "Manuals"), _label(2, "Billing"), _label(3, "Ops")]
-
-
-@pytest.fixture
-def threads_engine():
-    return mock.create_autospec(sqla_asyncio.AsyncEngine)
-
-
-@pytest.fixture
-def the_threads():
-    return mock.AsyncMock()
-
-
-@pytest.fixture
-def mock_async_session():
-    class FakeSession:
-        async def __aenter__(self):
-            return mock.MagicMock()
-
-        async def __aexit__(self, *args):
-            pass
-
-    return mock.patch(
-        "soliplex.auto_labels.sqla_asyncio.AsyncSession",
-        side_effect=lambda **_: FakeSession(),
-    )
-
-
-@pytest.fixture
-def mock_thread_storage(the_threads):
-    return mock.patch(
-        "soliplex.auto_labels.agui_persistence.ThreadStorage",
-        return_value=the_threads,
-    )
 
 
 class TestLabelsOutputType:
@@ -99,22 +59,35 @@ def test_label_instructions_name_every_label():
     assert found.endswith("Allowed labels:\n- Manuals\n- Ops")
 
 
+def _answering(*answers):
+    """A model which picks each of 'answers' in turn, and records calls."""
+    calls = []
+
+    def respond(messages, info: ai_function.AgentInfo):
+        calls.append((messages, info))
+        return ai_messages.ModelResponse(
+            parts=[
+                ai_messages.ToolCallPart(
+                    tool_name=info.output_tools[0].name,
+                    args={"label_names": answers[len(calls) - 1]},
+                )
+            ]
+        )
+
+    return ai_function.FunctionModel(respond), calls
+
+
 class TestGenerateLabels:
     @pytest.mark.anyio
     @pytest.mark.parametrize("assistant_text", ["", "Hi there!"])
-    @mock.patch("pydantic_ai.Agent")
     @mock.patch("soliplex.config.agents.get_model_from_config")
     async def test_maps_chosen_names_to_ids(
-        self, get_model_from_config, agent_klass, assistant_text
+        self, get_model_from_config, assistant_text
     ):
+        model, calls = _answering(["Ops", "Manuals", "Ops"])
+        get_model_from_config.return_value = model
         agent_config = mock.MagicMock()
         messages = [agui_core.UserMessage(id="1", content="Hello")]
-
-        run_result = mock.MagicMock()
-        run_result.output.label_names = ["Ops", "Manuals", "Ops"]
-        agent_klass.return_value.run = mock.AsyncMock(
-            return_value=run_result,
-        )
 
         found = await auto_labels.generate_labels(
             agent_config, CATALOGUE, messages, assistant_text=assistant_text
@@ -125,36 +98,118 @@ class TestGenerateLabels:
         get_model_from_config.assert_called_once_with(
             agent_config=agent_config,
         )
-        agent_kwargs = agent_klass.call_args.kwargs
-        assert agent_kwargs["model"] is get_model_from_config.return_value
-        assert agent_kwargs["instructions"] == (
-            auto_labels.label_instructions(["Manuals", "Billing", "Ops"])
+        ((sent, info),) = calls
+        assert info.instructions == auto_labels.label_instructions(
+            ["Manuals", "Billing", "Ops"]
         )
-        output_type = agent_kwargs["output_type"]
-        with pytest.raises(pydantic.ValidationError):
-            output_type(label_names=["Invented"])
-
         expected_text = "user: Hello"
         if assistant_text:
             expected_text += f"\nassistant: {assistant_text}"
-        agent_klass.return_value.run.assert_awaited_once_with(expected_text)
+        assert sent[0].parts[-1].content == expected_text
+
+    @pytest.mark.anyio
+    @mock.patch("soliplex.config.agents.get_model_from_config")
+    async def test_retries_a_name_outside_the_catalogue(
+        self, get_model_from_config
+    ):
+        model, calls = _answering(["Invented"], ["Billing"])
+        get_model_from_config.return_value = model
+
+        found = await auto_labels.generate_labels(
+            mock.MagicMock(),
+            CATALOGUE,
+            [agui_core.UserMessage(id="1", content="Hello")],
+        )
+
+        assert found == [2]
+        retry = calls[1][0][-1].parts[0]
+        assert isinstance(retry, ai_messages.RetryPromptPart)
+
+    @pytest.mark.anyio
+    @mock.patch("soliplex.config.agents.get_model_from_config")
+    async def test_gives_up_on_names_outside_the_catalogue(
+        self, get_model_from_config
+    ):
+        model, _ = _answering(*[["Invented"]] * 10)
+        get_model_from_config.return_value = model
+
+        with pytest.raises(pydantic_ai.UnexpectedModelBehavior):
+            await auto_labels.generate_labels(
+                mock.MagicMock(),
+                CATALOGUE,
+                [agui_core.UserMessage(id="1", content="Hello")],
+            )
 
 
-@pytest.mark.anyio
-async def test_candidate_labels_is_the_catalogue(the_threads):
-    the_threads.list_labels.return_value = CATALOGUE
+USER = "user1"
+ROOM = "room1"
 
-    assert await auto_labels.candidate_labels(the_threads) is CATALOGUE
+
+@pytest_asyncio.fixture()
+async def threads_engine():
+    engine = sqla_asyncio.create_async_engine(
+        config_installation.ASYNC_MEMORY_ENGINE_URL,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(agui_schema.Base.metadata.create_all)
+
+    yield engine
+
+    await engine.dispose()
+
+
+async def _storage(threads_engine, work):
+    async with sqla_asyncio.AsyncSession(bind=threads_engine) as session:
+        async with session.begin():
+            return await work(agui_persistence.ThreadStorage(session))
+
+
+async def _catalogue(threads_engine, *names):
+    async def work(ts):
+        return [(await ts.create_label(name=name)).id_ for name in names]
+
+    return await _storage(threads_engine, work)
+
+
+async def _thread(threads_engine, *, runs=1):
+    async def work(ts):
+        thread = await ts.new_thread(user_name=USER, email="", room_id=ROOM)
+        thread_id = thread.thread_id
+        for _ in range(runs - 1):
+            await ts.new_run(user_name=USER, room_id=ROOM, thread_id=thread_id)
+        return thread_id
+
+    return await _storage(threads_engine, work)
+
+
+async def _set_labels(threads_engine, thread_id, label_ids):
+    async def work(ts):
+        await ts.set_thread_labels(
+            user_name=USER,
+            room_id=ROOM,
+            thread_id=thread_id,
+            label_ids=label_ids,
+        )
+
+    await _storage(threads_engine, work)
+
+
+async def _label_names(threads_engine, thread_id):
+    async def work(ts):
+        found = await ts.get_threads_labels(thread_ids=[thread_id])
+        return [label.name for label in found.get(thread_id, [])]
+
+    return await _storage(threads_engine, work)
 
 
 class TestMaybeApplyLabels:
-    async def _apply(self, threads_engine, event_list=()):
+    async def _apply(self, threads_engine, thread_id, event_list=()):
         await auto_labels.maybe_apply_labels(
             label_agent_config=self.label_agent_config,
             threads_engine=threads_engine,
-            room_id="room1",
-            thread_id="thread1",
-            user_name="user1",
+            room_id=ROOM,
+            thread_id=thread_id,
+            user_name=USER,
             messages=self.messages,
             event_list=event_list,
         )
@@ -167,120 +222,108 @@ class TestMaybeApplyLabels:
     @mock.patch("soliplex.auto_labels.titles.extract_assistant_text")
     @mock.patch("soliplex.auto_labels.generate_labels")
     async def test_applies_chosen_labels(
-        self,
-        gen_labels,
-        extract_at,
-        threads_engine,
-        the_threads,
-        mock_async_session,
-        mock_thread_storage,
+        self, gen_labels, extract_at, threads_engine
     ):
-        gen_labels.return_value = [3, 1]
+        manuals, _billing, ops = await _catalogue(
+            threads_engine, "Manuals", "Billing", "Ops"
+        )
+        thread_id = await _thread(threads_engine)
+        gen_labels.return_value = [ops, manuals]
         extract_at.return_value = "assistant response"
-        the_threads.list_labels.return_value = CATALOGUE
-        # Unlabelled when checked; by the time the agent has chosen, the
-        # owner has attached one of the same labels and one other.
-        the_threads.get_thread.side_effect = [
-            _thread(),
-            _thread(labels=[_label(1, "Manuals"), _label(9, "Mine")]),
-        ]
         event_list = [mock.MagicMock()]
 
-        with mock_async_session, mock_thread_storage:
-            await self._apply(threads_engine, event_list)
+        await self._apply(threads_engine, thread_id, event_list)
 
+        assert await _label_names(threads_engine, thread_id) == [
+            "Manuals",
+            "Ops",
+        ]
         extract_at.assert_called_once_with(event_list)
-        gen_labels.assert_awaited_once_with(
-            self.label_agent_config,
-            CATALOGUE,
-            self.messages,
-            "assistant response",
-        )
-        the_threads.set_thread_labels.assert_awaited_once_with(
-            user_name="user1",
-            room_id="room1",
-            thread_id="thread1",
-            label_ids=[1, 9, 3, 1],
-        )
+        catalogue = gen_labels.await_args.args[1]
+        assert [label.name for label in catalogue] == [
+            "Billing",
+            "Manuals",
+            "Ops",
+        ]
 
     @pytest.mark.anyio
-    @pytest.mark.parametrize(
-        "thread_kw",
-        [{"runs": 2}, {"labels": [_label(1, "Manuals")]}],
-        ids=["not_first_run", "already_labelled"],
-    )
     @mock.patch("soliplex.auto_labels.generate_labels")
-    async def test_skips_without_asking(
-        self,
-        gen_labels,
-        thread_kw,
-        threads_engine,
-        the_threads,
-        mock_async_session,
-        mock_thread_storage,
+    async def test_keeps_labels_the_owner_attached_meanwhile(
+        self, gen_labels, threads_engine
     ):
-        the_threads.get_thread.return_value = _thread(**thread_kw)
+        manuals, billing, ops = await _catalogue(
+            threads_engine, "Manuals", "Billing", "Ops"
+        )
+        thread_id = await _thread(threads_engine)
 
-        with mock_async_session, mock_thread_storage:
-            await self._apply(threads_engine)
+        async def owner_labels_while_choosing(*args):
+            await _set_labels(threads_engine, thread_id, [manuals, billing])
+            return [ops, manuals]
 
-        the_threads.list_labels.assert_not_awaited()
+        gen_labels.side_effect = owner_labels_while_choosing
+
+        await self._apply(threads_engine, thread_id)
+
+        assert await _label_names(threads_engine, thread_id) == [
+            "Billing",
+            "Manuals",
+            "Ops",
+        ]
+
+    @pytest.mark.anyio
+    @mock.patch("soliplex.auto_labels.generate_labels")
+    async def test_skips_after_the_first_run(self, gen_labels, threads_engine):
+        await _catalogue(threads_engine, "Manuals")
+        thread_id = await _thread(threads_engine, runs=2)
+
+        await self._apply(threads_engine, thread_id)
+
         gen_labels.assert_not_awaited()
-        the_threads.set_thread_labels.assert_not_awaited()
+        assert await _label_names(threads_engine, thread_id) == []
+
+    @pytest.mark.anyio
+    @mock.patch("soliplex.auto_labels.generate_labels")
+    async def test_skips_a_thread_the_owner_labelled(
+        self, gen_labels, threads_engine
+    ):
+        manuals, _ops = await _catalogue(threads_engine, "Manuals", "Ops")
+        thread_id = await _thread(threads_engine)
+        await _set_labels(threads_engine, thread_id, [manuals])
+
+        await self._apply(threads_engine, thread_id)
+
+        gen_labels.assert_not_awaited()
+        assert await _label_names(threads_engine, thread_id) == ["Manuals"]
 
     @pytest.mark.anyio
     @mock.patch("soliplex.auto_labels.generate_labels")
     async def test_skips_with_empty_catalogue(
-        self,
-        gen_labels,
-        threads_engine,
-        the_threads,
-        mock_async_session,
-        mock_thread_storage,
+        self, gen_labels, threads_engine
     ):
-        the_threads.get_thread.return_value = _thread()
-        the_threads.list_labels.return_value = []
+        thread_id = await _thread(threads_engine)
 
-        with mock_async_session, mock_thread_storage:
-            await self._apply(threads_engine)
+        await self._apply(threads_engine, thread_id)
 
         gen_labels.assert_not_awaited()
-        the_threads.set_thread_labels.assert_not_awaited()
 
     @pytest.mark.anyio
     @mock.patch("soliplex.auto_labels.generate_labels")
     async def test_writes_nothing_when_none_chosen(
-        self,
-        gen_labels,
-        threads_engine,
-        the_threads,
-        mock_async_session,
-        mock_thread_storage,
+        self, gen_labels, threads_engine
     ):
+        await _catalogue(threads_engine, "Manuals")
+        thread_id = await _thread(threads_engine)
         gen_labels.return_value = []
-        the_threads.get_thread.return_value = _thread()
-        the_threads.list_labels.return_value = CATALOGUE
 
-        with mock_async_session, mock_thread_storage:
-            await self._apply(threads_engine)
+        await self._apply(threads_engine, thread_id)
 
         gen_labels.assert_awaited_once()
-        the_threads.set_thread_labels.assert_not_awaited()
+        assert await _label_names(threads_engine, thread_id) == []
 
     @pytest.mark.anyio
     @mock.patch("soliplex.auto_labels.logfire")
-    async def test_logs_and_swallows_failure(
-        self,
-        logfire,
-        threads_engine,
-        the_threads,
-        mock_async_session,
-        mock_thread_storage,
-    ):
-        the_threads.get_thread.side_effect = Exception("db down")
-
-        with mock_async_session, mock_thread_storage:
-            await self._apply(threads_engine)
+    async def test_logs_and_swallows_failure(self, logfire, threads_engine):
+        await self._apply(threads_engine, "no-such-thread")
 
         logfire.exception.assert_called_once_with(
             "Failed to apply thread labels"
