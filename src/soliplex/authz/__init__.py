@@ -219,6 +219,22 @@ class AdminUserPolicy(abc.ABC):
         """Remove all admin user discriminators from the admin users table."""
 
     @abc.abstractmethod
+    async def is_admin(
+        self,
+        user_token: UserToken,
+    ) -> bool:
+        """Is the user represented by 'user_token' an admin user?
+
+        Matches 'user_token' against each admin entry's JSONPath query;
+        the user is an admin when any query matches.
+
+        This test is for *non-audit* checks, e.g. to support whether
+        the frontend offers an admin-only option:  it is not intended
+        for use where an actual admin operation is performed (see
+        'check_admin_access' for that case).
+        """
+
+    @abc.abstractmethod
     async def check_admin_access(
         self,
         user_token: UserToken,
@@ -226,11 +242,13 @@ class AdminUserPolicy(abc.ABC):
         resource: str,
         action: str,
     ) -> bool:
-        """Is the user represented by 'user_token' an admin user?
+        """Validate that the user represented by 'user_token' is an admin user
 
-        Matches 'user_token' against each admin entry's JSONPath query;
-        the user is an admin when any query matches. 'resource' / 'action'
-        name the privileged operation being gated (for the audit record).
+        This check is called at the point that an auditable admin action
+        is being performed.  It calls the non-audit 'is_admin' check, and then
+        creates the audit record, identifying the privileged operation being
+        gated using 'resource' / 'action'. Finally, it returns the result
+        from 'is_admin'.
         """
 
 
@@ -238,14 +256,14 @@ class RoomAuthorizationPolicy(abc.ABC):
     """Protocol for checking / managing room authorization policies."""
 
     @abc.abstractmethod
-    async def check_room_access(
+    async def has_room_permission(
         self,
         room_id: str,
         user_token: UserToken | None,
         *,
         permission: Permission,
     ) -> bool:
-        """Can the user represented by 'user_token' access a room?
+        """Does the user have a 'permission' on a given room?
 
         For a room with an authorization policy, return whether the result
         of its ``check_token`` for the user token and permission is ALLOW.
@@ -255,6 +273,29 @@ class RoomAuthorizationPolicy(abc.ABC):
         - Return True for READ (such rooms are public for read).
 
         - Return False for WRITE and ADMIN.
+
+        This test is for *non-audit* checks, e.g. to support whether
+        the frontend offers an option which would require the permission:
+        it is not intended for use where the actual gated operation is
+        performed (see 'check_room_access' for that case).
+        """
+
+    @abc.abstractmethod
+    async def check_room_access(
+        self,
+        room_id: str,
+        user_token: UserToken | None,
+        *,
+        permission: Permission,
+    ) -> bool:
+        """Validate that the user has the required permission for a room.
+
+        Calls the non-audit 'has_room_permission' check first.
+
+        This check is called at the point that an auditable action
+        is being performed.  It calls the non-audit 'has_room_permission'
+        check, and then creates the audit record, identifying the required
+        permission.  Finally, it returns the result from 'has_room_permission'.
         """
 
     @abc.abstractmethod

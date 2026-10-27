@@ -309,7 +309,7 @@ async def test_get_user_authz(
     w_admin_access,
 ):
     the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
-    the_admin_users.check_admin_access.return_value = w_admin_access
+    the_admin_users.is_admin.return_value = w_admin_access
     the_authz_logger = mock.create_autospec(loggers.LogWrapper)
 
     expected = models.UserAuthorization(is_admin_user=w_admin_access)
@@ -322,14 +322,10 @@ async def test_get_user_authz(
 
     assert found == expected
 
+    the_admin_users.is_admin.assert_awaited_once_with(THE_USER_CLAIMS)
+
     the_authz_logger.debug.assert_called_once_with(
         loggers.AUTHZ_GET_USER_AUTHZ,
-    )
-
-    the_admin_users.check_admin_access.assert_awaited_once_with(
-        THE_USER_CLAIMS,
-        resource=loggers.AUDIT_RESOURCE_USER_AUTHZ,
-        action=loggers.AUDIT_ACTION_READ,
     )
 
 

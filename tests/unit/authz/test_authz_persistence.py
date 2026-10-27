@@ -271,6 +271,25 @@ ADMIN_ACTION = loggers.AUDIT_ACTION_READ
 
 
 @pytest.mark.asyncio
+async def test_admin_user_is_admin(the_async_session):
+    aup = _admin_user_policy(the_async_session)
+
+    assert not await aup.is_admin(USER_TOKEN)
+
+    email_discriminator = authz.token_field_json_path("email", EMAIL)
+    await aup.add_admin_user_discriminator(email_discriminator)
+
+    assert await aup.is_admin(USER_TOKEN)
+
+    await aup.remove_admin_user_discriminator(email_discriminator)
+
+    assert not await aup.is_admin(USER_TOKEN)
+
+    aup._audit.admin_access_denied.assert_not_called()
+    aup._audit.admin_access_denied.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_admin_user_check_admin_access(the_async_session):
     aup = _admin_user_policy(the_async_session)
 
@@ -506,6 +525,55 @@ def test_room_authz_policy_builds_audit_log():
     assert policy._audit.extra["claims"] == CLAIMS
     assert isinstance(policy._access_audit, loggers.RoomAccessAuditLog)
     assert policy._access_audit.extra["claims"] == CLAIMS
+
+
+@pytest.mark.asyncio
+async def test_room_authz_has_room_permission_public(the_async_session):
+    rap = _room_authz_policy(the_async_session)
+
+    assert await rap.has_room_permission(ROOM_ID, None, permission=READ)
+
+    # No policy: WRITE and ADMIN remain default-denied.
+    assert not await rap.has_room_permission(ROOM_ID, None, permission=WRITE)
+
+    assert not await rap.has_room_permission(ROOM_ID, None, permission=ADMIN)
+
+    rap._access_audit.room_access_allowed.assert_not_called()
+    rap._access_audit.room_access_denied.assert_not_called()
+    assert rap._audit.method_calls == []
+
+
+@pytest.mark.asyncio
+async def test_room_authz_has_room_permission_denied(the_async_session):
+    rap = _room_authz_policy(the_async_session)
+    # Policy w/ deny as default, no ACL entries.
+    the_async_session.add(authz_schema.RoomPolicy(room_id=ROOM_ID))
+
+    assert not await rap.has_room_permission(ROOM_ID, None, permission=READ)
+
+    rap._access_audit.room_access_denied.assert_not_called()
+    rap._access_audit.room_access_allowed.assert_not_called()
+    assert rap._audit.method_calls == []
+
+
+@pytest.mark.asyncio
+async def test_room_authz_has_room_permission_allowed(the_async_session):
+    rap = _room_authz_policy(the_async_session)
+    denier = authz_schema.RoomPolicy(room_id=ROOM_ID)
+    the_async_session.add(denier)
+    the_async_session.add(
+        authz_schema.ACLEntry(
+            room_policy=denier,
+            allow_deny=authz.AllowDeny.ALLOW,
+            everyone=True,
+        )
+    )
+
+    assert await rap.has_room_permission(ROOM_ID, None, permission=READ)
+
+    rap._access_audit.room_access_allowed.assert_not_called()
+    rap._access_audit.room_access_denied.assert_not_called()
+    assert rap._audit.method_calls == []
 
 
 @pytest.mark.asyncio

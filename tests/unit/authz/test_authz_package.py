@@ -2,6 +2,18 @@ import pytest
 
 from soliplex import authz
 
+USER_NAME = "phreddy"
+GIVEN_NAME = "Phred"
+FAMILY_NAME = "Phlyntstone"
+EMAIL = "phreddy@example.com"
+
+THE_USER_CLAIMS = {
+    "preferred_username": USER_NAME,
+    "given_name": GIVEN_NAME,
+    "family_name": FAMILY_NAME,
+    "email": EMAIL,
+}
+
 
 def test_reservedjsonpathfunctionname_is_valueerror():
     assert issubclass(authz.ReservedJSONPathFunctionName, ValueError)
