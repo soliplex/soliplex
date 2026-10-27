@@ -2028,8 +2028,8 @@ async def test_create_label_rejects_a_name_taken_in_another_case(
     async with unit_of_work():
         await _label_id(ts, "Urgent")
 
-    # Raised before the insert, so the caller gets a 409 rather than a
-    # transaction poisoned by the unique constraint.
+    # The unique constraint is the only check, so a concurrent create of
+    # the same name is refused the same way.
     with pytest.raises(agui.DuplicateLabel):
         await ts.create_label(name="URGENT")
 
@@ -2512,6 +2512,46 @@ async def test_list_user_threads_page_filters_by_name(
         "Osprey Pilot Manual",
     ]
     assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_filters_by_non_ascii_name(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="Ärger im Büro")
+        await _named_thread(ts, room_id=ROOM_ID, name="Arger")
+
+    # SQLite's own 'lower()' leaves 'Ä' alone.
+    pairs, position = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        name_query="ärger",
+    )
+
+    assert [name for _, name in pairs] == ["Ärger im Büro"]
+    assert position is None
+
+
+@pytest.mark.parametrize("value, expected", [(None, None), ("ÄB", "äb")])
+def test__sqlite_lower(value, expected):
+    assert agui_persistence._sqlite_lower(value) == expected
+
+
+@pytest.mark.asyncio
+async def test__name_fold_uses_sql_lower_off_sqlite():
+    connection = mock.Mock()
+    connection.dialect.name = "postgresql"
+    session = mock.Mock()
+    session.connection = mock.AsyncMock(return_value=connection)
+
+    fold = await agui_persistence._name_fold(session)
+
+    assert str(fold("x").compile()).startswith("lower(")
+    connection.get_raw_connection.assert_not_called()
 
 
 @pytest.mark.asyncio

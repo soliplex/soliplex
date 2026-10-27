@@ -936,25 +936,30 @@ class AGUI_NewThreadRequest(pydantic.BaseModel):
     metadata: AGUI_ThreadMetadata = KW_ONLY_NONE
 
 
-# A '#RRGGBB' color, either case. Validated here rather than in the
-# database: this is the boundary a bad value would arrive through, and a
-# CHECK constraint could not report which field was wrong.
-HEX_COLOR_PATTERN = r"^#(?:[0-9a-fA-F]{3}){1,2}$"
+# A '#RRGGBB' color, accepted in either case and stored lowercased.
+HEX_COLOR_PATTERN = r"^#[0-9a-fA-F]{6}$"
 
-# Nothing stops a caller attaching a label a thousand times over, or
-# filtering on a query string long enough to bloat the SQL. A ceiling
-# well above any real use keeps both bounded.
+LabelColor = typing.Annotated[
+    str,
+    pydantic.StringConstraints(to_lower=True, pattern=HEX_COLOR_PATTERN),
+]
+
+LabelName = typing.Annotated[
+    str,
+    pydantic.StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=64,
+    ),
+]
+
 MAX_THREAD_LABELS = 32
 
 
 class AGUI_Label(pydantic.BaseModel):
     """A category which may be attached to threads.
 
-    'usage_count' is present only for administrators: it spans every
-    user's threads, so a name beside a volume would tell anyone else how
-    much work exists that they cannot see. Omitted -- not zero, not null
-    -- so a client cannot mistake "not allowed to know" for "unused" and
-    offer a delete that is in fact destructive.
+    'usage_count' is present only for administrators.
     """
 
     id: int = KW_ONLY
@@ -977,36 +982,19 @@ class AGUI_Labels(pydantic.BaseModel):
 
 
 class AGUI_NewLabelRequest(pydantic.BaseModel):
-    name: str = pydantic.Field(kw_only=True, min_length=1, max_length=64)
-    color: str | None = pydantic.Field(
-        kw_only=True,
-        default=None,
-        pattern=HEX_COLOR_PATTERN,
-    )
+    name: LabelName = KW_ONLY
+    color: LabelColor | None = KW_ONLY_NONE
 
 
 class AGUI_UpdateLabelRequest(pydantic.BaseModel):
     """Fields to change on a label; omitted ones are left alone."""
 
-    name: str | None = pydantic.Field(
-        kw_only=True,
-        default=None,
-        min_length=1,
-        max_length=64,
-    )
-    color: str | None = pydantic.Field(
-        kw_only=True,
-        default=None,
-        pattern=HEX_COLOR_PATTERN,
-    )
+    name: LabelName | None = KW_ONLY_NONE
+    color: LabelColor | None = KW_ONLY_NONE
 
 
 class AGUI_SetThreadLabelsRequest(pydantic.BaseModel):
-    """The complete set of labels a thread should carry.
-
-    A replacement rather than a delta: the properties dialog knows the
-    whole set, and a delta would need its own conflict story.
-    """
+    """The complete set of labels a thread should carry."""
 
     label_ids: list[int] = pydantic.Field(
         kw_only=True,
@@ -1031,11 +1019,6 @@ class AGUI_Thread(pydantic.BaseModel):
     # birth); lets clients mark threads with unseen activity.
     last_activity: pydantic.AwareDatetime | None = KW_ONLY_NONE
 
-    # Whole labels rather than bare IDs: the client paints coloured
-    # chips, and shipping IDs alone would force every listing to be
-    # joined client-side against a separately-fetched catalogue -- with a
-    # window in which a just-renamed label renders under its old name.
-    # The integer IDs are still right there for cheap comparison.
     labels: list[AGUI_Label] = pydantic.Field(
         kw_only=True,
         default_factory=list,

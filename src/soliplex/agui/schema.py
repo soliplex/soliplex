@@ -101,15 +101,8 @@ class Thread(Base):
         passive_deletes=True,
     )
 
-    # Deliberately one-way: 'Label' carries no 'threads' collection. A
-    # back-reference would let one stray attribute access load every
-    # thread in the installation; usage counts come from a grouped
-    # aggregate instead.
-    #
-    # 'passive_deletes' leaves the association rows to the database's
-    # 'ON DELETE CASCADE' rather than having SQLAlchemy delete them one
-    # by one. Labels themselves are never cascaded -- detaching a label
-    # from a thread must not delete it from the catalogue.
+    # One-way: 'Label' has no 'threads' collection. 'passive_deletes'
+    # leaves the association rows to the database's 'ON DELETE CASCADE'.
     labels: Mapped[list[Label]] = relationship(
         secondary="thread_label",
         order_by="Label.name_key",
@@ -167,9 +160,7 @@ class Label(Base):
 
     'name' is what people read and type; 'name_key' is that name folded
     to lower case and carries the uniqueness constraint, so 'Urgent' and
-    'urgent' are the same label. The constraint lives on a stored column
-    rather than on a functional index over 'lower(name)' because SQLite
-    cannot express the latter.
+    'urgent' are the same label.
 
     'color' is a '#RRGGBB' string, defaulting to the neutral grey in
     'agui.util.DEFAULT_LABEL_COLOR' and thereafter editable.
@@ -177,14 +168,9 @@ class Label(Base):
 
     __tablename__ = "label"
 
-    # Plain SQLite hands out 'max(id) + 1', so deleting the highest label
-    # and creating another gives the new one the old one's ID -- and any
-    # client still holding the previous catalogue would then paint the
-    # wrong chip. AUTOINCREMENT makes IDs monotonic. No-op on PostgreSQL.
-    #
-    # Consequence to keep in mind: IDs are allocated per deployment, so
-    # nothing portable between installations (config, seed data, exports)
-    # may key on them.
+    # Without AUTOINCREMENT, SQLite reuses 'max(id) + 1', so a new label
+    # could take a deleted one's ID and a stale client catalogue would
+    # paint the wrong chip. No-op on PostgreSQL.
     __table_args__ = {"sqlite_autoincrement": True}
 
     id_: Mapped[int] = mapped_column(primary_key=True)
@@ -194,15 +180,10 @@ class Label(Base):
     )
 
     name: Mapped[str] = mapped_column()
-    # 'unique' only: adding 'index=True' as well would make autogenerate
-    # emit a redundant index alongside the constraint's own.
     name_key: Mapped[str] = mapped_column(unique=True)
     color: Mapped[str] = mapped_column()
 
 
-# A Core table rather than a mapped class: it carries no payload of its
-# own, and modelling it as an entity would only invite queries that treat
-# the association as a thing in itself.
 thread_label = sqla_schema.Table(
     "thread_label",
     Base.metadata,
@@ -211,10 +192,8 @@ thread_label = sqla_schema.Table(
         ForeignKey("thread.id_", ondelete="CASCADE"),
         primary_key=True,
     ),
-    # Indexed explicitly: the composite primary key only indexes
-    # '(thread_id_, label_id_)', which does not serve a lookup keyed on
-    # the label -- and both the label filter and the usage count are
-    # exactly that.
+    # The composite primary key does not serve lookups by label alone,
+    # which the label filter and the usage count both make.
     sqla_schema.Column(
         "label_id_",
         ForeignKey("label.id_", ondelete="CASCADE"),

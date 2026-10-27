@@ -62,28 +62,16 @@ async def get_agui_labels(
 ) -> models.AGUI_Labels:
     """Return the installation's label catalogue
 
-    Readable by anyone: a user has to know the catalogue to attach
-    anything from it, and the client renders chips from it.
-
-    Usage counts ride along only for administrators. They span every
-    user's threads, so a label name beside a volume would tell an
-    ordinary user how much work exists that they cannot otherwise see --
-    and, since only administrators can delete a label, the count (whose
-    whole purpose is to warn before deleting one in use) is of no use to
-    anyone else.
+    Readable by anyone; usage counts are included only for
+    administrators.
     """
     the_labels_logger.debug(loggers.LABELS_GET)
 
-    is_admin = await the_admin_users.check_admin_access(
-        the_user_claims,
-        resource=loggers.AUDIT_RESOURCE_THREAD_LABEL,
-        action=loggers.AUDIT_ACTION_READ,
-    )
+    # Not 'check_admin_access': this shapes the response rather than
+    # gating it, so a non-admin read is not an access denial to audit.
+    is_admin = await the_admin_users.is_admin(the_user_claims)
 
     labels = await the_threads.list_labels()
-    # Omitted outright for non-admins rather than sent as 0 or null, so
-    # a client cannot read "not allowed to know" as "unused" and offer a
-    # delete that is in fact destructive.
     counts = await the_threads.get_label_usage_counts() if is_admin else {}
 
     return models.AGUI_Labels(
@@ -140,11 +128,7 @@ async def post_agui_label_id(
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_labels_logger: loggers.LogWrapper = depend_the_labels_logger,
 ) -> models.AGUI_Label:
-    """Rename and/or recolor a label (administrators only)
-
-    POST rather than PATCH: the repository has no 'patch' or 'put'
-    handler anywhere, and this follows the thread-metadata update.
-    """
+    """Rename and/or recolor a label (administrators only)"""
     the_labels_logger.debug(loggers.LABELS_POST_LABEL)
 
     await _check_admin(

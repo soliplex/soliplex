@@ -65,7 +65,7 @@ async def test_get_agui_labels_hides_counts_from_non_admins(
     the_admin_users,
     the_labels_logger,
 ):
-    the_admin_users.check_admin_access.return_value = False
+    the_admin_users.is_admin.return_value = False
     the_threads.list_labels.return_value = [URGENT, BLOCKED]
 
     found = await labels_views.get_agui_labels(
@@ -75,16 +75,12 @@ async def test_get_agui_labels_hides_counts_from_non_admins(
         the_labels_logger=the_labels_logger,
     )
 
-    # The catalogue itself is readable by anyone -- a user has to know it
-    # to attach anything from it.
     assert [label.name for label in found.labels] == ["Urgent", "Blocked"]
-
-    # Counts span every user's threads, so a name beside a volume would
-    # leak how much work exists that this caller cannot see. Omitted
-    # outright, never sent as zero.
     assert [label.usage_count for label in found.labels] == [None, None]
 
     the_threads.get_label_usage_counts.assert_not_awaited()
+    # A non-admin reading the catalogue is not an access denial.
+    the_admin_users.check_admin_access.assert_not_awaited()
     the_labels_logger.debug.assert_called_once_with(loggers.LABELS_GET)
 
 
@@ -94,7 +90,7 @@ async def test_get_agui_labels_gives_admins_global_counts(
     the_admin_users,
     the_labels_logger,
 ):
-    the_admin_users.check_admin_access.return_value = True
+    the_admin_users.is_admin.return_value = True
     the_threads.list_labels.return_value = [URGENT, BLOCKED]
     the_threads.get_label_usage_counts.return_value = {URGENT.id_: 7}
 
@@ -105,15 +101,9 @@ async def test_get_agui_labels_gives_admins_global_counts(
         the_labels_logger=the_labels_logger,
     )
 
-    # A label nothing carries reports zero rather than being omitted:
-    # for an admin, "unused" is exactly the answer they asked for.
     assert [label.usage_count for label in found.labels] == [7, 0]
 
-    the_admin_users.check_admin_access.assert_awaited_once_with(
-        THE_USER_CLAIMS,
-        resource=loggers.AUDIT_RESOURCE_THREAD_LABEL,
-        action=loggers.AUDIT_ACTION_READ,
-    )
+    the_admin_users.is_admin.assert_awaited_once_with(THE_USER_CLAIMS)
 
 
 @pytest.mark.anyio
@@ -202,7 +192,7 @@ async def test_post_agui_label_id_updates(
 
     found = await labels_views.post_agui_label_id(
         label_id=2,
-        updated_label=models.AGUI_UpdateLabelRequest(color="#ABCDEF"),
+        updated_label=models.AGUI_UpdateLabelRequest(color="#abcdef"),
         the_threads=the_threads,
         the_admin_users=the_admin_users,
         the_user_claims=THE_USER_CLAIMS,
@@ -216,7 +206,7 @@ async def test_post_agui_label_id_updates(
     the_threads.update_label.assert_awaited_once_with(
         label_id=2,
         name=None,
-        color="#ABCDEF",
+        color="#abcdef",
     )
     the_labels_logger.debug.assert_called_once_with(loggers.LABELS_POST_LABEL)
 

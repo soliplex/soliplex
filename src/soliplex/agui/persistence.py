@@ -75,6 +75,29 @@ def _name_key(name: str) -> str:
     return name.lower()
 
 
+# SQLite's built-in 'lower()' folds only ASCII, so on SQLite the name
+# search calls this Python fold instead, registered on the connection.
+_SQLITE_LOWER = "soliplex_lower"
+
+
+def _sqlite_lower(value: str | None) -> str | None:
+    return None if value is None else value.lower()
+
+
+async def _name_fold(session):
+    """Return the SQL function that folds a name as 'str.lower' does."""
+    connection = await session.connection()
+
+    if connection.dialect.name != "sqlite":
+        return sqla_sql.func.lower
+
+    raw = await connection.get_raw_connection()
+    await raw.driver_connection.create_function(
+        _SQLITE_LOWER, 1, _sqlite_lower, deterministic=True
+    )
+    return getattr(sqla_sql.func, _SQLITE_LOWER)
+
+
 class ThreadStorage(agui.ThreadStorage):
     def __init__(self, session: sqla_asyncio.AsyncSession):
         self._session = session
@@ -231,6 +254,7 @@ class ThreadStorage(agui.ThreadStorage):
                 # Correlated rather than joined to 'thread_metadata',
                 # which is optional: a never-titled thread has no row,
                 # and must still appear in an unfiltered listing.
+                fold = await _name_fold(session)
                 pattern = f"%{_like_escape(name_query).lower()}%"
                 query = query.where(
                     sqla_sql.select(sqla_sql.literal(1))
@@ -238,9 +262,9 @@ class ThreadStorage(agui.ThreadStorage):
                     .where(
                         agui_schema.ThreadMetadata.thread_id_
                         == agui_schema.Thread.id_,
-                        sqla_sql.func.lower(
-                            agui_schema.ThreadMetadata.name
-                        ).like(pattern, escape=_LIKE_ESCAPE),
+                        fold(agui_schema.ThreadMetadata.name).like(
+                            pattern, escape=_LIKE_ESCAPE
+                        ),
                     )
                     .correlate(agui_schema.Thread)
                     .exists()
@@ -358,23 +382,16 @@ class ThreadStorage(agui.ThreadStorage):
 
         return label
 
-    async def _assert_name_free(self, *, name: str, session, excluding=None):
-        """Refuse a label name already taken, ignoring case.
+    async def _flush_label(self, *, name: str, session):
+        """Flush a label write, raising 'DuplicateLabel' on a name clash.
 
-        The unique constraint on 'name_key' is the real guard; checking
-        first is what turns a poisoned transaction into a 409 the client
-        can act on. 'excluding' is the label being renamed, which must
-        not collide with itself.
+        The unique constraint on 'name_key' is the only check, so two
+        concurrent writes of one name cannot both pass it.
         """
-        query = sqla_sql.select(agui_schema.Label.id_).where(
-            agui_schema.Label.name_key == _name_key(name)
-        )
-
-        if excluding is not None:
-            query = query.where(agui_schema.Label.id_ != excluding)
-
-        if (await session.scalars(query)).first() is not None:
-            raise agui.DuplicateLabel(name)
+        try:
+            await session.flush()
+        except sqla_exc.IntegrityError:
+            raise agui.DuplicateLabel(name) from None
 
     async def list_labels(self) -> list[agui_schema.Label]:
         async with self.session as session:
@@ -402,16 +419,9 @@ class ThreadStorage(agui.ThreadStorage):
         color: str = None,
     ) -> agui_schema.Label:
         async with self.session as session:
-            await self._assert_name_free(name=name, session=session)
-
             label = agui_schema.Label(
                 name=name,
                 name_key=_name_key(name),
-                # A label nobody colored is stored neutral rather than
-                # left null: the column is what every client paints from,
-                # and "no color" would make each of them invent its own
-                # fallback -- so the same label would look different
-                # depending on which one you were looking at.
                 color=(
                     color
                     if color is not None
@@ -419,9 +429,7 @@ class ThreadStorage(agui.ThreadStorage):
                 ),
             )
             session.add(label)
-            # Flushed here rather than left to the commit so the row's ID
-            # is populated on the instance the caller is handed back.
-            await session.flush()
+            await self._flush_label(name=name, session=session)
 
         return label
 
@@ -439,16 +447,13 @@ class ThreadStorage(agui.ThreadStorage):
             )
 
             if name is not None:
-                await self._assert_name_free(
-                    name=name,
-                    session=session,
-                    excluding=label_id,
-                )
                 label.name = name
                 label.name_key = _name_key(name)
 
             if color is not None:
                 label.color = color
+
+            await self._flush_label(name=label.name, session=session)
 
         return label
 
