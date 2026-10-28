@@ -9,17 +9,17 @@ from pydantic_ai import messages as ai_messages
 from pydantic_ai.models import function as ai_function
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import auto_labels
+from soliplex import label
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.config import installation as config_installation
 
 
 def _label(id_, name):
-    label = mock.MagicMock()
-    label.id_ = id_
-    label.name = name
-    return label
+    found = mock.MagicMock()
+    found.id_ = id_
+    found.name = name
+    return found
 
 
 CATALOGUE = [_label(1, "Manuals"), _label(2, "Billing"), _label(3, "Ops")]
@@ -27,35 +27,35 @@ CATALOGUE = [_label(1, "Manuals"), _label(2, "Billing"), _label(3, "Ops")]
 
 class TestLabelsOutputType:
     def test_admits_catalogue_names(self):
-        output_type = auto_labels.labels_output_type(["Manuals", "Ops"])
+        output_type = label.labels_output_type(["Manuals", "Ops"])
 
         found = output_type(label_names=["Ops", "Manuals"])
 
         assert found.label_names == ["Ops", "Manuals"]
 
     def test_defaults_to_none_chosen(self):
-        output_type = auto_labels.labels_output_type(["Manuals"])
+        output_type = label.labels_output_type(["Manuals"])
 
         assert output_type().label_names == []
 
     def test_rejects_a_name_outside_the_catalogue(self):
-        output_type = auto_labels.labels_output_type(["Manuals"])
+        output_type = label.labels_output_type(["Manuals"])
 
         with pytest.raises(pydantic.ValidationError):
             output_type(label_names=["Invented"])
 
     def test_rejects_more_than_the_maximum(self):
-        names = [f"L{i}" for i in range(auto_labels.MAX_AUTO_LABELS + 1)]
-        output_type = auto_labels.labels_output_type(names)
+        names = [f"L{i}" for i in range(label.MAX_AUTO_LABELS + 1)]
+        output_type = label.labels_output_type(names)
 
         with pytest.raises(pydantic.ValidationError):
             output_type(label_names=names)
 
 
 def test_label_instructions_name_every_label():
-    found = auto_labels.label_instructions(["Manuals", "Ops"])
+    found = label.label_instructions(["Manuals", "Ops"])
 
-    assert found.startswith(auto_labels.LABEL_PROMPT)
+    assert found.startswith(label.LABEL_PROMPT)
     assert found.endswith("Allowed labels:\n- Manuals\n- Ops")
 
 
@@ -89,7 +89,7 @@ class TestGenerateLabels:
         agent_config = mock.MagicMock()
         messages = [agui_core.UserMessage(id="1", content="Hello")]
 
-        found = await auto_labels.generate_labels(
+        found = await label.generate_labels(
             agent_config, CATALOGUE, messages, assistant_text=assistant_text
         )
 
@@ -99,7 +99,7 @@ class TestGenerateLabels:
             agent_config=agent_config,
         )
         ((sent, info),) = calls
-        assert info.instructions == auto_labels.label_instructions(
+        assert info.instructions == label.label_instructions(
             ["Manuals", "Billing", "Ops"]
         )
         expected_text = "user: Hello"
@@ -115,7 +115,7 @@ class TestGenerateLabels:
         model, calls = _answering(["Invented"], ["Billing"])
         get_model_from_config.return_value = model
 
-        found = await auto_labels.generate_labels(
+        found = await label.generate_labels(
             mock.MagicMock(),
             CATALOGUE,
             [agui_core.UserMessage(id="1", content="Hello")],
@@ -134,7 +134,7 @@ class TestGenerateLabels:
         get_model_from_config.return_value = model
 
         with pytest.raises(pydantic_ai.UnexpectedModelBehavior):
-            await auto_labels.generate_labels(
+            await label.generate_labels(
                 mock.MagicMock(),
                 CATALOGUE,
                 [agui_core.UserMessage(id="1", content="Hello")],
@@ -204,7 +204,7 @@ async def _label_names(threads_engine, thread_id):
 
 class TestMaybeApplyLabels:
     async def _apply(self, threads_engine, thread_id, event_list=()):
-        await auto_labels.maybe_apply_labels(
+        await label.maybe_apply_labels(
             label_agent_config=self.label_agent_config,
             threads_engine=threads_engine,
             room_id=ROOM,
@@ -219,8 +219,8 @@ class TestMaybeApplyLabels:
         self.messages = [agui_core.UserMessage(id="1", content="Hello")]
 
     @pytest.mark.anyio
-    @mock.patch("soliplex.auto_labels.titles.extract_assistant_text")
-    @mock.patch("soliplex.auto_labels.generate_labels")
+    @mock.patch("soliplex.label.titles.extract_assistant_text")
+    @mock.patch("soliplex.label.generate_labels")
     async def test_applies_chosen_labels(
         self, gen_labels, extract_at, threads_engine
     ):
@@ -247,7 +247,7 @@ class TestMaybeApplyLabels:
         ]
 
     @pytest.mark.anyio
-    @mock.patch("soliplex.auto_labels.generate_labels")
+    @mock.patch("soliplex.label.generate_labels")
     async def test_keeps_labels_the_owner_attached_meanwhile(
         self, gen_labels, threads_engine
     ):
@@ -271,7 +271,7 @@ class TestMaybeApplyLabels:
         ]
 
     @pytest.mark.anyio
-    @mock.patch("soliplex.auto_labels.generate_labels")
+    @mock.patch("soliplex.label.generate_labels")
     async def test_skips_after_the_first_run(self, gen_labels, threads_engine):
         await _catalogue(threads_engine, "Manuals")
         thread_id = await _thread(threads_engine, runs=2)
@@ -282,7 +282,7 @@ class TestMaybeApplyLabels:
         assert await _label_names(threads_engine, thread_id) == []
 
     @pytest.mark.anyio
-    @mock.patch("soliplex.auto_labels.generate_labels")
+    @mock.patch("soliplex.label.generate_labels")
     async def test_skips_a_thread_the_owner_labelled(
         self, gen_labels, threads_engine
     ):
@@ -296,7 +296,7 @@ class TestMaybeApplyLabels:
         assert await _label_names(threads_engine, thread_id) == ["Manuals"]
 
     @pytest.mark.anyio
-    @mock.patch("soliplex.auto_labels.generate_labels")
+    @mock.patch("soliplex.label.generate_labels")
     async def test_skips_with_empty_catalogue(
         self, gen_labels, threads_engine
     ):
@@ -307,7 +307,7 @@ class TestMaybeApplyLabels:
         gen_labels.assert_not_awaited()
 
     @pytest.mark.anyio
-    @mock.patch("soliplex.auto_labels.generate_labels")
+    @mock.patch("soliplex.label.generate_labels")
     async def test_writes_nothing_when_none_chosen(
         self, gen_labels, threads_engine
     ):
@@ -321,7 +321,7 @@ class TestMaybeApplyLabels:
         assert await _label_names(threads_engine, thread_id) == []
 
     @pytest.mark.anyio
-    @mock.patch("soliplex.auto_labels.logfire")
+    @mock.patch("soliplex.label.logfire")
     async def test_logs_and_swallows_failure(self, logfire, threads_engine):
         await self._apply(threads_engine, "no-such-thread")
 

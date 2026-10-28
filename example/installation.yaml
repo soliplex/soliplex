@@ -382,12 +382,15 @@ agent_configs:
   - id: "title"
     model_name: "gpt-oss:latest"
 
+  - id: "label"
+    model_name: "gpt-oss:latest"
+
 title_agent_config_id: "title"
 
 # Attach labels from the catalogue to a thread after its first run. The
 # agent may only choose existing labels, so this does nothing until an
 # administrator has created some.
-label_agent_config_id: "title"
+label_agent_config_id: "label"
 
 #==========================================================================
 # Upload directory configuraition
