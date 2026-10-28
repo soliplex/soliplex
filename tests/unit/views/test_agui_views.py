@@ -1282,7 +1282,7 @@ def test_parse_last_event_id(header, expected):
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
 @pytest.mark.parametrize("w_label_config", [False, True])
 @pytest.mark.parametrize("w_title_config", [False, True])
-@mock.patch("soliplex.views.agui.auto_labels.maybe_apply_labels")
+@mock.patch("soliplex.views.agui.label.maybe_apply_labels")
 @mock.patch("soliplex.views.agui.titles.maybe_generate_title")
 @mock.patch("soliplex.agui.persistence.finish_run")
 @mock.patch("soliplex.agui.persistence.save_single_event")
