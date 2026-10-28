@@ -20,8 +20,8 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
-from soliplex import auto_labels
 from soliplex import installation
+from soliplex import label
 from soliplex import loggers
 from soliplex import models
 from soliplex import titles
@@ -930,7 +930,7 @@ async def _after_finished_run(
 
     if label_agent_config is not None:
         pending.append(
-            auto_labels.maybe_apply_labels(
+            label.maybe_apply_labels(
                 label_agent_config=label_agent_config,
                 **run_kwargs,
             )
