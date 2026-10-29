@@ -1766,6 +1766,7 @@ async def _page_names(
     limit=50,
     after=None,
     label_ids=None,
+    unlabeled=False,
     name_query=None,
 ):
     """Return (room_id, name) pairs for one page, and the next position."""
@@ -1775,6 +1776,7 @@ async def _page_names(
         limit=limit,
         after=after,
         label_ids=label_ids,
+        unlabeled=unlabeled,
         name_query=name_query,
     )
     pairs = []
@@ -2486,6 +2488,43 @@ async def test_list_user_threads_page_treats_no_labels_as_unfiltered(
     # a client clearing its last chip must not empty the list.
     assert [name for _, name in pairs] == ["unlabelled"]
     assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_filters_unlabeled(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        blocked = await _label_id(ts, "Blocked")
+        await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="urgent",
+            label_ids=[urgent],
+        )
+        await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="blocked",
+            label_ids=[blocked],
+        )
+        await _named_thread(ts, room_id=ROOM_ID, name="unlabelled")
+
+    alone, _ = await _page_names(ts, room_ids=[ROOM_ID], unlabeled=True)
+    beside, _ = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        label_ids=[urgent],
+        unlabeled=True,
+    )
+
+    assert [name for _, name in alone] == ["unlabelled"]
+    # Another alternative, not a further condition: no label *or* Urgent.
+    assert sorted(name for _, name in beside) == ["unlabelled", "urgent"]
 
 
 @pytest.mark.asyncio

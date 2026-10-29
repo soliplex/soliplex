@@ -182,6 +182,7 @@ class ThreadStorage(agui.ThreadStorage):
         limit: int,
         after: agui.ThreadPagePosition | None = None,
         label_ids: list[int] = None,
+        unlabeled: bool = False,
         name_query: str = None,
     ) -> tuple[
         list[tuple[agui_schema.Thread, datetime.datetime]],
@@ -226,7 +227,7 @@ class ThreadStorage(agui.ThreadStorage):
                 .where(agui_schema.Thread.room_id.in_(room_ids))
             )
 
-            if label_ids:
+            def carries(*conditions):
                 # A semi-join, not 'JOIN ... DISTINCT': joining the
                 # association multiplies a thread by however many of the
                 # requested labels it carries, which corrupts LIMIT. The
@@ -234,13 +235,13 @@ class ThreadStorage(agui.ThreadStorage):
                 # PostgreSQL requires every ORDER BY expression in the
                 # select list, and the ordering below is a computed one.
                 # EXISTS multiplies nothing.
-                query = query.where(
+                return (
                     sqla_sql.select(sqla_sql.literal(1))
                     .select_from(agui_schema.thread_label)
                     .where(
                         agui_schema.thread_label.c.thread_id_
                         == agui_schema.Thread.id_,
-                        agui_schema.thread_label.c.label_id_.in_(label_ids),
+                        *conditions,
                     )
                     # Correlate explicitly: left to itself SQLAlchemy
                     # correlates away every table the outer query also
@@ -249,6 +250,20 @@ class ThreadStorage(agui.ThreadStorage):
                     .correlate(agui_schema.Thread)
                     .exists()
                 )
+
+            # Both read as alternatives, so passing both widens rather
+            # than narrows: carrying one of the labels, *or* none at all.
+            label_filters = []
+            if label_ids:
+                label_filters.append(
+                    carries(
+                        agui_schema.thread_label.c.label_id_.in_(label_ids),
+                    )
+                )
+            if unlabeled:
+                label_filters.append(~carries())
+            if label_filters:
+                query = query.where(sqla_sql.or_(*label_filters))
 
             if name_query:
                 # Correlated rather than joined to 'thread_metadata',
