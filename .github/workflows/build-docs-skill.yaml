@@ -53,7 +53,9 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version-file: "pyproject.toml"
+          # Pinned: 'python-version-file' resolves requires-python to the
+          # newest CPython, ahead of the locked dependencies' wheels.
+          python-version: "3.13"
 
       # The 'dev' group installs 'soliplex-skills' (which depends on
       # 'skills-ref'), used by the generator to validate the skill against

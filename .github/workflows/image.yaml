@@ -51,6 +51,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          # Pinned: without it, uv resolves requires-python to the newest
+          # CPython, ahead of the locked dependencies' wheels.
+          python-version: "3.13"
+
       # Tag from the project version, as 'pypi.yaml' does, so image and PyPI
       # versions agree even when the git tag name differs.
       - name: Read the project version
