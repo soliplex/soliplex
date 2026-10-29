@@ -86,6 +86,7 @@ def _add_provider_model(url_models, base_url, model_name, role):
 NO_AUTH_MODE_USER_TOKEN = {
     "name": "Phreddy Phlyntstone",
     "email": "phreddy@example.com",
+    "preferred_username": "phreddy",
 }
 
 
