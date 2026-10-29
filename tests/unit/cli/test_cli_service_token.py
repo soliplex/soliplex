@@ -10,10 +10,13 @@ import pytest
 from soliplex import token_mint
 from soliplex.cli import main as cli_main
 from soliplex.cli import service_token as cli_service_token
+from soliplex.config import secrets as config_secrets
 
 SECRET = "service-token-testing-secret"
 NOW = 1_700_000_000
 TOKEN = "DEADBEEF"
+STABLE_SECRET_NAME = "TESTING_SECRET"
+STABLE_ENV_VAR_NAME = "SOLIPLEX_TESTING_SERVICE_TOKEN_SECRET"
 
 
 def _invoke(cli_runner, scratch_installation, *args):
@@ -90,6 +93,46 @@ def test_parse_claims_not_an_object(value):
         cli_service_token.parse_claims(value)
 
     assert exc_info.value.value == value
+
+
+# -- _resolve_stable_secret ------------------------------------------------
+
+
+def _secret_source(kind):
+    if kind == "env_var":
+        return config_secrets.EnvVarSecretSource(
+            secret_name=STABLE_SECRET_NAME,
+            env_var_name=STABLE_ENV_VAR_NAME,
+        )
+    return config_secrets.RandomCharsSecretSource(
+        secret_name=STABLE_SECRET_NAME,
+    )
+
+
+@pytest.mark.parametrize(
+    "kinds, w_env_var, expected",
+    [
+        (["env_var", "random_chars"], True, SECRET),
+        (["env_var"], True, SECRET),
+        (["env_var", "random_chars"], False, None),
+        (["random_chars", "env_var"], True, None),
+        (["random_chars"], False, None),
+        ([], False, None),
+    ],
+)
+def test__resolve_stable_secret(monkeypatch, kinds, w_env_var, expected):
+    if w_env_var:
+        monkeypatch.setenv(STABLE_ENV_VAR_NAME, SECRET)
+    else:
+        monkeypatch.delenv(STABLE_ENV_VAR_NAME, raising=False)
+    secret_config = config_secrets.SecretConfig(
+        secret_name=STABLE_SECRET_NAME,
+        sources=[_secret_source(kind) for kind in kinds],
+    )
+
+    found = cli_service_token._resolve_stable_secret(secret_config)
+
+    assert found == expected
 
 
 # -- _write_token -----------------------------------------------------------
@@ -329,3 +372,30 @@ def test_mint_quiet(scratch_installation, cli_runner, tmp_path, w_file):
 
     assert result.exit_code == 0
     assert result.stderr == ""
+
+
+def test_mint_wo_stable_secret(
+    scratch_installation,
+    cli_runner,
+    tmp_path,
+    monkeypatch,
+):
+    # Keep a developer's '.env' in the cwd from supplying the secret.
+    monkeypatch.chdir(tmp_path)
+
+    result = cli_runner.invoke(
+        cli_main.the_cli,
+        [
+            "service-token",
+            "mint",
+            str(scratch_installation.path),
+            "--claims",
+            '{"sub": "ops"}',
+            "--expires-in",
+            "10m",
+        ],
+        env={"SOLIPLEX_URL_SAFE_TOKEN_SECRET": None},
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""

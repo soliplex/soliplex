@@ -5,7 +5,8 @@ authenticate to the Soliplex API without an OIDC login:  it is passed as
 the bearer token, and carries the claims given when it was minted, plus
 its expiry time.  The token is signed with the installation's
 'URL_SAFE_TOKEN_SECRET', so the server must resolve that secret to the
-same value as the CLI does.
+same value as the CLI does:  the command refuses to mint a token signed
+with a secret resolved from a 'random_chars' source.
 
 The token is written to a file, or to stdout;  everything else the command
 reports goes to stderr, so that a script can capture the token alone.
@@ -24,9 +25,11 @@ import typer
 from rich import console
 
 from soliplex import authn
+from soliplex import secrets
 from soliplex import token_mint
 from soliplex.cli import cli_util
 from soliplex.cli import types
+from soliplex.config import secrets as config_secrets
 
 the_console = console.Console(stderr=True)
 
@@ -160,6 +163,36 @@ quiet_type = typing.Annotated[
 ]
 
 
+def _resolve_stable_secret(
+    secret_config: config_secrets.SecretConfig,
+) -> str | None:
+    """Return the secret's value, if resolved before any 'random_chars' source
+
+    Tries the secret's sources in order, as the server does, stopping at
+    the first 'random_chars' source.  Returns 'None' if none of the sources
+    tried resolves the secret.
+    """
+    stable_sources = []
+
+    for source in secret_config.sources:
+        if source.kind == config_secrets.RandomCharsSecretSource.kind:
+            break
+        stable_sources.append(source)
+
+    if not stable_sources:
+        return None
+
+    trial = config_secrets.SecretConfig(
+        secret_name=secret_config.secret_name,
+        sources=stable_sources,
+    )
+
+    try:
+        return config_secrets.get_secret(trial)
+    except secrets.SecretSourcesFailed:
+        return None
+
+
 def _write_token(output: pathlib.Path, token: str, *, force: bool):
     """Write 'token' to a new file at 'output', readable only by its owner
 
@@ -187,7 +220,19 @@ def mint_service_token(
 ):
     """Mint a service token, and write it to a file or to stdout"""
     the_installation = cli_util.get_installation(installation_path)
-    secret = the_installation.get_secret(authn.SERVICE_TOKEN_SECRET_NAME)
+    secret_name = authn.SERVICE_TOKEN_SECRET_NAME
+    secret = _resolve_stable_secret(
+        the_installation._config.secrets_map[secret_name]
+    )
+
+    if secret is None:
+        the_console.rule("No stable secret")
+        the_console.print(
+            f"'{secret_name}' resolves only from its 'random_chars' "
+            "source, so the server would not verify the token:  configure "
+            "it from an 'env_var', 'file_path', or 'subprocess' source."
+        )
+        raise typer.Exit(1)
 
     try:
         token = token_mint.mint_service_token(

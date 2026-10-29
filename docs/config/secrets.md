@@ -173,8 +173,15 @@ behind a load balancer](../server/index.md#running-behind-a-load-balancer).
 
 ### `URL_SAFE_TOKEN_SECRET`
 
-This secret is used to generate bearer tokens to allow MCP clients to
-access a room's MCP-enabled tools.
+This secret is used to sign bearer tokens:
+
+- the tokens which allow MCP clients to access a room's MCP-enabled tools;
+- service tokens, minted by
+  [`soliplex-cli service-token mint`](../server/cli.md#service-token),
+  which allow a client (e.g., `curl`, or an operator's script) to call
+  the Soliplex API without an OIDC login.
+
+Changing the secret invalidates every token signed with the old value.
 
 This value must be an ASCII hex digest of a random `bytes` object with length
 32.  To generate such a value:
@@ -217,9 +224,17 @@ fallback `random_chars` source:
       - kind: "random_chars"
 ```
 
-but this configuration should not be used where sessions must survive
-a server restart (the session token will be regenerated), nor when [running
+but this configuration should not be used where MCP tokens must survive
+a server restart (the secret will be regenerated), nor when [running
 behind a load balancer](../server/index.md#running-behind-a-load-balancer).
+
+Nor can service tokens be used with it:  `soliplex-cli service-token mint`
+resolves the secret in its own process, so when the fallback applies, the
+CLI would sign the token with one random value and the server would check
+it against another.  The CLI therefore refuses to mint a token unless one
+of the sources ahead of the `random_chars` source resolves the secret.
+Configure an `env_var` or `file_path` source, and make sure it resolves to
+the same value for the CLI and for the server.
 
 ## Checking Configured Secrets
 
