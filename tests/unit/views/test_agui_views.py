@@ -2752,6 +2752,7 @@ async def test_get_agui_threads(
         limit=25,
         cursor=None,
         label_ids=None,
+        unlabeled=False,
         q=None,
         the_installation=the_installation,
         the_threads=the_threads,
@@ -2786,6 +2787,7 @@ async def test_get_agui_threads(
         limit=25,
         after=None,
         label_ids=None,
+        unlabeled=False,
         name_query=None,
     )
 
@@ -2811,6 +2813,7 @@ async def test_get_agui_threads_resumes_after_cursor(the_threads):
         limit=50,
         cursor=agui_views._encode_threads_cursor(position),
         label_ids=None,
+        unlabeled=False,
         q=None,
         the_installation=the_installation,
         the_threads=the_threads,
@@ -2845,6 +2848,7 @@ async def test_get_agui_threads_rejects_a_foreign_cursor(the_threads, cursor):
             limit=50,
             cursor=cursor,
             label_ids=None,
+            unlabeled=False,
             q=None,
             the_installation=the_installation,
             the_threads=the_threads,
@@ -2872,6 +2876,7 @@ async def test_get_agui_threads_restricts_to_authorized_rooms(the_threads):
         limit=50,
         cursor=None,
         label_ids=None,
+        unlabeled=False,
         q=None,
         the_installation=the_installation,
         the_threads=the_threads,
@@ -2931,6 +2936,7 @@ async def test_get_agui_threads_batches_label_lookups(the_threads):
         limit=50,
         cursor=None,
         label_ids=None,
+        unlabeled=False,
         q=None,
         the_installation=the_installation,
         the_threads=the_threads,
@@ -2963,6 +2969,7 @@ async def test_get_agui_threads_forwards_the_filters(the_threads):
         limit=50,
         cursor=None,
         label_ids=[1, 2],
+        unlabeled=True,
         q="manual",
         the_installation=the_installation,
         the_threads=the_threads,
@@ -2971,10 +2978,11 @@ async def test_get_agui_threads_forwards_the_filters(the_threads):
         the_logger=the_logger,
     )
 
-    # Both halves of the search box reach the query. 'q' is the wire
+    # Every part of the search box reaches the query. 'q' is the wire
     # name; the storage layer calls it 'name_query'.
     _args, kwargs = the_threads.list_user_threads_page.call_args
     assert kwargs["label_ids"] == [1, 2]
+    assert kwargs["unlabeled"] is True
     assert kwargs["name_query"] == "manual"
 
 
@@ -3003,6 +3011,7 @@ async def test_get_agui_threads_carries_labels(the_threads, test_thread):
         limit=50,
         cursor=None,
         label_ids=None,
+        unlabeled=False,
         q=None,
         the_installation=the_installation,
         the_threads=the_threads,

@@ -222,6 +222,7 @@ async def get_agui_threads(
     ),
     cursor: str = fastapi.Query(default=None),
     label_ids: list[int] = _LABEL_IDS_QUERY,
+    unlabeled: bool = fastapi.Query(default=False),
     q: str = fastapi.Query(default=None, max_length=_THREAD_QUERY_MAX),
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui.ThreadStorage = depend_the_threads,
@@ -233,6 +234,10 @@ async def get_agui_threads(
 
     Most recently active first. Pass the previous page's 'next_cursor'
     as 'cursor' to continue; a page without one is the last.
+
+    'label_ids' keeps threads carrying any of those labels, and
+    'unlabeled' threads carrying none; given both, a thread passes on
+    either.
     """
     the_logger.debug(loggers.AGUI_GET_THREADS)
 
@@ -257,6 +262,7 @@ async def get_agui_threads(
         limit=limit,
         after=after,
         label_ids=label_ids,
+        unlabeled=unlabeled,
         name_query=q,
     )
 
