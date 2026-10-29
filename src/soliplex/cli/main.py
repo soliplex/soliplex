@@ -21,6 +21,7 @@ from soliplex.cli import database
 from soliplex.cli import ollama
 from soliplex.cli import room_authz
 from soliplex.cli import serve
+from soliplex.cli import service_token
 from soliplex.cli import types
 from soliplex.config import installation as config_installation
 
@@ -101,6 +102,7 @@ the_cli.add_typer(database.app)
 the_cli.add_typer(admin_users.app)
 the_cli.add_typer(room_authz.app)
 the_cli.add_typer(ollama.app)
+the_cli.add_typer(service_token.app)
 
 
 misc_app = typer.Typer()
