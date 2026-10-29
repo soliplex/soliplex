@@ -342,6 +342,7 @@ class ThreadStorage(abc.ABC):
         limit: int,
         after: ThreadPagePosition | None = None,
         label_ids: list[int] = None,
+        unlabeled: bool = False,
         name_query: str = None,
     ) -> tuple[
         list[tuple[Thread, datetime.datetime]],
@@ -363,6 +364,10 @@ class ThreadStorage(abc.ABC):
         'label_ids', when given, keeps only threads carrying *any* of
         those labels -- the "any of" reading people know from chip
         filters elsewhere. An empty list means the same as omitting it.
+
+        'unlabeled', when true, keeps threads carrying no label at all.
+        It joins 'label_ids' as one more alternative: passing both keeps
+        threads carrying any of those labels *or* none.
 
         'name_query', when given, keeps only threads whose name contains
         it, case-insensitively. The two filters combine: passing both
