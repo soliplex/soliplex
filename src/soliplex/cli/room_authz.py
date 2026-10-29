@@ -71,6 +71,9 @@ def _room_authz_callback(
 
 
 def _check_room_id(the_installation, room_id):
+    if authz.RoomAuthorizationPolicy.is_dunder_room_id(room_id):
+        return
+
     room_configs = the_installation._config.room_configs
     if room_id in room_configs:
         return

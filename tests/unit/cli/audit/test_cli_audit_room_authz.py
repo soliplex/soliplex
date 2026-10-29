@@ -151,6 +151,17 @@ def test__room_policies(
                 "stale": ["ghost"],
             },
         ),
+        # Reserved 'dunder' room rows are never stale (#1488).
+        (
+            [],
+            [("old", "DENY"), ("__provision__", "ALLOW")],
+            {
+                "default": [],
+                "public": [],
+                "private": [],
+                "stale": ["old"],
+            },
+        ),
     ],
 )
 def test__room_authz_groups(
