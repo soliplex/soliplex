@@ -19,7 +19,9 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version-file: "pyproject.toml"
+          # Pinned: 'python-version-file' resolves requires-python to the
+          # newest CPython, ahead of the locked dependencies' wheels.
+          python-version: "3.13"
       # PyPI indexes the project version, which need not match the tag
       # name. Read it from the checked-out project so the announcement below
       # links to the distribution this run actually uploads.
