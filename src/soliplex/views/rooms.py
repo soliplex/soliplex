@@ -11,8 +11,8 @@ from soliplex import authn
 from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
-from soliplex import mcp_auth
 from soliplex import models
+from soliplex import token_mint
 from soliplex import util
 from soliplex import views
 
@@ -179,7 +179,7 @@ async def get_room_mcp_token(
         ) from None
 
     secret = the_installation.get_secret("URL_SAFE_TOKEN_SECRET")
-    mcp_token = mcp_auth.generate_url_safe_token(
+    mcp_token = token_mint.generate_url_safe_token(
         secret,
         room_id,
         **the_user_claims,
