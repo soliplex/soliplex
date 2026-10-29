@@ -13,6 +13,7 @@ from fastapi import security
 
 from soliplex import installation
 from soliplex import loggers
+from soliplex import token_mint
 from soliplex.config import authsystem as config_authsystem
 
 UserClaims = dict[str, typing.Any]
@@ -28,6 +29,9 @@ _oauth = None
 
 JWT_VALIDATION_NO_TOKEN = "JWT validation failed (no token)"
 JWT_VALIDATION_INVALID_TOKEN = "JWT validation failed (invalid token)"
+SERVICE_TOKEN_VALIDATION_INVALID_TOKEN = (
+    "Service token validation failed (invalid token)"
+)
 
 INSECURE_COOKIES_ENV_VAR = "_SOLIPLEX_INSECURE_SESSION_COOKIE"
 
@@ -40,6 +44,8 @@ AUTHN_COOKIE_ALWAYS_CLAIMS = ("sub",)
 # practice).  'soliplex_authn' consumes 14 of them, leaving the round 4000
 # as the budget for the serialized value alone.
 AUTHN_COOKIE_MAX_SIZE = 4000
+
+SERVICE_TOKEN_SECRET_NAME = "URL_SAFE_TOKEN_SECRET"
 
 
 def _get_authsystem_config(
@@ -113,12 +119,36 @@ def authenticate(
 
         errors[auth_system.id] = msg
 
+    claims, service_token_reason = token_mint.load_service_token(
+        the_installation.get_secret(SERVICE_TOKEN_SECRET_NAME),
+        token,
+    )
+    if claims is not None:
+        return claims
+
+    if service_token_reason != loggers.AUTHN_SERVICE_TOKEN_BAD_SIGNATURE:
+        # The signature verified, so the token is a service token:
+        # report the error accordingly.
+        logger.error(
+            loggers.AUTHN_SERVICE_TOKEN_INVALID,
+            reason=service_token_reason,
+        )
+        raise fastapi.HTTPException(
+            status_code=401,
+            detail=SERVICE_TOKEN_VALIDATION_INVALID_TOKEN,
+        )
+
     for oidc_system_id, msg in errors.items():
         logger.error(
             loggers.AUTHN_JWT_INVALID,
             oidc_system_id=oidc_system_id,
             reason=msg,
         )
+
+    logger.error(
+        loggers.AUTHN_SERVICE_TOKEN_INVALID,
+        reason=service_token_reason,
+    )
 
     raise fastapi.HTTPException(
         status_code=401,

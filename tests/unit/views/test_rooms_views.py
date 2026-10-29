@@ -300,7 +300,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_error", [False, True])
-@mock.patch("soliplex.mcp_auth.generate_url_safe_token")
+@mock.patch("soliplex.token_mint.generate_url_safe_token")
 async def test_get_room_mcp_token(gust, w_error):
     ROOM_ID = "test-room"
     ROOM_CONFIG = object()

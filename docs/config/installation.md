@@ -423,9 +423,9 @@ the AG-UI run endpoint groups the model's streamed deltas (text, thinking,
 reasoning and tool-call arguments) into SSE events. Each profile shares the
 shape of the strategies below, plus a short `description` for delivery
 to clients (the name is the mapping key): clients may name one profile in
-the run request's `forwarded_props` (see [Room Configuration](
-rooms.md#ag-ui-sse-delivery)); a room without its own choice uses the
-stanza's `default` profile. Unknown profile names, at either level, fall
+the run request's `forwarded_props` (see
+[Room Configuration](rooms.md#ag-ui-sse-delivery)); a room without its own
+choice uses the stanza's `default` profile. Unknown profile names, at either level, fall
 back to the next level's default; with no stanza at all, runs use
 `strategy: "message"`.
 

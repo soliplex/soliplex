@@ -3000,6 +3000,107 @@ soliplex-cli room-authz add-acl-entry \
   example/installation.yaml chat
 ```
 
+## `service-token`
+
+The `service-token` group mints service tokens: bearer tokens which let a
+client (e.g., `curl`, or an operator's script) call the Soliplex API
+without an OIDC login. A service token carries the claims given when it
+was minted, plus its issue (`iat`) and expiry (`exp`) times, signed with
+the installation's
+[`URL_SAFE_TOKEN_SECRET`](../config/secrets.md#url_safe_token_secret).
+
+The server accepts a service token wherever it accepts an OIDC access
+token, as `Authorization: Bearer <token>`, and treats its claims as the
+user's: authorization (admin users, room ACLs) and thread ownership see
+them exactly as they would see the claims of an OIDC token. So give the
+token the claims those checks match on, typically `preferred_username`
+and / or `email`.
+
+### `service-token mint`
+
+Mint a service token, and write it to a file or to stdout.
+
+```bash
+soliplex-cli service-token mint [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Options
+
+- `--claims JSON` — required. The token's claims, as a JSON object, e.g.
+  `'{"preferred_username": "ops", "email": "ops@example.com"}'`. If the
+  object has no `sub`, the token's `sub` is a random UUID. It may not
+  hold `iat` or `exp`: those are set when minting.
+- `--expires-in DURATION` — required. The token's lifetime: an integer
+  followed by one of `s`, `m`, `h`, `d`, or `w` (e.g. `15m`, `90d`).
+- `-o PATH` / `--output PATH` — file to which the token is written. If
+  omitted, or `-`, the token is written to stdout.
+- `--force` — replace the output file, if it exists.
+- `-q` / `--quiet` — report only errors.
+
+#### Output
+
+The token is written, followed by a newline, to the output file or to
+stdout. A file is created readable only by its owner (mode `0600`).
+
+Everything else goes to stderr, so that a script can capture the token
+alone: unless `--quiet` is given, a summary showing the output file (if
+any), the token's `sub`, and its expiry time (UTC).
+
+#### Behavior Notes
+
+- **Choosing a lifetime.** Each token stays valid until it expires:
+  Soliplex keeps no record of the tokens it mints, so a single token
+  cannot be revoked. Give a token the shortest lifetime its use allows:
+  minutes for a token a script mints at the point of use, weeks to
+  months for one an operator keeps in a file for occasional scripting.
+- **Revoking every token.** Changing `URL_SAFE_TOKEN_SECRET` invalidates
+  every service token (and every MCP token) signed with the old value.
+- **The secret must resolve to the same value for the CLI and the
+  server.** A `random_chars` source resolves differently in each process,
+  so the command refuses to mint a token unless one of the sources ahead
+  of any `random_chars` source resolves the secret; see
+  [`URL_SAFE_TOKEN_SECRET`](../config/secrets.md#url_safe_token_secret).
+  The command cannot check that the server's environment resolves those
+  sources to the same value.
+
+#### Exit Status
+
+- `0` — the token was minted and written.
+- `1` — `URL_SAFE_TOKEN_SECRET` resolves only from a `random_chars`
+  source, the claims hold `iat` or `exp`, the lifetime is zero, or the
+  output file exists and `--force` was not given.
+- `2` — a usage error: `--claims` is not a JSON object, `--expires-in`
+  is not a valid duration, or a required option is missing.
+
+#### Examples
+
+Mint a token for occasional scripting, valid for 90 days, into a file:
+
+```bash
+soliplex-cli service-token mint example/installation.yaml \
+  --claims '{"preferred_username": "ops", "email": "ops@example.com"}' \
+  --expires-in 90d \
+  --output ~/.config/soliplex/ops.token
+curl -H "Authorization: Bearer $(cat ~/.config/soliplex/ops.token)" \
+  http://localhost:8000/api/v1/rooms
+```
+
+Mint a short-lived token at the point of use, capturing it from stdout:
+
+```bash
+TOKEN=$(soliplex-cli service-token mint example/installation.yaml \
+  --claims '{"preferred_username": "ci-bot"}' \
+  --expires-in 5m --quiet)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/rooms
+```
+
 ## `ollama`
 
 The `ollama` group bundles subcommands that interact with Ollama servers

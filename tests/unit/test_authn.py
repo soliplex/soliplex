@@ -165,8 +165,9 @@ def test_authenticate_w_token_none(w_auth_disabled):
 
 
 @pytest.mark.parametrize("w_hit", [None, "first", "second"])
+@mock.patch("soliplex.token_mint.load_service_token")
 @mock.patch("soliplex.authn.validate_access_token")
-def test_authenticate(vat, with_auth_systems, w_hit):
+def test_authenticate(vat, lst, with_auth_systems, w_hit):
     FIRST_USER = {"test": "one-idp"}
     SECOND_USER = {"test": "another-idp"}
     the_installation = mock.create_autospec(installation.Installation)
@@ -174,6 +175,7 @@ def test_authenticate(vat, with_auth_systems, w_hit):
     the_installation.oidc_auth_system_configs = with_auth_systems
     logger = mock.create_autospec(loggers.LogWrapper)
     token = object()
+    lst.return_value = None, loggers.AUTHN_SERVICE_TOKEN_BAD_SIGNATURE
 
     no_auth = len(with_auth_systems) == 0
 
@@ -196,17 +198,28 @@ def test_authenticate(vat, with_auth_systems, w_hit):
             with pytest.raises(fastapi.HTTPException) as exc:
                 authn.authenticate(the_installation, logger, token)
 
-            # Miss logs error for each system
-            for system, err_call in zip(
-                with_auth_systems,
-                logger.error.call_args_list,
-                strict=True,
-            ):
-                assert err_call == mock.call(
-                    loggers.AUTHN_JWT_INVALID,
-                    oidc_system_id=system.id,
-                    reason="err",
-                )
+            # Miss logs error for each system, then for the service token
+            assert logger.error.call_args_list == [
+                *[
+                    mock.call(
+                        loggers.AUTHN_JWT_INVALID,
+                        oidc_system_id=system.id,
+                        reason="err",
+                    )
+                    for system in with_auth_systems
+                ],
+                mock.call(
+                    loggers.AUTHN_SERVICE_TOKEN_INVALID,
+                    reason=loggers.AUTHN_SERVICE_TOKEN_BAD_SIGNATURE,
+                ),
+            ]
+            lst.assert_called_once_with(
+                the_installation.get_secret.return_value,
+                token,
+            )
+            the_installation.get_secret.assert_called_once_with(
+                authn.SERVICE_TOKEN_SECRET_NAME,
+            )
 
             assert exc.value.status_code == 401
             assert exc.value.detail == (
@@ -235,6 +248,66 @@ def test_authenticate(vat, with_auth_systems, w_hit):
                 )
 
             logger.error.assert_not_called()
+            lst.assert_not_called()
+
+
+@mock.patch("soliplex.token_mint.load_service_token")
+@mock.patch("soliplex.authn.validate_access_token")
+def test_authenticate_w_service_token(vat, lst, with_auth_systems):
+    SERVICE_USER = {"sub": "ops", "exp": 123}
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_installation.oidc_auth_system_configs = with_auth_systems
+    logger = mock.create_autospec(loggers.LogWrapper)
+    token = object()
+    vat.return_value = None, "err"
+    lst.return_value = SERVICE_USER, None
+
+    found = authn.authenticate(the_installation, logger, token)
+
+    assert found is SERVICE_USER
+    lst.assert_called_once_with(
+        the_installation.get_secret.return_value,
+        token,
+    )
+    the_installation.get_secret.assert_called_once_with(
+        authn.SERVICE_TOKEN_SECRET_NAME,
+    )
+    logger.error.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_reason",
+    [
+        loggers.AUTHN_SERVICE_TOKEN_BAD_ENVELOPE,
+        loggers.AUTHN_SERVICE_TOKEN_EXPIRED,
+    ],
+)
+@mock.patch("soliplex.token_mint.load_service_token")
+@mock.patch("soliplex.authn.validate_access_token")
+def test_authenticate_w_invalid_service_token(
+    vat,
+    lst,
+    with_auth_systems,
+    w_reason,
+):
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_installation.oidc_auth_system_configs = with_auth_systems
+    logger = mock.create_autospec(loggers.LogWrapper)
+    token = object()
+    vat.return_value = None, "err"
+    lst.return_value = None, w_reason
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        authn.authenticate(the_installation, logger, token)
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == authn.SERVICE_TOKEN_VALIDATION_INVALID_TOKEN
+    logger.error.assert_called_once_with(
+        loggers.AUTHN_SERVICE_TOKEN_INVALID,
+        reason=w_reason,
+    )
 
 
 @pytest.mark.parametrize(
