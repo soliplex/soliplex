@@ -1,4 +1,4 @@
-"""Platform gating for the tests of the POSIX-only sandbox.
+"""Platform gating for tests which cannot run off a POSIX host.
 
 Soliplex sandboxes a room's tool calls with bubblewrap, which exists
 only on Linux: 'src/soliplex/skills/bwrap_sandbox/' drives 'bwrap'
@@ -42,12 +42,20 @@ requires_posix_sandbox = pytest.mark.skipif(
     reason=POSIX_ONLY_REASON,
 )
 
-# The test modules 'requires_posix_sandbox' skips, plus the modules
-# under test they are the only coverage for. Coverage patterns,
+# file-mode semantics ('0o600' owner-only modes) are not portable:
+# 'open()' mode bits are honored on Windows only as a readonly flag.
+requires_posix_file_modes = pytest.mark.skipif(
+    os.name != "posix",
+    reason="needs a POSIX host: '0o600' owner-only file modes",
+)
+
+# The test modules the 'requires_posix_*' markers skip whole, plus the
+# modules under test they are the only coverage for. Coverage patterns,
 # relative to the repository root (see 'tests/conftest.py').
 POSIX_ONLY_COVERAGE_OMIT = (
     "src/soliplex/skills/bwrap_sandbox/*",
     "src/soliplex/views/sandbox_workdirs.py",
     "tests/unit/skills/test_bwrap_sandbox.py",
     "tests/unit/views/test_sandbox_workdirs.py",
+    "tests/unit/cli/test_cli_service_token_file_modes.py",
 )
