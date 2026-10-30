@@ -64,7 +64,12 @@ def _room_authz_groups(the_installation, room_policies):
         else:
             private.append(room_id)
 
-    stale = sorted(rid for rid in policies if rid not in configured_set)
+    stale = sorted(
+        rid
+        for rid in policies
+        if rid not in configured_set
+        and not authz.RoomAuthorizationPolicy.is_dunder_room_id(rid)
+    )
 
     return {
         "default": default,

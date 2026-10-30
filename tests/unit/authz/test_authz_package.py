@@ -146,3 +146,34 @@ def test_parse_token_field_json_path_roundtrip(field, value):
 )
 def test_parse_token_field_json_path_non_field_query(value):
     assert authz.parse_token_field_json_path(value) is None
+
+
+@pytest.mark.parametrize(
+    "room_id",
+    [
+        "__provision__",
+        "__system__",
+        "__x1__",
+        "__y_w__",
+    ],
+)
+def test_is_dunder_room_id_accepts_reserved(room_id):
+    assert authz.RoomAuthorizationPolicy.is_dunder_room_id(room_id) is True
+
+
+@pytest.mark.parametrize(
+    "room_id",
+    [
+        "",
+        "provision",
+        "_provision_",
+        "__provision",
+        "provision__",
+        "__0abc__",  # inner may not start with a digit
+        "__has space__",
+        "____",  # inner requires at least one character
+        "_____",  # inner may not be underscores alone
+    ],
+)
+def test_is_dunder_room_id_rejects_unreserved(room_id):
+    assert authz.RoomAuthorizationPolicy.is_dunder_room_id(room_id) is False

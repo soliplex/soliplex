@@ -80,6 +80,9 @@ def test__room_authz_callback(
         # Configured rooms; non-matching id is rejected.
         (["chat"], "search", True),
         (["chat", "search"], "nosuch", True),
+        # Reserved 'dunder' ids pass without configuration (#1488).
+        ([], "__provision__", False),
+        (["chat"], "__system__", False),
     ],
 )
 @mock.patch("soliplex.cli.room_authz.the_console")

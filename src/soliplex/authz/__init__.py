@@ -252,8 +252,16 @@ class AdminUserPolicy(abc.ABC):
         """
 
 
+_DUNDER_ROOM_ID_RE = re.compile(r"^__([A-Za-z][A-Za-z0-9_]*)__$")
+
+
 class RoomAuthorizationPolicy(abc.ABC):
     """Protocol for checking / managing room authorization policies."""
+
+    @staticmethod
+    def is_dunder_room_id(room_id: str) -> bool:
+        """Does the room ID match the reserved 'dunder' name pattern?"""
+        return _DUNDER_ROOM_ID_RE.fullmatch(room_id) is not None
 
     @abc.abstractmethod
     async def has_room_permission(
