@@ -13,6 +13,7 @@ from soliplex import authz
 from soliplex import models
 from soliplex.cli import cli_util
 from soliplex.cli import types
+from soliplex.config import rooms as config_rooms
 
 the_console = cli_util.the_console
 
@@ -71,7 +72,7 @@ def _room_authz_callback(
 
 
 def _check_room_id(the_installation, room_id):
-    if authz.RoomAuthorizationPolicy.is_dunder_room_id(room_id):
+    if config_rooms.is_dunder_room_id(room_id):
         return
 
     room_configs = the_installation._config.room_configs

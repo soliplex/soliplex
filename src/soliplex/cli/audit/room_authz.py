@@ -9,6 +9,7 @@ from soliplex.cli import cli_util
 from soliplex.cli import types
 from soliplex.cli.audit import _common as audit_common
 from soliplex.cli.audit import databases as audit_databases
+from soliplex.config import rooms as config_rooms
 
 
 async def _list_room_policies(the_installation):
@@ -68,7 +69,7 @@ def _room_authz_groups(the_installation, room_policies):
         rid
         for rid in policies
         if rid not in configured_set
-        and not authz.RoomAuthorizationPolicy.is_dunder_room_id(rid)
+        and not config_rooms.is_dunder_room_id(rid)
     )
 
     return {
