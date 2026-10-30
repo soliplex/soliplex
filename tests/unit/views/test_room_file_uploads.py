@@ -1,5 +1,7 @@
 import contextlib
+import datetime
 import io
+import os
 from unittest import mock
 
 import fastapi
@@ -133,15 +135,22 @@ async def test_get_uploads_room_only(
         return f"{URL_PREFIX}/v1/uploads/{room_id}/{filename}"
 
     exp_filename_urls = {}
+    exp_stats = {}
 
     if w_room_path:
         room_path.mkdir(parents=True)
         (room_path / "ignore_me").mkdir()
-        for filename in w_filenames:
+        for i_file, filename in enumerate(w_filenames):
             file_path = room_path / filename
             file_path.write_text(f"filename: {filename}")
             exp_filename_urls[filename] = download_url(
                 ROUTE_NAME, TEST_ROOM_ID, filename
+            )
+            mtime = 1_761_725_730 + i_file
+            os.utime(file_path, (mtime, mtime))
+            exp_stats[filename] = (
+                datetime.datetime.fromtimestamp(mtime, tz=datetime.UTC),
+                len(f"filename: {filename}"),
             )
 
     request = mock.create_autospec(fastapi.Request)
@@ -183,6 +192,12 @@ async def test_get_uploads_room_only(
             for filename in w_filenames:
                 exp_url = exp_filename_urls[filename]
                 assert str(found_files[filename]) == exp_url
+
+            found_stats = {
+                f_up.filename: (f_up.modified_at, f_up.size_bytes)
+                for f_up in found.uploads
+            }
+            assert found_stats == exp_stats
         else:
             assert found.uploads == []
 

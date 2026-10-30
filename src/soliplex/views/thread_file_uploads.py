@@ -61,29 +61,27 @@ async def get_uploads_room_id_thread_thread_id(
         )
 
     thread_dir = pathlib.Path(uploads_path) / thread_id
-    filename_urls = {}
-
-    if thread_dir.is_dir():
-        for file_or_sub in thread_dir.glob("*"):
-            if file_or_sub.is_file():
-                filename = file_or_sub.name
-                filename_urls[filename] = request.url_for(
-                    # View function name, not the route path.
-                    "get_uploads_room_id_thread_thread_id_filename",
-                    room_id=room_id,
-                    thread_id=thread_id,
-                    filename=filename,
-                )
+    files = soliplex_views_util.upload_files(thread_dir)
 
     return models.ThreadUploads(
         room_id=room_id,
         thread_id=thread_id,
         uploads=[
             models.FileUpload(
-                filename=key,
-                url=str(value),  # The two URL types are not compatible
+                filename=filename,
+                url=str(  # The two URL types are not compatible
+                    request.url_for(
+                        # View function name, not the route path.
+                        "get_uploads_room_id_thread_thread_id_filename",
+                        room_id=room_id,
+                        thread_id=thread_id,
+                        filename=filename,
+                    )
+                ),
+                modified_at=soliplex_views_util.modified_at(stat_result),
+                size_bytes=stat_result.st_size,
             )
-            for key, value in filename_urls.items()
+            for filename, stat_result in files.items()
         ],
     )
 

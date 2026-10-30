@@ -101,27 +101,25 @@ async def get_uploads_room(
         )
 
     room_dir = pathlib.Path(uploads_path) / room_id
-    filename_urls = {}
-
-    if room_dir.is_dir():
-        for file_or_sub in room_dir.glob("*"):
-            if file_or_sub.is_file():
-                filename = file_or_sub.name
-                filename_urls[filename] = request.url_for(
-                    # View function name, not the route path.
-                    "get_uploads_room_filename",
-                    room_id=room_id,
-                    filename=filename,
-                )
+    files = views_util.upload_files(room_dir)
 
     return models.RoomUploads(
         room_id=room_id,
         uploads=[
             models.FileUpload(
-                filename=key,
-                url=str(value),  # The two URL types are not compatible
+                filename=filename,
+                url=str(  # The two URL types are not compatible
+                    request.url_for(
+                        # View function name, not the route path.
+                        "get_uploads_room_filename",
+                        room_id=room_id,
+                        filename=filename,
+                    )
+                ),
+                modified_at=views_util.modified_at(stat_result),
+                size_bytes=stat_result.st_size,
             )
-            for key, value in filename_urls.items()
+            for filename, stat_result in files.items()
         ],
     )
 
