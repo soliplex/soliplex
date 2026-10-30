@@ -1228,7 +1228,8 @@ def _make_regular(path):
 
 
 def _make_symlink(path):
-    target = path.parent / "target.txt"
+    # Outside the scanned directory, which must hold only 'path'.
+    target = path.parent.parent / "target.txt"
     target.write_text("x")
     path.symlink_to(target)
 
@@ -1241,15 +1242,16 @@ def _make_symlink(path):
         (".soliplex-script-x.py", _make_regular, False),
         ("link.txt", _make_symlink, False),
         ("subdir", pathlib.Path.mkdir, False),
-        ("missing.txt", None, False),
     ],
 )
 def test_is_downloadable(temp_dir, w_name, w_make, expected):
-    entry = temp_dir / w_name
-    if w_make is not None:
-        w_make(entry)
+    scanned = temp_dir / "scanned"
+    scanned.mkdir()
+    w_make(scanned / w_name)
 
-    found = skills_bwrap_sandbox.is_downloadable(entry)
+    with os.scandir(scanned) as entries:
+        [entry] = entries
+        found = skills_bwrap_sandbox.is_downloadable(entry)
 
     assert found is expected
 
@@ -1283,6 +1285,133 @@ def test_downloadable_files_skips_symlinks_and_snapshots(temp_dir):
     found = skills_bwrap_sandbox.downloadable_files(workdir)
 
     assert found == ["sub/keep.txt"]
+
+
+def _make_swap_tree(temp_dir):
+    outside = temp_dir / "outside"
+    _make_regular(outside / "deep" / "secret.txt")
+    workdir = temp_dir / "work"
+    _make_regular(workdir / "a.txt")
+    _make_regular(workdir / "sub" / "deep" / "keep.txt")
+    return workdir, outside
+
+
+def _change_sub(workdir, outside, w_change):
+    sub = workdir / "sub"
+
+    if w_change == "unreadable":
+        sub.chmod(0)
+        return
+
+    # Renamed, not removed: a descriptor the walk holds on 'sub' still
+    # reaches its contents.
+    sub.rename(workdir / "moved")
+
+    if w_change == "symlink":
+        sub.symlink_to(outside)
+    else:
+        sub.write_text("not a directory")
+
+
+@pytest.mark.parametrize(
+    "w_change",
+    [
+        "symlink",
+        "file",
+        pytest.param("unreadable", marks=_platform.requires_non_root),
+    ],
+)
+def test_downloadable_files_skips_dir_changed_before_entering(
+    temp_dir,
+    w_change,
+):
+    workdir, outside = _make_swap_tree(temp_dir)
+    real_open = os.open
+    swapped = []
+
+    def swap_then_open(path, *args, **kwargs):
+        if path == "sub" and not swapped:
+            swapped.append(path)
+            _change_sub(workdir, outside, w_change)
+
+        return real_open(path, *args, **kwargs)
+
+    with mock.patch("os.open", side_effect=swap_then_open):
+        found = skills_bwrap_sandbox.downloadable_files(workdir)
+
+    assert swapped
+    assert found == ["a.txt"]
+
+
+def test_downloadable_files_ignores_swap_of_dir_after_entering(temp_dir):
+    workdir, outside = _make_swap_tree(temp_dir)
+    real_scandir = os.scandir
+    scanned = []
+
+    def scan_then_swap(path):
+        scanned.append(path)
+
+        # The second scan is of 'sub'.
+        if len(scanned) == 2:
+            _change_sub(workdir, outside, "symlink")
+
+        return real_scandir(path)
+
+    with mock.patch("os.scandir", side_effect=scan_then_swap):
+        found = skills_bwrap_sandbox.downloadable_files(workdir)
+
+    assert len(scanned) == 3
+    assert found == ["a.txt", "sub/deep/keep.txt"]
+
+
+def test_downloadable_files_skips_entry_whose_type_cannot_be_read(temp_dir):
+    _make_regular(temp_dir / "a.txt")
+    # A filesystem reporting no type makes the scan look it up, which
+    # fails in a directory that cannot be searched.
+    unknown = mock.create_autospec(os.DirEntry, instance=True)
+    unknown.name = "b.txt"
+    unknown.is_dir.side_effect = PermissionError
+    real_scandir = os.scandir
+
+    def scan_w_unknown(dir_fd):
+        with real_scandir(dir_fd) as entries:
+            return contextlib.nullcontext([*entries, unknown])
+
+    with mock.patch("os.scandir", side_effect=scan_w_unknown):
+        found = skills_bwrap_sandbox.downloadable_files(temp_dir)
+
+    assert found == ["a.txt"]
+
+
+@_platform.requires_non_root
+def test_downloadable_files_w_unreadable_directory(temp_dir):
+    workdir = temp_dir / "work"
+    _make_regular(workdir / "a.txt")
+    workdir.chmod(0)
+
+    found = skills_bwrap_sandbox.downloadable_files(workdir)
+
+    assert found == []
+
+
+def test_downloadable_files_closes_what_it_opens(temp_dir):
+    _make_regular(temp_dir / "a" / "b" / "c.txt")
+    open_before = len(os.listdir("/dev/fd"))
+
+    found = skills_bwrap_sandbox.downloadable_files(temp_dir)
+
+    assert found == ["a/b/c.txt"]
+    assert len(os.listdir("/dev/fd")) == open_before
+
+
+def test_downloadable_files_stops_at_max_walk_depth(temp_dir):
+    _make_regular(temp_dir / "a" / "b" / "at_limit.txt")
+    _make_regular(temp_dir / "a" / "b" / "c" / "below_limit.txt")
+
+    with mock.patch.object(skills_bwrap_sandbox, "MAX_WALK_DEPTH", 2):
+        found = skills_bwrap_sandbox.downloadable_files(temp_dir)
+
+    assert found == ["a/b/at_limit.txt"]
 
 
 def test_write_transcript_uses_the_call_id(transcripts_path):
@@ -1385,6 +1514,35 @@ def test_render_mount_table_counts_volume_files(
     # Counts, never names: a name is a disclosure with nothing recorded.
     for name in w_specs:
         assert name not in found
+
+
+@pytest.mark.parametrize(
+    "w_missing",
+    [pytest.param(False, marks=_platform.requires_non_root), True],
+)
+def test_render_mount_table_counts_unreadable_volume_as_empty(
+    temp_dir,
+    w_missing,
+):
+    volume_dir = temp_dir / "room"
+
+    if not w_missing:
+        volume_dir.mkdir()
+        (volume_dir / "a.csv").write_text("x", encoding="utf-8")
+        volume_dir.chmod(0)
+
+    found = skills_bwrap_sandbox.render_mount_table(
+        workdir=None,
+        volumes={"room": _volume(volume_dir)},
+        dependencies=[],
+    )
+
+    [volume_line] = [
+        line
+        for line in found.splitlines()
+        if f"{SANDBOX_VOLUMES_PATH}/room" in line
+    ]
+    assert volume_line.endswith("empty")
 
 
 def test_render_mount_table_reports_writability(temp_dir):

@@ -379,15 +379,14 @@ def script_snapshot_name(run_id: str | None, call_id: uuid.UUID) -> str:
     return f"{SCRIPT_SNAPSHOT_PREFIX}{stem}.py"
 
 
-def is_downloadable(entry: pathlib.Path) -> bool:
+def is_downloadable(entry: os.DirEntry) -> bool:
     """Return whether the workdir endpoint serves 'entry'.
 
-    Only regular files are served, and never a script snapshot.
+    Only regular files are served, and never a script snapshot.  The type
+    comes from the directory scan, without following a symlink.
     """
-    return (
-        not entry.name.startswith(SCRIPT_SNAPSHOT_PREFIX)
-        and not entry.is_symlink()
-        and entry.is_file()
+    return not entry.name.startswith(SCRIPT_SNAPSHOT_PREFIX) and entry.is_file(
+        follow_symlinks=False
     )
 
 
@@ -679,18 +678,85 @@ def effective_volumes(
     return (static or {}) | (runtime or {})
 
 
+# A walk holds a descriptor open for its root and for each level below
+# it: this bounds how many one walk can be made to hold.
+MAX_WALK_DEPTH = 64
+
+
+def _add_downloadable_files(
+    dir_fd: int,
+    relative: pathlib.PurePosixPath,
+    found: list[str],
+) -> None:
+    """Add the files the workdir endpoint serves beneath 'dir_fd' to 'found'.
+
+    Each entry's type comes from the scan of the open directory, without
+    following symlinks, and each subdirectory is opened relative to it
+    with 'O_NOFOLLOW': nothing is reached through a symlink, and no
+    symlink's target is looked up.
+    """
+    sub_dirs = []
+
+    with os.scandir(dir_fd) as entries:
+        for entry in entries:
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    sub_dirs.append(entry.name)
+                elif is_downloadable(entry):
+                    found.append((relative / entry.name).as_posix())
+            except OSError:  # no type from the scan, and none readable
+                continue
+
+    if len(relative.parts) >= MAX_WALK_DEPTH:
+        return
+
+    flags = (
+        os.O_RDONLY
+        | os.O_DIRECTORY
+        | os.O_NOFOLLOW
+        | os.O_NONBLOCK
+        | os.O_CLOEXEC
+    )
+
+    for name in sub_dirs:
+        try:
+            sub_fd = os.open(name, flags, dir_fd=dir_fd)
+        except OSError:  # a symlink or non-directory, removed, unreadable
+            continue
+
+        try:
+            _add_downloadable_files(sub_fd, relative / name, found)
+        finally:
+            os.close(sub_fd)
+
+
 def downloadable_files(directory: pathlib.Path) -> list[str]:
     """Return the paths, relative to 'directory', the workdir endpoint serves.
 
-    The walk enters no symlinked directory: it reports one as a file,
-    which 'is_downloadable' then refuses.
+    Sandboxed code may change the tree while the walk runs, so the walk
+    holds each directory open and works relative to it (see
+    '_add_downloadable_files').  It enters no directory more than
+    'MAX_WALK_DEPTH' levels below 'directory'.
     """
-    return sorted(
-        (dir_path / name).relative_to(directory).as_posix()
-        for dir_path, _dir_names, file_names in directory.walk()
-        for name in file_names
-        if is_downloadable(dir_path / name)
-    )
+    try:
+        root_fd = os.open(
+            directory,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+        )
+    except OSError:
+        # Missing (a thread's workspace does not exist until a command
+        # runs) or unreadable, which sandboxed code can make it: either
+        # way, nothing is served from it.
+        return []
+
+    found = []
+
+    try:
+        _add_downloadable_files(root_fd, pathlib.PurePosixPath(), found)
+    finally:
+        os.close(root_fd)
+
+    return sorted(found)
 
 
 def _downloadable_count(directory: pathlib.Path | None) -> int:
@@ -709,10 +775,15 @@ def _top_level_file_count(volume: bs_models.VolumeInfo) -> int:
     """
     directory = volume.host_path
 
-    if directory is None or not directory.is_dir():
+    if directory is None:
         return 0
 
-    return sum(1 for entry in directory.glob("*") if is_downloadable(entry))
+    try:
+        with os.scandir(directory) as entries:
+            return sum(1 for entry in entries if is_downloadable(entry))
+    except OSError:
+        # Missing, or unreadable: sandboxed code can chmod a writable volume.
+        return 0
 
 
 def _count_phrase(count: int) -> str:
