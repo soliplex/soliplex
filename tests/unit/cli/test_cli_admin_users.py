@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest import mock
 
 import pytest
@@ -8,6 +9,7 @@ import typer
 import yaml
 
 from soliplex import authz
+from soliplex import token_mint
 from soliplex.authz import schema as authz_schema
 from soliplex.cli import admin_users as cli_admin_users
 
@@ -821,3 +823,178 @@ def test_as_yaml_clear_from_yaml_round_trip(
         == 0
     )
     assert _read_admins(scratch_installation) == expected
+
+
+# -- check ------------------------------------------------------------------
+
+
+CHECK_SECRET = "admin-users-check-testing-secret"
+
+
+def _check_token(claims):
+    return token_mint.mint_service_token(
+        CHECK_SECRET,
+        claims,
+        expires_in=600,
+    )
+
+
+def _invoke_check(cli_runner, scratch, *rest, group_args=(), stdin=None):
+    return cli_runner.invoke(
+        cli_admin_users.app,
+        [*group_args, "check", str(scratch.path), *rest],
+        env={"SOLIPLEX_URL_SAFE_TOKEN_SECRET": CHECK_SECRET},
+        input=stdin,
+    )
+
+
+def test__check_result_as_jsonable():
+
+    found = cli_admin_users._check_result_as_jsonable(
+        {"sub": "ops", "email": ALICE_EMAIL},
+        True,
+    )
+
+    assert found == {"sub": "ops", "is_admin": True}
+
+
+@pytest.mark.parametrize(
+    "w_obj, exp_human",
+    [
+        (None, False),
+        ({}, False),
+        ({"verbose": False}, False),
+        ({"verbose": True}, True),
+    ],
+)
+@mock.patch("soliplex.cli.admin_users._human_dump_check_result")
+@mock.patch("soliplex.cli.admin_users._dump_check_result")
+def test__dump_check(
+    _dump_check_result,
+    _human_dump_check_result,
+    ctx,
+    w_obj,
+    exp_human,
+):
+    ctx.obj = w_obj
+    result = {"is_admin": True}
+
+    cli_admin_users._dump_check(ctx, result)
+
+    if exp_human:
+        _human_dump_check_result.assert_called_once_with(result)
+        _dump_check_result.assert_not_called()
+    else:
+        _dump_check_result.assert_called_once_with(result)
+        _human_dump_check_result.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "claims, exp_is_admin",
+    [
+        ({"sub": "ops", "email": ALICE_EMAIL}, True),
+        ({"sub": "ops", "preferred_username": "bob"}, True),
+        ({"sub": "ops", "role": "admin"}, True),
+        ({"sub": "ops", "email": "carol@example.com"}, False),
+        ({"sub": "ops"}, False),
+    ],
+)
+def test_check(scratch_installation, cli_runner, claims, exp_is_admin):
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP, BOB_PU_JP, ROLE_JP)
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        stdin=_check_token(claims),
+    )
+
+    assert result.exit_code == (0 if exp_is_admin else 1)
+    assert json.loads(result.stdout) == {
+        "sub": "ops",
+        "is_admin": exp_is_admin,
+    }
+
+
+def test_check_wo_admins(scratch_installation, cli_runner):
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        stdin=_check_token({"sub": "ops", "email": ALICE_EMAIL}),
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["is_admin"] is False
+
+
+def test_check_w_input_file(scratch_installation, cli_runner, tmp_path):
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP)
+    input_path = tmp_path / "token"
+    input_path.write_text(
+        f"{_check_token({'sub': 'ops', 'email': ALICE_EMAIL})}\n",
+        encoding="utf-8",
+    )
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "--input",
+        str(input_path),
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["is_admin"] is True
+
+
+@pytest.mark.parametrize("w_admin", [True, False])
+def test_check_verbose(scratch_installation, cli_runner, w_admin):
+    _seed_admins(scratch_installation, ALICE_EMAIL_JP)
+    email = ALICE_EMAIL if w_admin else "carol@example.com"
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        group_args=["--verbose"],
+        stdin=_check_token({"sub": "ops", "email": email}),
+    )
+
+    assert result.exit_code == (0 if w_admin else 1)
+
+
+@mock.patch("soliplex.cli.admin_users._dump_check")
+def test_check_w_stale_admin(_dump_check, scratch_installation, cli_runner):
+    _seed_stale_admin(scratch_installation, STALE_JP)
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        stdin=_check_token({"sub": "ops", "email": "carol@example.com"}),
+    )
+
+    assert result.exit_code == 1
+    assert result.exception.__class__ is SystemExit
+    _dump_check.assert_not_called()
+
+
+def test_check_invalid_token(scratch_installation, cli_runner):
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        stdin="not-a-token",
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+
+
+def test_check_missing_input(scratch_installation, cli_runner, tmp_path):
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "--input",
+        str(tmp_path / "nonesuch"),
+    )
+
+    assert result.exit_code == 2

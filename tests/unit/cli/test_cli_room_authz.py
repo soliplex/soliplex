@@ -1676,6 +1676,28 @@ def test_check_w_private_policy(
     assert json.loads(result.stdout)["allowed"] is exp_allowed
 
 
+@mock.patch("soliplex.cli.room_authz._dump_check")
+def test_check_w_stale_acl_entry(
+    _dump_check,
+    scratch_installation,
+    cli_runner,
+):
+    _seed_stale_acl_entry(scratch_installation, "chat", ALLOW, STALE_JP)
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "chat",
+        "--permission",
+        "read",
+        stdin=_check_token({"sub": "ops", "email": BOB_EMAIL}),
+    )
+
+    assert result.exit_code == 1
+    assert result.exception.__class__ is SystemExit
+    _dump_check.assert_not_called()
+
+
 def test_check_w_input_file(scratch_installation, cli_runner, tmp_path):
     input_path = tmp_path / "token"
     input_path.write_text(

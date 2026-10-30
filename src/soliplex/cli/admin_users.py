@@ -6,11 +6,13 @@ import pathlib
 import sys
 import typing
 
+import jsonpath
 import typer
 import yaml
 
 from soliplex import authz
 from soliplex.cli import cli_util
+from soliplex.cli import service_token
 from soliplex.cli import types
 
 the_console = cli_util.the_console
@@ -253,6 +255,38 @@ def _dump_admin_users(json_paths):  # pragma NO COVER UI ONLY
     print(json.dumps({"admin_users": admin_users}))
 
 
+def _check_result_as_jsonable(claims, is_admin) -> dict:
+    """Render the outcome of 'admin-users check' as a jsonable dict."""
+    return {
+        "sub": claims.get("sub"),
+        "is_admin": is_admin,
+    }
+
+
+def _human_dump_check_result(result):  # pragma NO COVER UI ONLY
+    verdict = "Admin user" if result["is_admin"] else "Not an admin user"
+    the_console.rule(verdict)
+    the_console.print(f"Subject: {result['sub']}")
+
+
+def _dump_check_result(result):  # pragma NO COVER UI ONLY
+    print(json.dumps(result))
+
+
+def _dump_check(ctx, result):
+    if ctx.obj and ctx.obj.get("verbose"):
+        _human_dump_check_result(result)
+    else:
+        _dump_check_result(result)
+
+
+async def _is_admin(the_installation, command, claims):
+    async with cli_util._admin_user_policy(
+        the_installation, command
+    ) as policy:
+        return await policy.is_admin(claims)
+
+
 async def _list_discriminators(the_installation, command):
     async with cli_util._admin_user_policy(
         the_installation, command
@@ -305,6 +339,40 @@ def list_admin_users(
         _list_discriminators(the_installation, "admin-users list")
     )
     _dump(ctx, discriminators)
+
+
+@app.command("check")
+def check_admin_user(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+    input_path: service_token.input_type = str(service_token.STDIN_INPUT),
+):
+    """Check whether a service token's user is an admin user.
+
+    Exits 0 if the user is an admin user, else 1:  also if an admin
+    entry's 'json_path' no longer compiles.
+    """
+    the_installation = cli_util.get_installation(installation_path)
+
+    claims = service_token.load_token_claims(the_installation, input_path)
+
+    try:
+        is_admin = asyncio.run(
+            _is_admin(the_installation, "admin-users check", claims)
+        )
+    except jsonpath.JSONPathError as exc:
+        the_console.rule("Stale admin entry")
+        the_console.print(
+            f"An admin entry's 'json_path' no longer compiles ({exc}):  "
+            "find it with 'soliplex-cli audit admin-users', and remove it "
+            "with 'soliplex-cli admin-users delete "
+            "--allow-invalid-json-path'."
+        )
+        raise typer.Exit(1) from None
+    _dump_check(ctx, _check_result_as_jsonable(claims, is_admin))
+
+    if not is_admin:
+        raise typer.Exit(1)
 
 
 @app.command("clear")

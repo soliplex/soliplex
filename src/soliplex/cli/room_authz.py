@@ -6,6 +6,7 @@ import pathlib
 import sys
 import typing
 
+import jsonpath
 import typer
 import yaml
 
@@ -371,22 +372,33 @@ def check_room_permission(
 ):
     """Check whether a service token's user has a permission on a room.
 
-    Exits 0 if the room's policy allows the permission, else 1.
+    Exits 0 if the room's policy allows the permission, else 1:  also if
+    an ACL entry's 'json_path' for the room no longer compiles.
     """
     the_installation = cli_util.get_installation(installation_path)
     _check_room_id(the_installation, room_id)
 
     claims = service_token.load_token_claims(the_installation, input_path)
 
-    allowed = asyncio.run(
-        _has_permission(
-            the_installation,
-            "room-authz check",
-            room_id,
-            claims,
-            permission,
+    try:
+        allowed = asyncio.run(
+            _has_permission(
+                the_installation,
+                "room-authz check",
+                room_id,
+                claims,
+                permission,
+            )
         )
-    )
+    except jsonpath.JSONPathError as exc:
+        the_console.rule("Stale ACL entry")
+        the_console.print(
+            f"An ACL entry's 'json_path' for room '{room_id}' no longer "
+            f"compiles ({exc}):  find it with 'soliplex-cli audit "
+            "room-authz', and remove it with 'soliplex-cli room-authz "
+            "delete-acl-entry --allow-invalid-json-path'."
+        )
+        raise typer.Exit(1) from None
     _dump_check(
         ctx,
         _check_result_as_jsonable(room_id, permission, claims, allowed),

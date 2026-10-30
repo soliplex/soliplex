@@ -1836,7 +1836,8 @@ any admin entry's query is granted administrator privileges by the
 Soliplex authorization policy engine. The common case — an admin keyed
 by email — is stored as `$[?$.email == "..."]`, mirroring how
 `room-authz` ACL entries store their discriminators. The subcommands
-below read from and modify that table directly.
+below read from and modify that table directly, and check a user
+against it.
 
 This group replaces the flat `list-admin-users` / `add-admin-user` /
 `clear-admin-users` commands; see [Renamed Commands](#renamed-commands).
@@ -1848,7 +1849,8 @@ YAML). When the installation uses the default in-memory SQLite DB
 that the operation would be a no-op, and exits with status `1` without
 touching the database. There is no override.
 
-All six commands share the following conventions:
+All seven commands share the following conventions (except where
+[`check`](#admin-users-check) notes otherwise):
 
 - Positional argument `INSTALLATION_CONFIG_PATH` — path to the
   installation configuration. May be a YAML file or a directory
@@ -1919,6 +1921,84 @@ Extract just the emails with `jq`:
 ```bash
 soliplex-cli admin-users list example/installation.yaml \
   | jq -r '.admin_users[]'
+```
+
+### `admin-users check`
+
+Check whether the user identified by a
+[service token](#service-token) is an admin user: that is, whether any
+admin entry's query matches the token's claims. Nothing in the
+authorization database is changed.
+
+```bash
+soliplex-cli admin-users check [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Options
+
+- `-i PATH` / `--input PATH` — file from which the token is read. If
+  omitted, or `-`, the token is read from stdin. Leading and trailing
+  whitespace is ignored.
+
+#### Output
+
+Instead of the admin-user list, the command prints the outcome of the
+check as a single JSON object on stdout:
+
+```json
+{"sub": "ops", "is_admin": true}
+```
+
+With the group-level `--verbose` flag, it prints a human-focused summary
+instead, e.g.:
+
+```text
+─── Admin user ───
+Subject: ops
+```
+
+#### Behavior Notes
+
+- **The token is validated first,** as by
+  [`service-token validate`](#service-token-validate): the command
+  exits with status `1`, printing the reason on stderr and nothing on
+  stdout, if the token's signature does not verify, it holds no `exp`,
+  or it has expired, or if `URL_SAFE_TOKEN_SECRET` resolves only from a
+  `random_chars` source.
+- **The check is not audited.** Unlike the server's checks at the point
+  of a privileged operation, it emits no admin-access audit record.
+- **A stale admin entry stops the check.** If an admin entry's stored
+  `json_path` no longer compiles (e.g., it references a meta-config
+  filter function that is no longer registered), the command exits with
+  status `1`. Find such entries with
+  [`audit admin-users`](#audit-admin-users), and remove them with
+  [`admin-users delete --allow-invalid-json-path`](#admin-users-delete).
+
+#### Exit Status
+
+- `0` — the token's user is an admin user.
+- `1` — the token's user is not an admin user, the token is not valid,
+  `URL_SAFE_TOKEN_SECRET` resolves only from a `random_chars` source,
+  an admin entry's `json_path` no longer compiles, or the RAM-DB guard
+  fires.
+- `2` — a usage error, e.g. the input file does not exist.
+
+#### Examples
+
+Check that a token kept in a file belongs to an admin user:
+
+```bash
+soliplex-cli admin-users check example/installation.yaml \
+  --input ~/.config/soliplex/ops.token
+```
+
+Gate a script on admin access, using a freshly-minted token:
+
+```bash
+soliplex-cli service-token mint example/installation.yaml \
+  --claims '{"email": "alice@example.com"}' --expires-in 5m --quiet |
+  soliplex-cli admin-users check example/installation.yaml > /dev/null &&
+  echo "alice is an admin user"
 ```
 
 ### `admin-users add`
@@ -2429,13 +2509,20 @@ Subject: ops
   uploads) also allow admin users write access to every room.
 - **The check is not audited.** Unlike the server's checks at the point
   of a gated operation, it emits no room-access audit record.
+- **A stale ACL entry stops the check.** If one of the room's ACL
+  entries has a stored `json_path` which no longer compiles (e.g., it
+  references a meta-config filter function that is no longer
+  registered), the command exits with status `1`. Find such entries
+  with [`audit room-authz`](#audit-room-authz), and remove them with
+  [`room-authz delete-acl-entry --allow-invalid-json-path`](#room-authz-delete-acl-entry).
 
 #### Exit Status
 
 - `0` — the room's policy allows the permission.
 - `1` — the room's policy denies the permission, the token is not
   valid, `URL_SAFE_TOKEN_SECRET` resolves only from a `random_chars`
-  source, `ROOM_ID` doesn't match a configured room, or the RAM-DB
+  source, `ROOM_ID` doesn't match a configured room, one of the room's
+  ACL entries has a `json_path` which no longer compiles, or the RAM-DB
   guard fires.
 - `2` — a usage error, e.g. `--permission` is missing or not one of
   `read`, `write`, or `admin`, or the input file does not exist.
