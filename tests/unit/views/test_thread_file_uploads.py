@@ -1,5 +1,7 @@
 import contextlib
+import datetime
 import io
+import os
 import uuid
 from unittest import mock
 
@@ -94,15 +96,22 @@ async def test_get_uploads_room_id_thread_thread_id_only(
         return f"{URL_PREFIX}/v1/uploads/{room_id}/{thread_id}/{filename}"
 
     exp_filename_urls = {}
+    exp_stats = {}
 
     if w_thread_path:
         thread_path.mkdir(parents=True)
         (thread_path / "ignore_me").mkdir()
-        for filename in w_filenames:
+        for i_file, filename in enumerate(w_filenames):
             file_path = thread_path / filename
             file_path.write_text(f"filename: {filename}")
             exp_filename_urls[filename] = download_url(
                 ROUTE_NAME, TEST_ROOM_ID, TEST_THREAD_ID_STR, filename
+            )
+            mtime = 1_761_725_730 + i_file
+            os.utime(file_path, (mtime, mtime))
+            exp_stats[filename] = (
+                datetime.datetime.fromtimestamp(mtime, tz=datetime.UTC),
+                len(f"filename: {filename}"),
             )
 
     request = mock.create_autospec(fastapi.Request)
@@ -147,6 +156,12 @@ async def test_get_uploads_room_id_thread_thread_id_only(
             for filename in w_filenames:
                 exp_url = exp_filename_urls[filename]
                 assert str(found_files[filename]) == exp_url
+
+            found_stats = {
+                f_up.filename: (f_up.modified_at, f_up.size_bytes)
+                for f_up in found.uploads
+            }
+            assert found_stats == exp_stats
         else:
             assert found.uploads == []
 
@@ -162,6 +177,41 @@ async def test_get_uploads_room_id_thread_thread_id_only(
     the_logger.debug.assert_called_once_with(
         loggers.UPLOADS_GET_ROOM_THREAD,
     )
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.util.upload_files")
+@mock.patch("soliplex.views.agui._check_thread_ownership")
+async def test_get_uploads_room_id_thread_thread_id_w_unrepresentable_time(
+    cto,
+    upload_files,
+    the_threads,
+    uploads_path,
+):
+    # A file's time can be set beyond year 9999, but the filesystem under
+    # the test may not store it as set, so the stat is built by hand.
+    upload_files.return_value = {
+        "far.txt": os.stat_result((0,) * 8 + (253_402_300_800, 0)),
+    }
+    request = mock.create_autospec(fastapi.Request)
+    request.url_for.return_value = f"{URL_PREFIX}/file"
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.threads_upload_path = str(uploads_path / "threads")
+
+    found = await thread_views.get_uploads_room_id_thread_thread_id(
+        request=request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=mock.create_autospec(loggers.LogWrapper),
+    )
+
+    assert [(f_up.filename, f_up.modified_at) for f_up in found.uploads] == [
+        ("far.txt", None)
+    ]
 
 
 @pytest.mark.anyio

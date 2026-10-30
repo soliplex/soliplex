@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import os
 import pathlib
 import uuid
@@ -193,9 +194,11 @@ async def test_get_workdirs_room_thread_lists_nested_files(
     thread_path = sandbox_workdirs_path / TEST_ROOM_ID / TEST_THREAD_ID_STR
     nested = ["crm_app/app.py", "reports/summary.txt"]
 
-    for relative in nested:
+    for i_file, relative in enumerate(nested):
         (thread_path / relative).parent.mkdir(parents=True, exist_ok=True)
         (thread_path / relative).write_text(relative)
+        mtime = 1_761_725_730 + i_file
+        os.utime(thread_path / relative, (mtime, mtime))
 
     def download_url(name, room_id, thread_id, filename):
         return f"{URL_PREFIX}/v1/workdir/{room_id}/{thread_id}/{filename}"
@@ -217,13 +220,55 @@ async def test_get_workdirs_room_thread_lists_nested_files(
         the_logger=mock.create_autospec(loggers.LogWrapper),
     )
 
-    assert [(f_up.filename, str(f_up.url)) for f_up in found.files] == [
+    assert [
+        (f_up.filename, str(f_up.url), f_up.modified_at, f_up.size_bytes)
+        for f_up in found.files
+    ] == [
         (
             relative,
             f"{URL_PREFIX}/v1/workdir/{TEST_ROOM_ID}/"
             f"{TEST_THREAD_ID_STR}/{relative}",
+            datetime.datetime.fromtimestamp(
+                1_761_725_730 + i_file, tz=datetime.UTC
+            ),
+            len(relative),
         )
-        for relative in nested
+        for i_file, relative in enumerate(nested)
+    ]
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.skills.bwrap_sandbox.downloadable_files")
+@mock.patch("soliplex.views.agui._check_thread_ownership")
+async def test_get_workdirs_room_thread_w_unrepresentable_time(
+    cto,
+    downloadable_files,
+    the_threads,
+    sandbox_path,
+):
+    # A file's time can be set beyond year 9999, but the filesystem under
+    # the test may not store it as set, so the stat is built by hand.
+    downloadable_files.return_value = {
+        "far.txt": os.stat_result((0,) * 8 + (253_402_300_800, 0)),
+    }
+    request = mock.create_autospec(fastapi.Request)
+    request.url_for.return_value = f"{URL_PREFIX}/file"
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.sandbox_workdirs_path = str(sandbox_path / "workdirs")
+
+    found = await workdir_views.get_workdirs_room_thread(
+        request=request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=mock.create_autospec(loggers.LogWrapper),
+    )
+
+    assert [(f_up.filename, f_up.modified_at) for f_up in found.files] == [
+        ("far.txt", None)
     ]
 
 
