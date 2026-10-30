@@ -385,8 +385,8 @@ def is_downloadable(entry: os.DirEntry) -> bool:
     Only regular files are served, and never a script snapshot.  The type
     comes from the directory scan, without following a symlink.
     """
-    return entry.is_file(follow_symlinks=False) and not (
-        entry.name.startswith(SCRIPT_SNAPSHOT_PREFIX)
+    return not entry.name.startswith(SCRIPT_SNAPSHOT_PREFIX) and entry.is_file(
+        follow_symlinks=False
     )
 
 
