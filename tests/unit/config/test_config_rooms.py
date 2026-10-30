@@ -1232,3 +1232,45 @@ def test_roomconfig_list_haiku_rag_client_kws_wo_database(
     )
 
     assert list(room_config.list_haiku_rag_client_kw()) == []
+
+
+@pytest.mark.parametrize(
+    "room_id",
+    [
+        "__provision__",
+        "__system__",
+        "__x1__",
+        "__y_w__",
+    ],
+)
+def test_is_dunder_room_id_accepts_reserved(room_id):
+    assert config_rooms.is_dunder_room_id(room_id) is True
+
+
+@pytest.mark.parametrize(
+    "room_id",
+    [
+        "",
+        "provision",
+        "_provision_",
+        "__provision",
+        "provision__",
+        "__0abc__",  # inner may not start with a digit
+        "__has space__",
+        "____",  # inner requires at least one character
+        "_____",  # inner may not be underscores alone
+    ],
+)
+def test_is_dunder_room_id_rejects_unreserved(room_id):
+    assert config_rooms.is_dunder_room_id(room_id) is False
+
+
+def test_roomconfig_rejects_dunder_id():
+    room_config_kw = copy.deepcopy(BARE_ROOM_CONFIG_KW)
+    room_config_kw["id"] = "__provision__"
+
+    with pytest.raises(
+        config_exc.ReservedDunderRoomID,
+        match="__provision__",
+    ):
+        config_rooms.RoomConfig(**room_config_kw)

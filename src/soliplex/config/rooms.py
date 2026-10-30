@@ -2,6 +2,7 @@ from __future__ import annotations  # forward refs in typing decls
 
 import dataclasses
 import pathlib
+import re
 import typing
 
 from . import _utils
@@ -49,6 +50,16 @@ def _check_sse_delivery_name(
         )
 
     return sse_delivery_name
+
+
+# Reserved for ACL-only pseudo-rooms (#1488): a 'dunder' room ID is
+# never the ID of a configured room.
+_DUNDER_ROOM_ID_RE = re.compile(r"^__([A-Za-z][A-Za-z0-9_]*)__$")
+
+
+def is_dunder_room_id(room_id: str) -> bool:
+    """Does the room ID match the reserved 'dunder' name pattern?"""
+    return _DUNDER_ROOM_ID_RE.fullmatch(room_id) is not None
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -111,6 +122,9 @@ class RoomConfig:
     _agui_feature_names: list[str] = _default_list_field()
 
     def __post_init__(self, logo_image: str | None):
+        if is_dunder_room_id(self.id):
+            raise config_exc.ReservedDunderRoomID(self.id)
+
         if logo_image is not None:
             self._logo_image = logo_image
 
