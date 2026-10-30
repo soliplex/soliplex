@@ -1,4 +1,4 @@
-"""Mint service tokens
+"""Mint and validate service tokens
 
 A service token lets a client (e.g., 'curl', or an operator's script)
 authenticate to the Soliplex API without an OIDC login:  it is passed as
@@ -8,8 +8,10 @@ its expiry time.  The token is signed with the installation's
 same value as the CLI does:  the command refuses to mint a token signed
 with a secret resolved from a 'random_chars' source.
 
-The token is written to a file, or to stdout;  everything else the command
-reports goes to stderr, so that a script can capture the token alone.
+'mint' writes the token to a file, or to stdout;  'validate' reads a token
+from a file, or from stdin, and writes its claims to a file, or to stdout.
+Everything else either command reports goes to stderr, so that a script can
+capture the token, or the claims, alone.
 """
 
 from __future__ import annotations
@@ -19,9 +21,11 @@ import json
 import os
 import pathlib
 import re
+import sys
 import typing
 
 import typer
+import yaml
 from rich import console
 
 from soliplex import authn
@@ -33,9 +37,11 @@ from soliplex.config import secrets as config_secrets
 
 the_console = console.Console(stderr=True)
 
+STDIN_INPUT = pathlib.Path("-")
 STDOUT_OUTPUT = pathlib.Path("-")
+YAML_SUFFIXES = (".yaml", ".yml")
 
-SERVICE_TOKEN_HELP = "Mint service tokens for API clients"
+SERVICE_TOKEN_HELP = "Mint and validate service tokens for API clients"
 
 app = typer.Typer(
     name="service-token",
@@ -145,6 +151,35 @@ output_type = typing.Annotated[
     ),
 ]
 
+input_type = typing.Annotated[
+    pathlib.Path,
+    typer.Option(
+        "-i",
+        "--input",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        allow_dash=True,
+        help=(
+            "File from which the token is read;  if '-' (the default), "
+            "the token is read from stdin."
+        ),
+    ),
+]
+
+claims_output_type = typing.Annotated[
+    pathlib.Path,
+    typer.Option(
+        "-o",
+        "--output",
+        help=(
+            "File to which the claims are written:  as YAML if its "
+            "extension is '.yaml' or '.yml', else as JSON.  If '-' (the "
+            "default), the claims are written to stdout, as JSON."
+        ),
+    ),
+]
+
 force_type = typing.Annotated[
     bool,
     typer.Option(
@@ -193,32 +228,12 @@ def _resolve_stable_secret(
         return None
 
 
-def _write_token(output: pathlib.Path, token: str, *, force: bool):
-    """Write 'token' to a new file at 'output', readable only by its owner
+def _get_stable_secret(installation_path: pathlib.Path) -> str:
+    """Return the installation's stable service token secret
 
-    With 'force', an existing file at 'output' is replaced.
-
-    Raises 'FileExistsError' if 'output' exists and 'force' is false.
+    Raises 'typer.Exit(1)' if the secret resolves only from its
+    'random_chars' source.
     """
-    if force:
-        output.unlink(missing_ok=True)
-
-    fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-
-    with os.fdopen(fd, "w", encoding="utf-8") as stream:
-        stream.write(f"{token}\n")
-
-
-@app.command("mint")
-def mint_service_token(
-    installation_path: types.installation_path_type,
-    claims: claims_type,
-    expires_in: expires_in_type,
-    output: output_type = STDOUT_OUTPUT,
-    force: force_type = False,
-    quiet: quiet_type = False,
-):
-    """Mint a service token, and write it to a file or to stdout"""
     the_installation = cli_util.get_installation(installation_path)
     secret_name = authn.SERVICE_TOKEN_SECRET_NAME
     secret = _resolve_stable_secret(
@@ -234,6 +249,97 @@ def mint_service_token(
         )
         raise typer.Exit(1)
 
+    return secret
+
+
+def _write_output(output: pathlib.Path, content: str, *, force: bool):
+    """Write 'content' to a new file at 'output', readable only by its owner
+
+    With 'force', an existing file at 'output' is replaced.
+
+    Raises 'FileExistsError' if 'output' exists and 'force' is false.
+    """
+    if force:
+        output.unlink(missing_ok=True)
+
+    fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(content)
+
+
+def _emit(output: pathlib.Path, content: str, *, force: bool):
+    """Write 'content' to 'output', or to stdout if 'output' is '-'
+
+    Raises 'typer.Exit(1)' if 'output' exists and 'force' is false.
+    """
+    if output == STDOUT_OUTPUT:
+        typer.echo(content, nl=False)
+        return
+
+    try:
+        _write_output(output, content, force=force)
+    except FileExistsError:
+        the_console.rule("Output file exists")
+        the_console.print(f"Pass '--force' to replace {output}.")
+        raise typer.Exit(1) from None
+
+
+def _read_token(input_path: pathlib.Path) -> str:
+    """Return the token read from 'input_path', or from stdin if it is '-'"""
+    if input_path == STDIN_INPUT:
+        text = sys.stdin.read()
+    else:
+        text = input_path.read_text(encoding="utf-8")
+
+    return text.strip()
+
+
+def _format_claims(
+    claims: token_mint.ServiceTokenClaims,
+    output: pathlib.Path,
+) -> str:
+    """Return 'claims' rendered as a document for 'output'
+
+    YAML if the extension of 'output' is one of 'YAML_SUFFIXES' (in any
+    case), else JSON.
+    """
+    if output.suffix.lower() in YAML_SUFFIXES:
+        return yaml.safe_dump(
+            claims,
+            sort_keys=False,
+            default_flow_style=False,
+        )
+
+    return json.dumps(claims, indent=2) + "\n"
+
+
+def _print_summary(
+    title: str,
+    claims: token_mint.ServiceTokenClaims,
+    output: pathlib.Path,
+):
+    expires = datetime.datetime.fromtimestamp(claims["exp"], datetime.UTC)
+
+    the_console.rule(title)
+    if output != STDOUT_OUTPUT:
+        the_console.print(f"Written to: {output}")
+    the_console.print(f"Subject:    {claims['sub']}")
+    the_console.print(f"Expires:    {expires.isoformat()}")
+
+
+@app.command("mint")
+def mint_service_token(
+    installation_path: types.installation_path_type,
+    claims: claims_type,
+    expires_in: expires_in_type,
+    output: output_type = STDOUT_OUTPUT,
+    force: force_type = False,
+    quiet: quiet_type = False,
+):
+    """Mint a service token, and write it to a file or to stdout"""
+    secret = _get_stable_secret(installation_path)
+
     try:
         token = token_mint.mint_service_token(
             secret,
@@ -245,24 +351,37 @@ def mint_service_token(
         the_console.print(str(exc))
         raise typer.Exit(1) from None
 
-    if output == STDOUT_OUTPUT:
-        typer.echo(token)
-    else:
-        try:
-            _write_token(output, token, force=force)
-        except FileExistsError:
-            the_console.rule("Output file exists")
-            the_console.print(f"Pass '--force' to replace {output}.")
-            raise typer.Exit(1) from None
+    _emit(output, f"{token}\n", force=force)
 
     if quiet:
         return
 
     minted, _ = token_mint.load_service_token(secret, token)
-    expires = datetime.datetime.fromtimestamp(minted["exp"], datetime.UTC)
+    _print_summary("Service token minted", minted, output)
 
-    the_console.rule("Service token minted")
-    if output != STDOUT_OUTPUT:
-        the_console.print(f"Written to: {output}")
-    the_console.print(f"Subject:    {minted['sub']}")
-    the_console.print(f"Expires:    {expires.isoformat()}")
+
+@app.command("validate")
+def validate_service_token(
+    installation_path: types.installation_path_type,
+    input_path: input_type = str(STDIN_INPUT),
+    output: claims_output_type = STDOUT_OUTPUT,
+    force: force_type = False,
+    quiet: quiet_type = False,
+):
+    """Validate a service token, and write its claims to a file or stdout"""
+    secret = _get_stable_secret(installation_path)
+    token = _read_token(input_path)
+
+    claims, reason = token_mint.load_service_token(secret, token)
+
+    if claims is None:
+        the_console.rule("Invalid service token")
+        the_console.print(reason)
+        raise typer.Exit(1)
+
+    _emit(output, _format_claims(claims, output), force=force)
+
+    if quiet:
+        return
+
+    _print_summary("Service token valid", claims, output)

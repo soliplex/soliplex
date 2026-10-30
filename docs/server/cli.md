@@ -3002,11 +3002,11 @@ soliplex-cli room-authz add-acl-entry \
 
 ## `service-token`
 
-The `service-token` group mints service tokens: bearer tokens which let a
-client (e.g., `curl`, or an operator's script) call the Soliplex API
-without an OIDC login. A service token carries the claims given when it
-was minted, plus its issue (`iat`) and expiry (`exp`) times, signed with
-the installation's
+The `service-token` group mints and validates service tokens: bearer
+tokens which let a client (e.g., `curl`, or an operator's script) call the
+Soliplex API without an OIDC login. A service token carries the claims given
+when it was minted, plus its issue (`iat`) and expiry (`exp`) times, signed
+with the installation's
 [`URL_SAFE_TOKEN_SECRET`](../config/secrets.md#url_safe_token_secret).
 
 The server accepts a service token wherever it accepts an OIDC access
@@ -3099,6 +3099,88 @@ TOKEN=$(soliplex-cli service-token mint example/installation.yaml \
   --claims '{"preferred_username": "ci-bot"}' \
   --expires-in 5m --quiet)
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/rooms
+```
+
+### `service-token validate`
+
+Validate a service token, and write its claims to a file or to stdout.
+
+```bash
+soliplex-cli service-token validate [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Options
+
+- `-i PATH` / `--input PATH` — file from which the token is read. If
+  omitted, or `-`, the token is read from stdin. Leading and trailing
+  whitespace (e.g., the newline written by `service-token mint`) is
+  ignored.
+- `-o PATH` / `--output PATH` — file to which the claims are written:
+  as YAML if its extension is `.yaml` or `.yml` (in any case), and
+  otherwise as JSON. If omitted, or `-`, the claims are written to
+  stdout, as JSON.
+- `--force` — replace the output file, if it exists.
+- `-q` / `--quiet` — report only errors.
+
+#### Output
+
+The token's claims, including its `iat` and `exp`, are written as a JSON
+object to stdout, or to the output file as a JSON object or a YAML
+mapping, depending on its extension. A file is created readable only by
+its owner (mode `0600`).
+
+Everything else goes to stderr, so that a script can capture the claims
+alone: unless `--quiet` is given, a summary showing the output file (if
+any), the token's `sub`, and its expiry time (UTC). If the token is not
+valid, the reason: its signature does not verify, it holds no `exp`, or
+it has expired.
+
+#### Behavior Notes
+
+- **The secret must resolve to the same value as when the token was
+  minted.** As with `service-token mint`, the command refuses to run
+  unless one of the sources ahead of any `random_chars` source resolves
+  `URL_SAFE_TOKEN_SECRET`. A token which validates here validates on a
+  server whose environment resolves the secret to the same value.
+
+#### Exit Status
+
+- `0` — the token is valid, and its claims were written.
+- `1` — `URL_SAFE_TOKEN_SECRET` resolves only from a `random_chars`
+  source, the token is not valid, or the output file exists and
+  `--force` was not given.
+- `2` — a usage error, e.g. the input file does not exist.
+
+#### Examples
+
+Check the claims of a token kept in a file:
+
+```bash
+soliplex-cli service-token validate example/installation.yaml \
+  --input ~/.config/soliplex/ops.token
+```
+
+Save a token's claims as YAML, e.g. to edit them by hand:
+
+```bash
+soliplex-cli service-token validate example/installation.yaml \
+  --input ~/.config/soliplex/ops.token --output ops-claims.yaml
+```
+
+Check a freshly-minted token, extracting a claim with `jq`:
+
+```bash
+soliplex-cli service-token mint example/installation.yaml \
+  --claims '{"preferred_username": "ci-bot"}' --expires-in 5m --quiet |
+  soliplex-cli service-token validate example/installation.yaml --quiet |
+  jq -r .preferred_username
 ```
 
 ## `ollama`
