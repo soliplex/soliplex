@@ -961,6 +961,21 @@ def test_check_verbose(scratch_installation, cli_runner, w_admin):
     assert result.exit_code == (0 if w_admin else 1)
 
 
+@mock.patch("soliplex.cli.admin_users._dump_check")
+def test_check_w_stale_admin(_dump_check, scratch_installation, cli_runner):
+    _seed_stale_admin(scratch_installation, STALE_JP)
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        stdin=_check_token({"sub": "ops", "email": "carol@example.com"}),
+    )
+
+    assert result.exit_code == 1
+    assert result.exception.__class__ is SystemExit
+    _dump_check.assert_not_called()
+
+
 def test_check_invalid_token(scratch_installation, cli_runner):
 
     result = _invoke_check(

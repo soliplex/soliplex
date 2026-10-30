@@ -1967,13 +1967,20 @@ Subject: ops
   `random_chars` source.
 - **The check is not audited.** Unlike the server's checks at the point
   of a privileged operation, it emits no admin-access audit record.
+- **A stale admin entry stops the check.** If an admin entry's stored
+  `json_path` no longer compiles (e.g., it references a meta-config
+  filter function that is no longer registered), the command exits with
+  status `1`. Find such entries with
+  [`audit admin-users`](#audit-admin-users), and remove them with
+  [`admin-users delete --allow-invalid-json-path`](#admin-users-delete).
 
 #### Exit Status
 
 - `0` — the token's user is an admin user.
 - `1` — the token's user is not an admin user, the token is not valid,
   `URL_SAFE_TOKEN_SECRET` resolves only from a `random_chars` source,
-  or the RAM-DB guard fires.
+  an admin entry's `json_path` no longer compiles, or the RAM-DB guard
+  fires.
 - `2` — a usage error, e.g. the input file does not exist.
 
 #### Examples
@@ -2502,13 +2509,20 @@ Subject: ops
   uploads) also allow admin users write access to every room.
 - **The check is not audited.** Unlike the server's checks at the point
   of a gated operation, it emits no room-access audit record.
+- **A stale ACL entry stops the check.** If one of the room's ACL
+  entries has a stored `json_path` which no longer compiles (e.g., it
+  references a meta-config filter function that is no longer
+  registered), the command exits with status `1`. Find such entries
+  with [`audit room-authz`](#audit-room-authz), and remove them with
+  [`room-authz delete-acl-entry --allow-invalid-json-path`](#room-authz-delete-acl-entry).
 
 #### Exit Status
 
 - `0` — the room's policy allows the permission.
 - `1` — the room's policy denies the permission, the token is not
   valid, `URL_SAFE_TOKEN_SECRET` resolves only from a `random_chars`
-  source, `ROOM_ID` doesn't match a configured room, or the RAM-DB
+  source, `ROOM_ID` doesn't match a configured room, one of the room's
+  ACL entries has a `json_path` which no longer compiles, or the RAM-DB
   guard fires.
 - `2` — a usage error, e.g. `--permission` is missing or not one of
   `read`, `write`, or `admin`, or the input file does not exist.

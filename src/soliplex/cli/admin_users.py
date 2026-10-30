@@ -6,6 +6,7 @@ import pathlib
 import sys
 import typing
 
+import jsonpath
 import typer
 import yaml
 
@@ -348,15 +349,26 @@ def check_admin_user(
 ):
     """Check whether a service token's user is an admin user.
 
-    Exits 0 if the user is an admin user, else 1.
+    Exits 0 if the user is an admin user, else 1:  also if an admin
+    entry's 'json_path' no longer compiles.
     """
     the_installation = cli_util.get_installation(installation_path)
 
     claims = service_token.load_token_claims(the_installation, input_path)
 
-    is_admin = asyncio.run(
-        _is_admin(the_installation, "admin-users check", claims)
-    )
+    try:
+        is_admin = asyncio.run(
+            _is_admin(the_installation, "admin-users check", claims)
+        )
+    except jsonpath.JSONPathError as exc:
+        the_console.rule("Stale admin entry")
+        the_console.print(
+            f"An admin entry's 'json_path' no longer compiles ({exc}):  "
+            "find it with 'soliplex-cli audit admin-users', and remove it "
+            "with 'soliplex-cli admin-users delete "
+            "--allow-invalid-json-path'."
+        )
+        raise typer.Exit(1) from None
     _dump_check(ctx, _check_result_as_jsonable(claims, is_admin))
 
     if not is_admin:
