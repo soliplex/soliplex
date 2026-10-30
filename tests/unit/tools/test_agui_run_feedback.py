@@ -461,6 +461,43 @@ def test__find_feedback_by_run_id(
         assert whence is getattr(our_state.entries, which)
 
 
+def test__find_feedback_by_run_id_wo_entries():
+    # A thread which has not yet called 'query_recent_feedback'.
+    our_state = arf_tools.RecentRunFeedback()
+
+    with pytest.raises(arf_tools.UnknownFeedback) as exc_info:
+        arf_tools._find_feedback_by_run_id(our_state, RUN_ID)
+
+    assert exc_info.value.run_id == RUN_ID
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.tools.agui_run_feedback._get_threads_storage")
+async def test_review_recent_feedback_wo_prior_query(gts, ctx_w_deps):
+    review = arf_tools.FeedbackReview(run_id=RUN_ID, note=REVIEWED_NOTE)
+
+    with pytest.raises(arf_tools.UnknownFeedback):
+        await arf_tools.review_recent_feedback(ctx_w_deps, review)
+
+    assert STATE_NAMESPACE not in ctx_w_deps.deps.state
+    gts.assert_not_called()
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.tools.agui_run_feedback._get_threads_storage")
+async def test_resolve_recent_feedback_wo_prior_query(gts, ctx_w_deps):
+    resolution = arf_tools.FeedbackResolution(
+        run_id=RUN_ID,
+        note=RESOLVED_NOTE,
+    )
+
+    with pytest.raises(arf_tools.UnknownFeedback):
+        await arf_tools.resolve_recent_feedback(ctx_w_deps, resolution)
+
+    assert STATE_NAMESPACE not in ctx_w_deps.deps.state
+    gts.assert_not_called()
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_run_id, expectation",
