@@ -1313,7 +1313,14 @@ def _change_sub(workdir, outside, w_change):
         sub.write_text("not a directory")
 
 
-@pytest.mark.parametrize("w_change", ["symlink", "file", "unreadable"])
+@pytest.mark.parametrize(
+    "w_change",
+    [
+        "symlink",
+        "file",
+        pytest.param("unreadable", marks=_platform.requires_non_root),
+    ],
+)
 def test_downloadable_files_skips_dir_changed_before_entry(
     temp_dir,
     w_change,
@@ -1376,6 +1383,7 @@ def test_downloadable_files_skips_entry_whose_type_cannot_be_read(temp_dir):
     assert found == ["a.txt"]
 
 
+@_platform.requires_non_root
 def test_downloadable_files_w_unreadable_directory(temp_dir):
     workdir = temp_dir / "work"
     _make_regular(workdir / "a.txt")
@@ -1508,7 +1516,10 @@ def test_render_mount_table_counts_volume_files(
         assert name not in found
 
 
-@pytest.mark.parametrize("w_missing", [False, True])
+@pytest.mark.parametrize(
+    "w_missing",
+    [pytest.param(False, marks=_platform.requires_non_root), True],
+)
 def test_render_mount_table_counts_unreadable_volume_as_empty(
     temp_dir,
     w_missing,

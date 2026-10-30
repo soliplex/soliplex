@@ -49,6 +49,13 @@ requires_posix_file_modes = pytest.mark.skipif(
     reason="needs a POSIX host: '0o600' owner-only file modes",
 )
 
+# root bypasses permission checks, so a 'chmod(0)' directory stays
+# readable.  'os.geteuid' exists only on POSIX.
+requires_non_root = pytest.mark.skipif(
+    os.name == "posix" and os.geteuid() == 0,
+    reason="needs a non-root user: root ignores mode bits",
+)
+
 # The test modules the 'requires_posix_*' markers skip whole, plus the
 # modules under test they are the only coverage for. Coverage patterns,
 # relative to the repository root (see 'tests/conftest.py').
