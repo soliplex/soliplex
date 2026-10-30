@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 from unittest import mock
 
 import pytest
@@ -11,6 +12,7 @@ import yaml
 from soliplex import authz
 from soliplex import installation
 from soliplex import models
+from soliplex import token_mint
 from soliplex.authz import schema as authz_schema
 from soliplex.cli import room_authz as cli_room_authz
 from soliplex.config import installation as config_installation
@@ -751,6 +753,7 @@ def _entry(
     """An ACL-entry kwargs dict in the shape the commands build/store."""
     return {
         "allow_deny": allow_deny,
+        "permission": permission,
         "everyone": everyone,
         "authenticated": authenticated,
         "json_path": json_path,
@@ -1524,3 +1527,237 @@ def test_from_yaml_null_without_room_id_errors(
     )
 
     assert result.exit_code == 1
+
+
+# -- check ------------------------------------------------------------------
+
+
+CHECK_SECRET = "room-authz-check-testing-secret"
+BOB_EMAIL = "bob@example.com"
+
+
+def _check_token(claims):
+    return token_mint.mint_service_token(
+        CHECK_SECRET,
+        claims,
+        expires_in=600,
+    )
+
+
+def _invoke_check(cli_runner, scratch, *rest, group_args=(), stdin=None):
+    return cli_runner.invoke(
+        cli_room_authz.app,
+        [*group_args, "check", str(scratch.path), *rest],
+        env={"SOLIPLEX_URL_SAFE_TOKEN_SECRET": CHECK_SECRET},
+        input=stdin,
+    )
+
+
+def test__check_result_as_jsonable():
+
+    found = cli_room_authz._check_result_as_jsonable(
+        "chat",
+        WRITE,
+        {"sub": "ops", "email": ALICE_EMAIL},
+        True,
+    )
+
+    assert found == {
+        "room_id": "chat",
+        "permission": "write",
+        "sub": "ops",
+        "allowed": True,
+    }
+
+
+@pytest.mark.parametrize(
+    "w_obj, exp_human",
+    [
+        (None, False),
+        ({}, False),
+        ({"verbose": False}, False),
+        ({"verbose": True}, True),
+    ],
+)
+@mock.patch("soliplex.cli.room_authz._human_dump_check_result")
+@mock.patch("soliplex.cli.room_authz._dump_check_result")
+def test__dump_check(
+    _dump_check_result,
+    _human_dump_check_result,
+    ctx,
+    w_obj,
+    exp_human,
+):
+    ctx.obj = w_obj
+    result = {"allowed": True}
+
+    cli_room_authz._dump_check(ctx, result)
+
+    if exp_human:
+        _human_dump_check_result.assert_called_once_with(result)
+        _dump_check_result.assert_not_called()
+    else:
+        _dump_check_result.assert_called_once_with(result)
+        _human_dump_check_result.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "permission, exp_allowed",
+    [
+        ("read", True),
+        ("write", False),
+        ("admin", False),
+    ],
+)
+def test_check_wo_policy(
+    scratch_installation,
+    cli_runner,
+    permission,
+    exp_allowed,
+):
+    token = _check_token({"sub": "ops", "email": ALICE_EMAIL})
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "chat",
+        "--permission",
+        permission,
+        stdin=token,
+    )
+
+    assert result.exit_code == (0 if exp_allowed else 1)
+    assert json.loads(result.stdout) == {
+        "room_id": "chat",
+        "permission": permission,
+        "sub": "ops",
+        "allowed": exp_allowed,
+    }
+
+
+@pytest.mark.parametrize(
+    "email, permission, exp_allowed",
+    [
+        (ALICE_EMAIL, "read", True),
+        (ALICE_EMAIL, "write", True),
+        (ALICE_EMAIL, "admin", False),
+        (BOB_EMAIL, "read", False),
+        (BOB_EMAIL, "write", False),
+    ],
+)
+def test_check_w_private_policy(
+    scratch_installation,
+    cli_runner,
+    email,
+    permission,
+    exp_allowed,
+):
+    _seed_policy(
+        scratch_installation,
+        "chat",
+        DENY,
+        [
+            _entry(ALLOW, permission=READ, json_path=ALICE_EMAIL_JP),
+            _entry(ALLOW, permission=WRITE, json_path=ALICE_EMAIL_JP),
+        ],
+    )
+    token = _check_token({"sub": "ops", "email": email})
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "chat",
+        "--permission",
+        permission,
+        stdin=token,
+    )
+
+    assert result.exit_code == (0 if exp_allowed else 1)
+    assert json.loads(result.stdout)["allowed"] is exp_allowed
+
+
+def test_check_w_input_file(scratch_installation, cli_runner, tmp_path):
+    input_path = tmp_path / "token"
+    input_path.write_text(
+        f"{_check_token({'sub': 'ops'})}\n",
+        encoding="utf-8",
+    )
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "chat",
+        "--permission",
+        "read",
+        "--input",
+        str(input_path),
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["allowed"] is True
+
+
+@pytest.mark.parametrize("w_allowed", [True, False])
+def test_check_verbose(scratch_installation, cli_runner, w_allowed):
+    permission = "read" if w_allowed else "write"
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "chat",
+        "--permission",
+        permission,
+        group_args=["--verbose"],
+        stdin=_check_token({"sub": "ops"}),
+    )
+
+    assert result.exit_code == (0 if w_allowed else 1)
+
+
+@mock.patch("soliplex.cli.room_authz._has_permission")
+def test_check_unconfigured_room(
+    _has_permission,
+    scratch_installation,
+    cli_runner,
+):
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "nonesuch",
+        "--permission",
+        "read",
+        stdin=_check_token({"sub": "ops"}),
+    )
+
+    assert result.exit_code == 1
+    _has_permission.assert_not_called()
+
+
+def test_check_invalid_token(scratch_installation, cli_runner):
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "chat",
+        "--permission",
+        "read",
+        stdin="not-a-token",
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+
+
+def test_check_invalid_permission(scratch_installation, cli_runner):
+
+    result = _invoke_check(
+        cli_runner,
+        scratch_installation,
+        "chat",
+        "--permission",
+        "nonesuch",
+        stdin=_check_token({"sub": "ops"}),
+    )
+
+    assert result.exit_code == 2

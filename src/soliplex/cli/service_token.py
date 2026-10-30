@@ -315,13 +315,12 @@ def _resolve_stable_secret(
         return None
 
 
-def _get_stable_secret(installation_path: pathlib.Path) -> str:
+def _get_stable_secret(the_installation) -> str:
     """Return the installation's stable service token secret
 
     Raises 'typer.Exit(1)' if the secret resolves only from its
     'random_chars' source.
     """
-    the_installation = cli_util.get_installation(installation_path)
     secret_name = authn.SERVICE_TOKEN_SECRET_NAME
     secret = _resolve_stable_secret(
         the_installation._config.secrets_map[secret_name]
@@ -382,6 +381,30 @@ def _read_token(input_path: pathlib.Path) -> str:
     return text.strip()
 
 
+def load_token_claims(
+    the_installation,
+    input_path: pathlib.Path,
+) -> token_mint.ServiceTokenClaims:
+    """Return the claims of the service token read from 'input_path'
+
+    Reads the token from stdin if 'input_path' is '-'.
+
+    Raises 'typer.Exit(1)' if the installation's secret resolves only from
+    its 'random_chars' source, or if the token is not valid.
+    """
+    secret = _get_stable_secret(the_installation)
+    token = _read_token(input_path)
+
+    claims, reason = token_mint.load_service_token(secret, token)
+
+    if claims is None:
+        the_console.rule("Invalid service token")
+        the_console.print(reason)
+        raise typer.Exit(1)
+
+    return claims
+
+
 def _format_claims(
     claims: token_mint.ServiceTokenClaims,
     output: pathlib.Path,
@@ -437,7 +460,7 @@ def mint_service_token(
                 f"Dropped from {claims_input}: {', '.join(dropped)}"
             )
 
-    secret = _get_stable_secret(installation_path)
+    secret = _get_stable_secret(cli_util.get_installation(installation_path))
 
     try:
         token = token_mint.mint_service_token(
@@ -468,15 +491,8 @@ def validate_service_token(
     quiet: quiet_type = False,
 ):
     """Validate a service token, and write its claims to a file or stdout"""
-    secret = _get_stable_secret(installation_path)
-    token = _read_token(input_path)
-
-    claims, reason = token_mint.load_service_token(secret, token)
-
-    if claims is None:
-        the_console.rule("Invalid service token")
-        the_console.print(reason)
-        raise typer.Exit(1)
+    the_installation = cli_util.get_installation(installation_path)
+    claims = load_token_claims(the_installation, input_path)
 
     _emit(output, _format_claims(claims, output), force=force)
 

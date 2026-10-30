@@ -2241,12 +2241,13 @@ and **an empty policy row**:
   making the room effectively **private**. Write and admin access are
   denied unless an entry scoped to them grants it.
 
-The eight commands below create, inspect, edit, and populate these
-rows.
+The nine commands below create, inspect, edit, and populate these
+rows, and check a user's access against them.
 
 ### Shared Conventions
 
-All eight commands share the following:
+All nine commands share the following (except where
+[`check`](#room-authz-check) notes otherwise):
 
 - Positional argument `INSTALLATION_CONFIG_PATH` — as documented in the
   [`admin-users`](#admin-users) section. If omitted, falls back to
@@ -2375,6 +2376,88 @@ the YAML — without `--allow-stale` this would exit with status `1`:
 ```bash
 soliplex-cli room-authz show --allow-stale \
   example/installation.yaml old-room-id
+```
+
+### `room-authz check`
+
+Check whether the user identified by a
+[service token](#service-token) has a permission on a room, as the
+room's policy decides it. Nothing in the authorization database is
+changed.
+
+```bash
+soliplex-cli room-authz check [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
+```
+
+#### Options
+
+- `--permission PERMISSION` — required. The permission to check: one
+  of `read`, `write`, or `admin`.
+- `-i PATH` / `--input PATH` — file from which the token is read. If
+  omitted, or `-`, the token is read from stdin. Leading and trailing
+  whitespace is ignored.
+
+#### Output
+
+Instead of the room's policy, the command prints the outcome of the
+check as a single JSON object on stdout:
+
+```json
+{"room_id": "chat", "permission": "write", "sub": "ops", "allowed": false}
+```
+
+With the group-level `--verbose` flag, it prints a human-focused summary
+instead, e.g.:
+
+```text
+─── Denied: WRITE on chat ───
+Subject: ops
+```
+
+#### Behavior Notes
+
+- **The token is validated first,** as by
+  [`service-token validate`](#service-token-validate): the command
+  exits with status `1`, printing the reason on stderr and nothing on
+  stdout, if the token's signature does not verify, it holds no `exp`,
+  or it has expired, or if `URL_SAFE_TOKEN_SECRET` resolves only from a
+  `random_chars` source.
+- **The check is the room policy's alone.** It answers as the server's
+  room-access checks do (see [the model](#the-model-in-one-paragraph)),
+  without regard to whether the user is an
+  [admin user](#admin-users): some server operations (e.g., file
+  uploads) also allow admin users write access to every room.
+- **The check is not audited.** Unlike the server's checks at the point
+  of a gated operation, it emits no room-access audit record.
+
+#### Exit Status
+
+- `0` — the room's policy allows the permission.
+- `1` — the room's policy denies the permission, the token is not
+  valid, `URL_SAFE_TOKEN_SECRET` resolves only from a `random_chars`
+  source, `ROOM_ID` doesn't match a configured room, or the RAM-DB
+  guard fires.
+- `2` — a usage error, e.g. `--permission` is missing or not one of
+  `read`, `write`, or `admin`, or the input file does not exist.
+
+#### Examples
+
+Check that a token kept in a file grants write access to the `chat`
+room:
+
+```bash
+soliplex-cli room-authz check example/installation.yaml chat \
+  --permission write --input ~/.config/soliplex/ops.token
+```
+
+Gate a script on read access, using a freshly-minted token:
+
+```bash
+soliplex-cli service-token mint example/installation.yaml \
+  --claims '{"email": "alice@example.com"}' --expires-in 5m --quiet |
+  soliplex-cli room-authz check example/installation.yaml chat \
+    --permission read > /dev/null &&
+  echo "alice may read chat"
 ```
 
 ### `room-authz as-yaml`

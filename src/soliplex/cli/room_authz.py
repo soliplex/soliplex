@@ -12,6 +12,7 @@ import yaml
 from soliplex import authz
 from soliplex import models
 from soliplex.cli import cli_util
+from soliplex.cli import service_token
 from soliplex.cli import types
 from soliplex.config import rooms as config_rooms
 
@@ -231,6 +232,52 @@ def _effective_room_id(room_id, model) -> str | None:
     return None
 
 
+def _check_result_as_jsonable(room_id, permission, claims, allowed) -> dict:
+    """Render the outcome of 'room-authz check' as a jsonable dict."""
+    return {
+        "room_id": room_id,
+        "permission": permission.value,
+        "sub": claims.get("sub"),
+        "allowed": allowed,
+    }
+
+
+def _human_dump_check_result(result):  # pragma NO COVER UI ONLY
+    verdict = "Allowed" if result["allowed"] else "Denied"
+    the_console.rule(
+        f"{verdict}: {result['permission'].upper()} on {result['room_id']}"
+    )
+    the_console.print(f"Subject: {result['sub']}")
+
+
+def _dump_check_result(result):  # pragma NO COVER UI ONLY
+    print(json.dumps(result))
+
+
+def _dump_check(ctx, result):
+    if ctx.obj and ctx.obj.get("verbose"):
+        _human_dump_check_result(result)
+    else:
+        _dump_check_result(result)
+
+
+async def _has_permission(
+    the_installation,
+    command,
+    room_id,
+    claims,
+    permission,
+):
+    async with cli_util._room_authz_policy(
+        the_installation, command
+    ) as policy:
+        return await policy.has_room_permission(
+            room_id,
+            claims,
+            permission=permission,
+        )
+
+
 async def _get_policy(the_installation, command, room_id):
     async with cli_util._room_authz_policy(
         the_installation, command
@@ -312,6 +359,41 @@ def show_room_authz(
         )
     )
     _dump(ctx, room_id, policy)
+
+
+@app.command("check")
+def check_room_permission(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+    room_id: str,
+    permission: authz.Permission = PermissionOption,
+    input_path: service_token.input_type = str(service_token.STDIN_INPUT),
+):
+    """Check whether a service token's user has a permission on a room.
+
+    Exits 0 if the room's policy allows the permission, else 1.
+    """
+    the_installation = cli_util.get_installation(installation_path)
+    _check_room_id(the_installation, room_id)
+
+    claims = service_token.load_token_claims(the_installation, input_path)
+
+    allowed = asyncio.run(
+        _has_permission(
+            the_installation,
+            "room-authz check",
+            room_id,
+            claims,
+            permission,
+        )
+    )
+    _dump_check(
+        ctx,
+        _check_result_as_jsonable(room_id, permission, claims, allowed),
+    )
+
+    if not allowed:
+        raise typer.Exit(1)
 
 
 @app.command("as-yaml")

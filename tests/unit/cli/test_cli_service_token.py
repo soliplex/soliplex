@@ -11,6 +11,7 @@ from rich import console
 
 from soliplex import loggers
 from soliplex import token_mint
+from soliplex.cli import cli_util
 from soliplex.cli import main as cli_main
 from soliplex.cli import service_token as cli_service_token
 from soliplex.config import secrets as config_secrets
@@ -244,8 +245,9 @@ def test__resolve_stable_secret(monkeypatch, kinds, w_env_var, expected):
 
 def test__get_stable_secret(scratch_installation, monkeypatch):
     monkeypatch.setenv("SOLIPLEX_URL_SAFE_TOKEN_SECRET", SECRET)
+    the_installation = cli_util.get_installation(scratch_installation.path)
 
-    found = cli_service_token._get_stable_secret(scratch_installation.path)
+    found = cli_service_token._get_stable_secret(the_installation)
 
     assert found == SECRET
 
@@ -258,9 +260,52 @@ def test__get_stable_secret_wo_stable_secret(
     # Keep a developer's '.env' in the cwd from supplying the secret.
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("SOLIPLEX_URL_SAFE_TOKEN_SECRET", raising=False)
+    the_installation = cli_util.get_installation(scratch_installation.path)
 
     with pytest.raises(typer.Exit) as exc_info:
-        cli_service_token._get_stable_secret(scratch_installation.path)
+        cli_service_token._get_stable_secret(the_installation)
+
+    assert exc_info.value.exit_code == 1
+
+
+# -- load_token_claims ------------------------------------------------------
+
+
+@pytest.mark.parametrize("line_end", ["", "\n"])
+@mock.patch("time.time", return_value=NOW)
+def test_load_token_claims(
+    time_time,
+    scratch_installation,
+    monkeypatch,
+    tmp_path,
+    line_end,
+):
+    monkeypatch.setenv("SOLIPLEX_URL_SAFE_TOKEN_SECRET", SECRET)
+    the_installation = cli_util.get_installation(scratch_installation.path)
+    token = token_mint.mint_service_token(
+        SECRET, {"sub": "ops"}, expires_in=600
+    )
+    input_path = tmp_path / "token"
+    input_path.write_text(f"{token}{line_end}", encoding="utf-8")
+
+    found = cli_service_token.load_token_claims(the_installation, input_path)
+
+    assert found == {"sub": "ops", "iat": NOW, "exp": NOW + 600}
+
+
+def test_load_token_claims_invalid(
+    scratch_installation,
+    monkeypatch,
+    tmp_path,
+    recording_console,
+):
+    monkeypatch.setenv("SOLIPLEX_URL_SAFE_TOKEN_SECRET", SECRET)
+    the_installation = cli_util.get_installation(scratch_installation.path)
+    input_path = tmp_path / "token"
+    input_path.write_text(f"{TOKEN}\n", encoding="utf-8")
+
+    with pytest.raises(typer.Exit) as exc_info:
+        cli_service_token.load_token_claims(the_installation, input_path)
 
     assert exc_info.value.exit_code == 1
 
