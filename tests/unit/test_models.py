@@ -1642,3 +1642,31 @@ def test_installationinfo_from_config_w_features_and_profiles(
     assert info_model.sse_delivery_profiles == (
         models.SSE_DeliveryProfiles.from_config(profiles_config)
     )
+
+
+@pytest.mark.parametrize(
+    "request_class",
+    [models.AGUI_NewLabelRequest, models.AGUI_UpdateLabelRequest],
+)
+def test_label_requests_normalize_name_and_color(request_class):
+    found = request_class(name="  Urgent ", color="#ABCDEF")
+
+    assert found.name == "Urgent"
+    assert found.color == "#abcdef"
+
+
+@pytest.mark.parametrize(
+    "request_class",
+    [models.AGUI_NewLabelRequest, models.AGUI_UpdateLabelRequest],
+)
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"name": "   "},
+        {"name": "Urgent", "color": "#abc"},
+        {"name": "Urgent", "color": "abcdef"},
+    ],
+)
+def test_label_requests_reject_bad_values(request_class, kwargs):
+    with pytest.raises(pydantic.ValidationError):
+        request_class(**kwargs)

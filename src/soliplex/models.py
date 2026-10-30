@@ -936,6 +936,72 @@ class AGUI_NewThreadRequest(pydantic.BaseModel):
     metadata: AGUI_ThreadMetadata = KW_ONLY_NONE
 
 
+# A '#RRGGBB' color, accepted in either case and stored lowercased.
+HEX_COLOR_PATTERN = r"^#[0-9a-fA-F]{6}$"
+
+LabelColor = typing.Annotated[
+    str,
+    pydantic.StringConstraints(to_lower=True, pattern=HEX_COLOR_PATTERN),
+]
+
+LabelName = typing.Annotated[
+    str,
+    pydantic.StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=64,
+    ),
+]
+
+MAX_THREAD_LABELS = 32
+
+
+class AGUI_Label(pydantic.BaseModel):
+    """A category which may be attached to threads.
+
+    'usage_count' is present only for administrators.
+    """
+
+    id: int = KW_ONLY
+    name: str = KW_ONLY
+    color: str = KW_ONLY
+    usage_count: int | None = KW_ONLY_NONE
+
+    @classmethod
+    def from_label(cls, a_label: agui.Label, usage_count: int = None):
+        return cls(
+            id=a_label.id_,
+            name=a_label.name,
+            color=a_label.color,
+            usage_count=usage_count,
+        )
+
+
+class AGUI_Labels(pydantic.BaseModel):
+    labels: list[AGUI_Label]
+
+
+class AGUI_NewLabelRequest(pydantic.BaseModel):
+    name: LabelName = KW_ONLY
+    color: LabelColor | None = KW_ONLY_NONE
+
+
+class AGUI_UpdateLabelRequest(pydantic.BaseModel):
+    """Fields to change on a label; omitted ones are left alone."""
+
+    name: LabelName | None = KW_ONLY_NONE
+    color: LabelColor | None = KW_ONLY_NONE
+
+
+class AGUI_SetThreadLabelsRequest(pydantic.BaseModel):
+    """The complete set of labels a thread should carry."""
+
+    label_ids: list[int] = pydantic.Field(
+        kw_only=True,
+        max_length=MAX_THREAD_LABELS,
+    )
+
+
 class AGUI_Thread(pydantic.BaseModel):
     room_id: str = KW_ONLY
     thread_id: pydantic.UUID4 = KW_ONLY
@@ -953,6 +1019,11 @@ class AGUI_Thread(pydantic.BaseModel):
     # birth); lets clients mark threads with unseen activity.
     last_activity: pydantic.AwareDatetime | None = KW_ONLY_NONE
 
+    labels: list[AGUI_Label] = pydantic.Field(
+        kw_only=True,
+        default_factory=list,
+    )
+
     @classmethod
     def from_thread(
         cls,
@@ -960,6 +1031,7 @@ class AGUI_Thread(pydantic.BaseModel):
         a_thread_meta: AGUI_ThreadMetadata,
         a_thread_runs: AGUI_Runs = None,
         a_thread_last_activity: datetime.datetime | None = None,
+        a_thread_labels: list[agui.Label] = None,
     ):
         return cls(
             room_id=a_thread.room_id,
@@ -968,6 +1040,10 @@ class AGUI_Thread(pydantic.BaseModel):
             metadata=a_thread_meta,
             runs=a_thread_runs,
             last_activity=a_thread_last_activity,
+            labels=[
+                AGUI_Label.from_label(a_label)
+                for a_label in a_thread_labels or ()
+            ],
         )
 
 

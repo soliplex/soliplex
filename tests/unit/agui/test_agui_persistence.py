@@ -12,6 +12,7 @@ from soliplex import agui
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.agui import sse_delivery as agui_sse_delivery
+from soliplex.agui import util as agui_util
 from soliplex.config import installation as config_installation
 from tests.unit.agui import agui_constants
 
@@ -1747,6 +1748,42 @@ async def _page(ts, *, room_ids=(ROOM_ID,), limit=50, after=None):
     ], position
 
 
+async def _named_thread(ts, *, room_id, name, user_name=USER_NAME):
+    """Create a thread carrying 'name' as its metadata name."""
+    thread = await ts.new_thread(
+        user_name=user_name,
+        email=EMAIL,
+        room_id=room_id,
+        thread_metadata={"name": name},
+    )
+    return await thread.awaitable_attrs.thread_id
+
+
+async def _page_names(
+    ts,
+    *,
+    room_ids,
+    limit=50,
+    after=None,
+    label_ids=None,
+    name_query=None,
+):
+    """Return (room_id, name) pairs for one page, and the next position."""
+    rows, position = await ts.list_user_threads_page(
+        user_name=USER_NAME,
+        room_ids=room_ids,
+        limit=limit,
+        after=after,
+        label_ids=label_ids,
+        name_query=name_query,
+    )
+    pairs = []
+    for a_thread, _last_activity in rows:
+        meta = await a_thread.awaitable_attrs.thread_metadata
+        pairs.append((a_thread.room_id, None if meta is None else meta.name))
+    return pairs, position
+
+
 @pytest.mark.asyncio
 async def test_list_user_threads_page_no_rooms_short_circuits(
     the_async_session,
@@ -1899,3 +1936,710 @@ async def test_list_user_threads_page_scopes_to_the_user(
     found, _ = await _page(ts)
 
     assert [thread_id for thread_id, _ in found] == [mine]
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("plain", "plain"),
+        ("100%", "100\\%"),
+        ("a_b", "a\\_b"),
+        ("back\\slash", "back\\\\slash"),
+        ("%_\\", "\\%\\_\\\\"),
+    ],
+    ids=["plain", "percent", "underscore", "backslash", "all_three"],
+)
+def test__like_escape(raw, expected):
+    assert agui_persistence._like_escape(raw) == expected
+
+
+def test__name_key_folds_case():
+    assert agui_persistence._name_key("Urgent") == "urgent"
+
+
+async def _label_id(ts, name, color=None):
+    """Create a label and return its ID.
+
+    The ID rather than the instance: a commit expires the instance, and
+    reading an expired attribute outside the session's greenlet raises
+    'MissingGreenlet' rather than quietly reloading.
+    """
+    label = await ts.create_label(name=name, color=color)
+    return label.id_
+
+
+async def _label_rows(ts):
+    """Return (id, name, name_key, color) for the catalogue, in order."""
+    return [
+        (label.id_, label.name, label.name_key, label.color)
+        for label in await ts.list_labels()
+    ]
+
+
+async def _labelled(ts, *, room_id, name, label_ids):
+    """Create a named thread carrying 'label_ids'."""
+    thread_id = await _named_thread(ts, room_id=room_id, name=name)
+    await ts.set_thread_labels(
+        user_name=USER_NAME,
+        room_id=room_id,
+        thread_id=thread_id,
+        label_ids=label_ids,
+    )
+    return thread_id
+
+
+@pytest.mark.asyncio
+async def test_create_label_folds_its_name_and_defaults_its_color(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        label_id = await _label_id(ts, "Urgent")
+
+    # Stored rather than left null: every client paints from this column,
+    # and a null would have each of them invent its own fallback.
+    assert await _label_rows(ts) == [
+        (label_id, "Urgent", "urgent", agui_util.DEFAULT_LABEL_COLOR)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_label_keeps_an_explicit_color(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        label_id = await _label_id(ts, "Urgent", color="#ABCDEF")
+
+    assert await _label_rows(ts) == [(label_id, "Urgent", "urgent", "#ABCDEF")]
+
+
+@pytest.mark.asyncio
+async def test_create_label_rejects_a_name_taken_in_another_case(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _label_id(ts, "Urgent")
+
+    # The unique constraint is the only check, so a concurrent create of
+    # the same name is refused the same way.
+    with pytest.raises(agui.DuplicateLabel):
+        await ts.create_label(name="URGENT")
+
+
+@pytest.mark.asyncio
+async def test_list_labels_orders_by_folded_name(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        for name in ("zebra", "Alpha", "mango"):
+            await _label_id(ts, name)
+
+    labels = await ts.list_labels()
+
+    assert [label.name for label in labels] == ["Alpha", "mango", "zebra"]
+
+
+@pytest.mark.asyncio
+async def test_update_label_renames_and_recolors(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        label_id = await _label_id(ts, "Urgent")
+
+    async with unit_of_work():
+        await ts.update_label(
+            label_id=label_id,
+            name="Blocked",
+            color="#ABCDEF",
+        )
+
+    assert await _label_rows(ts) == [
+        (label_id, "Blocked", "blocked", "#ABCDEF")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_label_leaves_omitted_fields_alone(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        label_id = await _label_id(ts, "Urgent", color="#ABCDEF")
+
+    async with unit_of_work():
+        await ts.update_label(label_id=label_id, name="Blocked")
+
+    # Recoloring and renaming are independent: renaming must not reset
+    # the swatch an administrator chose.
+    assert await _label_rows(ts) == [
+        (label_id, "Blocked", "blocked", "#ABCDEF")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_label_recolors_without_renaming(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        label_id = await _label_id(ts, "Urgent")
+
+    async with unit_of_work():
+        await ts.update_label(label_id=label_id, color="#ABCDEF")
+
+    # The colour picker in the management tab sends no name, so this is
+    # the ordinary edit -- not an edge case.
+    assert await _label_rows(ts) == [(label_id, "Urgent", "urgent", "#ABCDEF")]
+
+
+@pytest.mark.asyncio
+async def test_update_label_lets_a_label_keep_its_own_name(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        label_id = await _label_id(ts, "Urgent", color="#ABCDEF")
+
+    async with unit_of_work():
+        # Recasing a label must not collide with itself.
+        await ts.update_label(label_id=label_id, name="URGENT")
+
+    assert await _label_rows(ts) == [(label_id, "URGENT", "urgent", "#ABCDEF")]
+
+
+@pytest.mark.asyncio
+async def test_update_label_rejects_another_labels_name(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        first = await _label_id(ts, "Urgent")
+        await _label_id(ts, "Blocked")
+
+    with pytest.raises(agui.DuplicateLabel):
+        await ts.update_label(label_id=first, name="blocked")
+
+
+@pytest.mark.asyncio
+async def test_update_label_rejects_an_unknown_label(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    with pytest.raises(agui.UnknownLabel):
+        await ts.update_label(label_id=404, name="Urgent")
+
+
+@pytest.mark.asyncio
+async def test_delete_label_rejects_an_unknown_label(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    with pytest.raises(agui.UnknownLabel):
+        await ts.delete_label(label_id=404)
+
+
+@pytest.mark.asyncio
+async def test_delete_label_leaves_its_threads_standing(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        label_id = await _label_id(ts, "Urgent")
+        await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="kept",
+            label_ids=[label_id],
+        )
+
+    async with unit_of_work():
+        await ts.delete_label(label_id=label_id)
+
+    pairs, position = await _page_names(ts, room_ids=[ROOM_ID])
+
+    assert [name for _, name in pairs] == ["kept"]
+    assert position is None
+    assert await ts.list_labels() == []
+
+
+@pytest.mark.asyncio
+async def test_set_thread_labels_replaces_the_whole_set(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        blocked = await _label_id(ts, "Blocked")
+        thread_id = await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="thread",
+            label_ids=[urgent],
+        )
+
+    async with unit_of_work():
+        await ts.set_thread_labels(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            label_ids=[blocked],
+        )
+
+    found = await ts.get_threads_labels(thread_ids=[thread_id])
+
+    assert [label.name for label in found[thread_id]] == ["Blocked"]
+
+
+@pytest.mark.asyncio
+async def test_set_thread_labels_clears_with_an_empty_list(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        thread_id = await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="thread",
+            label_ids=[urgent],
+        )
+
+    async with unit_of_work():
+        await ts.set_thread_labels(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            label_ids=[],
+        )
+
+    assert await ts.get_threads_labels(thread_ids=[thread_id]) == {}
+
+
+@pytest.mark.asyncio
+async def test_set_thread_labels_tolerates_a_repeated_id(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        thread_id = await _named_thread(ts, room_id=ROOM_ID, name="thread")
+
+    async with unit_of_work():
+        # The association's composite key would reject the second copy;
+        # de-duplicating first turns a 500 into a no-op.
+        await ts.set_thread_labels(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            label_ids=[urgent, urgent],
+        )
+
+    found = await ts.get_threads_labels(thread_ids=[thread_id])
+
+    assert [label.name for label in found[thread_id]] == ["Urgent"]
+
+
+@pytest.mark.asyncio
+async def test_set_thread_labels_rejects_an_unknown_label(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        thread_id = await _named_thread(ts, room_id=ROOM_ID, name="thread")
+
+    # Assignment only ever selects from the catalogue -- it never coins
+    # a label, whoever is asking.
+    with pytest.raises(agui.UnknownLabel):
+        await ts.set_thread_labels(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            label_ids=[404],
+        )
+
+
+@pytest.mark.asyncio
+async def test_set_thread_labels_refuses_another_users_thread(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        thread = await ts.new_thread(
+            user_name=OTHER_USER_NAME,
+            email=OTHER_EMAIL,
+            room_id=ROOM_ID,
+            thread_metadata={"name": "theirs"},
+        )
+        thread_id = await thread.awaitable_attrs.thread_id
+
+    with pytest.raises(agui.UnknownThread):
+        await ts.set_thread_labels(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            label_ids=[urgent],
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_threads_labels_batches_and_omits_the_unlabelled(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        blocked = await _label_id(ts, "Blocked")
+        first = await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="first",
+            label_ids=[urgent, blocked],
+        )
+        second = await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="second",
+            label_ids=[urgent],
+        )
+        bare = await _named_thread(ts, room_id=ROOM_ID, name="bare")
+
+    found = await ts.get_threads_labels(
+        thread_ids=[first, second, bare],
+    )
+
+    assert [label.name for label in found[first]] == ["Blocked", "Urgent"]
+    assert [label.name for label in found[second]] == ["Urgent"]
+    assert bare not in found
+
+
+@pytest.mark.asyncio
+async def test_get_threads_labels_short_circuits_on_no_threads(
+    the_async_session,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    assert await ts.get_threads_labels(thread_ids=[]) == {}
+
+
+@pytest.mark.asyncio
+async def test_get_label_usage_counts_spans_every_user(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        unused = await _label_id(ts, "Unused")
+        await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="mine",
+            label_ids=[urgent],
+        )
+        theirs = await ts.new_thread(
+            user_name=OTHER_USER_NAME,
+            email=OTHER_EMAIL,
+            room_id=ROOM_ID,
+            thread_metadata={"name": "theirs"},
+        )
+        await ts.set_thread_labels(
+            user_name=OTHER_USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=await theirs.awaitable_attrs.thread_id,
+            label_ids=[urgent],
+        )
+
+    counts = await ts.get_label_usage_counts()
+
+    # Global, not per-caller -- which is exactly why the view only hands
+    # these to an administrator.
+    assert counts[urgent] == 2
+    # A label nothing carries is omitted rather than reported as zero.
+    assert unused not in counts
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_filters_by_any_label(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        blocked = await _label_id(ts, "Blocked")
+        await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="both",
+            label_ids=[urgent, blocked],
+        )
+        await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="urgent-only",
+            label_ids=[urgent],
+        )
+        await _named_thread(ts, room_id=ROOM_ID, name="unlabelled")
+
+    pairs, position = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        label_ids=[urgent, blocked],
+    )
+
+    # "Any of", and each thread appears once however many of the
+    # requested labels it carries -- the semi-join multiplies nothing.
+    assert sorted(name for _, name in pairs) == ["both", "urgent-only"]
+    assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_pages_correctly_when_filtered(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        blocked = await _label_id(ts, "Blocked")
+        for index in range(4):
+            await _labelled(
+                ts,
+                room_id=ROOM_ID,
+                name=f"thread-{index}",
+                label_ids=[urgent, blocked],
+            )
+
+    seen = []
+    position = None
+    for _ in range(2):
+        pairs, position = await _page_names(
+            ts,
+            room_ids=[ROOM_ID],
+            limit=2,
+            after=position,
+            label_ids=[urgent, blocked],
+        )
+        seen.extend(name for _, name in pairs)
+
+    # Had the filter been a join rather than a semi-join, each thread
+    # would occupy two rows and this would skip half the results.
+    assert sorted(seen) == ["thread-0", "thread-1", "thread-2", "thread-3"]
+    assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_treats_no_labels_as_unfiltered(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="unlabelled")
+
+    pairs, position = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        label_ids=[],
+    )
+
+    # An empty selection means "no filter chosen", not "match nothing":
+    # a client clearing its last chip must not empty the list.
+    assert [name for _, name in pairs] == ["unlabelled"]
+    assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_filters_by_name(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="Osprey Pilot Manual")
+        await _named_thread(ts, room_id=ROOM_ID, name="Chinook Manual")
+        await _named_thread(ts, room_id=ROOM_ID, name="Unrelated")
+
+    pairs, position = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        name_query="manual",
+    )
+
+    # Case-insensitive substring.
+    assert sorted(name for _, name in pairs) == [
+        "Chinook Manual",
+        "Osprey Pilot Manual",
+    ]
+    assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_filters_by_non_ascii_name(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="Ärger im Büro")
+        await _named_thread(ts, room_id=ROOM_ID, name="Arger")
+
+    # SQLite's own 'lower()' leaves 'Ä' alone.
+    pairs, position = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        name_query="ärger",
+    )
+
+    assert [name for _, name in pairs] == ["Ärger im Büro"]
+    assert position is None
+
+
+@pytest.mark.parametrize("value, expected", [(None, None), ("ÄB", "äb")])
+def test__sqlite_lower(value, expected):
+    assert agui_persistence._sqlite_lower(value) == expected
+
+
+@pytest.mark.asyncio
+async def test__name_fold_uses_sql_lower_off_sqlite():
+    connection = mock.Mock()
+    connection.dialect.name = "postgresql"
+    session = mock.Mock()
+    session.connection = mock.AsyncMock(return_value=connection)
+
+    fold = await agui_persistence._name_fold(session)
+
+    assert str(fold("x").compile()).startswith("lower(")
+    connection.get_raw_connection.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_escapes_name_wildcards(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="100% coverage")
+        await _named_thread(ts, room_id=ROOM_ID, name="something else")
+
+    pairs, position = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        name_query="100%",
+    )
+
+    # Unescaped, the '%' would match every thread in the room.
+    assert [name for _, name in pairs] == ["100% coverage"]
+    assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_name_filter_drops_unnamed_threads(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="named")
+        await ts.new_thread(
+            user_name=USER_NAME,
+            email=EMAIL,
+            room_id=ROOM_ID,
+        )
+
+    pairs, position = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        name_query="named",
+    )
+
+    # A thread with no metadata row cannot match a name search -- but it
+    # still appears in the unfiltered listing, which is why the filter is
+    # a correlated EXISTS rather than a join on the metadata row.
+    assert [name for _, name in pairs] == ["named"]
+    assert position is None
+
+    unfiltered, _ = await _page_names(ts, room_ids=[ROOM_ID])
+
+    assert len(unfiltered) == 2
+    assert None in [name for _, name in unfiltered]
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_combines_both_filters(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="Osprey Manual",
+            label_ids=[urgent],
+        )
+        await _named_thread(ts, room_id=ROOM_ID, name="Chinook Manual")
+        await _labelled(
+            ts,
+            room_id=ROOM_ID,
+            name="Unrelated",
+            label_ids=[urgent],
+        )
+
+    pairs, position = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        label_ids=[urgent],
+        name_query="manual",
+    )
+
+    # AND across the two axes: the label chip narrows the text search
+    # rather than widening it.
+    assert [name for _, name in pairs] == ["Osprey Manual"]
+    assert position is None
