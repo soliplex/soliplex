@@ -1321,7 +1321,7 @@ def _change_sub(workdir, outside, w_change):
         pytest.param("unreadable", marks=_platform.requires_non_root),
     ],
 )
-def test_downloadable_files_skips_dir_changed_before_entry(
+def test_downloadable_files_skips_dir_changed_before_entering(
     temp_dir,
     w_change,
 ):
@@ -1343,7 +1343,7 @@ def test_downloadable_files_skips_dir_changed_before_entry(
     assert found == ["a.txt"]
 
 
-def test_downloadable_files_refuses_dir_swapped_after_entry(temp_dir):
+def test_downloadable_files_ignores_swap_of_dir_after_entering(temp_dir):
     workdir, outside = _make_swap_tree(temp_dir)
     real_scandir = os.scandir
     scanned = []
