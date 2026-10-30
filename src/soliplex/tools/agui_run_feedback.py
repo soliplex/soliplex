@@ -518,6 +518,11 @@ def _find_feedback_by_run_id(
 
     Search state's entries using the given attribute names
     """
+    if our_state.entries is None:
+        # No 'query_recent_feedback' yet in this thread:  ask the model to
+        # call it, rather than failing on the missing entries.
+        raise UnknownFeedback(run_id)
+
     for attr in from_which_attrs:
         candidates = getattr(our_state.entries, attr)
         for candidate in candidates:
