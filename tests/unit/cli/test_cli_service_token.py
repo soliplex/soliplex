@@ -114,6 +114,91 @@ def test_parse_claims_not_an_object(value):
     assert exc_info.value.value == value
 
 
+# -- load_claims_file -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name, text",
+    [
+        ("claims.json", '{"sub": "ops", "preferred_username": "ops"}'),
+        ("claims", '{"sub": "ops", "preferred_username": "ops"}'),
+        ("claims.yaml", "sub: ops\npreferred_username: ops\n"),
+        ("claims.yml", "sub: ops\npreferred_username: ops\n"),
+        ("CLAIMS.YAML", "sub: ops\npreferred_username: ops\n"),
+    ],
+)
+def test_load_claims_file(tmp_path, name, text):
+    path = tmp_path / name
+    path.write_text(text, encoding="utf-8")
+
+    found = cli_service_token.load_claims_file(path)
+
+    assert found == {"sub": "ops", "preferred_username": "ops"}
+
+
+@pytest.mark.parametrize(
+    "name, text, file_format",
+    [
+        ("claims.json", "", "JSON"),
+        ("claims.json", "{", "JSON"),
+        ("claims.json", "sub: ops\n", "JSON"),
+        ("claims.yaml", "{", "YAML"),
+        ("claims.yaml", "sub: [ops\n", "YAML"),
+    ],
+)
+def test_load_claims_file_invalid(tmp_path, name, text, file_format):
+    path = tmp_path / name
+    path.write_text(text, encoding="utf-8")
+
+    with pytest.raises(cli_service_token.InvalidClaimsFile) as exc_info:
+        cli_service_token.load_claims_file(path)
+
+    assert exc_info.value.path == path
+    assert exc_info.value.file_format == file_format
+
+
+@pytest.mark.parametrize(
+    "name, text",
+    [
+        ("claims.json", "[]"),
+        ("claims.json", '"ops"'),
+        ("claims.json", "null"),
+        ("claims.yaml", ""),
+        ("claims.yaml", "- ops\n"),
+        ("claims.yaml", "ops\n"),
+    ],
+)
+def test_load_claims_file_not_an_object(tmp_path, name, text):
+    path = tmp_path / name
+    path.write_text(text, encoding="utf-8")
+
+    with pytest.raises(cli_service_token.ClaimsFileNotAnObject) as exc_info:
+        cli_service_token.load_claims_file(path)
+
+    assert exc_info.value.path == path
+
+
+# -- drop_reserved_claims ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "claims, expected_kept, expected_dropped",
+    [
+        ({}, {}, []),
+        ({"sub": "ops"}, {"sub": "ops"}, []),
+        ({"sub": "ops", "iat": 1}, {"sub": "ops"}, ["iat"]),
+        ({"sub": "ops", "exp": 2}, {"sub": "ops"}, ["exp"]),
+        ({"exp": 2, "sub": "ops", "iat": 1}, {"sub": "ops"}, ["iat", "exp"]),
+    ],
+)
+def test_drop_reserved_claims(claims, expected_kept, expected_dropped):
+
+    kept, dropped = cli_service_token.drop_reserved_claims(claims)
+
+    assert kept == expected_kept
+    assert dropped == expected_dropped
+
+
 # -- _resolve_stable_secret ------------------------------------------------
 
 
@@ -543,6 +628,147 @@ def test_mint_wo_stable_secret(
     assert result.stdout == ""
 
 
+# -- mint --input -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name, text",
+    [
+        ("claims.json", '{"sub": "ops", "preferred_username": "ops"}'),
+        ("claims.yaml", "sub: ops\npreferred_username: ops\n"),
+        (
+            "claims.yaml",
+            "sub: ops\npreferred_username: ops\niat: 1\nexp: 2\n",
+        ),
+    ],
+)
+@mock.patch("time.time", return_value=NOW)
+def test_mint_w_input(
+    time_time,
+    scratch_installation,
+    cli_runner,
+    tmp_path,
+    name,
+    text,
+):
+    claims_input = tmp_path / name
+    claims_input.write_text(text, encoding="utf-8")
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "--input",
+        str(claims_input),
+        "--expires-in",
+        "10m",
+    )
+
+    assert result.exit_code == 0
+    assert token_mint.load_service_token(SECRET, result.stdout.strip()) == (
+        {
+            "sub": "ops",
+            "preferred_username": "ops",
+            "iat": NOW,
+            "exp": NOW + 600,
+        },
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "text, w_quiet, expected_note",
+    [
+        ('{"sub": "ops"}', False, False),
+        ('{"sub": "ops", "exp": 2}', False, True),
+        ('{"sub": "ops", "exp": 2}', True, False),
+    ],
+)
+def test_mint_w_input_dropped_note(
+    scratch_installation,
+    cli_runner,
+    tmp_path,
+    text,
+    w_quiet,
+    expected_note,
+):
+    claims_input = tmp_path / "claims.json"
+    claims_input.write_text(text, encoding="utf-8")
+    quiet_args = ["--quiet"] if w_quiet else []
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "-i",
+        str(claims_input),
+        "--expires-in",
+        "10m",
+        *quiet_args,
+    )
+
+    assert result.exit_code == 0
+    assert ("Dropped from" in result.stderr) == expected_note
+
+
+def test_mint_w_claims_and_input(scratch_installation, cli_runner, tmp_path):
+    claims_input = tmp_path / "claims.json"
+    claims_input.write_text('{"sub": "ops"}', encoding="utf-8")
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "--claims",
+        '{"sub": "ops"}',
+        "--input",
+        str(claims_input),
+        "--expires-in",
+        "10m",
+    )
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+
+
+def test_mint_wo_claims_or_input(scratch_installation, cli_runner):
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "--expires-in",
+        "10m",
+    )
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+
+
+@pytest.mark.parametrize(
+    "name, text",
+    [
+        ("missing.json", None),
+        ("claims.json", "{"),
+        ("claims.yaml", "- ops\n"),
+    ],
+)
+def test_mint_w_bad_input(
+    scratch_installation, cli_runner, tmp_path, name, text
+):
+    claims_input = tmp_path / name
+    if text is not None:
+        claims_input.write_text(text, encoding="utf-8")
+
+    result = _invoke(
+        cli_runner,
+        scratch_installation,
+        "--input",
+        str(claims_input),
+        "--expires-in",
+        "10m",
+    )
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+
+
 # -- validate ---------------------------------------------------------------
 
 
@@ -699,6 +925,7 @@ def test_validate_w_force(scratch_installation, cli_runner, tmp_path):
             sub="ops",
         ),
     ],
+    ids=["empty", "garbage", "w_other_secret", "wo_exp"],
 )
 def test_validate_w_invalid_token(
     scratch_installation,
