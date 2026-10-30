@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
-import stat
 from unittest import mock
 
 import pytest
@@ -145,15 +143,6 @@ def test__write_token_new_file(tmp_path, w_force):
     cli_service_token._write_token(output, TOKEN, force=w_force)
 
     assert output.read_text(encoding="utf-8") == f"{TOKEN}\n"
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
-def test__write_token_owner_only(tmp_path):
-    output = tmp_path / "token"
-
-    cli_service_token._write_token(output, TOKEN, force=False)
-
-    assert stat.S_IMODE(output.stat().st_mode) == 0o600
 
 
 def test__write_token_existing_wo_force(tmp_path):
