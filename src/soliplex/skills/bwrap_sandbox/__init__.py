@@ -686,14 +686,19 @@ MAX_WALK_DEPTH = 64
 def _add_downloadable_files(
     dir_fd: int,
     relative: pathlib.PurePosixPath,
-    found: list[str],
+    found: dict[str, os.stat_result],
 ) -> None:
-    """Add the files the workdir endpoint serves beneath 'dir_fd' to 'found'.
+    """Map each file the workdir endpoint serves beneath 'dir_fd' to its
+    stat, in 'found'.
 
     Each entry's type comes from the scan of the open directory, without
     following symlinks, and each subdirectory is opened relative to it
     with 'O_NOFOLLOW': nothing is reached through a symlink, and no
     symlink's target is looked up.
+
+    Each file's stat is taken relative to 'dir_fd', without following a
+    symlink, while 'dir_fd' is open: a 'DirEntry' keeps only the
+    descriptor's number, which may name another directory once closed.
     """
     sub_dirs = []
 
@@ -703,8 +708,10 @@ def _add_downloadable_files(
                 if entry.is_dir(follow_symlinks=False):
                     sub_dirs.append(entry.name)
                 elif is_downloadable(entry):
-                    found.append((relative / entry.name).as_posix())
-            except OSError:  # no type from the scan, and none readable
+                    found[(relative / entry.name).as_posix()] = entry.stat(
+                        follow_symlinks=False
+                    )
+            except OSError:  # removed, or no type or stat readable
                 continue
 
     if len(relative.parts) >= MAX_WALK_DEPTH:
@@ -730,8 +737,9 @@ def _add_downloadable_files(
             os.close(sub_fd)
 
 
-def downloadable_files(directory: pathlib.Path) -> list[str]:
-    """Return the paths, relative to 'directory', the workdir endpoint serves.
+def downloadable_files(directory: pathlib.Path) -> dict[str, os.stat_result]:
+    """Map each path, relative to 'directory', the workdir endpoint serves
+    to its stat, in path order.
 
     Sandboxed code may change the tree while the walk runs, so the walk
     holds each directory open and works relative to it (see
@@ -747,16 +755,16 @@ def downloadable_files(directory: pathlib.Path) -> list[str]:
         # Missing (a thread's workspace does not exist until a command
         # runs) or unreadable, which sandboxed code can make it: either
         # way, nothing is served from it.
-        return []
+        return {}
 
-    found = []
+    found = {}
 
     try:
         _add_downloadable_files(root_fd, pathlib.PurePosixPath(), found)
     finally:
         os.close(root_fd)
 
-    return sorted(found)
+    return dict(sorted(found.items()))
 
 
 def _downloadable_count(directory: pathlib.Path | None) -> int:
