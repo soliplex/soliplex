@@ -188,6 +188,28 @@ def test_ask_reports_missing_result(
     assert run[-1].outcome == loggers.AUDIT_OUTCOME_ERROR
 
 
+def test_ask_passes_thread_persistence_engine_to_deps(
+    no_cli_logging,
+    cli_runner,
+    scratch_installation,
+):
+    real_drive = cli_ask.agui_persistence.drive_agui_turn
+    seen = {}
+
+    def _spy(**kwargs):
+        seen["engine"] = kwargs["engine"]
+        seen["deps"] = kwargs["run_stream_kwargs"]["deps"]
+        return real_drive(**kwargs)
+
+    with mock.patch.object(cli_ask.agui_persistence, "drive_agui_turn", _spy):
+        result = _invoke(cli_runner, scratch_installation, "faux", "hi")
+
+    assert result.exit_code == 0
+    # Tools such as 'agui_run_feedback' open sessions on this engine; left
+    # unset, they fail with "Could not locate a bind configured on mapper".
+    assert seen["deps"].thread_persistence_engine is seen["engine"]
+
+
 class Boom(RuntimeError):
     def __init__(self):
         super().__init__("stream boom")
