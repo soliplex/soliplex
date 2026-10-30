@@ -162,9 +162,12 @@ async def _run_ask(the_installation, room_id, prompt, claims) -> _AskResult:
             run_input=run_input,
         )
 
+        # Tools which open their own sessions on the thread database (e.g.
+        # 'soliplex.tools.agui_run_feedback') find it on the deps.
         deps = await the_installation.get_agent_deps_for_room(
             room_id=room_id,
             user=user,
+            thread_persistence_engine=engine,
             run_agent_input=run_input,
         )
         adapter = ai_ag_ui.AGUIAdapter(
