@@ -4,6 +4,7 @@ import datetime
 import functools
 import json
 import logging
+import os
 import pathlib
 import re
 import subprocess
@@ -181,6 +182,34 @@ def strip_default_port(url: datastructures.URL) -> datastructures.URL:
             f"{f'#{url.fragment}' if url.fragment else ''}"
         )
     return url
+
+
+def modified_at(stat_result: os.stat_result) -> datetime.datetime:
+    """Return the modification time in 'stat_result', in UTC."""
+    return datetime.datetime.fromtimestamp(
+        stat_result.st_mtime,
+        tz=datetime.UTC,
+    )
+
+
+def upload_files(directory: pathlib.Path) -> dict[str, os.stat_result]:
+    """Map each file in the uploads 'directory' to its stat.
+
+    Symlinks are followed, as the download views follow them: the
+    operator may link a shared file in.  A file which vanishes after the
+    listing sees it is left out.
+    """
+    files = {}
+
+    if directory.is_dir():
+        for file_or_sub in directory.glob("*"):
+            if file_or_sub.is_file():
+                try:
+                    files[file_or_sub.name] = file_or_sub.stat()
+                except FileNotFoundError:
+                    continue
+
+    return files
 
 
 @contextlib.contextmanager

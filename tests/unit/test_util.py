@@ -1,5 +1,7 @@
 import contextlib
 import datetime
+import os
+import pathlib
 from unittest import mock
 
 import logfire
@@ -385,6 +387,62 @@ def test_strip_default_port(start_url, expected):
     found = util.strip_default_port(datastructures.URL(start_url))
 
     assert found == expected
+
+
+UPLOAD_TIMES = {"a.txt": 1_761_725_730, "bb.txt": 1_761_725_790}
+
+
+def test_modified_at_is_utc(temp_dir):
+    path = temp_dir / "a.txt"
+    path.write_text("a")
+    os.utime(path, (1_761_725_730, 1_761_725_730))
+
+    found = util.modified_at(path.stat())
+
+    assert found.isoformat() == "2025-10-29T08:15:30+00:00"
+
+
+def test_upload_files_maps_regular_files_to_stats(temp_dir):
+    (temp_dir / "subdir").mkdir()
+
+    for name, mtime in UPLOAD_TIMES.items():
+        (temp_dir / name).write_text(name)
+        os.utime(temp_dir / name, (mtime, mtime))
+
+    found = util.upload_files(temp_dir)
+
+    assert {
+        name: (stat_result.st_mtime, stat_result.st_size)
+        for name, stat_result in found.items()
+    } == {name: (mtime, len(name)) for name, mtime in UPLOAD_TIMES.items()}
+
+
+def test_upload_files_w_missing_directory(temp_dir):
+    assert util.upload_files(temp_dir / "missing") == {}
+
+
+def test_upload_files_skips_file_vanished_after_is_file(temp_dir):
+    (temp_dir / "kept.txt").write_text("kept")
+    (temp_dir / "vanishing.txt").write_text("vanishing")
+    real_is_file = pathlib.Path.is_file
+
+    def is_file_then_vanish(path):
+        found = real_is_file(path)
+
+        if path.name == "vanishing.txt":
+            path.unlink()
+
+        return found
+
+    with mock.patch.object(
+        pathlib.Path,
+        "is_file",
+        autospec=True,
+        side_effect=is_file_then_vanish,
+    ):
+        found = util.upload_files(temp_dir)
+
+    assert list(found) == ["kept.txt"]
 
 
 @pytest.fixture

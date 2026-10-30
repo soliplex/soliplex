@@ -49,6 +49,12 @@ requires_posix_file_modes = pytest.mark.skipif(
     reason="needs a POSIX host: '0o600' owner-only file modes",
 )
 
+# 'Path.symlink_to' needs a privilege, or Developer Mode, on Windows.
+requires_posix_symlinks = pytest.mark.skipif(
+    os.name != "posix",
+    reason="needs a POSIX host: symlinks",
+)
+
 # root bypasses permission checks, so a 'chmod(0)' directory stays
 # readable.  'os.geteuid' exists only on POSIX.
 requires_non_root = pytest.mark.skipif(
@@ -65,4 +71,5 @@ POSIX_ONLY_COVERAGE_OMIT = (
     "tests/unit/skills/test_bwrap_sandbox.py",
     "tests/unit/views/test_sandbox_workdirs.py",
     "tests/unit/cli/test_cli_service_token_file_modes.py",
+    "tests/unit/test_util_symlinks.py",
 )
