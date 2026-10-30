@@ -39,6 +39,12 @@ class NotADict(ValueError):
         super().__init__(f"YAML did not parse as a dict: {found}")
 
 
+class ReservedDunderRoomID(ValueError):
+    def __init__(self, room_id):
+        self.room_id = room_id
+        super().__init__(f"Reserved 'dunder' room ID: {room_id!r}")
+
+
 class RemovedUploadPathConfig(ValueError):
     def __init__(self):
         super().__init__(
