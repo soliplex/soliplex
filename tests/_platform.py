@@ -9,9 +9,10 @@ Their tests build the same preconditions the machinery does -- a
 symlink, a FIFO, a name with an embedded NUL that 'PosixPath.resolve'
 rejects -- so on a host offering none of them there is nothing left to
 assert. Rather than skip test by test, each module skips whole: mark it
-with 'requires_posix_sandbox' and name it (with the module it covers)
-in 'POSIX_ONLY_COVERAGE_OMIT', which 'tests/conftest.py' drops from the
-coverage report so the 100% gate keeps its meaning off POSIX.
+with the matching 'requires_posix_*' marker and name it (with any module
+only it covers) in 'POSIX_ONLY_COVERAGE_OMIT', which 'tests/conftest.py'
+drops from the coverage report so the 100% gate keeps its meaning off
+POSIX.
 
 This module lives in 'tests/', not 'tests/unit/', on purpose: the
 coverage targets in 'pyproject.toml' include 'tests/unit', and a

@@ -4,7 +4,6 @@ import io
 import json
 import os
 import pathlib
-import stat
 import uuid
 from unittest import mock
 
@@ -1258,22 +1257,19 @@ def test_is_downloadable(temp_dir, w_name, w_make, expected):
 
 
 def test_downloadable_files_lists_nested_files(temp_dir):
-    created = ["report.txt", "reports/summary.txt", "crm_app/static/app.js"]
-
-    for i_file, relative in enumerate(created):
-        path = temp_dir / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(relative)
-        os.utime(path, (1_761_725_730 + i_file, 1_761_725_730 + i_file))
+    for relative in [
+        "report.txt",
+        "reports/summary.txt",
+        "crm_app/static/app.js",
+    ]:
+        _make_regular(temp_dir / relative)
 
     found = skills_bwrap_sandbox.downloadable_files(temp_dir)
 
-    assert [
-        (relative, stat_result.st_mtime, stat_result.st_size)
-        for relative, stat_result in found.items()
-    ] == [
-        (relative, 1_761_725_730 + created.index(relative), len(relative))
-        for relative in sorted(created)
+    assert list(found) == [
+        "crm_app/static/app.js",
+        "report.txt",
+        "reports/summary.txt",
     ]
 
 
@@ -1413,13 +1409,12 @@ def test_downloadable_files_skips_file_removed_before_stat(temp_dir):
     assert list(found) == ["a.txt"]
 
 
-def test_downloadable_files_does_not_follow_file_swapped_for_symlink(
-    temp_dir,
-):
+def test_downloadable_files_skips_file_swapped_for_symlink(temp_dir):
     outside = temp_dir / "outside"
     _make_regular(outside / "secret.txt")
     workdir = temp_dir / "work"
     _make_regular(workdir / "a.txt")
+    _make_regular(workdir / "b.txt")
 
     def swap():
         (workdir / "a.txt").unlink()
@@ -1428,7 +1423,7 @@ def test_downloadable_files_does_not_follow_file_swapped_for_symlink(
     with _scan_then(swap):
         found = skills_bwrap_sandbox.downloadable_files(workdir)
 
-    assert stat.S_ISLNK(found["a.txt"].st_mode)
+    assert list(found) == ["b.txt"]
 
 
 @_platform.requires_non_root

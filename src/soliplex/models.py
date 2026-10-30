@@ -731,7 +731,7 @@ class RoomRAGDocuments(pydantic.BaseModel):
 class FileUpload(pydantic.BaseModel):
     filename: str
     url: pydantic.HttpUrl
-    modified_at: datetime.datetime
+    modified_at: datetime.datetime | None  # null outside years 1 to 9999
     size_bytes: int
 
 
@@ -749,7 +749,7 @@ class ThreadUploads(pydantic.BaseModel):
 class WorkdirFile(pydantic.BaseModel):
     filename: str
     url: pydantic.HttpUrl
-    modified_at: datetime.datetime
+    modified_at: datetime.datetime | None  # null outside years 1 to 9999
     size_bytes: int
 
 

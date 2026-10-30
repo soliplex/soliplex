@@ -691,14 +691,17 @@ def _add_downloadable_files(
     """Map each file the workdir endpoint serves beneath 'dir_fd' to its
     stat, in 'found'.
 
-    Each entry's type comes from the scan of the open directory, without
-    following symlinks, and each subdirectory is opened relative to it
-    with 'O_NOFOLLOW': nothing is reached through a symlink, and no
-    symlink's target is looked up.
+    Each entry is typed without following symlinks, by the scan of the
+    open directory or, where the scan gives no type, by an lstat relative
+    to 'dir_fd'; each subdirectory is opened relative to 'dir_fd' with
+    'O_NOFOLLOW': nothing is reached through a symlink, and no symlink's
+    target is looked up.
 
     Each file's stat is taken relative to 'dir_fd', without following a
     symlink, while 'dir_fd' is open: a 'DirEntry' keeps only the
     descriptor's number, which may name another directory once closed.
+    A file is kept only if that stat is of a regular file: sandboxed code
+    may have replaced it since it was typed.
     """
     sub_dirs = []
 
@@ -708,9 +711,10 @@ def _add_downloadable_files(
                 if entry.is_dir(follow_symlinks=False):
                     sub_dirs.append(entry.name)
                 elif is_downloadable(entry):
-                    found[(relative / entry.name).as_posix()] = entry.stat(
-                        follow_symlinks=False
-                    )
+                    stat_result = entry.stat(follow_symlinks=False)
+
+                    if stat.S_ISREG(stat_result.st_mode):
+                        found[(relative / entry.name).as_posix()] = stat_result
             except OSError:  # removed, or no type or stat readable
                 continue
 
@@ -738,8 +742,8 @@ def _add_downloadable_files(
 
 
 def downloadable_files(directory: pathlib.Path) -> dict[str, os.stat_result]:
-    """Map each path, relative to 'directory', the workdir endpoint serves
-    to its stat, in path order.
+    """Map each path the workdir endpoint serves, relative to 'directory',
+    to its stat, sorted by path string.
 
     Sandboxed code may change the tree while the walk runs, so the walk
     holds each directory open and works relative to it (see

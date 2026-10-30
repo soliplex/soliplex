@@ -7,6 +7,7 @@ import logging
 import os
 import pathlib
 import re
+import stat
 import subprocess
 import typing
 
@@ -184,30 +185,41 @@ def strip_default_port(url: datastructures.URL) -> datastructures.URL:
     return url
 
 
-def modified_at(stat_result: os.stat_result) -> datetime.datetime:
-    """Return the modification time in 'stat_result', in UTC."""
-    return datetime.datetime.fromtimestamp(
-        stat_result.st_mtime,
-        tz=datetime.UTC,
-    )
+UNIX_EPOCH = datetime.datetime(1970, 1, 1, tzinfo=datetime.UTC)
+
+
+def modified_at(stat_result: os.stat_result) -> datetime.datetime | None:
+    """Return the modification time in 'stat_result', in UTC.
+
+    'None' when a 'datetime' cannot hold it (outside years 1 to 9999):
+    whoever writes the file can set any time, and a filesystem may store
+    it as set.  Adding to the epoch, unlike 'fromtimestamp', fails only
+    with 'OverflowError', and the same way on every platform.
+    """
+    try:
+        return UNIX_EPOCH + datetime.timedelta(seconds=stat_result.st_mtime)
+    except OverflowError:
+        return None
 
 
 def upload_files(directory: pathlib.Path) -> dict[str, os.stat_result]:
     """Map each file in the uploads 'directory' to its stat.
 
     Symlinks are followed, as the download views follow them: the
-    operator may link a shared file in.  A file which vanishes after the
-    listing sees it is left out.
+    operator may link a shared file in.  A missing 'directory' has no
+    files.  One stat decides each entry, so an entry which is not a
+    regular file when stat'd, or cannot be stat'd, is left out.
     """
     files = {}
 
-    if directory.is_dir():
-        for file_or_sub in directory.glob("*"):
-            if file_or_sub.is_file():
-                try:
-                    files[file_or_sub.name] = file_or_sub.stat()
-                except FileNotFoundError:
-                    continue
+    for file_or_sub in directory.glob("*"):
+        try:
+            stat_result = file_or_sub.stat()
+        except OSError:  # removed, a dangling or looping link, access denied
+            continue
+
+        if stat.S_ISREG(stat_result.st_mode):
+            files[file_or_sub.name] = stat_result
 
     return files
 

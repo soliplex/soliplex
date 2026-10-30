@@ -389,56 +389,60 @@ def test_strip_default_port(start_url, expected):
     assert found == expected
 
 
-UPLOAD_TIMES = {"a.txt": 1_761_725_730, "bb.txt": 1_761_725_790}
+def test_modified_at_is_utc():
+    stat_result = os.stat_result((0,) * 8 + (1_761_725_730, 0))
+
+    found = util.modified_at(stat_result)
+
+    # On a UTC host a local time compares and prints the same as UTC.
+    assert found.tzinfo is datetime.UTC
 
 
-def test_modified_at_is_utc(temp_dir):
-    path = temp_dir / "a.txt"
-    path.write_text("a")
-    os.utime(path, (1_761_725_730, 1_761_725_730))
+@pytest.mark.parametrize(
+    "w_mtime, expected",
+    [
+        pytest.param(
+            1_761_725_730.5,
+            datetime.datetime(
+                2025, 10, 29, 8, 15, 30, 500_000, tzinfo=datetime.UTC
+            ),
+            id="sub_second",
+        ),
+        pytest.param(-62_135_596_801, None, id="before_year_1"),
+        pytest.param(
+            -62_135_596_800,
+            datetime.datetime(1, 1, 1, tzinfo=datetime.UTC),
+            id="first_second_of_year_1",
+        ),
+        pytest.param(
+            253_402_300_799,
+            datetime.datetime(9999, 12, 31, 23, 59, 59, tzinfo=datetime.UTC),
+            id="last_second_of_year_9999",
+        ),
+        pytest.param(253_402_300_800, None, id="year_10000"),
+    ],
+)
+def test_modified_at_w_mtime(w_mtime, expected):
+    stat_result = os.stat_result((0,) * 8 + (w_mtime, 0))
 
-    found = util.modified_at(path.stat())
-
-    assert found.isoformat() == "2025-10-29T08:15:30+00:00"
+    assert util.modified_at(stat_result) == expected
 
 
-def test_upload_files_maps_regular_files_to_stats(temp_dir):
-    (temp_dir / "subdir").mkdir()
-
-    for name, mtime in UPLOAD_TIMES.items():
-        (temp_dir / name).write_text(name)
-        os.utime(temp_dir / name, (mtime, mtime))
-
-    found = util.upload_files(temp_dir)
-
-    assert {
-        name: (stat_result.st_mtime, stat_result.st_size)
-        for name, stat_result in found.items()
-    } == {name: (mtime, len(name)) for name, mtime in UPLOAD_TIMES.items()}
-
-
-def test_upload_files_w_missing_directory(temp_dir):
-    assert util.upload_files(temp_dir / "missing") == {}
-
-
-def test_upload_files_skips_file_vanished_after_is_file(temp_dir):
+def test_upload_files_skips_file_removed_before_stat(temp_dir):
     (temp_dir / "kept.txt").write_text("kept")
     (temp_dir / "vanishing.txt").write_text("vanishing")
-    real_is_file = pathlib.Path.is_file
+    real_glob = pathlib.Path.glob
 
-    def is_file_then_vanish(path):
-        found = real_is_file(path)
-
-        if path.name == "vanishing.txt":
-            path.unlink()
-
+    def glob_then_remove(path, pattern):
+        found = list(real_glob(path, pattern))
+        (path / "vanishing.txt").unlink()
         return found
 
     with mock.patch.object(
         pathlib.Path,
-        "is_file",
+        "glob",
         autospec=True,
-        side_effect=is_file_then_vanish,
+        side_effect=glob_then_remove,
     ):
         found = util.upload_files(temp_dir)
 

@@ -237,6 +237,41 @@ async def test_get_workdirs_room_thread_lists_nested_files(
     ]
 
 
+@pytest.mark.anyio
+@mock.patch("soliplex.skills.bwrap_sandbox.downloadable_files")
+@mock.patch("soliplex.views.agui._check_thread_ownership")
+async def test_get_workdirs_room_thread_w_unrepresentable_time(
+    cto,
+    downloadable_files,
+    the_threads,
+    sandbox_path,
+):
+    # A file's time can be set beyond year 9999, but the filesystem under
+    # the test may not store it as set, so the stat is built by hand.
+    downloadable_files.return_value = {
+        "far.txt": os.stat_result((0,) * 8 + (253_402_300_800, 0)),
+    }
+    request = mock.create_autospec(fastapi.Request)
+    request.url_for.return_value = f"{URL_PREFIX}/file"
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.sandbox_workdirs_path = str(sandbox_path / "workdirs")
+
+    found = await workdir_views.get_workdirs_room_thread(
+        request=request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=mock.create_autospec(loggers.LogWrapper),
+    )
+
+    assert [(f_up.filename, f_up.modified_at) for f_up in found.files] == [
+        ("far.txt", None)
+    ]
+
+
 not_a_workdir_file = raises_httpexc(
     code=404,
     match=f"No workdir file: {TEST_FILENAME}",

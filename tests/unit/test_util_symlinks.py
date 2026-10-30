@@ -13,7 +13,7 @@ def test_upload_files_follows_symlinks(temp_dir):
     uploads = temp_dir / "uploads"
     uploads.mkdir()
     (uploads / "linked.dat").symlink_to(shared)
-    (uploads / "broken.dat").symlink_to(temp_dir / "missing")
+    (uploads / "loop.dat").symlink_to(uploads / "loop.dat")
 
     found = util.upload_files(uploads)
 
