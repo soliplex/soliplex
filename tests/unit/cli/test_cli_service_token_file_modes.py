@@ -10,9 +10,9 @@ pytestmark = _platform.requires_posix_file_modes
 TOKEN = "DEADBEEF"
 
 
-def test__write_token_owner_only(tmp_path):
+def test__write_output_owner_only(tmp_path):
     output = tmp_path / "token"
 
-    cli_service_token._write_token(output, TOKEN, force=False)
+    cli_service_token._write_output(output, TOKEN, force=False)
 
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
