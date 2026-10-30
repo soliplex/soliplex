@@ -1280,7 +1280,9 @@ def test_parse_last_event_id(header, expected):
     ],
 )
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
+@pytest.mark.parametrize("w_label_config", [False, True])
 @pytest.mark.parametrize("w_title_config", [False, True])
+@mock.patch("soliplex.views.agui.label.maybe_apply_labels")
 @mock.patch("soliplex.views.agui.titles.maybe_generate_title")
 @mock.patch("soliplex.agui.persistence.finish_run")
 @mock.patch("soliplex.agui.persistence.save_single_event")
@@ -1290,7 +1292,9 @@ async def test_drive_llm_stream(
     sse,
     fr,
     maybe_gen_title,
+    maybe_apply_labels,
     w_title_config,
+    w_label_config,
     w_finished_error,
     w_finish_error,
     finish_expectation,
@@ -1300,6 +1304,7 @@ async def test_drive_llm_stream(
     event_queue = asyncio.Queue()
 
     title_agent_config = mock.MagicMock() if w_title_config else None
+    label_agent_config = mock.MagicMock() if w_label_config else None
     messages = [mock.MagicMock()]
 
     finished_event = agui_core.events.RunFinishedEvent(
@@ -1334,6 +1339,7 @@ async def test_drive_llm_stream(
             run_id=TEST_RUN_ID_STR,
             title_agent_config=title_agent_config,
             messages=messages,
+            label_agent_config=label_agent_config,
         )
 
     logfire.span.assert_called_once_with(
@@ -1393,24 +1399,31 @@ async def test_drive_llm_stream(
             error_message="finish error",
         )
 
-    should_generate_title = (
-        finish_expected is None
-        and w_finished_error == "finished"
-        and w_title_config
+    finished = finish_expected is None and w_finished_error == "finished"
+    run_kwargs = dict(
+        threads_engine=sqla_engine,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        user_name=USER_NAME,
+        messages=messages,
+        event_list=expected,
     )
 
-    if should_generate_title:
+    if finished and w_title_config:
         maybe_gen_title.assert_awaited_once_with(
             title_agent_config=title_agent_config,
-            threads_engine=sqla_engine,
-            room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID_STR,
-            user_name=USER_NAME,
-            messages=messages,
-            event_list=expected,
+            **run_kwargs,
         )
     else:
         maybe_gen_title.assert_not_awaited()
+
+    if finished and w_label_config:
+        maybe_apply_labels.assert_awaited_once_with(
+            label_agent_config=label_agent_config,
+            **run_kwargs,
+        )
+    else:
+        maybe_apply_labels.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1879,6 +1892,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
 
         # asyncio.task starts 'init_agent_stream' right away.
         exp_title_config = the_installation.get_title_agent_config.return_value
+        exp_label_config = the_installation.get_label_agent_config.return_value
         ias.assert_called_once()
         ias_kwargs = ias.call_args_list[0].kwargs
         assert ias_kwargs["agui_adapter"] is exp_adapter
@@ -1889,6 +1903,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert ias_kwargs["thread_id"] == TEST_THREAD_ID_STR
         assert ias_kwargs["run_id"] == TEST_RUN_ID_STR
         assert ias_kwargs["title_agent_config"] is exp_title_config
+        assert ias_kwargs["label_agent_config"] is exp_label_config
         assert ias_kwargs["messages"] is exp_adapter.run_input.messages
         exp_room_config = the_installation.get_room_config.return_value
         assert ias_kwargs["delivery"] is (

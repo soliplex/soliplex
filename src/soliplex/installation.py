@@ -542,13 +542,27 @@ class Installation:
     ) -> config_completions.CompletionConfig:
         return self._config.completion_configs[completion_id]
 
+    def _get_optional_agent_config(
+        self,
+        agent_config_id: str | None,
+    ) -> config_agents.AgentConfig | None:
+        if agent_config_id is None:
+            return None
+        return self._config.agent_configs_map[agent_config_id]
+
     def get_title_agent_config(
         self,
     ) -> config_agents.AgentConfig | None:
-        title_agent_config_id = self._config.title_agent_config_id
-        if title_agent_config_id is None:
-            return None
-        return self._config.agent_configs_map[title_agent_config_id]
+        return self._get_optional_agent_config(
+            self._config.title_agent_config_id
+        )
+
+    def get_label_agent_config(
+        self,
+    ) -> config_agents.AgentConfig | None:
+        return self._get_optional_agent_config(
+            self._config.label_agent_config_id
+        )
 
     def get_agent_by_id(
         self,
