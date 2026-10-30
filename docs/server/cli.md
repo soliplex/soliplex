@@ -3033,10 +3033,19 @@ soliplex-cli service-token mint [OPTIONS] [INSTALLATION_CONFIG_PATH]
 
 #### Options
 
-- `--claims JSON` — required. The token's claims, as a JSON object, e.g.
+- `--claims JSON` — the token's claims, as a JSON object, e.g.
   `'{"preferred_username": "ops", "email": "ops@example.com"}'`. If the
   object has no `sub`, the token's `sub` is a random UUID. It may not
   hold `iat` or `exp`: those are set when minting.
+- `-i PATH` / `--input PATH` — file from which the token's claims are
+  read: as a YAML mapping if its extension is `.yaml` or `.yml` (in any
+  case), and otherwise as a JSON object. As with `--claims`, a missing
+  `sub` becomes a random UUID. Any `iat` or `exp` claims in the file are
+  dropped (noted on stderr unless `--quiet` is given), so the file
+  written by [`service-token validate`](#service-token-validate) can be
+  used to mint a fresh token with the same claims.
+
+  Give exactly one of `--claims` or `--input`.
 - `--expires-in DURATION` — required. The token's lifetime: an integer
   followed by one of `s`, `m`, `h`, `d`, or `w` (e.g. `15m`, `90d`).
 - `-o PATH` / `--output PATH` — file to which the token is written. If
@@ -3076,7 +3085,9 @@ any), the token's `sub`, and its expiry time (UTC).
 - `1` — `URL_SAFE_TOKEN_SECRET` resolves only from a `random_chars`
   source, the claims hold `iat` or `exp`, the lifetime is zero, or the
   output file exists and `--force` was not given.
-- `2` — a usage error: `--claims` is not a JSON object, `--expires-in`
+- `2` — a usage error: `--claims` is not a JSON object, the `--input`
+  file is missing, does not parse, or does not hold a mapping / object,
+  both or neither of `--claims` and `--input` are given, `--expires-in`
   is not a valid duration, or a required option is missing.
 
 #### Examples
@@ -3090,6 +3101,30 @@ soliplex-cli service-token mint example/installation.yaml \
   --output ~/.config/soliplex/ops.token
 curl -H "Authorization: Bearer $(cat ~/.config/soliplex/ops.token)" \
   http://localhost:8000/api/v1/rooms
+```
+
+Mint a token from claims kept in a YAML file, e.g. `ops-claims.yaml`
+holding:
+
+```yaml
+preferred_username: ops
+email: ops@example.com
+```
+
+```bash
+soliplex-cli service-token mint example/installation.yaml \
+  --input ops-claims.yaml --expires-in 90d \
+  --output ~/.config/soliplex/ops.token
+```
+
+Renew a token, keeping its claims (including its `sub`):
+
+```bash
+soliplex-cli service-token validate example/installation.yaml \
+  --input ~/.config/soliplex/ops.token --output ops-claims.yaml --quiet
+soliplex-cli service-token mint example/installation.yaml \
+  --input ops-claims.yaml --expires-in 90d --quiet \
+  --output ~/.config/soliplex/ops.token --force
 ```
 
 Mint a short-lived token at the point of use, capturing it from stdout:

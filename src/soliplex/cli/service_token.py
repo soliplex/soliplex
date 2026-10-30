@@ -81,6 +81,34 @@ class ClaimsNotAnObject(typer.BadParameter):
         super().__init__(f"expected a JSON object: {value!r}")
 
 
+class ClaimsSourceConflict(typer.BadParameter):
+    def __init__(self):
+        super().__init__(
+            "give exactly one of '--claims' or '--input'",
+            param_hint="'--claims' / '--input'",
+        )
+
+
+class InvalidClaimsFile(typer.BadParameter):
+    def __init__(self, path: pathlib.Path, file_format: str, reason: str):
+        self.path = path
+        self.file_format = file_format
+        self.reason = reason
+        super().__init__(
+            f"invalid {file_format} ({reason}): {path}",
+            param_hint="'-i' / '--input'",
+        )
+
+
+class ClaimsFileNotAnObject(typer.BadParameter):
+    def __init__(self, path: pathlib.Path):
+        self.path = path
+        super().__init__(
+            f"expected a mapping / object: {path}",
+            param_hint="'-i' / '--input'",
+        )
+
+
 def parse_duration(value: str) -> int:
     """Return the number of seconds in 'value', e.g. '15m' or '90d'
 
@@ -114,15 +142,74 @@ def parse_claims(value: str) -> dict:
     return claims
 
 
+def load_claims_file(path: pathlib.Path) -> dict:
+    """Return the claims in the file at 'path'
+
+    The file holds YAML if its extension is one of 'YAML_SUFFIXES' (in
+    any case), else JSON.
+
+    Raises:
+
+    - 'InvalidClaimsFile' if the file does not parse.
+    - 'ClaimsFileNotAnObject' if the file parses, but not as a mapping.
+    """
+    text = path.read_text(encoding="utf-8")
+
+    if path.suffix.lower() in YAML_SUFFIXES:
+        try:
+            claims = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise InvalidClaimsFile(path, "YAML", str(exc)) from None
+    else:
+        try:
+            claims = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise InvalidClaimsFile(path, "JSON", exc.msg) from None
+
+    if not isinstance(claims, dict):
+        raise ClaimsFileNotAnObject(path)
+
+    return claims
+
+
+def drop_reserved_claims(claims: dict) -> tuple[dict, list[str]]:
+    """Return 'claims' without any 'SERVICE_TOKEN_RESERVED_CLAIMS'
+
+    Returns '(kept, dropped)':  'dropped' names the reserved claims
+    which 'claims' held.
+    """
+    reserved = token_mint.SERVICE_TOKEN_RESERVED_CLAIMS
+    dropped = [claim for claim in reserved if claim in claims]
+    kept = {key: value for key, value in claims.items() if key not in reserved}
+    return kept, dropped
+
+
 claims_type = typing.Annotated[
-    dict,
+    dict | None,
     typer.Option(
         "--claims",
         parser=parse_claims,
         help=(
             "Claims for the token, as a JSON object, e.g. "
             '\'{"preferred_username": "ops"}\'.  If it has no "sub", '
-            'the token\'s "sub" is a random UUID.'
+            'the token\'s "sub" is a random UUID.  Exclusive with '
+            "'--input'."
+        ),
+    ),
+]
+
+claims_input_type = typing.Annotated[
+    pathlib.Path | None,
+    typer.Option(
+        "-i",
+        "--input",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help=(
+            "File from which the claims are read:  as YAML if its "
+            "extension is '.yaml' or '.yml', else as JSON.  Any 'iat' or "
+            "'exp' claims in it are dropped.  Exclusive with '--claims'."
         ),
     ),
 ]
@@ -331,13 +418,25 @@ def _print_summary(
 @app.command("mint")
 def mint_service_token(
     installation_path: types.installation_path_type,
-    claims: claims_type,
     expires_in: expires_in_type,
+    claims: claims_type = None,
+    claims_input: claims_input_type = None,
     output: output_type = STDOUT_OUTPUT,
     force: force_type = False,
     quiet: quiet_type = False,
 ):
     """Mint a service token, and write it to a file or to stdout"""
+    if (claims is None) == (claims_input is None):
+        raise ClaimsSourceConflict()
+
+    if claims_input is not None:
+        claims, dropped = drop_reserved_claims(load_claims_file(claims_input))
+
+        if dropped and not quiet:
+            the_console.print(
+                f"Dropped from {claims_input}: {', '.join(dropped)}"
+            )
+
     secret = _get_stable_secret(installation_path)
 
     try:
