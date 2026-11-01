@@ -126,7 +126,7 @@ def config_as_yaml(
     except config_installation.MissingEnvVars:
         pass
 
-    exported_yaml = yaml.dump(
+    exported_yaml = yaml.safe_dump(
         the_installation._config.as_yaml,
         sort_keys=False,
     )
