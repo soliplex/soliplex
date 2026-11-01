@@ -568,8 +568,8 @@ async def get_auth_system(
 
     On success, set the authn cookie (see 'authn.set_authn_cookie'), and
     redirect to the client-specified URL.  Unless the login asked for
-    'CallbackDelivery.COOKIE', pass 'token', 'refresh_token',
-    'expires_in', and (when the provider returns one) 'id_token' as
+    'CallbackDelivery.COOKIE', pass 'token', and 'refresh_token' /
+    'expires_in' / 'id_token' when the provider returns them, as
     callback parameters.  A 'CallbackDelivery.COOKIE' sign-in for which
     the authn cookie cannot be set serves an error page (HTTP 500)
     instead of such a redirect.
@@ -624,16 +624,15 @@ async def get_auth_system(
     )
 
     if delivery is CallbackDelivery.FRAGMENT:
-        callback_params = dict(
-            token=access_token,
-            refresh_token=tokendict["refresh_token"],
-            expires_in=tokendict["expires_in"],
-        )
+        callback_params = {"token": access_token}
 
-        # Absent unless the configured scope includes 'openid'.
-        id_token = tokendict.get("id_token")
-        if id_token is not None:
-            callback_params["id_token"] = id_token
+        # RFC 6749 §5.1:  'refresh_token' is optional, 'expires_in'
+        # recommended.  'id_token' is absent unless the configured scope
+        # includes 'openid'.
+        for key in ("refresh_token", "expires_in", "id_token"):
+            value = tokendict.get(key)
+            if value is not None:
+                callback_params[key] = value
 
         return_to = _with_callback_params(return_to, callback_params)
 
