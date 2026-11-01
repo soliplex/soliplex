@@ -59,6 +59,7 @@ def test_config(cli_runner, scratch_installation):
 
     assert result.exit_code == 0
     assert "# Source:" in result.stdout
+    assert "!!python" not in result.stdout
 
 
 def test_config_tolerates_unresolved_secrets_and_env(cli_runner):
