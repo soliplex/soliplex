@@ -190,7 +190,20 @@ def validate_access_token(
     if msg is not None:
         return None, msg
 
-    if payload.get("azp") not in auth_system.accepted_azp_list:
+    # RFC 9068 access tokens name their client in 'client_id';  others
+    # (e.g. Keycloak's) carry the OIDC 'azp' claim.  See #1510.
+    accepted = auth_system.accepted_client_ids
+    client_id = payload.get("client_id")
+    azp = payload.get("azp")
+
+    if client_id is not None:
+        if azp is not None and azp != client_id:
+            return None, loggers.AUTHN_JWT_BIND_CLIENT_MISMATCH
+
+        if client_id not in accepted:
+            return None, loggers.AUTHN_JWT_BIND_CLIENT_ID
+
+    elif azp not in accepted:
         return None, loggers.AUTHN_JWT_BIND_AZP
 
     for claim, expected in auth_system.required_claims.items():

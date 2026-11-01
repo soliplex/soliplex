@@ -70,6 +70,8 @@ AUTHN_JWT_PARSE_EXPIRED_SIG = "jwt-parse-exp-sig"
 AUTHN_JWT_PARSE_OTHER = "jwt-parse-other"
 
 AUTHN_JWT_BIND_AZP = "jwt-bind-azp"
+AUTHN_JWT_BIND_CLIENT_ID = "jwt-bind-client-id"
+AUTHN_JWT_BIND_CLIENT_MISMATCH = "jwt-bind-client-mismatch"
 AUTHN_JWT_BIND_CLAIM = "jwt-bind-claim"
 
 AUTHN_GET_LOGIN = "get login"
