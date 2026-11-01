@@ -81,6 +81,14 @@ default) need no extra configuration.
 
 - `scope`: string, an OAuth scope specifier.
 
+- `accepted_client_ids`: a list of client IDs whose access tokens
+  Soliplex accepts (default: `[client_id]`).  A token names its client
+  in the `client_id` claim (RFC 9068) or the `azp` claim (e.g.,
+  Keycloak's);  a token carrying both is rejected unless they agree.
+  `accepted_azp_list` is a deprecated alias:  loading it raises a
+  `DeprecationWarning`, which `soliplex-cli audit installation`
+  reports as a finding.  Configure one or the other, not both.
+
 - `cookie_claims`: a list of token claim names to copy into the authn
   cookie set at sign-in (default: `email` and `preferred_username`).
   List top-level claim names:  a listed claim is copied whole, including

@@ -5,6 +5,7 @@ import enum
 import pathlib
 import ssl
 import typing
+import warnings
 
 from . import _utils
 from . import exceptions as config_exc
@@ -25,6 +26,27 @@ _secret_whole_or_literal_field = config_interp.secret_whole_or_literal_field
 WELL_KNOWN_OPENID_CONFIGURATION = ".well-known/openid-configuration"
 
 DEFAULT_COOKIE_CLAIMS = ("email", "preferred_username")
+
+ACCEPTED_CLIENT_IDS_W_ALIAS = (
+    "Configure 'accepted_client_ids' or its alias 'accepted_azp_list', "
+    "not both"
+)
+
+
+ACCEPTED_AZP_LIST_DEPRECATION = """\
+The 'accepted_azp_list' OIDC provider setting
+(configured in {config_path})
+is deprecated, and will be removed after 'v0.94'.
+
+Use instead 'accepted_client_ids'.
+"""
+
+
+class AcceptedClientIdsOrAzpList(ValueError):
+    def __init__(self, accepted_client_ids, accepted_azp_list):
+        self.accepted_client_ids = accepted_client_ids
+        self.accepted_azp_list = accepted_azp_list
+        super().__init__(ACCEPTED_CLIENT_IDS_W_ALIAS)
 
 
 class UnlistedFrontendOriginPolicy(enum.StrEnum):
@@ -52,12 +74,17 @@ class OIDCAuthSystemConfig:
         UnlistedFrontendOriginPolicy.CONSENT_REQUIRED
     )
 
+    _accepted_client_ids: list[str] | None = None
+    # Deprecated alias for '_accepted_client_ids', spelled
+    # 'accepted_azp_list' in YAML.
     _accepted_azp_list: list[str] | None = None
 
     @property
-    def accepted_azp_list(self) -> list[str]:
-        """Accepted values for the 'azp' token claim."""
-        if self._accepted_azp_list is not None:
+    def accepted_client_ids(self) -> list[str]:
+        """Accepted values for the 'client_id' / 'azp' token claims."""
+        if self._accepted_client_ids is not None:
+            return self._accepted_client_ids
+        elif self._accepted_azp_list is not None:
             return self._accepted_azp_list
         else:
             return [self.client_id]
@@ -115,6 +142,16 @@ class OIDCAuthSystemConfig:
             # "authorize_state": main.SESSION_SECRET_KEY,
         }
 
+    def __post_init__(self):
+        if (
+            self._accepted_client_ids is not None
+            and self._accepted_azp_list is not None
+        ):
+            raise AcceptedClientIdsOrAzpList(
+                self._accepted_client_ids,
+                self._accepted_azp_list,
+            )
+
     # Set in 'from_yaml' below
     _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
@@ -149,8 +186,19 @@ class OIDCAuthSystemConfig:
                 UnlistedFrontendOriginPolicy(ufo)
             )
 
+        aci = config_dict.pop("accepted_client_ids", None)
+        if aci is not None:
+            config_dict["_accepted_client_ids"] = aci
+
         aal = config_dict.pop("accepted_azp_list", None)
         if aal is not None:
+            warnings.warn(
+                ACCEPTED_AZP_LIST_DEPRECATION.format(
+                    config_path=str(config_path),
+                ),
+                category=DeprecationWarning,
+                stacklevel=2,
+            )
             config_dict["_accepted_azp_list"] = aal
 
         iss = config_dict.pop("issuer", None)
@@ -203,6 +251,9 @@ class OIDCAuthSystemConfig:
             is not UnlistedFrontendOriginPolicy.CONSENT_REQUIRED
         ):
             result["unlisted_frontend_origin"] = self.unlisted_frontend_origin
+
+        if self._accepted_client_ids is not None:
+            result["accepted_client_ids"] = self._accepted_client_ids
 
         if self._accepted_azp_list is not None:
             result["accepted_azp_list"] = self._accepted_azp_list

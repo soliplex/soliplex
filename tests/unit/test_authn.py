@@ -316,7 +316,7 @@ def test_authenticate_w_invalid_service_token(
         (
             None,
             {
-                "accepted_azp_list": [AUTHSYSTEM_CLIENT_ID],
+                "accepted_client_ids": [AUTHSYSTEM_CLIENT_ID],
                 "required_claims": {},
             },
             None,
@@ -324,7 +324,7 @@ def test_authenticate_w_invalid_service_token(
         (
             None,
             {
-                "accepted_azp_list": [AUTHSYSTEM_CLIENT_ID],
+                "accepted_client_ids": [AUTHSYSTEM_CLIENT_ID],
                 "required_claims": {"typ": "Bearer", "foo": "QUX"},
             },
             None,
@@ -332,7 +332,7 @@ def test_authenticate_w_invalid_service_token(
         (
             jwt.InvalidIssuerError,
             {
-                "accepted_azp_list": [AUTHSYSTEM_CLIENT_ID],
+                "accepted_client_ids": [AUTHSYSTEM_CLIENT_ID],
                 "required_claims": {},
             },
             loggers.AUTHN_JWT_PARSE_INVALID_ISS,
@@ -340,7 +340,7 @@ def test_authenticate_w_invalid_service_token(
         (
             jwt.InvalidSignatureError,
             {
-                "accepted_azp_list": [AUTHSYSTEM_CLIENT_ID],
+                "accepted_client_ids": [AUTHSYSTEM_CLIENT_ID],
                 "required_claims": {},
             },
             loggers.AUTHN_JWT_PARSE_INVALID_SIG,
@@ -348,7 +348,7 @@ def test_authenticate_w_invalid_service_token(
         (
             jwt.MissingRequiredClaimError("foo"),
             {
-                "accepted_azp_list": [AUTHSYSTEM_CLIENT_ID],
+                "accepted_client_ids": [AUTHSYSTEM_CLIENT_ID],
                 "required_claims": {},
             },
             f"{loggers.AUTHN_JWT_PARSE_REQUIRED_CLAIM}:foo",
@@ -356,7 +356,7 @@ def test_authenticate_w_invalid_service_token(
         (
             jwt.ExpiredSignatureError,
             {
-                "accepted_azp_list": [AUTHSYSTEM_CLIENT_ID],
+                "accepted_client_ids": [AUTHSYSTEM_CLIENT_ID],
                 "required_claims": {},
             },
             loggers.AUTHN_JWT_PARSE_EXPIRED_SIG,
@@ -364,7 +364,7 @@ def test_authenticate_w_invalid_service_token(
         (
             jwt.InvalidTokenError,
             {
-                "accepted_azp_list": [AUTHSYSTEM_CLIENT_ID],
+                "accepted_client_ids": [AUTHSYSTEM_CLIENT_ID],
                 "required_claims": {},
             },
             loggers.AUTHN_JWT_PARSE_OTHER,
@@ -372,7 +372,7 @@ def test_authenticate_w_invalid_service_token(
         (
             None,
             {
-                "accepted_azp_list": [],
+                "accepted_client_ids": [],
                 "required_claims": {},
             },
             loggers.AUTHN_JWT_BIND_AZP,
@@ -380,7 +380,7 @@ def test_authenticate_w_invalid_service_token(
         (
             None,
             {
-                "accepted_azp_list": [AUTHSYSTEM_CLIENT_ID],
+                "accepted_client_ids": [AUTHSYSTEM_CLIENT_ID],
                 "required_claims": {"typ": "OTHER"},
             },
             f"{loggers.AUTHN_JWT_BIND_CLAIM}:typ",
@@ -388,7 +388,7 @@ def test_authenticate_w_invalid_service_token(
         (
             None,
             {
-                "accepted_azp_list": [AUTHSYSTEM_CLIENT_ID],
+                "accepted_client_ids": [AUTHSYSTEM_CLIENT_ID],
                 "required_claims": {"typ": "Bearer", "foo": "BAR"},
             },
             f"{loggers.AUTHN_JWT_BIND_CLAIM}:foo",
@@ -440,6 +440,57 @@ def test_validate_access_token(jwtd, w_jwt_err, w_as_kw, exp_msg):
             "require": ["exp", "iat", "iss", "sub"],
         },
     )
+
+
+OTHER_CLIENT_ID = "other-client"
+
+
+@pytest.mark.parametrize(
+    "w_claims, exp_msg",
+    [
+        ({}, loggers.AUTHN_JWT_BIND_AZP),
+        ({"azp": AUTHSYSTEM_CLIENT_ID}, None),
+        ({"azp": OTHER_CLIENT_ID}, loggers.AUTHN_JWT_BIND_AZP),
+        ({"client_id": AUTHSYSTEM_CLIENT_ID}, None),
+        ({"client_id": OTHER_CLIENT_ID}, loggers.AUTHN_JWT_BIND_CLIENT_ID),
+        (
+            {"client_id": AUTHSYSTEM_CLIENT_ID, "azp": AUTHSYSTEM_CLIENT_ID},
+            None,
+        ),
+        (
+            {"client_id": OTHER_CLIENT_ID, "azp": OTHER_CLIENT_ID},
+            loggers.AUTHN_JWT_BIND_CLIENT_ID,
+        ),
+        (
+            {"client_id": AUTHSYSTEM_CLIENT_ID, "azp": OTHER_CLIENT_ID},
+            loggers.AUTHN_JWT_BIND_CLIENT_MISMATCH,
+        ),
+        (
+            {"client_id": OTHER_CLIENT_ID, "azp": AUTHSYSTEM_CLIENT_ID},
+            loggers.AUTHN_JWT_BIND_CLIENT_MISMATCH,
+        ),
+    ],
+)
+@mock.patch("jwt.decode")
+def test_validate_access_token_binds_client(jwtd, w_claims, exp_msg):
+    payload = {"typ": "Bearer"} | w_claims
+    jwtd.return_value = payload
+    auth_system = mock.create_autospec(
+        config_authsystem.OIDCAuthSystemConfig,
+        token_validation_pem="test-pem",
+        issuer="https://authn.example.com/",
+        accepted_client_ids=[AUTHSYSTEM_CLIENT_ID],
+        required_claims={},
+    )
+
+    found, msg = authn.validate_access_token(object(), auth_system)
+
+    if exp_msg is None:
+        assert found == payload
+        assert msg is None
+    else:
+        assert found is None
+        assert msg == exp_msg
 
 
 @pytest.mark.parametrize(
