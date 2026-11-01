@@ -169,6 +169,22 @@ W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_YAML = f"""
       - "{AZP_TEST}"
 """
 
+CLIENT_ID_TEST = "test-client-id"
+W_ACC_CLIENT_IDS_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
+    "_accepted_client_ids": [CLIENT_ID_TEST]
+}
+W_ACC_CLIENT_IDS_AUTHSYSTEM_CONFIG_YAML = f"""
+{BARE_AUTHSYSTEM_CONFIG_YAML}
+    accepted_client_ids:
+      - "{CLIENT_ID_TEST}"
+"""
+
+W_ACC_CLIENT_IDS_AND_ALIAS_AUTHSYSTEM_CONFIG_YAML = f"""
+{W_ACC_CLIENT_IDS_AUTHSYSTEM_CONFIG_YAML}
+    accepted_azp_list:
+      - "{AZP_TEST}"
+"""
+
 AUTHSYSTEM_ISSUER = "https://example.com/auth/issuer"
 W_ISSUER_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW | {
     "_issuer": AUTHSYSTEM_ISSUER,
@@ -207,21 +223,67 @@ W_ERROR_AUTHSYSTM_CONFIG_YAML = f"""
 
 
 @pytest.mark.parametrize(
-    "w__aal, exp_aal",
+    "w_kw, exp_aci",
     [
-        (None, [AUTHSYSTEM_CLIENT_ID]),
-        (["test-one", "test-two"], ["test-one", "test-two"]),
+        ({}, [AUTHSYSTEM_CLIENT_ID]),
+        (
+            {"_accepted_client_ids": ["test-one", "test-two"]},
+            ["test-one", "test-two"],
+        ),
+        (
+            {"_accepted_azp_list": ["test-one", "test-two"]},
+            ["test-one", "test-two"],
+        ),
     ],
 )
-def test_authsystem_accepted_azp_list(installation_config, w__aal, exp_aal):
+def test_authsystem_accepted_client_ids(installation_config, w_kw, exp_aci):
     inst = config_authsystem.OIDCAuthSystemConfig(
         **BARE_AUTHSYSTEM_CONFIG_KW,
-        _accepted_azp_list=w__aal,
+        **w_kw,
     )
 
-    found = inst.accepted_azp_list
+    found = inst.accepted_client_ids
 
-    assert found == exp_aal
+    assert found == exp_aci
+
+
+def test_authsystem_ctor_w_accepted_client_ids_and_alias():
+    with pytest.raises(
+        config_authsystem.AcceptedClientIdsOrAzpList,
+    ) as exc_info:
+        config_authsystem.OIDCAuthSystemConfig(
+            **BARE_AUTHSYSTEM_CONFIG_KW,
+            _accepted_client_ids=["test-one"],
+            _accepted_azp_list=["test-two"],
+        )
+
+    exc = exc_info.value
+    assert exc.accepted_client_ids == ["test-one"]
+    assert exc.accepted_azp_list == ["test-two"]
+    assert str(exc) == config_authsystem.ACCEPTED_CLIENT_IDS_W_ALIAS
+
+
+def test_authsystem_from_yaml_w_accepted_client_ids_and_alias(
+    installation_config,
+    temp_dir,
+):
+    config_path = temp_dir / "config.yaml"
+    config_dict = yaml.safe_load(
+        W_ACC_CLIENT_IDS_AND_ALIAS_AUTHSYSTEM_CONFIG_YAML
+    )
+
+    with (
+        pytest.warns(DeprecationWarning, match="accepted_azp_list"),
+        pytest.raises(config_exc.FromYamlException) as exc_info,
+    ):
+        config_authsystem.OIDCAuthSystemConfig.from_yaml(
+            installation_config,
+            config_path,
+            config_dict,
+        )
+
+    cause = exc_info.value.__cause__
+    assert isinstance(cause, config_authsystem.AcceptedClientIdsOrAzpList)
 
 
 @pytest.mark.parametrize(
@@ -604,8 +666,8 @@ def test_authsystem_from_yaml_w_consent_template(
     "config_yaml, exp_config",
     [
         (
-            W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_YAML,
-            W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_KW.copy(),
+            W_ACC_CLIENT_IDS_AUTHSYSTEM_CONFIG_YAML,
+            W_ACC_CLIENT_IDS_AUTHSYSTEM_CONFIG_KW.copy(),
         ),
         (
             W_ISSUER_AUTHSYSTEM_CONFIG_YAML,
@@ -621,7 +683,7 @@ def test_authsystem_from_yaml_w_consent_template(
         ),
     ],
 )
-def test_authsystem_from_yaml_w_azp_list_issuer_cookie_rq_claims(
+def test_authsystem_from_yaml_w_client_ids_issuer_cookie_rq_claims(
     installation_config,
     temp_dir,
     config_yaml,
@@ -648,6 +710,34 @@ def test_authsystem_from_yaml_w_azp_list_issuer_cookie_rq_claims(
     assert found == expected
 
 
+def test_authsystem_from_yaml_w_accepted_azp_list_alias(
+    installation_config,
+    temp_dir,
+):
+    config_path = temp_dir / "config.yaml"
+    config_dict = yaml.safe_load(W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_YAML)
+    expected = config_authsystem.OIDCAuthSystemConfig(
+        _installation_config=installation_config,
+        _config_path=config_path,
+        **W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_KW,
+    )
+
+    with pytest.warns(DeprecationWarning, match="accepted_azp_list") as warned:
+        found = config_authsystem.OIDCAuthSystemConfig.from_yaml(
+            installation_config,
+            config_path,
+            config_dict,
+        )
+
+    assert found == expected
+    (record,) = warned
+    assert str(record.message) == (
+        config_authsystem.ACCEPTED_AZP_LIST_DEPRECATION.format(
+            config_path=str(config_path),
+        )
+    )
+
+
 @pytest.mark.parametrize(
     "w_kw",
     [
@@ -658,6 +748,7 @@ def test_authsystem_from_yaml_w_azp_list_issuer_cookie_rq_claims(
         W_CLIENT_SECRET_SECRET_AUTHSYSTEM_CONFIG_KW.copy(),
         W_OIDC_CPP_REL_CONFIG_KW.copy(),
         W_OIDC_CPP_ABS_CONFIG_KW.copy(),
+        W_ACC_CLIENT_IDS_AUTHSYSTEM_CONFIG_KW.copy(),
         W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_KW.copy(),
         W_ISSUER_AUTHSYSTEM_CONFIG_KW.copy(),
         W_COOKIE_CLAIMS_AUTHSYSTEM_CONFIG_KW.copy(),
@@ -689,6 +780,9 @@ def test_authsystem_as_yaml(installation_config, temp_dir, w_kw):
 
     if "oidc_client_pem_path" in w_kw:
         expected["oidc_client_pem_path"] = str(w_kw["oidc_client_pem_path"])
+
+    if "_accepted_client_ids" in w_kw:
+        expected["accepted_client_ids"] = w_kw["_accepted_client_ids"]
 
     if "_accepted_azp_list" in w_kw:
         expected["accepted_azp_list"] = w_kw["_accepted_azp_list"]
@@ -778,7 +872,7 @@ def _round_trip_authsystem_config(
         W_UFOP_DENY_AUTHSYSTEM_CONFIG_YAML,
         W_ABS_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML,
         W_REL_CONSENT_TEMPLATE_AUTHSYSTEM_CONFIG_YAML,
-        W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_YAML,
+        W_ACC_CLIENT_IDS_AUTHSYSTEM_CONFIG_YAML,
         W_ISSUER_AUTHSYSTEM_CONFIG_YAML,
         W_RQ_CLAIMS_AUTHSYSTEM_CONFIG_YAML,
     ],
@@ -795,3 +889,22 @@ def test_authsystem_as_yaml_round_trips(
     )
 
     assert reloaded == original
+
+
+def test_authsystem_as_yaml_round_trips_w_accepted_azp_list_alias(
+    installation_config,
+    temp_dir,
+):
+    """The alias is dumped as configured, so each load warns."""
+    with pytest.warns(
+        DeprecationWarning,
+        match="accepted_azp_list",
+    ) as warned:
+        original, reloaded = _round_trip_authsystem_config(
+            installation_config,
+            temp_dir / "config.yaml",
+            yaml.safe_load(W_ACC_AZP_LIST_AUTHSYSTEM_CONFIG_YAML),
+        )
+
+    assert reloaded == original
+    assert len(warned) == 2
