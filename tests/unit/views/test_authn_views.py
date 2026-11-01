@@ -1110,13 +1110,28 @@ async def test_get_auth_system(
         pytest.param(
             TOKENDICT_W_ID_TOKEN, f"/#?{EXP_QS_W_ID_TOKEN}", id="w_id_token"
         ),
+        pytest.param(
+            {"access_token": "TOKEN", "expires_in": "EXPIRES_IN"},
+            "/#?token=TOKEN&expires_in=EXPIRES_IN",
+            id="wo_refresh_token",
+        ),
+        pytest.param(
+            {"access_token": "TOKEN", "refresh_token": "RTOKEN"},
+            "/#?token=TOKEN&refresh_token=RTOKEN",
+            id="wo_expires_in",
+        ),
+        pytest.param(
+            {"access_token": "TOKEN"},
+            "/#?token=TOKEN",
+            id="access_token_only",
+        ),
     ],
 )
 @mock.patch("soliplex.authn.set_authn_cookie")
 @mock.patch("soliplex.authn.get_oauth")
 @mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.authn._get_authsystem_config")
-async def test_get_auth_system_id_token(
+async def test_get_auth_system_optional_tokens(
     _get_authsystem_config,
     auth_fn,
     get_oauth,
