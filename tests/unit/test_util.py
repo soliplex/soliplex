@@ -430,6 +430,31 @@ def test_modified_at_w_mtime(w_mtime, expected):
     assert found == expected
 
 
+def test_upload_files_maps_file_to_its_stat(temp_dir):
+    file_path = temp_dir / "a.txt"
+    file_path.write_text("a")
+    expected = file_path.stat()
+
+    found = util.upload_files(temp_dir)
+
+    assert found == {"a.txt": expected}
+
+
+def test_upload_files_skips_subdirectory(temp_dir):
+    (temp_dir / "sub").mkdir()
+
+    found = util.upload_files(temp_dir)
+
+    assert found == {}
+
+
+def test_upload_files_wo_directory(temp_dir):
+
+    found = util.upload_files(temp_dir / "nonesuch")
+
+    assert found == {}
+
+
 def test_upload_files_skips_file_removed_before_stat(temp_dir):
     (temp_dir / "kept.txt").write_text("kept")
     (temp_dir / "vanishing.txt").write_text("vanishing")
