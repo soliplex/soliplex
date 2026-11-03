@@ -9,9 +9,10 @@ Their tests build the same preconditions the machinery does -- a
 symlink, a FIFO, a name with an embedded NUL that 'PosixPath.resolve'
 rejects -- so on a host offering none of them there is nothing left to
 assert. Rather than skip test by test, each module skips whole: mark it
-with 'requires_posix_sandbox' and name it (with the module it covers)
-in 'POSIX_ONLY_COVERAGE_OMIT', which 'tests/conftest.py' drops from the
-coverage report so the 100% gate keeps its meaning off POSIX.
+with the matching 'requires_posix_*' marker and name it (with any module
+only it covers) in 'POSIX_ONLY_COVERAGE_OMIT', which 'tests/conftest.py'
+drops from the coverage report so the 100% gate keeps its meaning off
+POSIX.
 
 This module lives in 'tests/', not 'tests/unit/', on purpose: the
 coverage targets in 'pyproject.toml' include 'tests/unit', and a
@@ -49,6 +50,12 @@ requires_posix_file_modes = pytest.mark.skipif(
     reason="needs a POSIX host: '0o600' owner-only file modes",
 )
 
+# 'Path.symlink_to' needs a privilege, or Developer Mode, on Windows.
+requires_posix_symlinks = pytest.mark.skipif(
+    os.name != "posix",
+    reason="needs a POSIX host: symlinks",
+)
+
 # root bypasses permission checks, so a 'chmod(0)' directory stays
 # readable.  'os.geteuid' exists only on POSIX.
 requires_non_root = pytest.mark.skipif(
@@ -65,4 +72,5 @@ POSIX_ONLY_COVERAGE_OMIT = (
     "tests/unit/skills/test_bwrap_sandbox.py",
     "tests/unit/views/test_sandbox_workdirs.py",
     "tests/unit/cli/test_cli_service_token_file_modes.py",
+    "tests/unit/test_util_symlinks.py",
 )

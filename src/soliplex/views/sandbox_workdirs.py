@@ -72,26 +72,27 @@ async def get_workdirs_room_thread(
         )
 
     thread_dir = pathlib.Path(workdirs_path) / room_id / thread_id
-    filename_urls = {}
-
-    for filename in skills_bwrap_sandbox.downloadable_files(thread_dir):
-        filename_urls[filename] = request.url_for(
-            # View function name, not the route path.
-            "get_workdirs_room_thread_filename",
-            room_id=room_id,
-            thread_id=thread_id,
-            filename=filename,
-        )
+    files = skills_bwrap_sandbox.downloadable_files(thread_dir)
 
     return models.ThreadWorkdirFiles(
         room_id=room_id,
         thread_id=thread_id,
         files=[
             models.WorkdirFile(
-                filename=key,
-                url=str(value),  # The two URL types are not compatible
+                filename=filename,
+                url=str(  # The two URL types are not compatible
+                    request.url_for(
+                        # View function name, not the route path.
+                        "get_workdirs_room_thread_filename",
+                        room_id=room_id,
+                        thread_id=thread_id,
+                        filename=filename,
+                    )
+                ),
+                modified_at=soliplex_views_util.modified_at(stat_result),
+                size_bytes=stat_result.st_size,
             )
-            for key, value in filename_urls.items()
+            for filename, stat_result in files.items()
         ],
     )
 

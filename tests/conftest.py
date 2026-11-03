@@ -17,7 +17,7 @@ from tests import _platform
 from tests._dburi import sqlite_dburi
 
 COVERAGE_NOT_REPORTED = (
-    "coverage is not reported for the POSIX-only sandbox on this host: "
+    "coverage is not reported for POSIX-only code on this host: "
     "the tests covering it skip here (see 'tests/_platform.py'), so "
     "these are omitted from the report rather than dropping the 100% "
     "gate for everything else -- re-check them on Linux: {omitted}"
@@ -53,8 +53,8 @@ def _cov_config_objects(config):
 def pytest_configure(config):
     """Stop reporting coverage of what the platform skips off POSIX
 
-    'addopts' applies '--cov-fail-under=100' to every run. The tests of
-    the bubblewrap sandbox skip on a host which cannot express their
+    'addopts' applies '--cov-fail-under=100' to every run. Tests needing
+    a POSIX host skip on a host which cannot express their
     preconditions, leaving the code they cover unmeasured -- so the gate
     would fail however the tests themselves fared.
 

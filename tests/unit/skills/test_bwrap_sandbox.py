@@ -1266,7 +1266,7 @@ def test_downloadable_files_lists_nested_files(temp_dir):
 
     found = skills_bwrap_sandbox.downloadable_files(temp_dir)
 
-    assert found == [
+    assert list(found) == [
         "crm_app/static/app.js",
         "report.txt",
         "reports/summary.txt",
@@ -1284,7 +1284,7 @@ def test_downloadable_files_skips_symlinks_and_snapshots(temp_dir):
 
     found = skills_bwrap_sandbox.downloadable_files(workdir)
 
-    assert found == ["sub/keep.txt"]
+    assert list(found) == ["sub/keep.txt"]
 
 
 def _make_swap_tree(temp_dir):
@@ -1340,7 +1340,7 @@ def test_downloadable_files_skips_dir_changed_before_entering(
         found = skills_bwrap_sandbox.downloadable_files(workdir)
 
     assert swapped
-    assert found == ["a.txt"]
+    assert list(found) == ["a.txt"]
 
 
 def test_downloadable_files_ignores_swap_of_dir_after_entering(temp_dir):
@@ -1361,7 +1361,7 @@ def test_downloadable_files_ignores_swap_of_dir_after_entering(temp_dir):
         found = skills_bwrap_sandbox.downloadable_files(workdir)
 
     assert len(scanned) == 3
-    assert found == ["a.txt", "sub/deep/keep.txt"]
+    assert list(found) == ["a.txt", "sub/deep/keep.txt"]
 
 
 def test_downloadable_files_skips_entry_whose_type_cannot_be_read(temp_dir):
@@ -1380,7 +1380,50 @@ def test_downloadable_files_skips_entry_whose_type_cannot_be_read(temp_dir):
     with mock.patch("os.scandir", side_effect=scan_w_unknown):
         found = skills_bwrap_sandbox.downloadable_files(temp_dir)
 
-    assert found == ["a.txt"]
+    assert list(found) == ["a.txt"]
+
+
+def _scan_then(change):
+    # Run 'change' after the scan has read its entries and before the
+    # walk stats them.  Only for trees whose root holds no directory, so
+    # that there is one scan.
+    real_scandir = os.scandir
+
+    def scan_then_change(dir_fd):
+        with real_scandir(dir_fd) as entries:
+            scanned = [*entries]
+
+        change()
+        return contextlib.nullcontext(scanned)
+
+    return mock.patch("os.scandir", side_effect=scan_then_change)
+
+
+def test_downloadable_files_skips_file_removed_before_stat(temp_dir):
+    _make_regular(temp_dir / "a.txt")
+    _make_regular(temp_dir / "gone.txt")
+
+    with _scan_then((temp_dir / "gone.txt").unlink):
+        found = skills_bwrap_sandbox.downloadable_files(temp_dir)
+
+    assert list(found) == ["a.txt"]
+
+
+def test_downloadable_files_skips_file_swapped_for_symlink(temp_dir):
+    outside = temp_dir / "outside"
+    _make_regular(outside / "secret.txt")
+    workdir = temp_dir / "work"
+    _make_regular(workdir / "a.txt")
+    _make_regular(workdir / "b.txt")
+
+    def swap():
+        (workdir / "a.txt").unlink()
+        (workdir / "a.txt").symlink_to(outside / "secret.txt")
+
+    with _scan_then(swap):
+        found = skills_bwrap_sandbox.downloadable_files(workdir)
+
+    assert list(found) == ["b.txt"]
 
 
 @_platform.requires_non_root
@@ -1391,7 +1434,7 @@ def test_downloadable_files_w_unreadable_directory(temp_dir):
 
     found = skills_bwrap_sandbox.downloadable_files(workdir)
 
-    assert found == []
+    assert found == {}
 
 
 def test_downloadable_files_closes_what_it_opens(temp_dir):
@@ -1400,7 +1443,7 @@ def test_downloadable_files_closes_what_it_opens(temp_dir):
 
     found = skills_bwrap_sandbox.downloadable_files(temp_dir)
 
-    assert found == ["a/b/c.txt"]
+    assert list(found) == ["a/b/c.txt"]
     assert len(os.listdir("/dev/fd")) == open_before
 
 
@@ -1411,7 +1454,7 @@ def test_downloadable_files_stops_at_max_walk_depth(temp_dir):
     with mock.patch.object(skills_bwrap_sandbox, "MAX_WALK_DEPTH", 2):
         found = skills_bwrap_sandbox.downloadable_files(temp_dir)
 
-    assert found == ["a/b/at_limit.txt"]
+    assert list(found) == ["a/b/at_limit.txt"]
 
 
 def test_write_transcript_uses_the_call_id(transcripts_path):
