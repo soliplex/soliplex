@@ -425,7 +425,9 @@ def test_modified_at_is_utc():
 def test_modified_at_w_mtime(w_mtime, expected):
     stat_result = os.stat_result((0,) * 8 + (w_mtime, 0))
 
-    assert util.modified_at(stat_result) == expected
+    found = util.modified_at(stat_result)
+
+    assert found == expected
 
 
 def test_upload_files_skips_file_removed_before_stat(temp_dir):
