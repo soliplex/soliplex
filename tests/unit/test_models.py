@@ -1455,26 +1455,40 @@ def test_ragsource_from_source_tag(source_tag, expected):
     assert found == expected
 
 
-def test_aclentry_rejects_invalid_jsonpath():
+@pytest.mark.parametrize(
+    "bogus_json_path, exp_cause",
+    [
+        ("$[?(bogus", authz.InvalidJSONPath),
+        ("", authz.InvalidJSONPath),
+        ("   ", authz.InvalidJSONPath),
+        ("$", authz.JSONPathMatchesNull),
+        ("$.foo", authz.JSONPathMatchesNull),
+    ],
+)
+def test_aclentry_rejects_invalid_jsonpath(bogus_json_path, exp_cause):
     with pytest.raises(pydantic.ValidationError) as exc_info:
-        models.ACLEntry(json_path="not a path")
+        models.ACLEntry(json_path=bogus_json_path)
 
     causes = [
         err.get("ctx", {}).get("error") for err in exc_info.value.errors()
     ]
-    assert any(isinstance(c, authz.InvalidJSONPath) for c in causes)
+    assert any(isinstance(c, exp_cause) for c in causes)
+
+
+JSON_PATH = authz.token_field_json_path("email", EMAIL)
 
 
 @pytest.mark.parametrize(
     "kwargs",
     [
         {},  # no discriminator
-        {"everyone": True, "json_path": "$.foo"},  # two
+        {"everyone": True, "json_path": JSON_PATH},  # two
         {"preferred_username": "phreddy", "email": "phreddy@example.com"},
         {
             "everyone": True,
             "authenticated": True,
             "preferred_username": "phreddy",
+            "json_path": JSON_PATH,
         },
     ],
 )
@@ -1491,11 +1505,11 @@ def test_aclentry_requires_exactly_one_discriminator(kwargs):
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"everyone": True},
+        {"everyone": True, "json_path": None},  # cover 'None' branch
         {"authenticated": True},
         {"preferred_username": "phreddy"},
         {"email": "phreddy@example.com"},
-        {"json_path": "$.foo"},
+        {"json_path": JSON_PATH},
     ],
 )
 def test_aclentry_accepts_single_discriminator(kwargs):

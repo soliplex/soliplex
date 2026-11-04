@@ -1005,6 +1005,11 @@ class ACLEntry(ACLEntryUnchecked):
     @pydantic.field_validator("json_path")
     @classmethod
     def _check_json_path(cls, value: str | None) -> str | None:
+        if value is not None:
+            probe = authz.null_claims_match(value)
+
+            if probe is not None:
+                raise authz.JSONPathMatchesNull(value)
         return authz.validate_json_path(value)
 
     @pydantic.model_validator(mode="after")

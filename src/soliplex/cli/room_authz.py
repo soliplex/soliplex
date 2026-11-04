@@ -198,7 +198,7 @@ def _room_policy_as_yaml(policy) -> str:
     return yaml.safe_dump(to_dump, sort_keys=False, default_flow_style=False)
 
 
-def _room_policy_from_jsonable(data) -> models.RoomPolicy | None:
+def _room_policy_from_jsonable(data, the_console) -> models.RoomPolicy | None:
     """Build a 'models.RoomPolicy' from the JSON-serializable shape.
 
     Inverse of '_room_policy_as_jsonable': 'AllowDeny' member names are
@@ -207,11 +207,34 @@ def _room_policy_from_jsonable(data) -> models.RoomPolicy | None:
     if data is None:
         return None
     acl_entries = []
-    for entry in data.get("acl_entries", ()):
+    bad_entries = []
+
+    for i_entry, entry in enumerate(data.get("acl_entries", ())):
         entry = dict(entry)
+        json_path = entry.get("json_path")
+
+        if json_path is not None:
+            try:
+                authz.validate_json_path(json_path)
+            except authz.InvalidJSONPath:
+                bad_entries.append((i_entry, "invalid", json_path))
+                continue
+            else:
+                probe = authz.null_claims_match(json_path)
+                if probe is not None:
+                    bad_entries.append((i_entry, "matches null", json_path))
+                    continue
+
         entry["allow_deny"] = authz.AllowDeny[entry["allow_deny"]]
         entry["permission"] = authz.Permission[entry["permission"]]
         acl_entries.append(models.ACLEntry(**entry))
+
+    if bad_entries:
+        the_console.rule("Invalid JSONPaths")
+        for i_entry, reason, entry in bad_entries:
+            the_console.print(f"entry {i_entry}: {reason} {entry}")
+        raise typer.Exit(1)
+
     return models.RoomPolicy(
         room_id=data["room_id"],
         default_allow_deny=authz.AllowDeny[data["default_allow_deny"]],
@@ -503,7 +526,7 @@ def room_authz_from_yaml(
     else:
         yaml_text = sys.stdin.read()
 
-    model = _room_policy_from_jsonable(yaml.safe_load(yaml_text))
+    model = _room_policy_from_jsonable(yaml.safe_load(yaml_text), the_console)
 
     room_id = _effective_room_id(room_id, model)
     if room_id is None:

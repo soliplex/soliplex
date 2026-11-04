@@ -4,7 +4,6 @@ from unittest import mock
 
 import pytest
 
-from soliplex import authz
 from soliplex.cli import cli_util
 from soliplex.cli.audit import admin_users as audit_admin_users
 from soliplex.config import authsystem as config_authsystem
@@ -145,53 +144,28 @@ def test__invalid_admin_user_json_paths(json_paths, exp_invalid):
     assert normalized == exp_invalid
 
 
-_A_ID = "alpha"
-_B_ID = "beta"
-
-
 @pytest.mark.parametrize(
-    "json_path, exp_claim_names",
+    "json_paths, exp_flagged",
     [
-        # Canonical single-claim discriminators.
-        ('$[?$.email == "alice@example.com"]', ["email"]),
-        ('$[?$.preferred_username == "bob"]', ["preferred_username"]),
-        # Quoted values contribute no claim names, however evil-shaped.
-        ('$[?$.email == "x@$.evil.com"]', ["email"]),
-        # Filter functions' arguments are claims like any other.
-        ("$[?some_func($.email)]", ["email"]),
-        # Dotted references contribute only their root claim.
-        ("$.realm_access.roles[0]", ["realm_access"]),
-        # Bracketed references, root segment only.
-        ("$['email']", ["email"]),
-        # No claim references at all.
-        ("$", []),
-        # Nested '@'-relative queries take the enclosing chain's root.
-        ('$[?$.groups[?@ == "x"]]', ["groups"]),
-        ('$[?@.org.code == "XYZ"]', ["org"]),
+        ([], []),
+        # Equality-driven discriminators are clean; the root query is
+        # flagged against the empty token.
         (
-            '$[?$.org.personnel.specialties[?@ == "A1B2C3"]]',
-            ["org"],
+            ['$[?$.email == "alice@example.com"]', "$"],
+            [("$", {})],
         ),
-        # Unions, recursive descent:  every chain contributes its root.
-        ('$["a", "b"]', ["a", "b"]),
-        ("$..roles", ["roles"]),
-        # A singular-query selector reads its embedded query's claims.
-        ("$[$.key]", ["key"]),
-        # Unparseable queries contribute nothing:  rows like these are
-        # reported separately, in the invalid JSONPath block.
-        ("$[", []),
-        ("$[?missing_func($.email)]", []),
+        # Bare selectors are flagged against their claim seeded null.
+        (["$.email"], [("$.email", {"email": None})]),
     ],
 )
-@mock.patch.dict(
-    authz.the_jsonpath_environment.function_extensions,
-    {"some_func": lambda *args: None},
-)
-def test__discriminator_claim_names(json_path, exp_claim_names):
+def test__null_matching_admin_json_paths(json_paths, exp_flagged):
+    found = audit_admin_users._null_matching_admin_json_paths(json_paths)
 
-    found = audit_admin_users._discriminator_claim_names(json_path)
+    assert found == exp_flagged
 
-    assert found == exp_claim_names
+
+_A_ID = "alpha"
+_B_ID = "beta"
 
 
 @pytest.mark.parametrize(

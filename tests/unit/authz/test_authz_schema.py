@@ -17,6 +17,8 @@ NOW = datetime.datetime.now(datetime.UTC)
 
 EMAIL = "phreddy@example.com"
 JSON_PATH = authz.token_field_json_path("email", EMAIL)
+INVALID_JSON_PATH = "$[?@.role"  # unbalanced -- does not compile
+PROMISCUOUS_JSON_PATH = "$"
 
 ROOM_ID = "test-room"
 
@@ -53,9 +55,19 @@ def test_adminuser_ctor(the_session):
     the_session.commit()
 
 
-def test_adminuser_ctor_invalid_json_path():
-    with pytest.raises(authz.InvalidJSONPath):
-        authz_schema.AdminUser(json_path="$[?(bogus")
+@pytest.mark.parametrize(
+    "bogus_json_path, expectation",
+    [
+        ("$[?(bogus", pytest.raises(authz.InvalidJSONPath)),
+        ("", pytest.raises(authz.InvalidJSONPath)),
+        ("   ", pytest.raises(authz.InvalidJSONPath)),
+        ("$", pytest.raises(authz.JSONPathMatchesNull)),
+        ("$.foo", pytest.raises(authz.JSONPathMatchesNull)),
+    ],
+)
+def test_adminuser_ctor_invalid_json_path(bogus_json_path, expectation):
+    with expectation:
+        authz_schema.AdminUser(json_path=bogus_json_path)
 
 
 @pytest.mark.parametrize(
@@ -349,12 +361,49 @@ def the_room_policy():
     )
 
 
-def test_aclentry_rejects_invalid_jsonpath(the_room_policy):
-    with pytest.raises(authz.InvalidJSONPath):
+@pytest.mark.parametrize(
+    "w_kwargs",
+    [
+        {"everyone": True},
+        {"authenticated": True},
+        {"json_path": JSON_PATH},
+    ],
+)
+def test_aclentry_ctor(
+    the_session,
+    the_room_policy,
+    w_kwargs,
+):
+    acl_entry = authz_schema.ACLEntry(
+        room_policy=the_room_policy,
+        allow_deny=authz.AllowDeny.DENY,
+        **w_kwargs,
+    )
+
+    the_session.add(acl_entry)
+    the_session.commit()
+
+
+@pytest.mark.parametrize(
+    "bogus_json_path, expectation",
+    [
+        ("$[?(bogus", pytest.raises(authz.InvalidJSONPath)),
+        ("", pytest.raises(authz.InvalidJSONPath)),
+        ("   ", pytest.raises(authz.InvalidJSONPath)),
+        ("$", pytest.raises(authz.JSONPathMatchesNull)),
+        ("$.foo", pytest.raises(authz.JSONPathMatchesNull)),
+    ],
+)
+def test_aclentry_rejects_invalid_jsonpath(
+    the_room_policy,
+    bogus_json_path,
+    expectation,
+):
+    with expectation:
         authz_schema.ACLEntry(
             room_policy=the_room_policy,
             allow_deny=authz.AllowDeny.ALLOW,
-            json_path="not a path",
+            json_path=bogus_json_path,
         )
 
 
@@ -479,8 +528,11 @@ def test_aclentry_as_unchecked_model_tolerates_stale_json_path(
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {},  # zero discriminators
-        {"everyone": True, "json_path": "$.foo"},  # two discriminators
+        pytest.param({}, id="zero discriminators"),
+        pytest.param(
+            {"everyone": True, "json_path": "$[?match($.foo, 'b.*z')]"},
+            id="two discriminators",
+        ),
     ],
 )
 def test_aclentry_flush_requires_exactly_one_discriminator(

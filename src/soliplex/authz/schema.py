@@ -72,6 +72,11 @@ class AdminUser(Base):
 
     @sqla_orm.validates("json_path")
     def _check_json_path(self, _key, value):
+        probe = authz.null_claims_match(value)
+
+        if probe is not None:
+            raise authz.JSONPathMatchesNull(value)
+
         return authz.validate_json_path(value)
 
     def check_token(
@@ -213,6 +218,12 @@ class ACLEntry(Base):
 
     @sqla_orm.validates("json_path")
     def _check_json_path(self, _key, value):
+        if value is not None:
+            probe = authz.null_claims_match(value)
+
+            if probe is not None:
+                raise authz.JSONPathMatchesNull(value)
+
         return authz.validate_json_path(value)
 
     @classmethod
