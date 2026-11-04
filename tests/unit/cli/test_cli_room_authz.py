@@ -1810,7 +1810,8 @@ def test_check_w_stale_acl_entry(
 
     assert result.exit_code == 1
     assert result.exception.__class__ is SystemExit
-    _dump_check.assert_not_called()
+    _dump_check.assert_called_once()
+    assert _dump_check.call_args.args[1]["allowed"] is False
 
 
 def test_check_w_input_file(scratch_installation, cli_runner, tmp_path):

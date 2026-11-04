@@ -104,6 +104,8 @@ AUTHZ_DELETE_ROOM_POLICY = "delete room policy"
 AUTHZ_GET_INSTALLATION_AUTHZ = "get installation authz"
 AUTHZ_GET_USER_AUTHZ = "get user authz"
 AUTHZ_ROOM_ALLOW_WRITE_REQUIRED = "room allow write required"
+AUTHZ_STALE_ADMIN_ENTRY = "stale admin entry json_path skipped"
+AUTHZ_STALE_ACL_ENTRY = "stale ACL entry json_path"
 
 INST_GET_INSTALLATION_INFO = "get installation info"
 
