@@ -5,6 +5,7 @@ import tempfile
 import types
 from unittest import mock
 
+import _dotenv_guard
 import _test_features as agui_features
 import pytest
 
@@ -14,6 +15,7 @@ from soliplex import loggers
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import installation as config_installation
 from soliplex.config import routing as config_routing
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
@@ -33,6 +35,25 @@ def _auth_systems(n_auth_systems):
         )
         for i_auth_system in range(n_auth_systems)
     ]
+
+
+@pytest.fixture(autouse=True)
+def _no_repo_dotenv(monkeypatch):
+    """Keep the checkout's '.env' out of every unit test.
+
+    See '_dotenv_guard' for why, and for what is reported.
+    """
+    klass = config_installation.InstallationConfig
+    monkeypatch.setattr(
+        klass,
+        "_load_dotenv",
+        staticmethod(
+            _dotenv_guard.guard_load_dotenv(
+                klass._load_dotenv,
+                _dotenv_guard.REPO_ROOT,
+            )
+        ),
+    )
 
 
 @pytest.fixture(scope="module")
