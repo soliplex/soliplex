@@ -492,3 +492,18 @@ meta:
 
 Given the registration above, a room ACL entry could allow access with a
 predicate such as `$[?is_admin($.roles)]`.
+
+A registered predicate must not return `None`. Soliplex wraps each
+registered function:  when a query runs, a predicate call returning
+`None` raises `InvalidPredicateResult` (a `ValueError`), rather than
+counting as a match. python-jsonpath's filter expressions treat a
+`None` result like the JSON `null` it already counts as an existing,
+truthy value, so an unmatched predicate returning `None` would otherwise
+grant every `ALLOW` rule and admin discriminator referencing it. Any
+other result passes through unchanged, with the engine's usual
+truthiness rules deciding the match:  return `bool` for clarity.
+
+`json_path` values are rejected when blank (all whitespace):  a blank
+query compiles but matches every token -- including an empty one -- so a
+blank `ALLOW` entry would grant everyone. Rows stored before this
+rejection existed are reported by `soliplex-cli audit` as invalid.

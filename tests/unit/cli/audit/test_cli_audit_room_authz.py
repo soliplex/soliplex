@@ -256,5 +256,69 @@ def test__invalid_acl_json_paths(policy_specs, exp_invalid):
     assert normalized == exp_invalid
 
 
+@pytest.mark.parametrize(
+    "policy_specs, exp_flagged",
+    [
+        ([], {}),
+        (
+            [
+                (
+                    "chat",
+                    ['$[?$.email == "alice@example.com"]', "$.email"],
+                ),
+                ("talk", ["$"]),
+            ],
+            {
+                "chat": [("$.email", {"email": None})],
+                "talk": [("$", {})],
+            },
+        ),
+        # A missing-function entry fails validation, so it is reported
+        # in the invalid block instead of being flagged here.
+        ([("ghost", ["$[?other_missing($.email)]"])], {}),
+        # 'everyone' entries carry no 'json_path'; nothing to probe.
+        ([("anonymous", [None])], {}),
+    ],
+)
+def test__null_matching_acl_json_paths(policy_specs, exp_flagged):
+    room_policies = [
+        models.RoomPolicyUnchecked(
+            room_id=room_id,
+            acl_entries=[
+                models.ACLEntryUnchecked(
+                    allow_deny=authz.AllowDeny.ALLOW,
+                    json_path=jp,
+                )
+                for jp in json_paths
+            ],
+        )
+        for room_id, json_paths in policy_specs
+    ]
+
+    found = audit_room_authz._null_matching_acl_json_paths(room_policies)
+
+    assert found == exp_flagged
+
+
+@mock.patch.dict(
+    authz.the_jsonpath_environment.function_extensions,
+    {"pred": lambda claims: True},
+)
+def test__null_matching_acl_json_paths_ignores_predicates():
+    policy = models.RoomPolicyUnchecked(
+        room_id="chat",
+        acl_entries=[
+            models.ACLEntryUnchecked(
+                allow_deny=authz.AllowDeny.ALLOW,
+                json_path="$[?pred($)]",
+            ),
+        ],
+    )
+
+    found = audit_room_authz._null_matching_acl_json_paths([policy])
+
+    assert found == {}
+
+
 # _audit_room_authz_section: ui only
 # audit_room_authz: command

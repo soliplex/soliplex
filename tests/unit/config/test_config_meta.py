@@ -1,6 +1,7 @@
 import contextlib
 import copy
 import dataclasses
+import inspect
 
 import _test_features as agui_features
 import _test_metaconfig
@@ -1111,11 +1112,15 @@ def test_installationconfigmeta_from_yaml(
             }
 
         if config_dict_meta and "jsonpath_functions" in config_dict_meta:
-            assert authz.registered_jsonpath_functions() == {
-                JSONPATH_FUNCTION_NAME: _test_metaconfig.dummy_jsonpath_func
-            }
+            (registered_func,) = authz.registered_jsonpath_functions().values()
+
+            assert inspect.unwrap(registered_func) is (
+                _test_metaconfig.dummy_jsonpath_func
+            )
             assert (
-                patched_jsonpath_functions[JSONPATH_FUNCTION_NAME]
+                inspect.unwrap(
+                    patched_jsonpath_functions[JSONPATH_FUNCTION_NAME]
+                )
                 is _test_metaconfig.dummy_jsonpath_func
             )
 
@@ -1390,11 +1395,13 @@ def test_installationconfigmeta_from_yaml_w_clear(
     if "jsonpath_functions" in config_dict_meta:
         assert "before" not in patched_jsonpath_functions
 
-        assert authz.registered_jsonpath_functions() == {
-            JSONPATH_FUNCTION_NAME: _test_metaconfig.dummy_jsonpath_func
-        }
+        (registered_func,) = authz.registered_jsonpath_functions().values()
+
+        assert inspect.unwrap(registered_func) is (
+            _test_metaconfig.dummy_jsonpath_func
+        )
         assert (
-            patched_jsonpath_functions[JSONPATH_FUNCTION_NAME]
+            inspect.unwrap(patched_jsonpath_functions[JSONPATH_FUNCTION_NAME])
             is _test_metaconfig.dummy_jsonpath_func
         )
 
@@ -1608,7 +1615,10 @@ def test_installationconfigmeta_postinit_registers_jsonpath_functions(
     config_meta.InstallationConfigMeta(jsonpath_functions=[jf_meta])
 
     env = authz.the_jsonpath_environment
-    assert env.function_extensions[JSONPATH_FUNCTION_NAME] is jp_func
+    assert (
+        inspect.unwrap(env.function_extensions[JSONPATH_FUNCTION_NAME])
+        is jp_func
+    )
 
 
 @pytest.mark.parametrize("w_jsonpath", [False, True])
@@ -1760,7 +1770,13 @@ def _registry_snapshot():
         "agent_configs": dict(config_agents.AGENT_CONFIG_CLASSES_BY_KIND),
         "secret_sources": dict(config_secrets.SourceClassesByKind),
         "secret_getters": dict(config_secrets.SECRET_GETTERS_BY_KIND),
-        "jsonpath_functions": dict(authz.registered_jsonpath_functions()),
+        # Each registered function is a fresh wrapper (see
+        # 'authz.register_jsonpath_function'); the snapshot equality
+        # criterion is "same registered function", not identity.
+        "jsonpath_functions": {
+            name: inspect.unwrap(func)
+            for name, func in authz.registered_jsonpath_functions().items()
+        },
     }
 
 

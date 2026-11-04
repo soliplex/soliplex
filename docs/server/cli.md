@@ -1020,6 +1020,14 @@ Three blocks are printed:
   longer present. Use
   [`admin-users delete --allow-invalid-json-path`](#admin-users-delete)
   to remove such an entry. `(none)` if every stored row validates.
+- **Admin users matching a null/empty claims token** — one line per row
+  whose stored `json_path` matches a synthetic token seeding each claim
+  it references with JSON `null`, or an empty token. Presence tests and
+  bare selectors count a `null` claim as matching, and `$`-root or
+  constant filters match an empty token, so such a row could grant when
+  it shouldn't. Entries driven by registered filter functions
+  (predicates) are deployment software and contribute no flags here.
+  `(none)` if every stored row is clean.
 - **Claims not carried in the authn cookie** — a warning-grade
   diagnostic about the gap between the stored discriminators and the
   authn cookie's claims (see
@@ -1056,17 +1064,22 @@ ERROR: authorization database unreachable: <error>
 
 #### Exit Status
 
-- `0` when every stored `AdminUser.json_path` validates.
-- `1` when at least one row fails to validate. In `-q` / `--quiet`
+- `0` when every stored `AdminUser.json_path` validates and no row
+  matches a null/empty claims token.
+- `1` when at least one row fails to validate or matches a null/empty
+  claims token. In `-q` / `--quiet`
   mode, the errors are emitted to stdout as JSON of the form:
 
   ```json
   {
     "admin_users": {
-      "invalid_json_paths": [["<json_path>", "<error>"], "..."]
+      "invalid_json_paths": [["<json_path>", "<error>"], "..."],
+      "null_matching": [["<json_path>", "<token-json>"], "..."]
     }
   }
   ```
+
+  Each sub-key is absent when its corresponding block is empty.
 
 - `1` when the authorization database is unreachable, reported in
   `-q` / `--quiet` mode as:
@@ -1141,6 +1154,14 @@ compile:
   longer present. Use
   [`room-authz delete-acl-entry --allow-invalid-json-path`](#room-authz-delete-acl-entry)
   to remove such an entry.
+- **ACL entries matching a null/empty claims token** — for each
+  affected room, one line per entry whose stored `json_path` matches a
+  synthetic token seeding each claim it references with JSON `null`,
+  or an empty token. Presence tests and bare selectors count a `null`
+  claim as matching, and `$`-root or constant filters match an empty
+  token, so such an entry could grant when it shouldn't. Entries driven
+  by registered filter functions (predicates) are deployment software
+  and contribute no flags here.
 
 When the installation's `authorization_db` is the in-memory
 default (`sqlite://`), every configured room falls into the
@@ -1158,10 +1179,11 @@ ERROR: authorization database unreachable: <error>
 
 #### Exit Status
 
-- `0` when the **Stale** bucket is empty and no ACL `json_path` fails
-  to compile.
-- `1` when at least one stale row is detected, or at least one
-  `ACLEntry.json_path` fails to validate. In `-q` / `--quiet` mode, the
+- `0` when the **Stale** bucket is empty, and no ACL `json_path` fails
+  to compile or matches a null/empty claims token.
+- `1` when at least one stale row is detected, at least one
+  `ACLEntry.json_path` fails to validate, or at least one entry matches
+  a null/empty claims token. In `-q` / `--quiet` mode, the
   errors are emitted to stdout as JSON of the form:
 
   ```json
@@ -1170,12 +1192,15 @@ ERROR: authorization database unreachable: <error>
       "stale_rooms": ["<room_id>", "..."],
       "invalid_acls": {
         "<room_id>": [["<json_path>", "<error>"], "..."]
+      },
+      "null_matching_acls": {
+        "<room_id>": [["<json_path>", "<token-json>"], "..."]
       }
     }
   }
   ```
 
-  Either sub-key may be absent if its corresponding bucket is empty.
+  Each sub-key is absent when its corresponding block is empty.
 
 - `1` when the authorization database is unreachable, reported in
   `-q` / `--quiet` mode as:

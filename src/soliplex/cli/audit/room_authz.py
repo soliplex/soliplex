@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import typer
 
@@ -107,6 +108,29 @@ def _invalid_acl_json_paths(room_policies) -> dict:
     return invalid
 
 
+def _null_matching_acl_json_paths(room_policies) -> dict:
+    """Collect ACL entries matching a null-claims probe token.
+
+    ``room_policies`` is the policy list from '_room_policies' -- the
+    unchecked models, which tolerate entries that would fail
+    'policy.as_model'. Each surfaced 'json_path' which
+    'authz.null_claims_match' flags is returned, keyed by
+    'room_id' as a '(json_path, matched_token)' pair; predicate-driven
+    entries (no claim references) contribute nothing.
+    """
+    flagged: dict = {}
+    for policy in room_policies:
+        for entry in policy.acl_entries:
+            if entry.json_path is None:
+                continue
+            probe = authz.null_claims_match(entry.json_path)
+            if probe is not None:
+                flagged.setdefault(policy.room_id, []).append(
+                    (entry.json_path, probe),
+                )
+    return flagged
+
+
 def _audit_room_authz_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
@@ -174,11 +198,26 @@ def _audit_room_authz_section(
         tc_print("  (none)")
     tc_line()
 
+    null_matching = _null_matching_acl_json_paths(room_policies)
+    tc_print("ACL entries matching a null/empty claims token:")
+    if null_matching:
+        for room_id in sorted(null_matching):
+            for json_path, token in null_matching[room_id]:
+                tc_print(
+                    f"  - {room_id}: {json_path}"
+                    f"  (matched {json.dumps(token)})",
+                )
+    else:
+        tc_print("  (none)")
+    tc_line()
+
     sub_errors: dict = {}
     if groups["stale"]:
         sub_errors["stale_rooms"] = groups["stale"]
     if invalid_acls:
         sub_errors["invalid_acls"] = invalid_acls
+    if null_matching:
+        sub_errors["null_matching_acls"] = null_matching
 
     errors: dict = {}
     if sub_errors:

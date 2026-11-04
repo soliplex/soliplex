@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
-import jsonpath
 import typer
-from jsonpath import filter as jp_filter
 
 from soliplex import authn
 from soliplex import authz
@@ -70,98 +69,22 @@ def _invalid_admin_user_json_paths(
     return invalid
 
 
-def _discriminator_claim_names(json_path: str) -> list[str]:
-    """Extract the claim names referenced by an admin discriminator.
+def _null_matching_admin_json_paths(
+    json_paths: list[str],
+) -> list[tuple[str, dict]]:
+    """Collect admin discriminators matching a null-claims probe token.
 
-    Returns the (sorted) distinct claim names a discriminator can
-    reference from the token root:  for each chain of names reachable
-    from '$', or from an '@'-relative query under '$' or under one of
-    those chains, the chain's first name (so '$.realm_access.roles[0]'
-    yields 'realm_access', matching how the authn cookie carries
-    claims).
-
-    Parsing uses this environment's own JSONPath compiler, not pattern
-    matching:  quoted values, slices, wildcards, unions, recursive
-    descent, nested filters and JSONPath function extensions are all
-    understood, though claims read only *inside* a function extension
-    remain invisible to the audit.
-
-    An unparseable query (e.g. authored under a metaconfig whose filter
-    function no longer exists) contributes no claim names:  such rows
-    are reported separately, in the invalid JSONPath block.
+    Each stored 'json_path' which 'audit_common._null_claims_match'
+    flags is returned as a '(json_path, matched_token)' pair;
+    predicate-driven expressions (no claim references) contribute
+    nothing.
     """
-    try:
-        parsed = authz.the_jsonpath_environment.compile(json_path)
-    except jsonpath.JSONPathError:
-        return []
-
-    claims: set[str] = set()
-    _collect_from_segments(parsed.segments, (), claims)
-    return sorted(claims)
-
-
-def _collect_from_segments(
-    segments,
-    chain: tuple[str, ...],
-    claims: set[str],
-) -> None:
-    """Fold a segment sequence into the claim set, threading 'chain'.
-
-    Each chain's first name is a referenced claim.  Within one segment,
-    union selectors each fork from the incoming chain, and the first
-    fork's chain continues into later segments.  Wildcard, index and
-    slice segments pass the chain through unchanged.
-    """
-    for segment in segments:
-        grown: tuple[str, ...] | None = None
-
-        for selector in segment.selectors:
-            name = getattr(selector, "name", None)
-
-            if name is None:
-                sub_path = getattr(selector, "query", None)
-                if sub_path is not None:
-                    _collect_from_segments(sub_path.segments, (), claims)
-                    continue
-
-                expression = getattr(selector, "expression", None)
-                if expression is not None:
-                    _collect_from_expression(expression, chain, claims)
-                continue
-
-            forked = (*chain, str(name))
-            claims.add(forked[0])
-            if grown is None:
-                grown = forked
-
-        if grown is not None:
-            chain = grown
-
-
-def _collect_from_expression(
-    expression,
-    chain: tuple[str, ...],
-    claims: set[str],
-) -> tuple[str, ...]:
-    """Fold a filter expression's claim references into 'claims'.
-
-    Embedded JSONPaths are folded per their kind:  a '$'-anchored query
-    re-roots at '$';  an '@'-relative query continues the enclosing
-    chain.  Other expressions (infix operators, literals, function
-    calls) contribute only their children.
-    """
-    if isinstance(expression, jp_filter.FilterQuery):
-        sub_chain: tuple[str, ...] = chain
-        if not isinstance(expression, jp_filter.RelativeFilterQuery):
-            sub_chain = ()
-
-        _collect_from_segments(expression.path.segments, sub_chain, claims)
-        return chain
-
-    for child in expression.children():
-        _collect_from_expression(child, chain, claims)
-
-    return chain
+    matched: list[tuple[str, dict]] = []
+    for json_path in json_paths:
+        probe = authz.null_claims_match(json_path)
+        if probe is not None:
+            matched.append((json_path, probe))
+    return matched
 
 
 def _unresolvable_discriminators(
@@ -282,8 +205,19 @@ def _audit_admin_users_section(
         tc_print("  (none)")
     tc_line()
 
+    null_matching = _null_matching_admin_json_paths(json_paths)
+    tc_print("Admin users matching a null/empty claims token:")
+    if null_matching:
+        for json_path, token in null_matching:
+            tc_print(
+                f"  - {json_path}  (matched {json.dumps(token)})",
+            )
+    else:
+        tc_print("  (none)")
+    tc_line()
+
     refs = {
-        json_path: set(_discriminator_claim_names(json_path))
+        json_path: set(authz.discriminator_claim_names(json_path))
         for json_path in json_paths
     }
     unresolvable = _unresolvable_discriminators(
@@ -313,8 +247,13 @@ def _audit_admin_users_section(
         tc_line()
 
     errors: dict = {}
+    admin_user_errors: dict = {}
     if invalid:
-        errors["admin_users"] = {"invalid_json_paths": invalid}
+        admin_user_errors["invalid_json_paths"] = invalid
+    if null_matching:
+        admin_user_errors["null_matching"] = null_matching
+    if admin_user_errors:
+        errors["admin_users"] = admin_user_errors
     return errors
 
 

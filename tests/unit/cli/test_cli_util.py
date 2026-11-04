@@ -593,7 +593,7 @@ def test__resolve_json_path_w_meta_config_filter_function(
     # (as 'InstallationConfigMeta.__post_init__' does for every
     # 'meta.jsonpath_functions' entry) must validate successfully when
     # '_resolve_json_path' runs after the installation has been loaded.
-    def filter_func(value):  # pragma: NO COVER (registered, not called)
+    def filter_func(value):  # pragma: NO COVER (injected, not called)
         return value
 
     json_path = "$[?filter_func($.email)]"
@@ -603,7 +603,7 @@ def test__resolve_json_path_w_meta_config_filter_function(
     with pytest.raises(authz.InvalidJSONPath):
         authz.validate_json_path(json_path)
 
-    authz.register_jsonpath_function("filter_func", filter_func)
+    patched_jsonpath_functions["filter_func"] = filter_func
 
     found = cli_util._resolve_json_path(
         mock.sentinel.the_installation,
@@ -612,5 +612,4 @@ def test__resolve_json_path_w_meta_config_filter_function(
         None,
     )
 
-    assert found == json_path
-    assert patched_jsonpath_functions["filter_func"] is filter_func
+    assert found is json_path
