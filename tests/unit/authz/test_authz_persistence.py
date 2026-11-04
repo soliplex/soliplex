@@ -289,6 +289,32 @@ async def test_admin_user_is_admin(the_async_session):
     aup._audit.admin_access_denied.assert_not_called()
 
 
+async def _seed_stale_admin_user(session):
+    session.add(authz_schema.AdminUser(json_path=ROLE_JSON_PATH))
+    # Flush so the entry is a persistent row before the raw UPDATE
+    # corrupts its 'json_path' out from under the ORM '@validates' hook.
+    await session.flush()
+    await session.execute(
+        sqla_sql.text(
+            "UPDATE admin_users SET json_path = :stale "
+            "WHERE json_path = :placeholder"
+        ),
+        {"stale": STALE_JSON_PATH, "placeholder": ROLE_JSON_PATH},
+    )
+    session.expire_all()
+
+
+@pytest.mark.asyncio
+async def test_admin_user_is_admin_w_stale_entry(the_async_session):
+    await _seed_stale_admin_user(the_async_session)
+    the_async_session.add(authz_schema.AdminUser(json_path=JSON_PATH))
+    aup = _admin_user_policy(the_async_session)
+
+    found = await aup.is_admin(USER_TOKEN)
+
+    assert found is True
+
+
 @pytest.mark.asyncio
 async def test_admin_user_check_admin_access(the_async_session):
     aup = _admin_user_policy(the_async_session)
@@ -932,10 +958,16 @@ async def _seed_policy(session, *, default=DENY, entries=()):
     return policy
 
 
-async def _seed_stale_entry(session, *, allow_deny=ALLOW, permission=READ):
+async def _seed_stale_entry(
+    session,
+    *,
+    allow_deny=ALLOW,
+    permission=READ,
+    default=DENY,
+):
     await _seed_policy(
         session,
-        default=DENY,
+        default=default,
         entries=[_orm_entry(allow_deny, permission, json_path=JSON_PATH)],
     )
     # Flush so the entry is a persistent row (not just pending state)
@@ -952,6 +984,31 @@ async def _seed_stale_entry(session, *, allow_deny=ALLOW, permission=READ):
         {"stale": STALE_JSON_PATH, "placeholder": JSON_PATH},
     )
     session.expire_all()
+
+
+@pytest.mark.parametrize(
+    "allow_deny, exp",
+    [
+        # A stale DENY entry matches, overriding the ALLOW default.
+        (DENY, False),
+        # A stale ALLOW entry does not match:  the default applies.
+        (ALLOW, True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_room_authz_has_room_permission_w_stale_entry(
+    the_async_session,
+    allow_deny,
+    exp,
+):
+    await _seed_stale_entry(
+        the_async_session, allow_deny=allow_deny, default=ALLOW
+    )
+    rap = _room_authz_policy(the_async_session)
+
+    found = await rap.has_room_permission(ROOM_ID, USER_TOKEN, permission=READ)
+
+    assert found is exp
 
 
 @pytest.mark.asyncio
