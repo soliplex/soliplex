@@ -1,4 +1,5 @@
 import datetime
+import logging
 from unittest import mock
 
 import pydantic
@@ -8,6 +9,7 @@ from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import authz
+from soliplex import loggers
 from soliplex import models
 from soliplex import util
 from soliplex.authz import schema as authz_schema
@@ -87,6 +89,45 @@ def test_adminuser_check_token(w_json_path, w_token, exp):
     admin_user = authz_schema.AdminUser(json_path=w_json_path)
 
     assert admin_user.check_token(w_token) is exp
+
+
+STALE_JSON_PATH = "$[?stale_filter_func($.email)]"
+
+
+def _seed_stale_adminuser(the_session):
+    """Plant an admin entry whose stored 'json_path' no longer compiles.
+
+    The ORM's 'json_path' validator rejects a non-compiling query on
+    insert, so seed a valid placeholder query, then rewrite it to the
+    non-compiling value with a raw UPDATE (which skips '@validates') and
+    refresh the instance from the row.
+    """
+    admin_user = authz_schema.AdminUser(json_path=JSON_PATH)
+    the_session.add(admin_user)
+    the_session.commit()
+    the_session.execute(
+        sqlalchemy.text(
+            "UPDATE admin_users SET json_path = :stale "
+            "WHERE json_path = :placeholder"
+        ),
+        {"stale": STALE_JSON_PATH, "placeholder": JSON_PATH},
+    )
+    the_session.commit()
+    the_session.refresh(admin_user)
+    return admin_user
+
+
+def test_adminuser_check_token_w_stale_json_path(the_session, caplog):
+    admin_user = _seed_stale_adminuser(the_session)
+    caplog.set_level(logging.WARNING, logger=loggers.AUTHZ_LOGGER_NAME)
+
+    found = admin_user.check_token({"email": EMAIL})
+
+    assert found is False
+    (record,) = caplog.records
+    assert record.levelno == logging.WARNING
+    assert record.msg == loggers.AUTHZ_STALE_ADMIN_ENTRY
+    assert record.json_path == STALE_JSON_PATH
 
 
 def test_roompolicy_ctor(the_session):
@@ -438,10 +479,11 @@ def test_aclentry_from_model(the_session, the_room_policy, model_kwargs):
     assert found.as_model == model
 
 
-STALE_JSON_PATH = "$[?stale_filter_func($.email)]"
-
-
-def _seed_stale_aclentry(the_session, the_room_policy):
+def _seed_stale_aclentry(
+    the_session,
+    the_room_policy,
+    allow_deny=authz.AllowDeny.ALLOW,
+):
     """Plant an ACL entry whose stored 'json_path' no longer compiles.
 
     The ORM's 'json_path' validator rejects a non-compiling query on
@@ -451,7 +493,7 @@ def _seed_stale_aclentry(the_session, the_room_policy):
     """
     entry = authz_schema.ACLEntry(
         room_policy=the_room_policy,
-        allow_deny=authz.AllowDeny.ALLOW,
+        allow_deny=allow_deny,
         json_path=JSON_PATH,
     )
     the_session.add(the_room_policy)
@@ -707,6 +749,40 @@ def test_aclentry_check_token_w_jsonpath(
         assert found is allow_deny
     else:
         assert found is None
+
+
+@pytest.mark.parametrize(
+    "allow_deny, exp",
+    [
+        # A stale DENY entry matches:  skipping it could fall through to
+        # a later ALLOW entry, or to the policy's default.
+        (authz.AllowDeny.DENY, authz.AllowDeny.DENY),
+        # A stale ALLOW entry never grants access.
+        (authz.AllowDeny.ALLOW, None),
+    ],
+)
+def test_aclentry_check_token_w_stale_json_path(
+    the_session,
+    the_room_policy,
+    caplog,
+    allow_deny,
+    exp,
+):
+    entry = _seed_stale_aclentry(
+        the_session, the_room_policy, allow_deny=allow_deny
+    )
+    caplog.set_level(logging.WARNING, logger=loggers.AUTHZ_LOGGER_NAME)
+
+    found = entry.check_token(
+        {"email": EMAIL}, permission=authz.Permission.READ
+    )
+
+    assert found is exp
+    (record,) = caplog.records
+    assert record.levelno == logging.WARNING
+    assert record.msg == loggers.AUTHZ_STALE_ACL_ENTRY
+    assert record.json_path == STALE_JSON_PATH
+    assert record.allow_deny == allow_deny.name
 
 
 @pytest.mark.parametrize(

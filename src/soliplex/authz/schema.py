@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import typing
 
+import jsonpath
 import sqlalchemy
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy import schema as sqla_schema
@@ -10,6 +12,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from sqlalchemy.sql import sqltypes as sqla_sqltypes
 
 from soliplex import authz
+from soliplex import loggers
 from soliplex import models
 from soliplex import util
 from soliplex.config import installation as config_installation
@@ -20,6 +23,8 @@ ForeignKey = sqlalchemy.ForeignKey
 Mapped = sqla_orm.Mapped
 mapped_column = sqla_orm.mapped_column
 relationship = sqla_orm.relationship
+
+_authz_logger = logging.getLogger(loggers.AUTHZ_LOGGER_NAME)
 
 
 def _timestamp() -> datetime.datetime:
@@ -83,9 +88,21 @@ class AdminUser(Base):
         self,
         user_token: authz.UserToken | None,
     ) -> bool:
-        """Does 'user_token' match our JSONPath query?"""
+        """Does 'user_token' match our JSONPath query?
+
+        A stored 'json_path' which no longer compiles (e.g., it references
+        a meta-config filter function which is no longer registered)
+        never matches:  log it as a warning and return False.
+        """
         token = user_token or {}
-        match = authz.the_jsonpath_environment.match(self.json_path, token)
+        try:
+            match = authz.the_jsonpath_environment.match(self.json_path, token)
+        except jsonpath.JSONPathError as exc:
+            _authz_logger.warning(
+                loggers.AUTHZ_STALE_ADMIN_ENTRY,
+                extra={"json_path": self.json_path, "reason": str(exc)},
+            )
+            return False
         return match is not None
 
 
@@ -301,6 +318,12 @@ class ACLEntry(Base):
         return our 'allow_deny'.
 
         Otherwise, return None.
+
+        A stored 'json_path' which no longer compiles (e.g., it references
+        a meta-config filter function which is no longer registered) is
+        logged as a warning, and then treated as matching if our
+        'allow_deny' is DENY, else as not matching:  so a stale entry can
+        never grant access.
         """
         # Column defaults (Python 'default' / the migration's
         # 'server_default', which backfills existing rows) are applied
@@ -319,9 +342,22 @@ class ACLEntry(Base):
         token = user_token or {}
 
         if self.json_path is not None:
-            jp_match = authz.the_jsonpath_environment.match(
-                self.json_path, token
-            )
+            try:
+                jp_match = authz.the_jsonpath_environment.match(
+                    self.json_path, token
+                )
+            except jsonpath.JSONPathError as exc:
+                _authz_logger.warning(
+                    loggers.AUTHZ_STALE_ACL_ENTRY,
+                    extra={
+                        "json_path": self.json_path,
+                        "allow_deny": self.allow_deny.name,
+                        "reason": str(exc),
+                    },
+                )
+                if self.allow_deny is authz.AllowDeny.DENY:
+                    return authz.AllowDeny.DENY
+                return None
             if jp_match is not None:
                 return self.allow_deny
 
