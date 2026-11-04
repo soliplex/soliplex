@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import abc
 import enum
+import functools
 import json
 import re
 import typing
 
 import jsonpath
+from jsonpath import filter as jp_filter
 
 # Avoid circular import when only used for typing
 
@@ -18,6 +20,10 @@ UserToken = dict[str, typing.Any]
 # Single shared environment so metaconfig hooks can inject additional
 # filter functions in one place.
 the_jsonpath_environment = jsonpath.JSONPathEnvironment()
+
+# Set on the wrapper installed by 'register_jsonpath_function', so that
+# re-registering a wrapper replaces rather than re-wraps it.
+_WRAPPED_FILTER_MARKER = "__soliplex_wrapped_filter__"
 
 # Names of the RFC 9535 built-in filter functions, captured before any
 # metaconfig registration. Anything added to the environment beyond these
@@ -37,6 +43,25 @@ class ReservedJSONPathFunctionName(ValueError):
         )
 
 
+class InvalidPredicateResult(ValueError):
+    """Raised when a registered JSONPath filter function returns None.
+
+    python-jsonpath counts ``None`` (JSON ``null``) as an extant, truthy
+    value inside a filter expression ('JSONPathEnvironment.is_truthy'),
+    so a predicate returning it on miss would match every token with at
+    least one claim. The wrapper installed by
+    'register_jsonpath_function' fails closed by raising this error when
+    the query runs instead.
+    """
+
+    def __init__(self, name: str):
+        self.name = name
+        super().__init__(
+            f"Filter function {name!r} returned None; authz predicates"
+            f" must not return None."
+        )
+
+
 def register_jsonpath_function(name: str, func: typing.Any) -> None:
     """Register a named filter function into the shared environment.
 
@@ -45,19 +70,44 @@ def register_jsonpath_function(name: str, func: typing.Any) -> None:
     RFC 9535 well-typedness checks). It becomes usable inside JSONPath
     filter expressions as 'name(...)'.
 
+    The stored callable is wrapped:  a call returning 'None' raises
+    'InvalidPredicateResult' when the query runs; any other result
+    passes through unchanged, with the engine's usual truthiness rules
+    deciding the match.  'functools.wraps' carries 'func's identity, so
+    metaconfig round-tripping via 'registered_jsonpath_functions' still
+    resolves the original dotted name.
+
     Raises 'ReservedJSONPathFunctionName' if 'name' collides with one of
     the RFC 9535 built-ins.
     """
+    while getattr(func, _WRAPPED_FILTER_MARKER, False):
+        func = func.__wrapped__
+
     if name in BUILTIN_JSONPATH_FUNCTION_NAMES:
         raise ReservedJSONPathFunctionName(name)
-    the_jsonpath_environment.function_extensions[name] = func
+
+    @functools.wraps(func)
+    def wrapped_filter_function(*args, **kwargs):
+        result = func(*args, **kwargs)
+
+        if result is None:
+            raise InvalidPredicateResult(name)
+
+        return result
+
+    setattr(wrapped_filter_function, _WRAPPED_FILTER_MARKER, True)
+    the_jsonpath_environment.function_extensions[name] = (
+        wrapped_filter_function
+    )
 
 
 def registered_jsonpath_functions() -> dict[str, typing.Any]:
     """Filter functions added via 'register_jsonpath_function'.
 
     Excludes the RFC 9535 built-ins, leaving only the config-supplied
-    functions (e.g. for metaconfig round-tripping).
+    functions (e.g. for metaconfig round-tripping):  each entry is the
+    wrapper installed by 'register_jsonpath_function', whose
+    '__module__' / '__name__' still name the registered function.
     """
     return {
         name: func
@@ -72,6 +122,14 @@ class InvalidJSONPath(ValueError):
     def __init__(self, value: str):
         self.value = value
         super().__init__(f"Invalid JSONPath: {value!r}")
+
+
+class JSONPathMatchesNull(ValueError):
+    """Raised when a JSONPath query string can return 'null' values"""
+
+    def __init__(self, value: str):
+        self.value = value
+        super().__init__(f"JSONPath matches null: {value!r}")
 
 
 class ExactlyOneDiscriminator(ValueError):
@@ -123,13 +181,17 @@ def validate_json_path(value: str | None) -> str | None:
     """Validate a JSONPath query string.
 
     Returns ``value`` unchanged for ``None`` or a syntactically valid
-    RFC 9535 query.  Raises ``InvalidJSONPath`` for malformed queries
-    so that callers (pydantic field validators, SQLAlchemy
-    ``@validates`` hooks) can reject bad values at write time rather
-    than failing later inside ``check_token``.
+    RFC 9535 query.  Raises ``InvalidJSONPath`` for malformed queries,
+    and for blank queries (all whitespace), which compile but match
+    every token:  a blank 'ALLOW' entry would grant everyone.  Callers
+    (pydantic field validators, SQLAlchemy ``@validates`` hooks) can
+    reject bad values at write time rather than failing later inside
+    ``check_token``.
     """
     if value is None:
         return value
+    if not value.strip():
+        raise InvalidJSONPath(value)
     try:
         the_jsonpath_environment.compile(value)
     except jsonpath.JSONPathError as exc:
@@ -171,6 +233,153 @@ def parse_token_field_json_path(value: str) -> tuple[str, str] | None:
     if not isinstance(decoded, str):
         return None
     return match.group("field"), decoded
+
+
+def discriminator_claim_names(json_path: str) -> list[str]:
+    """Extract the claim names referenced by a stored json_path.
+
+    Returns the (sorted) distinct claim names a query can reference
+    from the token root:  for each chain of names reachable from '$',
+    or from an '@'-relative query under '$' or under one of those
+    chains, the chain's first name (so '$.realm_access.roles[0]'
+    yields 'realm_access', matching how the authn cookie carries
+    claims).
+
+    Parsing uses this environment's own JSONPath compiler, not pattern
+    matching:  quoted values, slices, wildcards, unions, recursive
+    descent, nested filters and JSONPath function extensions are all
+    understood, though claims read only *inside* a function extension
+    remain invisible to the audit.
+
+    An unparseable query (e.g. authored under a metaconfig whose filter
+    function no longer exists) contributes no claim names:  such rows
+    are reported separately, in the invalid JSONPath block.
+    """
+    try:
+        parsed = the_jsonpath_environment.compile(json_path)
+    except jsonpath.JSONPathError:
+        return []
+
+    claims: set[str] = set()
+    _collect_from_segments(parsed.segments, (), claims)
+    return sorted(claims)
+
+
+def _collect_from_segments(
+    segments,
+    chain: tuple[str, ...],
+    claims: set[str],
+) -> None:
+    """Fold a segment sequence into the claim set, threading 'chain'.
+
+    Each chain's first name is a referenced claim.  Within one segment,
+    union selectors each fork from the incoming chain, and the first
+    fork's chain continues into later segments.  Wildcard, index and
+    slice segments pass the chain through unchanged.
+    """
+    for segment in segments:
+        grown: tuple[str, ...] | None = None
+
+        for selector in segment.selectors:
+            name = getattr(selector, "name", None)
+
+            if name is None:
+                sub_path = getattr(selector, "query", None)
+                if sub_path is not None:
+                    _collect_from_segments(sub_path.segments, (), claims)
+                    continue
+
+                expression = getattr(selector, "expression", None)
+                if expression is not None:
+                    _collect_from_expression(expression, chain, claims)
+                continue
+
+            forked = (*chain, str(name))
+            claims.add(forked[0])
+            if grown is None:
+                grown = forked
+
+        if grown is not None:
+            chain = grown
+
+
+def _collect_from_expression(
+    expression,
+    chain: tuple[str, ...],
+    claims: set[str],
+) -> tuple[str, ...]:
+    """Fold a filter expression's claim references into 'claims'.
+
+    Embedded JSONPaths are folded per their kind:  a '$'-anchored query
+    re-roots at '$';  an '@'-relative query continues the enclosing
+    chain.  Other expressions (infix operators, literals, function
+    calls) contribute only their children.
+    """
+    if isinstance(expression, jp_filter.FilterQuery):
+        sub_chain: tuple[str, ...] = chain
+        if not isinstance(expression, jp_filter.RelativeFilterQuery):
+            sub_chain = ()
+
+        _collect_from_segments(expression.path.segments, sub_chain, claims)
+        return chain
+
+    for child in expression.children():
+        _collect_from_expression(child, chain, claims)
+
+    return chain
+
+
+def null_probe_tokens(claim_names: list[str]) -> list[dict]:
+    """Build the synthetic tokens null-probing a stored json_path.
+
+    One token seeds every claim name the expression references with
+    JSON 'null', plus one token with no claims at all -- the shapes a
+    miswritten expression is most likely to match by surprise:  bare
+    selectors and presence tests count 'null' as matching,
+    '$'-root or constant filters match an empty token outright.
+
+    Claims read only inside a function extension are invisible here;
+    matching that depends on nested claim structure cannot be reached
+    from the first-name chains either.
+    """
+    tokens: list[dict] = [{name: None for name in claim_names}]
+    if claim_names:
+        tokens.append({})
+    return tokens
+
+
+def null_claims_match(json_path: str) -> dict | None:
+    """Return the first null-probe token 'json_path' matches, if any.
+
+    Runs the expression against the 'null_probe_tokens' shapes; the
+    first match is returned as the evidence for an audit report.
+
+    Queries failing 'validate_json_path' (already reported in the
+    invalid block) and queries whose function extensions choke on the
+    synthetic claims contribute no flags:  predicate behavior is
+    software, audited only insofar as it runs here without complaint.
+    """
+    try:
+        validate_json_path(json_path)
+    except InvalidJSONPath:
+        return None
+
+    for probe_token in null_probe_tokens(
+        discriminator_claim_names(json_path),
+    ):
+        try:
+            if (
+                the_jsonpath_environment.match(
+                    json_path,
+                    probe_token,
+                )
+                is not None
+            ):
+                return probe_token
+        except Exception:
+            continue
+
+    return None
 
 
 class AllowDeny(enum.Enum):

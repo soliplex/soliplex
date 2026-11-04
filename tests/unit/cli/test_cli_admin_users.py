@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from unittest import mock
 
@@ -378,17 +379,21 @@ def test__admin_user_from_jsonable_rejects_invalid(the_console, w_entry):
     )
 
 
+OK_PATH = authz.token_field_json_path("foo", "bar")
+
+
 @pytest.mark.parametrize(
-    "w_data, exp",
+    "w_data, expectation, reasons",
     [
-        # 'null' document -> empty list.
-        (None, []),
-        # Missing key -> empty list.
-        ({}, []),
-        # Empty list.
-        ({"admin_users": []}, []),
-        # Populated list.
-        (
+        pytest.param(None, contextlib.nullcontext([]), [], id="null"),
+        pytest.param({}, contextlib.nullcontext([]), [], id="empty map"),
+        pytest.param(
+            {"admin_users": []},
+            contextlib.nullcontext([]),
+            [],
+            id="empty value",
+        ),
+        pytest.param(
             {
                 "admin_users": [
                     {
@@ -401,17 +406,73 @@ def test__admin_user_from_jsonable_rejects_invalid(the_console, w_entry):
                         "email": None,
                         "json_path": None,
                     },
+                    {
+                        "preferred_username": None,
+                        "email": None,
+                        "json_path": OK_PATH,
+                    },
                 ],
             },
-            [
-                authz.token_field_json_path("email", "alice@example.com"),
-                authz.token_field_json_path("preferred_username", "bob"),
-            ],
+            contextlib.nullcontext(
+                [
+                    authz.token_field_json_path("email", "alice@example.com"),
+                    authz.token_field_json_path("preferred_username", "bob"),
+                    OK_PATH,
+                ]
+            ),
+            [],
+            id="populated list",
+        ),
+        # Error cases
+        pytest.param(
+            {"admin_users": [{"json_path": ""}]},
+            pytest.raises(typer.Exit),
+            ["invalid"],
+            id="empty path",
+        ),
+        pytest.param(
+            {"admin_users": [{"json_path": "$"}]},
+            pytest.raises(typer.Exit),
+            ["matches null"],
+            id="promiscuous",
+        ),
+        pytest.param(
+            {"admin_users": [{"json_path": "$[$.b0rken"}]},
+            pytest.raises(typer.Exit),
+            ["invalid"],
+            id="syntax error",
+        ),
+        pytest.param(
+            {
+                "admin_users": [
+                    {"json_path": "$"},
+                    {"json_path": OK_PATH},
+                    {"json_path": "$[$.b0rken"},
+                ],
+            },
+            pytest.raises(typer.Exit),
+            ["matches null", None, "invalid"],
+            id="mixed",
         ),
     ],
 )
-def test__admin_users_from_jsonable(w_data, exp):
-    assert cli_admin_users._admin_users_from_jsonable(w_data) == exp
+def test__admin_users_from_jsonable(w_data, expectation, reasons):
+    the_console = mock.Mock(spec_set=["rule", "print"])
+
+    with expectation as expected:
+        found = cli_admin_users._admin_users_from_jsonable(w_data, the_console)
+
+    if isinstance(expected, pytest.ExceptionInfo):
+        the_console.rule.assert_called_once_with("Invalid JSONPaths")
+        assert the_console.print.call_args_list == [
+            mock.call(f"entry {i_entry}: {reason} {entry['json_path']}")
+            for i_entry, (entry, reason) in enumerate(
+                zip(w_data["admin_users"], reasons, strict=True),
+            )
+            if reason is not None
+        ]
+    else:
+        assert found == expected
 
 
 # ---------------------------------------------------------------------------

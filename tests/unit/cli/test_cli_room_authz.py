@@ -476,27 +476,32 @@ def test__room_policy_as_yaml_populated():
     }
 
 
+OK_PATH = authz.token_field_json_path("foo", "bar")
+
+
 @pytest.mark.parametrize(
-    "jsonable, expected",
+    "jsonable, expectation, reasons",
     [
-        # A 'null' document -> no policy.
-        (None, None),
-        # Empty policy: default-DENY, no ACL entries.
-        (
+        pytest.param(None, contextlib.nullcontext(None), [], id="null"),
+        pytest.param(
             {
                 "room_id": "chat",
                 "default_allow_deny": "DENY",
                 "acl_entries": [],
             },
-            models.RoomPolicy(
-                room_id="chat",
-                default_allow_deny=authz.AllowDeny.DENY,
-                acl_entries=[],
+            contextlib.nullcontext(
+                models.RoomPolicy(
+                    room_id="chat",
+                    default_allow_deny=authz.AllowDeny.DENY,
+                    acl_entries=[],
+                ),
             ),
+            [],
+            id="empty",
         ),
-        # Populated policy: 'AllowDeny' member names are converted back
-        # to enum members; each entry keeps its single discriminator.
-        (
+        # 'AllowDeny' member names are converted back to enum members;
+        # each entry keeps its single discriminator.
+        pytest.param(
             {
                 "room_id": "chat",
                 "default_allow_deny": "ALLOW",
@@ -520,6 +525,15 @@ def test__room_policy_as_yaml_populated():
                         "json_path": None,
                     },
                     {
+                        "allow_deny": "ALLOW",
+                        "permission": "ADMIN",
+                        "everyone": False,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": None,
+                        "json_path": OK_PATH,
+                    },
+                    {
                         "allow_deny": "DENY",
                         "permission": "READ",
                         "everyone": True,
@@ -539,37 +553,138 @@ def test__room_policy_as_yaml_populated():
                     },
                 ],
             },
-            models.RoomPolicy(
-                room_id="chat",
-                default_allow_deny=authz.AllowDeny.ALLOW,
-                acl_entries=[
-                    models.ACLEntry(
-                        allow_deny=authz.AllowDeny.ALLOW,
-                        permission=authz.Permission.READ,
-                        email="alice@example.com",
-                    ),
-                    models.ACLEntry(
-                        allow_deny=authz.AllowDeny.ALLOW,
-                        permission=authz.Permission.WRITE,
-                        email="alice@example.com",
-                    ),
-                    models.ACLEntry(
-                        allow_deny=authz.AllowDeny.DENY,
-                        permission=authz.Permission.READ,
-                        everyone=True,
-                    ),
-                    models.ACLEntry(
-                        allow_deny=authz.AllowDeny.DENY,
-                        permission=authz.Permission.WRITE,
-                        everyone=True,
-                    ),
-                ],
+            contextlib.nullcontext(
+                models.RoomPolicy(
+                    room_id="chat",
+                    default_allow_deny=authz.AllowDeny.ALLOW,
+                    acl_entries=[
+                        models.ACLEntry(
+                            allow_deny=authz.AllowDeny.ALLOW,
+                            permission=authz.Permission.READ,
+                            email="alice@example.com",
+                        ),
+                        models.ACLEntry(
+                            allow_deny=authz.AllowDeny.ALLOW,
+                            permission=authz.Permission.WRITE,
+                            email="alice@example.com",
+                        ),
+                        models.ACLEntry(
+                            allow_deny=authz.AllowDeny.ALLOW,
+                            permission=authz.Permission.ADMIN,
+                            json_path=OK_PATH,
+                        ),
+                        models.ACLEntry(
+                            allow_deny=authz.AllowDeny.DENY,
+                            permission=authz.Permission.READ,
+                            everyone=True,
+                        ),
+                        models.ACLEntry(
+                            allow_deny=authz.AllowDeny.DENY,
+                            permission=authz.Permission.WRITE,
+                            everyone=True,
+                        ),
+                    ],
+                ),
             ),
+            [],
+            id="populated",
+        ),
+        pytest.param(
+            {
+                "room_id": "chat",
+                "default_allow_deny": "DENY",
+                "acl_entries": [
+                    {
+                        "allow_deny": "ALLOW",
+                        "permission": "WRITE",
+                        "json_path": "",
+                    },
+                ],
+            },
+            pytest.raises(typer.Exit),
+            ["invalid"],
+            id="empty path",
+        ),
+        pytest.param(
+            {
+                "room_id": "chat",
+                "default_allow_deny": "DENY",
+                "acl_entries": [
+                    {
+                        "allow_deny": "ALLOW",
+                        "permission": "WRITE",
+                        "json_path": "$",
+                    },
+                ],
+            },
+            pytest.raises(typer.Exit),
+            ["matches null"],
+            id="promiscuous",
+        ),
+        pytest.param(
+            {
+                "room_id": "chat",
+                "default_allow_deny": "DENY",
+                "acl_entries": [
+                    {
+                        "allow_deny": "ALLOW",
+                        "permission": "WRITE",
+                        "json_path": "$[$.b0rken",
+                    },
+                ],
+            },
+            pytest.raises(typer.Exit),
+            ["invalid"],
+            id="syntax error",
+        ),
+        pytest.param(
+            {
+                "room_id": "chat",
+                "default_allow_deny": "DENY",
+                "acl_entries": [
+                    {
+                        "allow_deny": "ALLOW",
+                        "permission": "WRITE",
+                        "json_path": "$",
+                    },
+                    {
+                        "allow_deny": "ALLOW",
+                        "permission": "WRITE",
+                        "json_path": OK_PATH,
+                    },
+                    {
+                        "allow_deny": "ALLOW",
+                        "permission": "WRITE",
+                        "json_path": "$[$.b0rken",
+                    },
+                ],
+            },
+            pytest.raises(typer.Exit),
+            ["matches null", None, "invalid"],
+            id="mixed",
         ),
     ],
 )
-def test__room_policy_from_jsonable(jsonable, expected):
-    assert cli_room_authz._room_policy_from_jsonable(jsonable) == expected
+def test__room_policy_from_jsonable(jsonable, expectation, reasons):
+    the_console = mock.Mock(spec_set=["rule", "print"])
+
+    with expectation as expected:
+        found = cli_room_authz._room_policy_from_jsonable(
+            jsonable,
+            the_console,
+        )
+
+    if isinstance(expected, pytest.ExceptionInfo):
+        the_console.rule.assert_called_once_with("Invalid JSONPaths")
+        assert the_console.print.call_args_list == [
+            mock.call(f"entry {i_entry}: {reason} {entry['json_path']}")
+            for i_entry, (entry, reason) in enumerate(
+                zip(jsonable["acl_entries"], reasons, strict=True),
+            )
+            if reason is not None
+        ]
+    else:
+        assert found == expected
 
 
 @pytest.mark.parametrize(

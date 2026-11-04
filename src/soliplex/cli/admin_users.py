@@ -155,9 +155,11 @@ def _admin_user_from_jsonable(entry: dict) -> str:
 
     Each entry must specify exactly one of 'email',
     'preferred_username', or 'json_path'. Raises 'typer.Exit(1)' on a
-    malformed entry. The validity of a literal 'json_path' is not
-    checked here; the storage layer's '@validates' hook enforces it
-    on insert.
+    malformed entry.
+
+    The validity of a literal 'json_path' is not checked here;
+    the caller checks, falling back to the storage layer's '@validates'
+    hook enforcement on insert.
     """
     email = entry.get("email")
     preferred_username = entry.get("preferred_username")
@@ -179,17 +181,37 @@ def _admin_user_from_jsonable(entry: dict) -> str:
     return json_path
 
 
-def _admin_users_from_jsonable(data) -> list[str]:
+def _admin_users_from_jsonable(data, the_console) -> list[str]:
     """Translate the JSON-serializable shape back to a list of json_paths.
 
     Returns an empty list for a 'null' document or one with no entries.
     """
     if data is None:
         return []
-    return [
+    json_paths = [
         _admin_user_from_jsonable(entry)
         for entry in data.get("admin_users", ())
     ]
+
+    bad_entries = []
+    for i_entry, json_path in enumerate(json_paths):
+        try:
+            authz.validate_json_path(json_path)
+        except authz.InvalidJSONPath:
+            bad_entries.append((i_entry, "invalid", json_path))
+            continue
+        else:
+            probe = authz.null_claims_match(json_path)
+            if probe is not None:
+                bad_entries.append((i_entry, "matches null", json_path))
+
+    if bad_entries:
+        the_console.rule("Invalid JSONPaths")
+        for i_entry, reason, entry in bad_entries:
+            the_console.print(f"entry {i_entry}: {reason} {entry}")
+        raise typer.Exit(1)
+
+    return json_paths
 
 
 def _check_admin_user_args(
@@ -587,7 +609,10 @@ def admin_users_from_yaml(
     else:
         yaml_text = sys.stdin.read()
 
-    json_paths = _admin_users_from_jsonable(yaml.safe_load(yaml_text))
+    json_paths = _admin_users_from_jsonable(
+        yaml.safe_load(yaml_text),
+        the_console,
+    )
 
     asyncio.run(
         _replace_discriminators(
