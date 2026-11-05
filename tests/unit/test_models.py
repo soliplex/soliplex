@@ -1024,16 +1024,6 @@ def test_installation_from_config_bare(bare_installation_config):
     assert installation_model.logging_headers_map == {}
     assert installation_model.logging_claims_map == {}
 
-    # Deprecated, will be removed after v0.84.
-    assert (
-        installation_model.thread_persistence_dburi_sync
-        == models.DUMMY_TP_DBURI
-    )
-    assert (
-        installation_model.thread_persistence_dburi_async
-        == models.DUMMY_TP_DBURI
-    )
-
 
 @pytest.fixture
 def a_secret():

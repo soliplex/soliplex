@@ -152,10 +152,9 @@ In the main installation configuration:
 - `authorization_migration_dburi`
 
 Through Soliplex v0.81 the four runtime URLs named the flavor first, as
-`thread_persistence_dburi_sync` and so on.  The old names still work, but
-are deprecated and will be removed after Soliplex v0.84.  The two
-migration URLs (see [Migrations](dburis.md#migrations)) never had that
-spelling.
+`thread_persistence_dburi_sync` and so on.  Those names were deprecated
+from v0.82 through v0.90, and have since been removed.  The two migration
+URLs (see [Migrations](dburis.md#migrations)) never had that spelling.
 
 In the `mcp_client_toolsets:` stanza of a room or completion configuration,
 for each configured MCP client toolset:
@@ -197,46 +196,17 @@ Please see [this page](agents.md) for details on configuring agents.
 In addition to the values described there, note that the `id` element is
 required here.
 
-## Thread Persistence DBURI
+## Databases
 
-An installation can define two DBURIs for the database used to store
-AG-UI threads, runs, events, etc.
+Two stanzas configure the installation's databases, each as a pair of
+SQLAlchemy URLs (`sync_dburi` and `async_dburi`):
 
-### Synchronous DBURI
+- `thread_persistence_db`:  AG-UI threads, runs, and events
+- `authorization_db`:  administrative users, and room authorization
+  policies with their ACL entries
 
-One DBURI is for sync usage, e.g.  within console scripts.  Examples:
-
-- `sqlite://`
-- `postgresql+psycopg://user:<password>@dbhost/dbname`
-
-### Asynchronous DBURI
-
-The other DBURI is for async usage, e.g. within the Soliplex server
-process.  Examples:
-
-- `sqlite+aiosqlite://`
-- `postgresql+psycopg://user:<password>@dbhost/dbname`
-
-This DBURI must be compatible with SQLAlchemy's [asyncio extension](
-https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html).
-Dialects known to work include:
-
-- [`aiosqlite`](https://aiosqlite.omnilib.dev/en/stable/index.html)
-- [`psycopg`](https://www.psycopg.org/psycopg3/)
-- [`asyncpg`](https://magicstack.github.io/asyncpg/current/)
-
-The PostgreSQL driver (`psycopg`) is not installed with Soliplex; install
-the `postgres` or `postgres-binary` extra (see
-[Installing the PostgreSQL driver](dburis.md#installing-the-postgresql-driver)).
-
-### Default configuration
-
-By default, Soliplex configures thread persistence using in-memory DBURIS:
-
-- For sync use, `sqlite` (DBURI `sqlite://`)
-- For async use, `aiosqlite` (DBURI `sqlite+aiosqlite://`)
-
-The default configuration is equivalent to this explicit YAML:
+If a stanza is omitted, that database is an in-memory SQLite database,
+equivalent to:
 
 ```yaml
 thread_persistence_db:
@@ -244,22 +214,12 @@ thread_persistence_db:
   async_dburi: "sqlite+aiosqlite://"
 ```
 
-### Database passwords as secrets
+A password in a DBURI can come from a [secret](secrets.md), e.g.
+`postgresql+psycopg://user:secret:MY_DBURI_SECRET@dbhost/dbname`.
 
-For DBURIs requiring authentication, we would rather not expose the
-password in plain-text configuration.  In this case, we can define a
-Soliplex secret (read [here](./secrets.md)), and use that secret in the DBURI.
-
-```yaml
-secrets:
-    - secret_name: MY_DBURI_SECRET
-      # Configure sources here
-...
-
-thread_persistence_db:
-  sync_dburi: "postgresql+psycopg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
-  async_dburi: "postgresql+psycopg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
-```
+See [SQLAlchemy DBURIs](dburis.md) for the full reference:  supported
+dialects, on-disk SQLite and PostgreSQL examples, installing the
+PostgreSQL driver, and migrations.
 
 ## OIDC Auth Provider Paths
 

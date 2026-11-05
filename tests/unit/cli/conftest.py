@@ -46,7 +46,7 @@ class ScratchInstallation:
 
     'path' is the installation YAML to hand to a CLI command;
     'dburi' / 'db_path' locate the (initially empty) sync authz database
-    that the installation's 'authorization_dburi' has been repointed at,
+    that the installation's 'authorization_db' has been repointed at,
     and 'agui_db_path' the thread-persistence one. 'session()' opens a sync
     SQLAlchemy session against the authz database, creating its schema on
     first use.

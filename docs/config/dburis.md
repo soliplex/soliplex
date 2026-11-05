@@ -259,7 +259,7 @@ authorization_db:
   async_dburi: "postgresql+psycopg://env:SOLIPLEX_AUTHZ_USER:secret:POSTGRES_PASSWORD@/env:SOLIPLEX_AUTHZ_DBNAME"
 ```
 
-## Deprecated spelling
+## Removed spelling
 
 Through Soliplex v0.81, these two stanzas named the URL flavor as the
 sub-key, with the word `dburi` in the stanza name instead:
@@ -274,24 +274,22 @@ authorization_dburi:
   async: "<async dburi>"
 ```
 
-That spelling is still read, but is deprecated and will be removed after
-Soliplex v0.84.  Loading a configuration which uses it emits a
-`DeprecationWarning` naming the stanza and the configuration file.
+That spelling was deprecated from v0.82 through v0.90, and is no longer
+read:  a configuration which still uses it fails to load, with an error
+naming the unexpected `thread_persistence_dburi` or `authorization_dburi`
+key.
 
 The mapping to the current spelling is mechanical:
 
-| Deprecated | Current |
+| Removed | Current |
 | --- | --- |
 | `thread_persistence_dburi` | `thread_persistence_db` |
 | `authorization_dburi` | `authorization_db` |
 | `sync` | `sync_dburi` |
 | `async` | `async_dburi` |
 
-A configuration which somehow sets *both* spellings for the same database
-uses the current one, ignoring the deprecated one.
-
-`soliplex-cli config <installation-path>` exports the resolved
-configuration using the current spelling, which makes it a convenient way
-to derive the replacement text:  `secret:` and `env:` markers within the
-DBURIs are exported as written, not resolved, so the exported stanzas can
-be pasted back into `installation.yaml`.
+Alternatively, with a release which still reads the old spelling (v0.90
+or earlier), `soliplex-cli config <installation-path>` exports the
+configuration using the current spelling:  `secret:` and `env:` markers
+within the DBURIs are exported as written, not resolved, so the exported
+stanzas can be pasted back into `installation.yaml`.
