@@ -35,8 +35,6 @@ from tests.unit.config import test_config_rooms as test_rooms
 from tests.unit.config import test_config_skills as test_skills
 
 NoRaise = contextlib.nullcontext()
-no_depr_warning = contextlib.nullcontext()
-has_depr_warning = pytest.deprecated_call()
 
 
 class FauxToolConfig:
@@ -2042,12 +2040,6 @@ def test_installationconfig_thread_persistence_sync_dburi(w_kw, expected):
 
     assert found == expected
 
-    # Deprecated spellings: remove after v0.84.
-    with has_depr_warning:
-        depr_found = installation_config.thread_persistence_dburi_sync
-
-    assert depr_found == expected
-
 
 @pytest.mark.parametrize(
     "w_kw, expected",
@@ -2065,12 +2057,6 @@ def test_installationconfig_thread_persistence_async_dburi(w_kw, expected):
     found = installation_config.thread_persistence_async_dburi
 
     assert found == expected
-
-    # Deprecated spellings: remove after v0.84.
-    with has_depr_warning:
-        depr_found = installation_config.thread_persistence_dburi_async
-
-    assert depr_found == expected
 
 
 @pytest.mark.parametrize(
@@ -2150,12 +2136,6 @@ def test_installationconfig_authorization_sync_dburi(w_kw, expected):
 
     assert found == expected
 
-    # Deprecated spellings: remove after v0.84.
-    with has_depr_warning:
-        depr_found = installation_config.authorization_dburi_sync
-
-    assert depr_found == expected
-
 
 @pytest.mark.parametrize(
     "w_kw, expected",
@@ -2173,12 +2153,6 @@ def test_installationconfig_authorization_async_dburi(w_kw, expected):
     found = installation_config.authorization_async_dburi
 
     assert found == expected
-
-    # Deprecated spellings: remove after v0.84.
-    with has_depr_warning:
-        depr_found = installation_config.authorization_dburi_async
-
-    assert depr_found == expected
 
 
 @pytest.mark.parametrize(
@@ -2322,193 +2296,147 @@ def _marshal_iconfig_kw(iconfig_kw, config_path):
 
 
 @pytest.mark.parametrize(
-    "config_yaml, expected_kw, exp_deprecation",
+    "config_yaml, expected_kw",
     [
         (
             BOGUS_INSTALLATION_CONFIG_YAML,
-            None,
             None,
         ),
         (
             BARE_INSTALLATION_CONFIG_YAML,
             BARE_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_BARE_META_INSTALLATION_CONFIG_YAML,
             W_BARE_META_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_FULL_META_INSTALLATION_CONFIG_YAML,
             W_FULL_META_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_YAML,
             W_MIDDLEWARE_STACK_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_YAML,
             W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_SECRETS_INSTALLATION_CONFIG_YAML,
             W_SECRETS_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_ENVIRONMENT_LIST_INSTALLATION_CONFIG_YAML,
             W_ENVIRONMENT_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_ENVIRONMENT_MAPPING_INSTALLATION_CONFIG_YAML,
             W_ENVIRONMENT_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_HR_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
             W_HR_CONFIG_FILE_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
             W_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
             W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
             W_ROOMS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
             W_THREADS_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
             W_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_SANDBOX_INSTALLATION_CONFIG_YAML,
             W_SANDBOX_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_SSE_DELIVERY_INSTALLATION_CONFIG_YAML,
             W_SSE_DELIVERY_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_NULL_SSE_DELIVERY_INSTALLATION_CONFIG_YAML,
             BARE_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_OIDC_PATHS_INSTALLATION_CONFIG_YAML,
             W_OIDC_PATHS_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_OIDC_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_OIDC_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_ROOM_PATHS_INSTALLATION_CONFIG_YAML,
             W_ROOM_PATHS_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_ROOM_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_ROOM_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_COMPLETION_PATHS_INSTALLATION_CONFIG_YAML,
             W_COMPLETION_PATHS_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_COMPLETION_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_COMPLETION_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_QUIZZES_PATHS_INSTALLATION_CONFIG_YAML,
             W_QUIZZES_PATHS_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
             W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_SKILLS_PATHS_INSTALLATION_CONFIG_YAML,
             W_SKILLS_PATHS_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_YAML,
             W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_YAML,
             W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_YAML,
             W_TP_DB_W_MIGRATION_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_YAML,
             W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_AZ_DB_W_SECRET_INSTALLATION_CONFIG_YAML,
             W_AZ_DB_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
         ),
         (
             W_AZ_DB_W_MIGRATION_INSTALLATION_CONFIG_YAML,
             W_AZ_DB_W_MIGRATION_INSTALLATION_CONFIG_KW.copy(),
-            no_depr_warning,
-        ),
-        # Deprecated spellings: remove after v0.84.
-        (
-            W_DEPR_TP_DBURI_INSTALLATION_CONFIG_YAML,
-            W_TP_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(),
-            has_depr_warning,
-        ),
-        (
-            W_DEPR_AZ_DBURI_INSTALLATION_CONFIG_YAML,
-            W_AZ_DB_NO_MIGR_INSTALLATION_CONFIG_KW.copy(),
-            has_depr_warning,
         ),
     ],
 )
@@ -2522,7 +2450,6 @@ def test_installationconfig_from_yaml(
     patched_secret_getters,
     config_yaml,
     expected_kw,
-    exp_deprecation,
 ):
     patched_soliplex_config["test_secret_func"] = test_meta.secret_source_func
     config_path = temp_dir / "installation.yaml"
@@ -2544,16 +2471,10 @@ def test_installationconfig_from_yaml(
     else:
         expected = _marshal_iconfig_kw(expected_kw, config_path)
 
-        with exp_deprecation as deprecated:
-            found = config_installation.InstallationConfig.from_yaml(
-                config_path,
-                config_dict,
-            )
-
-        if deprecated is not None:
-            warned = deprecated.pop(DeprecationWarning)
-            msg = warned.message.args[0]
-            assert f"(configured in {config_path})" in msg
+        found = config_installation.InstallationConfig.from_yaml(
+            config_path,
+            config_dict,
+        )
 
         if "secrets" in expected_kw:
             replaced_secrets = []

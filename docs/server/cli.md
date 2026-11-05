@@ -493,13 +493,13 @@ If `models.Installation.from_config(...)` raises, the `OK` is replaced
 by `ERROR: <message>`.
 
 Any Python warning raised while loading the configuration -- for
-example, the `DeprecationWarning` for a configuration stanza slated for
+example, the `DeprecationWarning` for a configuration setting slated for
 removal -- follows as a finding of its own, naming the warning's
 category:
 
 ```text
 WARNING: DeprecationWarning
-  The 'authorization_dburi' installation configuration stanza is deprecated,
+  The 'accepted_azp_list' OIDC provider setting
   ...
 ```
 

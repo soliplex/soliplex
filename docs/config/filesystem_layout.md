@@ -4,8 +4,9 @@ An "installation" is a set of filesystem-based configuration files, organized
 as a directory tree.
 
 At the root of an installation directory is a file, `installation.yaml`, which
-is used to configure environment variables and secrets used by the
-installation.  There may be alternative configurations available, e.g. to
+configures the installation as a whole:  its environment variables and
+secrets, its databases, and where to find the other configuration files
+described below.  There may be alternative configurations available, e.g. to
 configure how the installation runs inside a container.
 
 See [this page](installation.md) for
@@ -36,6 +37,22 @@ Example layout:
       room_config.yaml
     ...
 ```
+
+## Databases
+
+Soliplex keeps AG-UI thread history and authorization data in two
+databases, configured by the `thread_persistence_db` and
+`authorization_db` stanzas of `installation.yaml`.  By default both are
+in-memory SQLite databases, so nothing is written to the installation
+directory.
+
+The example configurations instead use SQLite files under `db/sqlite/`,
+e.g. `sqlite:///db/sqlite/thread_persistence.sqlite`.  A relative path
+like this is resolved against the server's working directory, not the
+installation directory, and its parent directory must already exist.
+
+See [SQLAlchemy DBURIs](dburis.md) for the full reference, including
+PostgreSQL and database migrations.
 
 ## Room Configuration
 

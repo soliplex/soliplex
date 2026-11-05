@@ -516,10 +516,6 @@ class Installation(pydantic.BaseModel):
     logging_headers_map: dict[str, str] | None = {}
     logging_claims_map: dict[str, str] | None = {}
 
-    # Deprecated:  will be removed after v0.84
-    thread_persistence_dburi_sync: str | None = None
-    thread_persistence_dburi_async: str | None = None
-
     @classmethod
     def from_config(
         cls, installation_config: config_installation.InstallationConfig
@@ -570,9 +566,6 @@ class Installation(pydantic.BaseModel):
             logging_config_file=installation_config._logging_config_file,
             logging_headers_map=installation_config.logging_headers_map,
             logging_claims_map=installation_config.logging_claims_map,
-            # Deprecated:  return dummy values until after v0.84.
-            thread_persistence_dburi_sync=DUMMY_TP_DBURI,
-            thread_persistence_dburi_async=DUMMY_TP_DBURI,
         )
 
 

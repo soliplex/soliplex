@@ -7,7 +7,6 @@ import itertools
 import os
 import pathlib
 import typing
-import warnings
 
 import dotenv
 import yaml
@@ -363,20 +362,6 @@ class SandboxConfig:
             ).resolve()
         else:
             return None
-
-
-MULTI_DBURI_DEPRECATION = """\
-The '{stem}_dburi' installation configuration stanza is deprecated,
-and will be removed after soliplex v0.84 (configured in {config_path}).
-Use instead '{stem}_db', with sub-keys 'sync_dburi' and 'async_dburi'.
-"""
-
-
-TYPE_SFX_DBURI_DEPRECATION = """\
-The '{stem}_dburi_{type_}' installation configuration property is deprecated,
-and will be removed after soliplex v0.84 (configured in {config_path}).
-Use instead '{stem}_{type_}_dburi'.
-"""
 
 
 class MigrationPolicy(enum.StrEnum):
@@ -895,33 +880,6 @@ class InstallationConfig:
                 )
             )
 
-    # Deprecated aliases: remove after v0.84
-    @property
-    def thread_persistence_dburi_sync(self) -> str:
-        warnings.warn(
-            TYPE_SFX_DBURI_DEPRECATION.format(
-                stem="thread_persistence",
-                type_="sync",
-                config_path=str(self._config_path),
-            ),
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.thread_persistence_sync_dburi
-
-    @property
-    def thread_persistence_dburi_async(self) -> str:
-        warnings.warn(
-            TYPE_SFX_DBURI_DEPRECATION.format(
-                stem="thread_persistence",
-                type_="async",
-                config_path=str(self._config_path),
-            ),
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.thread_persistence_async_dburi
-
     #
     # Authorization DB
     #
@@ -977,33 +935,6 @@ class InstallationConfig:
                     installation_config=self,
                 )
             )
-
-    # Deprecated aliases: remove after v0.84
-    @property
-    def authorization_dburi_sync(self) -> str:
-        warnings.warn(
-            TYPE_SFX_DBURI_DEPRECATION.format(
-                stem="authorization",
-                type_="sync",
-                config_path=str(self._config_path),
-            ),
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.authorization_sync_dburi
-
-    @property
-    def authorization_dburi_async(self) -> str:
-        warnings.warn(
-            TYPE_SFX_DBURI_DEPRECATION.format(
-                stem="authorization",
-                type_="async",
-                config_path=str(self._config_path),
-            ),
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.authorization_async_dburi
 
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
@@ -1129,27 +1060,6 @@ class InstallationConfig:
 
             config_dict["logfire_config"] = logfire_cfg
 
-            # Deprecated spellings: remove after v0.84.
-            depr_tbd = config_dict.pop("thread_persistence_dburi", None)
-
-            if depr_tbd is not None:
-                warnings.warn(
-                    MULTI_DBURI_DEPRECATION.format(
-                        stem="thread_persistence",
-                        config_path=str(config_path),
-                    ),
-                    category=DeprecationWarning,
-                    stacklevel=2,
-                )
-                tp_db_already = "thread_persistence_db" in config_dict
-
-                if not tp_db_already:  # pragma NO COVER new one wins
-                    # Re-write to the new spelling
-                    config_dict["thread_persistence_db"] = {
-                        "sync_dburi": depr_tbd.get("sync"),
-                        "async_dburi": depr_tbd.get("async"),
-                    }
-
             tp_db = config_dict.pop("thread_persistence_db", {})
             config_dict["_thread_persistence_sync_dburi"] = tp_db.get(
                 "sync_dburi"
@@ -1163,27 +1073,6 @@ class InstallationConfig:
             config_dict["_thread_persistence_migration_policy"] = tp_db.get(
                 "migration_policy"
             )
-
-            # Deprecated spellings: remove after v0.84.
-            depr_adb = config_dict.pop("authorization_dburi", None)
-
-            if depr_adb is not None:
-                warnings.warn(
-                    MULTI_DBURI_DEPRECATION.format(
-                        stem="authorization",
-                        config_path=str(config_path),
-                    ),
-                    category=DeprecationWarning,
-                    stacklevel=2,
-                )
-                az_db_already = "authorization_db" in config_dict
-
-                if not az_db_already:  # pragma NO COVER new one wins
-                    # Re-write to the new spelling
-                    config_dict["authorization_db"] = {
-                        "sync_dburi": depr_adb.get("sync"),
-                        "async_dburi": depr_adb.get("async"),
-                    }
 
             az_db = config_dict.pop("authorization_db", {})
             config_dict["_authorization_sync_dburi"] = az_db.get("sync_dburi")
