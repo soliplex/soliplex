@@ -62,9 +62,6 @@ NoSuchSecret = pytest.raises(KeyError)
 RaisesSecretError = pytest.raises(secrets.SecretError)
 NoRaise = contextlib.nullcontext()
 
-no_depr_warning = contextlib.nullcontext()
-has_depr_warning = pytest.deprecated_call()
-
 
 @pytest.fixture
 def test_user() -> models.UserProfile:
@@ -684,13 +681,6 @@ def test_installation_thread_persistence_sync_dburi():
         is i_config.thread_persistence_sync_dburi
     )
 
-    # Deprecated spellings: remove after v0.84.
-    with has_depr_warning:
-        assert (
-            the_installation.thread_persistence_dburi_sync
-            is i_config.thread_persistence_sync_dburi
-        )
-
 
 def test_installation_thread_persistence_async_dburi():
     i_config = mock.create_autospec(config_installation.InstallationConfig)
@@ -700,13 +690,6 @@ def test_installation_thread_persistence_async_dburi():
         the_installation.thread_persistence_async_dburi
         is i_config.thread_persistence_async_dburi
     )
-
-    # Deprecated spellings: remove after v0.84.
-    with has_depr_warning:
-        assert (
-            the_installation.thread_persistence_dburi_async
-            is i_config.thread_persistence_async_dburi
-        )
 
 
 def test_installation_authorization_sync_dburi():
@@ -718,13 +701,6 @@ def test_installation_authorization_sync_dburi():
         is i_config.authorization_sync_dburi
     )
 
-    # Deprecated spellings: remove after v0.84.
-    with has_depr_warning:
-        assert (
-            the_installation.authorization_dburi_sync
-            is i_config.authorization_sync_dburi
-        )
-
 
 def test_installation_authorization_async_dburi():
     i_config = mock.create_autospec(config_installation.InstallationConfig)
@@ -734,13 +710,6 @@ def test_installation_authorization_async_dburi():
         the_installation.authorization_async_dburi
         is i_config.authorization_async_dburi
     )
-
-    # Deprecated spellings: remove after v0.84.
-    with has_depr_warning:
-        assert (
-            the_installation.authorization_dburi_async
-            is i_config.authorization_async_dburi
-        )
 
 
 def test_installation_thread_persistence_migration_dburi():
