@@ -356,7 +356,7 @@ class RunMessageWidget(t_widget.Widget):
         yield t_widgets.Label(f"{role.capitalize()}:")
 
         if content is not None:
-            yield t_widgets.Static(content)
+            yield t_widgets.Static(content, markup=False)
 
 
 class RunEventWidget(t_widget.Widget):
@@ -394,7 +394,7 @@ class RunEventWidget(t_widget.Widget):
 
     def compose(self) -> t_app.ComposeResult:
         yield t_widgets.Label(self.event_type)
-        yield t_widgets.Static(self.event_content)
+        yield t_widgets.Static(self.event_content, markup=False)
 
 
 class StateViewModal(t_screen.ModalScreen):
@@ -518,7 +518,9 @@ class RunView(t_screen.Screen):
 
         with RunLabeledWidget():
             yield t_widgets.Label("Label:")
-            yield t_widgets.Static(self.label_text, id="run-label")
+            yield t_widgets.Static(
+                self.label_text, id="run-label", markup=False
+            )
 
         with RunLabeledWidget():
             yield t_widgets.Label("Messages:")
