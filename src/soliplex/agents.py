@@ -153,7 +153,9 @@ def get_default_agent_from_configs(
 
     return pydantic_ai.Agent(
         model=model,
-        model_settings=agent_config.model_settings,
+        model_settings=config_agents.get_model_settings_from_config(
+            agent_config=agent_config,
+        ),
         tools=tools,
         toolsets=toolsets,
         instructions=agent_config.get_system_prompt(),

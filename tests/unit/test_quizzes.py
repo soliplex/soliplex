@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from pydantic_ai.models import google as google_models
 
 from soliplex import models
 from soliplex import quizzes
@@ -100,50 +101,57 @@ def a_quiz(
     return quiz
 
 
-@mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
-@mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
-@mock.patch("pydantic_ai.models.openai.OpenAIChatModel")
+@mock.patch("soliplex.config.agents.get_model_from_config")
 @mock.patch("pydantic_ai.Agent")
 def test_get_quiz_judge_agent(
     agent_klass,
-    model_klass,
-    ollama_provider_klass,
-    openai_provider_klass,
+    get_model_from_config,
     a_quiz,
 ):
-    is_openai = (
-        a_quiz.judge_agent.provider_type
-        == config_agents.LLMProviderType.OPENAI
-    )
-
+    """The judge's model comes from 'get_model_from_config'."""
     found = quizzes.get_quiz_judge_agent(a_quiz)
 
     assert found is agent_klass.return_value
 
+    get_model_from_config.assert_called_once_with(
+        agent_config=a_quiz.judge_agent,
+    )
     agent_klass.assert_called_once_with(
-        model=model_klass.return_value,
+        model=get_model_from_config.return_value,
         output_type=models.QuizLLMJudgeResponse,
         system_prompt=quizzes.ANSWER_EQUIVALENCE_RUBRIC,
     )
 
-    if is_openai:
-        model_klass.assert_called_once_with(
-            model_name=a_quiz.judge_agent.llm_model_name,
-            provider=openai_provider_klass.return_value,
-        )
-        openai_provider_klass.assert_called_once_with(
-            **a_quiz.judge_agent.llm_provider_kw,
-        )
-        ollama_provider_klass.assert_not_called()
-    else:
-        model_klass.assert_called_once_with(
-            model_name=a_quiz.judge_agent.llm_model_name,
-            provider=ollama_provider_klass.return_value,
-        )
-        openai_provider_klass.assert_not_called()
-        ollama_provider_klass.assert_called_once_with(
-            **a_quiz.judge_agent.llm_provider_kw,
-        )
+
+def test_get_quiz_judge_agent_builds_a_google_judge(
+    qa_question,
+    mc_question,
+    installation_config,
+    monkeypatch,
+):
+    """A 'google' judge is a 'GoogleModel', not an Ollama one.
+
+    Nothing mocked here: selecting the provider by hand sent every kind
+    but 'openai' to 'OllamaProvider', so only building the model for
+    real can tell the two apart.
+    """
+    monkeypatch.setenv("GEMINI_API_KEY", "testing")
+    judge_agent = config_agents.AgentConfig(
+        id="quiz-testing-judge",
+        model_name="gemini-2.5-flash",
+        provider_type=config_agents.LLMProviderType.GOOGLE,
+        _installation_config=installation_config,
+    )
+    quiz = config_quizzes.QuizConfig(
+        id="testing",
+        question_file="ignored.json",
+        judge_agent=judge_agent,
+        _installation_config=installation_config,
+    )
+
+    agent = quizzes.get_quiz_judge_agent(quiz)
+
+    assert isinstance(agent.model, google_models.GoogleModel)
 
 
 @pytest.mark.anyio
