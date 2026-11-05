@@ -387,59 +387,6 @@ class Installation:
     def authorization_migration_policy(self):
         return self._config.authorization_migration_policy
 
-    # Deprecated aliases: remove after v0.84.
-    @property
-    def thread_persistence_dburi_sync(self) -> str:
-        warnings.warn(
-            TYPE_SFX_DBURI_DEPRECATION.format(
-                stem="thread_persistence",
-                type_="sync",
-                config_path=str(self._config._config_path),
-            ),
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._config.thread_persistence_sync_dburi
-
-    @property
-    def thread_persistence_dburi_async(self) -> str:
-        warnings.warn(
-            TYPE_SFX_DBURI_DEPRECATION.format(
-                stem="thread_persistence",
-                type_="async",
-                config_path=str(self._config._config_path),
-            ),
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._config.thread_persistence_async_dburi
-
-    @property
-    def authorization_dburi_sync(self) -> str:
-        warnings.warn(
-            TYPE_SFX_DBURI_DEPRECATION.format(
-                stem="authorization",
-                type_="sync",
-                config_path=str(self._config._config_path),
-            ),
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._config.authorization_sync_dburi
-
-    @property
-    def authorization_dburi_async(self) -> str:
-        warnings.warn(
-            TYPE_SFX_DBURI_DEPRECATION.format(
-                stem="authorization",
-                type_="async",
-                config_path=str(self._config._config_path),
-            ),
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._config.authorization_async_dburi
-
     @property
     def auth_disabled(self):
         return len(self._config.oidc_auth_system_configs) == 0
