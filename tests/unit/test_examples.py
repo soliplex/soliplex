@@ -112,7 +112,7 @@ async def test_faux_agent_run_returns_canned_answer(faux_agent):
     result = await faux_agent.run("what is up?")
 
     assert result.output == "I don't know!"
-    assert isinstance(result.usage(), ai_usage.RunUsage)
+    assert isinstance(result.usage, ai_usage.RunUsage)
 
 
 @pytest.mark.anyio
@@ -224,7 +224,7 @@ async def test_run_stream_events_yields_final_answer(
     ]
 
     assert isinstance(events[-1], ai_run.AgentRunResultEvent)
-    assert events[-1].result == "I don't know!"
+    assert events[-1].result.output == "I don't know!"
 
 
 @pytest.mark.anyio
@@ -257,7 +257,7 @@ async def test_run_stream_events_handles_non_request_history(
         )
     ]
 
-    assert events[-1].result == "I don't know!"
+    assert events[-1].result.output == "I don't know!"
 
 
 @pytest.mark.anyio
@@ -280,7 +280,7 @@ async def test_run_stream_events_handles_history_without_user_prompt(
         )
     ]
 
-    assert events[-1].result == "I don't know!"
+    assert events[-1].result.output == "I don't know!"
 
 
 @pytest.mark.anyio
@@ -291,4 +291,4 @@ async def test_run_stream_events_returns_event_stream(faux_agent):
     async with stream as events:
         collected = [event async for event in events]
 
-    assert collected[-1].result == "I don't know!"
+    assert collected[-1].result.output == "I don't know!"
