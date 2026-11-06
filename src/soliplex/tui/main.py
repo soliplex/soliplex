@@ -340,12 +340,11 @@ class RunMessageWidget(t_widget.Widget):
     def message_content(self):
         content = self.message_info.get("content")
 
-        if self.message_role == "user":
-            if not isinstance(content, str):
-                if content.type == "binary":
-                    content = "<binary>"
-                else:
-                    content = content.text
+        if self.message_role == "user" and isinstance(content, list):
+            content = "\n".join(
+                part["text"] if part["type"] == "text" else f"<{part['type']}>"
+                for part in content
+            )
 
         return str(content) if content is not None else None
 
@@ -1119,12 +1118,6 @@ class RoomView(t_screen.Screen):
                 chunk = json.loads(decoded)
                 event = agui_parser.agui_event_from_json(chunk)
                 esp(event)
-
-                if chunk["type"] == "THINKING_START":
-                    response_content += "\n\n** thinking **\n\n"
-
-                elif chunk["type"] == "THINKING_TEXT_MESSAGE_CONTENT":
-                    response_content += chunk["delta"]
 
                 if chunk["type"] == "REASONING_START":
                     response_content += "\n\n** reasoning **\n\n"

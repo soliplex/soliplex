@@ -34,23 +34,29 @@ TEXT_CONTENT_1_ABC = agui_core.TextMessageContentEvent(
 )
 TEXT_END_1 = agui_core.TextMessageEndEvent(message_id=MESSAGE_ID_1)
 
-THINK_START = agui_core.ThinkingTextMessageStartEvent()
-THINK_CONTENT_A = agui_core.ThinkingTextMessageContentEvent(
+REASONING_ID = "test-reasoning-id"
+REASONING_START = agui_core.ReasoningMessageStartEvent(message_id=REASONING_ID)
+REASONING_CONTENT_A = agui_core.ReasoningMessageContentEvent(
+    message_id=REASONING_ID,
     delta="A ",
 )
-THINK_CONTENT_B = agui_core.ThinkingTextMessageContentEvent(
+REASONING_CONTENT_B = agui_core.ReasoningMessageContentEvent(
+    message_id=REASONING_ID,
     delta="B ",
 )
-THINK_CONTENT_C = agui_core.ThinkingTextMessageContentEvent(
+REASONING_CONTENT_C = agui_core.ReasoningMessageContentEvent(
+    message_id=REASONING_ID,
     delta="C",
 )
-THINK_CONTENT_AB = agui_core.ThinkingTextMessageContentEvent(
+REASONING_CONTENT_AB = agui_core.ReasoningMessageContentEvent(
+    message_id=REASONING_ID,
     delta="A B ",
 )
-THINK_CONTENT_ABC = agui_core.ThinkingTextMessageContentEvent(
+REASONING_CONTENT_ABC = agui_core.ReasoningMessageContentEvent(
+    message_id=REASONING_ID,
     delta="A B C",
 )
-THINK_END = agui_core.ThinkingTextMessageEndEvent()
+REASONING_END = agui_core.ReasoningMessageEndEvent(message_id=REASONING_ID)
 
 TOOL_CALL_ID = "test-tool-call-id"
 TOOL_CALL_NAME = "test_tool_call_name"
@@ -154,34 +160,34 @@ STATE_SNAPSHOT = agui_core.StateSnapshotEvent(snapshot=FINAL_STATE)
             ],
         ),
         (
-            [THINK_START, THINK_CONTENT_A, THINK_END],
-            [THINK_START, THINK_CONTENT_A, THINK_END],
+            [REASONING_START, REASONING_CONTENT_A, REASONING_END],
+            [REASONING_START, REASONING_CONTENT_A, REASONING_END],
         ),
         (
             [
-                THINK_START,
-                THINK_CONTENT_A,
-                THINK_CONTENT_B,
-                THINK_CONTENT_C,
-                THINK_END,
+                REASONING_START,
+                REASONING_CONTENT_A,
+                REASONING_CONTENT_B,
+                REASONING_CONTENT_C,
+                REASONING_END,
             ],
-            [THINK_START, THINK_CONTENT_ABC, THINK_END],
+            [REASONING_START, REASONING_CONTENT_ABC, REASONING_END],
         ),
         (
             [
-                THINK_START,
-                THINK_CONTENT_A,
-                THINK_CONTENT_B,
+                REASONING_START,
+                REASONING_CONTENT_A,
+                REASONING_CONTENT_B,
                 OTHER,
-                THINK_CONTENT_C,
-                THINK_END,
+                REASONING_CONTENT_C,
+                REASONING_END,
             ],
             [
-                THINK_START,
-                THINK_CONTENT_AB,
+                REASONING_START,
+                REASONING_CONTENT_AB,
                 OTHER,
-                THINK_CONTENT_C,
-                THINK_END,
+                REASONING_CONTENT_C,
+                REASONING_END,
             ],
         ),
         (
@@ -519,11 +525,11 @@ async def test_coalesce_event_stream_prefetches_at_most_two_events():
 
 @pytest.mark.anyio
 async def test_coalesce_event_stream_no_merge_across_types():
-    events = [THINK_CONTENT_A, TEXT_CONTENT_1_A, TEXT_CONTENT_1_B]
+    events = [REASONING_CONTENT_A, TEXT_CONTENT_1_A, TEXT_CONTENT_1_B]
 
     found = [event async for event in _coalesce(events)]
 
-    assert found == [THINK_CONTENT_A, TEXT_CONTENT_1_AB]
+    assert found == [REASONING_CONTENT_A, TEXT_CONTENT_1_AB]
 
 
 @pytest.mark.anyio
@@ -531,7 +537,7 @@ async def test_coalesce_event_stream_no_merge_across_types():
     "first, second, merged",
     [
         (TEXT_CONTENT_1_A, TEXT_CONTENT_1_B, TEXT_CONTENT_1_AB),
-        (THINK_CONTENT_A, THINK_CONTENT_B, THINK_CONTENT_AB),
+        (REASONING_CONTENT_A, REASONING_CONTENT_B, REASONING_CONTENT_AB),
         (TOOL_CALL_ARGS_A, TOOL_CALL_ARGS_B, TOOL_CALL_ARGS_AB),
         (
             agui_core.ReasoningMessageContentEvent(
