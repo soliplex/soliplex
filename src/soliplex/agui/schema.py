@@ -101,6 +101,14 @@ class Thread(Base):
         passive_deletes=True,
     )
 
+    # One-way: 'Label' has no 'threads' collection. 'passive_deletes'
+    # leaves the association rows to the database's 'ON DELETE CASCADE'.
+    labels: Mapped[list[Label]] = relationship(
+        secondary="thread_label",
+        order_by="Label.name_key",
+        passive_deletes=True,
+    )
+
     async def list_runs(self):
         runs = []
 
@@ -141,6 +149,58 @@ class ThreadMetadata(Base):
     #
     name: Mapped[str] = mapped_column()
     description: Mapped[str | None] = mapped_column()
+
+
+class Label(Base):
+    """A category which may be attached to threads.
+
+    Labels are global to the installation -- one namespace shared by
+    every room -- and are curated by administrators; ordinary users may
+    only attach existing ones to their own threads.
+
+    'name' is what people read and type; 'name_key' is that name folded
+    to lower case and carries the uniqueness constraint, so 'Urgent' and
+    'urgent' are the same label.
+
+    'color' is a '#RRGGBB' string, defaulting to the neutral grey in
+    'agui.util.DEFAULT_LABEL_COLOR' and thereafter editable.
+    """
+
+    __tablename__ = "label"
+
+    # Without AUTOINCREMENT, SQLite reuses 'max(id) + 1', so a new label
+    # could take a deleted one's ID and a stale client catalogue would
+    # paint the wrong chip. No-op on PostgreSQL.
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    id_: Mapped[int] = mapped_column(primary_key=True)
+    created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
+        default=agui_util._timestamp,
+    )
+
+    name: Mapped[str] = mapped_column()
+    name_key: Mapped[str] = mapped_column(unique=True)
+    color: Mapped[str] = mapped_column()
+
+
+thread_label = sqla_schema.Table(
+    "thread_label",
+    Base.metadata,
+    sqla_schema.Column(
+        "thread_id_",
+        ForeignKey("thread.id_", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    # The composite primary key does not serve lookups by label alone,
+    # which the label filter and the usage count both make.
+    sqla_schema.Column(
+        "label_id_",
+        ForeignKey("label.id_", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    ),
+)
 
 
 class Run(Base):
