@@ -526,7 +526,7 @@ def test_deleting_a_thread_detaches_its_labels(the_fk_session):
     the_fk_session.commit()
 
     # The association goes; the label stays in the catalogue.
-    assert the_fk_session.query(agui_schema.thread_label).count() == 0
+    assert the_fk_session.query(agui_schema.ThreadLabel).count() == 0
     assert the_fk_session.get(agui_schema.Label, label.id_) is not None
 
 
@@ -540,7 +540,7 @@ def test_deleting_a_label_detaches_it_from_threads(the_fk_session):
     the_fk_session.commit()
 
     # Deleting a label must not take its threads with it.
-    assert the_fk_session.query(agui_schema.thread_label).count() == 0
+    assert the_fk_session.query(agui_schema.ThreadLabel).count() == 0
     assert the_fk_session.get(agui_schema.Thread, thread.id_) is not None
 
 

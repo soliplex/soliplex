@@ -184,23 +184,22 @@ class Label(Base):
     color: Mapped[str] = mapped_column()
 
 
-thread_label = sqla_schema.Table(
-    "thread_label",
-    Base.metadata,
-    sqla_schema.Column(
-        "thread_id_",
+class ThreadLabel(Base):
+    """Associate a 'Thread' with a 'Label' it carries."""
+
+    __tablename__ = "thread_label"
+
+    thread_id_: Mapped[int] = mapped_column(
         ForeignKey("thread.id_", ondelete="CASCADE"),
         primary_key=True,
-    ),
+    )
     # The composite primary key does not serve lookups by label alone,
     # which the label filter and the usage count both make.
-    sqla_schema.Column(
-        "label_id_",
+    label_id_: Mapped[int] = mapped_column(
         ForeignKey("label.id_", ondelete="CASCADE"),
         primary_key=True,
         index=True,
-    ),
-)
+    )
 
 
 class Run(Base):

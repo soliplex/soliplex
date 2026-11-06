@@ -237,9 +237,9 @@ class ThreadStorage(agui.ThreadStorage):
                 # EXISTS multiplies nothing.
                 return (
                     sqla_sql.select(sqla_sql.literal(1))
-                    .select_from(agui_schema.thread_label)
+                    .select_from(agui_schema.ThreadLabel)
                     .where(
-                        agui_schema.thread_label.c.thread_id_
+                        agui_schema.ThreadLabel.thread_id_
                         == agui_schema.Thread.id_,
                         *conditions,
                     )
@@ -257,7 +257,7 @@ class ThreadStorage(agui.ThreadStorage):
             if label_ids:
                 label_filters.append(
                     carries(
-                        agui_schema.thread_label.c.label_id_.in_(label_ids),
+                        agui_schema.ThreadLabel.label_id_.in_(label_ids),
                     )
                 )
             if unlabeled:
@@ -420,9 +420,9 @@ class ThreadStorage(agui.ThreadStorage):
     async def get_label_usage_counts(self) -> dict[int, int]:
         async with self.session as session:
             query = sqla_sql.select(
-                agui_schema.thread_label.c.label_id_,
+                agui_schema.ThreadLabel.label_id_,
                 sqla_sql.func.count(),
-            ).group_by(agui_schema.thread_label.c.label_id_)
+            ).group_by(agui_schema.ThreadLabel.label_id_)
             rows = (await session.execute(query)).all()
 
         return {label_id: count for label_id, count in rows}
@@ -527,14 +527,13 @@ class ThreadStorage(agui.ThreadStorage):
                     agui_schema.Label,
                 )
                 .join(
-                    agui_schema.thread_label,
-                    agui_schema.thread_label.c.thread_id_
+                    agui_schema.ThreadLabel,
+                    agui_schema.ThreadLabel.thread_id_
                     == agui_schema.Thread.id_,
                 )
                 .join(
                     agui_schema.Label,
-                    agui_schema.Label.id_
-                    == agui_schema.thread_label.c.label_id_,
+                    agui_schema.Label.id_ == agui_schema.ThreadLabel.label_id_,
                 )
                 .where(agui_schema.Thread.thread_id.in_(thread_ids))
                 .order_by(agui_schema.Label.name_key)
