@@ -1,4 +1,4 @@
-"""soliplex-v0.88
+"""soliplex-v0.92
 
 Threads: add the label catalogue, 'Label' and 'ThreadLabel'
 
