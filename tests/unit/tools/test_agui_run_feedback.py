@@ -22,6 +22,12 @@ STATE_NAMESPACE = arf_tools.STATE_NAMESPACE
 
 NOW = datetime.datetime.now(datetime.UTC)
 SINCE = NOW - datetime.timedelta(days=1)
+
+
+def _patch(event: agui_core.StateDeltaEvent) -> list[dict]:
+    return event.model_dump(mode="json", by_alias=True)["delta"]
+
+
 LIMIT = 7
 USER_NAME = "phreddy"
 EMAIL = "phreddy@example.com"
@@ -394,7 +400,8 @@ async def test_query_recent_feedback(
     else:
         (event,) = deltas
         assert (
-            jsonpatch.apply_patch(start_agui_state, event.delta) == deps.state
+            jsonpatch.apply_patch(start_agui_state, _patch(event))
+            == deps.state
         )
 
 
@@ -559,20 +566,20 @@ async def test_review_recent_feedback(
         events = found.metadata
 
         (event,) = events
-        assert len(event.delta) == 2
+        assert len(_patch(event)) == 2
 
         d_remove = {
             "op": "remove",
             "path": f"/{STATE_NAMESPACE}/entries/opened/0",
         }
-        assert d_remove in event.delta
+        assert d_remove in _patch(event)
 
         d_add = {
             "op": "add",
             "path": f"/{STATE_NAMESPACE}/entries/reviewed/0",
             "value": exp_after_entry.model_dump(mode="json"),
         }
-        assert d_add in event.delta
+        assert d_add in _patch(event)
 
         rvw_rf.assert_awaited_once_with(
             reviewer_user_name=OTHER_USER_NAME,
@@ -588,7 +595,8 @@ async def test_review_recent_feedback(
 
         (event,) = deltas
         assert (
-            jsonpatch.apply_patch(start_agui_state, event.delta) == deps.state
+            jsonpatch.apply_patch(start_agui_state, _patch(event))
+            == deps.state
         )
         gts.assert_called_once_with(ctx_w_deps)
 
@@ -674,7 +682,7 @@ async def test_resolve_recent_feedback(
 
         events = found.metadata
         (event,) = events
-        assert len(event.delta) == 2
+        assert len(_patch(event)) == 2
 
         d_remove = {
             "op": "remove",
@@ -683,14 +691,14 @@ async def test_resolve_recent_feedback(
                 f"{'reviewed' if w_reviewed else 'opened'}/0"
             ),
         }
-        assert d_remove in event.delta
+        assert d_remove in _patch(event)
 
         d_add = {
             "op": "add",
             "path": f"/{STATE_NAMESPACE}/entries/resolved/0",
             "value": exp_after_entry.model_dump(mode="json"),
         }
-        assert d_add in event.delta
+        assert d_add in _patch(event)
 
         rsv_rf.assert_awaited_once_with(
             resolver_user_name=OTHER_USER_NAME,
@@ -706,7 +714,8 @@ async def test_resolve_recent_feedback(
 
         (event,) = deltas
         assert (
-            jsonpatch.apply_patch(start_agui_state, event.delta) == deps.state
+            jsonpatch.apply_patch(start_agui_state, _patch(event))
+            == deps.state
         )
         gts.assert_called_once_with(ctx_w_deps)
 

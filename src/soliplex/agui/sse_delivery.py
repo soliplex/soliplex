@@ -17,7 +17,6 @@ AGUI_EventStream = collections.abc.AsyncIterator[agui_core.Event]
 
 _COMPACTIBLE_TYPES = {  # event_type: compacting_attr
     agui_core.EventType.TEXT_MESSAGE_CONTENT: "message_id",
-    agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT: "message_id",
     agui_core.EventType.REASONING_MESSAGE_CONTENT: "message_id",
     agui_core.EventType.TOOL_CALL_ARGS: "tool_call_id",
 }
