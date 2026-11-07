@@ -25,8 +25,9 @@ MODEL_NAME = "test-model"
 OTHER_MODEL_NAME = "test-model-other"
 PROVIDER_BASE_URL = "https://provider.example.com/api"
 PROVIDER_BASE_URL_VIA_ENV = "env:PROVIDER_BASE_URL"
-OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
 OLLAMA_BASE_URL = "https://example.com:12345"
+OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
+GOOGLE_BASE_URL = "https://google.example.com/api"
 VLLM_BASE_URL = "https://vllm.example.com:8000"
 AGUI_FEATURE_NAME = "test-agui-feature"
 
@@ -66,19 +67,60 @@ model_name: "{MODEL_NAME}"
 system_prompt: "{SYSTEM_PROMPT}"
 """
 
-W_PROVIDER_KW_AGENT_CONFIG_KW = dict(
+W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    provider_type=config_agents.LLMProviderType.OLLAMA,
+    provider_base_url=OLLAMA_BASE_URL,
+)
+W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+provider_type: "ollama"
+provider_base_url: "{OLLAMA_BASE_URL}"
+"""
+
+W_OPENAI_PROVIDER_KW_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
     model_name=MODEL_NAME,
     provider_type=config_agents.LLMProviderType.OPENAI,
     provider_base_url=OTHER_PROVIDER_BASE_URL,
     provider_key="secret:OTHER_PROVIDER_KEY",
 )
-W_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
+W_OPENAI_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
 model_name: "{MODEL_NAME}"
 provider_type: "openai"
 provider_base_url: "{OTHER_PROVIDER_BASE_URL}"
 provider_key: "secret:OTHER_PROVIDER_KEY"
+"""
+
+W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    provider_type=config_agents.LLMProviderType.GOOGLE,
+    provider_base_url=GOOGLE_BASE_URL,
+    provider_key="secret:GOGGLE_API_KEY",
+)
+W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+provider_type: "google"
+provider_base_url: "{GOOGLE_BASE_URL}"
+provider_key: "secret:GOGGLE_API_KEY"
+"""
+
+W_VLLM_PROVIDER_KW_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    provider_type=config_agents.LLMProviderType.VLLM,
+    provider_base_url=VLLM_BASE_URL,
+)
+W_VLLM_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+provider_type: "vllm"
+provider_base_url: "{VLLM_BASE_URL}"
 """
 
 # Every interpolating field carries a marker, so a dump which resolved one
@@ -588,25 +630,6 @@ def test_agentconfig_ctor(installation_config, kw):
     assert found.model_name == kw["model_name"]
 
 
-def test_agentconfig_vllm_from_yaml(installation_config, tmp_path):
-    config_dict = yaml.safe_load(
-        f"""
-id: "{AGENT_ID}"
-model_name: "Qwen/Qwen3-8B"
-provider_type: "vllm"
-provider_base_url: "{BASE_URL}"
-"""
-    )
-
-    found = config_agents.AgentConfig.from_yaml(
-        installation_config, tmp_path / "agent.yaml", config_dict
-    )
-
-    assert found.provider_type == config_agents.LLMProviderType.VLLM
-    assert found.as_yaml["provider_type"] == "vllm"
-    assert found.provider_base_url == BASE_URL
-
-
 @pytest.mark.parametrize(
     "config_yaml, expectation",
     [
@@ -628,8 +651,26 @@ provider_base_url: "{BASE_URL}"
             contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
         ),
         (
-            W_PROVIDER_KW_AGENT_CONFIG_YAML,
-            contextlib.nullcontext(W_PROVIDER_KW_AGENT_CONFIG_KW.copy()),
+            W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(
+                W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_KW.copy()
+            ),
+        ),
+        (
+            W_OPENAI_PROVIDER_KW_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(
+                W_OPENAI_PROVIDER_KW_AGENT_CONFIG_KW.copy()
+            ),
+        ),
+        (
+            W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(
+                W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_KW.copy()
+            ),
+        ),
+        (
+            W_VLLM_PROVIDER_KW_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(W_VLLM_PROVIDER_KW_AGENT_CONFIG_KW.copy()),
         ),
         (
             W_RETRIES_AGENT_CONFIG_YAML,
@@ -1152,7 +1193,10 @@ def test_agentconfig_capabilities(w_kwargs, expected):
     "agent_config_kw, exp_cap",
     [
         (BARE_AGENT_CONFIG_KW.copy(), {}),
-        (W_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
+        (W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
+        (W_OPENAI_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
+        (W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
+        (W_VLLM_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
         (W_RETRIES_AGENT_CONFIG_KW.copy(), {}),
         (W_PROMPT_FILE_AGENT_CONFIG_KW.copy(), {}),
         (W_MULTIMODAL_AGENT_CONFIG_KW.copy(), {}),
@@ -1229,7 +1273,10 @@ def _round_trip_agent_config(installation_config, config_path, config_dict):
     [
         BARE_AGENT_CONFIG_YAML,
         W_KIND_AGENT_CONFIG_YAML,
-        W_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_OPENAI_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_VLLM_PROVIDER_KW_AGENT_CONFIG_YAML,
         W_MARKERS_AGENT_CONFIG_YAML,
         W_RETRIES_AGENT_CONFIG_YAML,
         W_MODEL_SETTINGS_AGENT_CONFIG_YAML,
