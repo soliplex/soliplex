@@ -18,6 +18,7 @@ from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import google as google_providers
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
+from pydantic_ai.providers import vllm as vllm_providers
 
 from . import _utils
 from . import exceptions
@@ -91,6 +92,7 @@ class LLMProviderType(enum.StrEnum):
     OPENAI = "openai"
     OLLAMA = "ollama"
     GOOGLE = "google"
+    VLLM = "vllm"
 
 
 def _apply_agent_config_template(
@@ -299,13 +301,14 @@ class AgentConfig:
         if ic is None:
             return self.provider_base_url
 
-        if (
-            self.provider_type == LLMProviderType.OLLAMA
-            and self.provider_base_url is None
-        ):
-            return ic.get_environment("OLLAMA_BASE_URL")
-        else:
-            return config_interp.resolve_field(self, "provider_base_url")
+        if self.provider_base_url is None:
+            if self.provider_type == LLMProviderType.OLLAMA:
+                return ic.get_environment("OLLAMA_BASE_URL")
+
+            if self.provider_type == LLMProviderType.VLLM:
+                return ic.get_environment("VLLM_BASE_URL")
+
+        return config_interp.resolve_field(self, "provider_base_url")
 
     @property
     def llm_provider_kw(self) -> dict:
@@ -568,6 +571,15 @@ def get_model_from_config(
             model_name=model_name,
             provider=provider,
             **_profile_kw(agent_config, openai_compat=True),
+            **model_settings_kw,
+        )
+
+    elif agent_config.provider_type == LLMProviderType.VLLM:
+        provider = vllm_providers.VLLMProvider(**provider_kw)
+        return openai_models.OpenAIChatModel(
+            model_name=model_name,
+            provider=provider,
+            **_profile_kw(agent_config, openai_compat=False),
             **model_settings_kw,
         )
 

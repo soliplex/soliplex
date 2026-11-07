@@ -10,6 +10,8 @@ import pytest
 import yaml
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import settings as ai_settings
+from pydantic_ai.models import openai as openai_models
+from pydantic_ai.providers import vllm as vllm_providers
 
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
@@ -23,8 +25,10 @@ MODEL_NAME = "test-model"
 OTHER_MODEL_NAME = "test-model-other"
 PROVIDER_BASE_URL = "https://provider.example.com/api"
 PROVIDER_BASE_URL_VIA_ENV = "env:PROVIDER_BASE_URL"
-OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
 OLLAMA_BASE_URL = "https://example.com:12345"
+OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
+GOOGLE_BASE_URL = "https://google.example.com/api"
+VLLM_BASE_URL = "https://vllm.example.com:8000"
 AGUI_FEATURE_NAME = "test-agui-feature"
 
 MODEL = "testing"
@@ -63,19 +67,60 @@ model_name: "{MODEL_NAME}"
 system_prompt: "{SYSTEM_PROMPT}"
 """
 
-W_PROVIDER_KW_AGENT_CONFIG_KW = dict(
+W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    provider_type=config_agents.LLMProviderType.OLLAMA,
+    provider_base_url=OLLAMA_BASE_URL,
+)
+W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+provider_type: "ollama"
+provider_base_url: "{OLLAMA_BASE_URL}"
+"""
+
+W_OPENAI_PROVIDER_KW_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
     model_name=MODEL_NAME,
     provider_type=config_agents.LLMProviderType.OPENAI,
     provider_base_url=OTHER_PROVIDER_BASE_URL,
     provider_key="secret:OTHER_PROVIDER_KEY",
 )
-W_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
+W_OPENAI_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
 model_name: "{MODEL_NAME}"
 provider_type: "openai"
 provider_base_url: "{OTHER_PROVIDER_BASE_URL}"
 provider_key: "secret:OTHER_PROVIDER_KEY"
+"""
+
+W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    provider_type=config_agents.LLMProviderType.GOOGLE,
+    provider_base_url=GOOGLE_BASE_URL,
+    provider_key="secret:GOGGLE_API_KEY",
+)
+W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+provider_type: "google"
+provider_base_url: "{GOOGLE_BASE_URL}"
+provider_key: "secret:GOGGLE_API_KEY"
+"""
+
+W_VLLM_PROVIDER_KW_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    provider_type=config_agents.LLMProviderType.VLLM,
+    provider_base_url=VLLM_BASE_URL,
+)
+W_VLLM_PROVIDER_KW_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+provider_type: "vllm"
+provider_base_url: "{VLLM_BASE_URL}"
 """
 
 # Every interpolating field carries a marker, so a dump which resolved one
@@ -606,8 +651,26 @@ def test_agentconfig_ctor(installation_config, kw):
             contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
         ),
         (
-            W_PROVIDER_KW_AGENT_CONFIG_YAML,
-            contextlib.nullcontext(W_PROVIDER_KW_AGENT_CONFIG_KW.copy()),
+            W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(
+                W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_KW.copy()
+            ),
+        ),
+        (
+            W_OPENAI_PROVIDER_KW_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(
+                W_OPENAI_PROVIDER_KW_AGENT_CONFIG_KW.copy()
+            ),
+        ),
+        (
+            W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(
+                W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_KW.copy()
+            ),
+        ),
+        (
+            W_VLLM_PROVIDER_KW_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(W_VLLM_PROVIDER_KW_AGENT_CONFIG_KW.copy()),
         ),
         (
             W_RETRIES_AGENT_CONFIG_YAML,
@@ -841,6 +904,17 @@ def test_agentconfig_llm_model_name(
             PROVIDER_BASE_URL,
         ),
         (config_agents.LLMProviderType.GOOGLE, {}, None),
+        (config_agents.LLMProviderType.VLLM, {}, VLLM_BASE_URL),
+        (
+            config_agents.LLMProviderType.VLLM,
+            {"provider_base_url": PROVIDER_BASE_URL},
+            PROVIDER_BASE_URL,
+        ),
+        (
+            config_agents.LLMProviderType.VLLM,
+            {"provider_base_url": PROVIDER_BASE_URL_VIA_ENV},
+            PROVIDER_BASE_URL,
+        ),
     ],
 )
 def test_agentconfig_llm_provider_base_url(
@@ -852,6 +926,7 @@ def test_agentconfig_llm_provider_base_url(
 ):
     ic_environ = {
         "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        "VLLM_BASE_URL": VLLM_BASE_URL,
         "PROVIDER_BASE_URL": PROVIDER_BASE_URL,
     }
 
@@ -1118,7 +1193,10 @@ def test_agentconfig_capabilities(w_kwargs, expected):
     "agent_config_kw, exp_cap",
     [
         (BARE_AGENT_CONFIG_KW.copy(), {}),
-        (W_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
+        (W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
+        (W_OPENAI_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
+        (W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
+        (W_VLLM_PROVIDER_KW_AGENT_CONFIG_KW.copy(), {}),
         (W_RETRIES_AGENT_CONFIG_KW.copy(), {}),
         (W_PROMPT_FILE_AGENT_CONFIG_KW.copy(), {}),
         (W_MULTIMODAL_AGENT_CONFIG_KW.copy(), {}),
@@ -1195,7 +1273,10 @@ def _round_trip_agent_config(installation_config, config_path, config_dict):
     [
         BARE_AGENT_CONFIG_YAML,
         W_KIND_AGENT_CONFIG_YAML,
-        W_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_OLLAMA_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_OPENAI_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_GOOGLE_PROVIDER_KW_AGENT_CONFIG_YAML,
+        W_VLLM_PROVIDER_KW_AGENT_CONFIG_YAML,
         W_MARKERS_AGENT_CONFIG_YAML,
         W_RETRIES_AGENT_CONFIG_YAML,
         W_MODEL_SETTINGS_AGENT_CONFIG_YAML,
@@ -1623,8 +1704,11 @@ def test_get_context_window_from_config_unbuildable(monkeypatch):
         (config_agents.LLMProviderType.OPENAI, OPENAI_PROVIDER_KW),
         (config_agents.LLMProviderType.OPENAI, {"api_key": API_KEY}),
         (config_agents.LLMProviderType.GOOGLE, GOOGLE_PROVIDER_KW),
+        (config_agents.LLMProviderType.VLLM, OPENAI_PROVIDER_KW),
+        (config_agents.LLMProviderType.VLLM, {"base_url": BASE_URL}),
     ],
 )
+@mock.patch("pydantic_ai.providers.vllm.VLLMProvider")
 @mock.patch("pydantic_ai.providers.google.GoogleProvider")
 @mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
 @mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
@@ -1636,6 +1720,7 @@ def test_get_model_from_config(
     oai_provider_klass,
     oll_provider_klass,
     google_provider_klass,
+    vllm_provider_klass,
     provider_type,
     llm_provider_kw,
     w_model_settings,
@@ -1709,6 +1794,24 @@ def test_get_model_from_config(
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
 
+    elif provider_type == config_agents.LLMProviderType.VLLM:
+        assert model is oai_model_klass.return_value
+        expected_kw = expected_profile_kw(openai_compat=False)
+        if w_model_settings:
+            expected_kw["settings"] = w_model_settings
+        oai_model_klass.assert_called_once_with(
+            model_name=exp_model_name,
+            provider=vllm_provider_klass.return_value,
+            **expected_kw,
+        )
+        vllm_provider_klass.assert_called_once_with(**llm_provider_kw)
+        assert agent_config.llm_provider_kw == llm_provider_kw
+
+        oai_provider_klass.assert_not_called()
+        oll_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
+
     else:
         assert model is oai_model_klass.return_value
         expected_kw = expected_profile_kw(openai_compat=True)
@@ -1730,3 +1833,40 @@ def test_get_model_from_config(
         oai_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
+
+
+@pytest.mark.parametrize("context_window", [None, 32768])
+@pytest.mark.parametrize("provider_key", [None, "secret:VLLM_KEY"])
+def test_vllm_model_profile(
+    installation_config, monkeypatch, context_window, provider_key
+):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("VLLM_API_KEY", raising=False)
+    installation_config.interpolate_environment = lambda value: value
+    installation_config.get_secret.return_value = API_KEY
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="Qwen/Qwen3-8B",
+        provider_type=config_agents.LLMProviderType.VLLM,
+        provider_base_url=BASE_URL,
+        provider_key=provider_key,
+        context_window=context_window,
+        _installation_config=installation_config,
+    )
+
+    model = config_agents.get_model_from_config(agent_config=agent_config)
+
+    assert isinstance(model, openai_models.OpenAIChatModel)
+    assert isinstance(model.provider, vllm_providers.VLLMProvider)
+    assert model.provider.base_url == f"{BASE_URL}/v1/"
+    assert (
+        model.profile["openai_chat_supports_multiple_system_messages"] is False
+    )
+    assert model.profile.get("supports_inline_system_prompts") is not True
+    if context_window is not None:
+        assert model.context_window == context_window
+    if provider_key is not None:
+        assert model.provider.client.api_key == API_KEY
+    else:
+        assert model.provider.client.api_key
+        installation_config.get_secret.assert_not_called()

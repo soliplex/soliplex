@@ -64,6 +64,7 @@ def installation_config():
     params=[
         config_agents.LLMProviderType.OLLAMA,
         config_agents.LLMProviderType.OPENAI,
+        config_agents.LLMProviderType.VLLM,
     ],
 )
 def agent_provider_type(request) -> dict:
@@ -100,6 +101,7 @@ def a_quiz(
     return quiz
 
 
+@mock.patch("pydantic_ai.providers.vllm.VLLMProvider")
 @mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
 @mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
 @mock.patch("pydantic_ai.models.openai.OpenAIChatModel")
@@ -109,6 +111,7 @@ def test_get_quiz_judge_agent(
     model_klass,
     ollama_provider_klass,
     openai_provider_klass,
+    vllm_provider_klass,
     a_quiz,
 ):
     is_openai = (
@@ -135,6 +138,19 @@ def test_get_quiz_judge_agent(
             **a_quiz.judge_agent.llm_provider_kw,
         )
         ollama_provider_klass.assert_not_called()
+        vllm_provider_klass.assert_not_called()
+    elif (
+        a_quiz.judge_agent.provider_type == config_agents.LLMProviderType.VLLM
+    ):
+        model_klass.assert_called_once_with(
+            model_name=a_quiz.judge_agent.llm_model_name,
+            provider=vllm_provider_klass.return_value,
+        )
+        vllm_provider_klass.assert_called_once_with(
+            **a_quiz.judge_agent.llm_provider_kw,
+        )
+        openai_provider_klass.assert_not_called()
+        ollama_provider_klass.assert_not_called()
     else:
         model_klass.assert_called_once_with(
             model_name=a_quiz.judge_agent.llm_model_name,
@@ -144,6 +160,7 @@ def test_get_quiz_judge_agent(
         ollama_provider_klass.assert_called_once_with(
             **a_quiz.judge_agent.llm_provider_kw,
         )
+        vllm_provider_klass.assert_not_called()
 
 
 @pytest.mark.anyio
