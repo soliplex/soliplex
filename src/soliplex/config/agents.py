@@ -495,8 +495,19 @@ _OPENAI_COMPAT_PROFILE = {
     "openai_chat_supports_multiple_system_messages": False,
 }
 
+# vLLM grammar-constrains strict tool arguments, and for a tool without
+# parameters the constrained decode can run on to 'max_tokens'.
+_VLLM_PROFILE = {
+    "openai_supports_strict_tool_definition": False,
+}
 
-def _profile_kw(agent_config: AgentConfig, *, openai_compat: bool) -> dict:
+
+def _profile_kw(
+    agent_config: AgentConfig,
+    *,
+    openai_compat: bool,
+    base: dict | None = None,
+) -> dict:
     """Return the 'profile=' keyword for the model, or nothing.
 
     A partial profile is merged over Pydantic AI's own, so only what the
@@ -504,6 +515,7 @@ def _profile_kw(agent_config: AgentConfig, *, openai_compat: bool) -> dict:
     lets Pydantic AI fill it for a model it knows; set, it overrides.
     """
     profile = dict(_OPENAI_COMPAT_PROFILE) if openai_compat else {}
+    profile.update(base or {})
 
     if agent_config.context_window is not None:
         profile["context_window"] = agent_config.context_window
@@ -579,7 +591,9 @@ def get_model_from_config(
         return openai_models.OpenAIChatModel(
             model_name=model_name,
             provider=provider,
-            **_profile_kw(agent_config, openai_compat=False),
+            **_profile_kw(
+                agent_config, openai_compat=False, base=_VLLM_PROFILE
+            ),
             **model_settings_kw,
         )
 

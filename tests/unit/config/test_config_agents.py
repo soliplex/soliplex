@@ -1796,7 +1796,9 @@ def test_get_model_from_config(
 
     elif provider_type == config_agents.LLMProviderType.VLLM:
         assert model is oai_model_klass.return_value
-        expected_kw = expected_profile_kw(openai_compat=False)
+        expected_kw = {
+            "profile": config_agents._VLLM_PROFILE | window_profile,
+        }
         if w_model_settings:
             expected_kw["settings"] = w_model_settings
         oai_model_klass.assert_called_once_with(
@@ -1863,6 +1865,7 @@ def test_vllm_model_profile(
         model.profile["openai_chat_supports_multiple_system_messages"] is False
     )
     assert model.profile.get("supports_inline_system_prompts") is not True
+    assert model.profile["openai_supports_strict_tool_definition"] is False
     if context_window is not None:
         assert model.context_window == context_window
     if provider_key is not None:
