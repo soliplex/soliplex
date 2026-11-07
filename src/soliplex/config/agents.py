@@ -215,13 +215,6 @@ class AgentConfig:
     _template_id: str = None
 
     def __post_init__(self, system_prompt):
-        if (
-            self.provider_type == LLMProviderType.VLLM
-            and not self.provider_base_url
-        ):
-            msg = "vllm agents require provider_base_url"
-            raise ValueError(msg)
-
         if system_prompt is not None:
             self._system_prompt_text = system_prompt
 
@@ -308,13 +301,14 @@ class AgentConfig:
         if ic is None:
             return self.provider_base_url
 
-        if (
-            self.provider_type == LLMProviderType.OLLAMA
-            and self.provider_base_url is None
-        ):
-            return ic.get_environment("OLLAMA_BASE_URL")
-        else:
-            return config_interp.resolve_field(self, "provider_base_url")
+        if self.provider_base_url is None:
+            if self.provider_type == LLMProviderType.OLLAMA:
+                return ic.get_environment("OLLAMA_BASE_URL")
+
+            if self.provider_type == LLMProviderType.VLLM:
+                return ic.get_environment("VLLM_BASE_URL")
+
+        return config_interp.resolve_field(self, "provider_base_url")
 
     @property
     def llm_provider_kw(self) -> dict:

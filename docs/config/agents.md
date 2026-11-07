@@ -78,7 +78,7 @@ agent:
 
   Use `"vllm"` for models served by vLLM, including Qwen chat templates
   that require a single leading system message. It uses the provider's
-  model profile to handle system messages and requires `provider_base_url`.
+  model profile to handle system messages.
 
 - `provider_base_url`: a string, is the base API URL for the agent's LLM
   provider.
@@ -90,6 +90,9 @@ agent:
 
   If not provided, and `provider_type` is set to `"ollama"`, defaults to
   the value configured in the installation environment as `OLLAMA_BASE_URL`
+
+  If not provided, and `provider_type` is set to `"vllm"`, defaults to
+  the value configured in the installation environment as `VLLM_BASE_URL`.
 
   If not provided, and `provider_type` is set to `"openai"`, defaults to
   the default OpenAI service URL.

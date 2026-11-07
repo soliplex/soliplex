@@ -27,6 +27,7 @@ PROVIDER_BASE_URL = "https://provider.example.com/api"
 PROVIDER_BASE_URL_VIA_ENV = "env:PROVIDER_BASE_URL"
 OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
 OLLAMA_BASE_URL = "https://example.com:12345"
+VLLM_BASE_URL = "https://vllm.example.com:8000"
 AGUI_FEATURE_NAME = "test-agui-feature"
 
 MODEL = "testing"
@@ -587,31 +588,6 @@ def test_agentconfig_ctor(installation_config, kw):
     assert found.model_name == kw["model_name"]
 
 
-@pytest.mark.parametrize(
-    "base_url_kw", [{}, {"provider_base_url": None}, {"provider_base_url": ""}]
-)
-def test_agentconfig_vllm_requires_base_url(
-    installation_config, tmp_path, base_url_kw, monkeypatch
-):
-    monkeypatch.setenv("VLLM_BASE_URL", BASE_URL)
-    config_dict = (
-        BARE_AGENT_CONFIG_KW
-        | {
-            "provider_type": "vllm",
-        }
-        | base_url_kw
-    )
-
-    with pytest.raises(config_exc.FromYamlException) as exc_info:
-        config_agents.AgentConfig.from_yaml(
-            installation_config, tmp_path / "agent.yaml", config_dict
-        )
-
-    cause = exc_info.value.__cause__
-    assert isinstance(cause, ValueError)
-    assert str(cause) == "vllm agents require provider_base_url"
-
-
 def test_agentconfig_vllm_from_yaml(installation_config, tmp_path):
     config_dict = yaml.safe_load(
         f"""
@@ -887,6 +863,17 @@ def test_agentconfig_llm_model_name(
             PROVIDER_BASE_URL,
         ),
         (config_agents.LLMProviderType.GOOGLE, {}, None),
+        (config_agents.LLMProviderType.VLLM, {}, VLLM_BASE_URL),
+        (
+            config_agents.LLMProviderType.VLLM,
+            {"provider_base_url": PROVIDER_BASE_URL},
+            PROVIDER_BASE_URL,
+        ),
+        (
+            config_agents.LLMProviderType.VLLM,
+            {"provider_base_url": PROVIDER_BASE_URL_VIA_ENV},
+            PROVIDER_BASE_URL,
+        ),
     ],
 )
 def test_agentconfig_llm_provider_base_url(
@@ -898,6 +885,7 @@ def test_agentconfig_llm_provider_base_url(
 ):
     ic_environ = {
         "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        "VLLM_BASE_URL": VLLM_BASE_URL,
         "PROVIDER_BASE_URL": PROVIDER_BASE_URL,
     }
 
