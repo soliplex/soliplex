@@ -74,7 +74,11 @@ agent:
 ### Optional Elements
 
 - `provider_type`: a string, must be one of `"ollama"` (the default),
-  `"openai"`, or `"google"`.
+  `"openai"`, `"google"`, or `"vllm"`.
+
+  Use `"vllm"` for models served by vLLM, including Qwen chat templates
+  that require a single leading system message. It uses the provider's
+  model profile to handle system messages and requires `provider_base_url`.
 
 - `provider_base_url`: a string, is the base API URL for the agent's LLM
   provider.

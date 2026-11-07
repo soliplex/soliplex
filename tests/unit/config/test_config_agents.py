@@ -10,6 +10,8 @@ import pytest
 import yaml
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import settings as ai_settings
+from pydantic_ai.models import openai as openai_models
+from pydantic_ai.providers import vllm as vllm_providers
 
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
@@ -583,6 +585,50 @@ def test_agentconfig_ctor(installation_config, kw):
     found = config_agents.AgentConfig(**kw)
 
     assert found.model_name == kw["model_name"]
+
+
+@pytest.mark.parametrize(
+    "base_url_kw", [{}, {"provider_base_url": None}, {"provider_base_url": ""}]
+)
+def test_agentconfig_vllm_requires_base_url(
+    installation_config, tmp_path, base_url_kw, monkeypatch
+):
+    monkeypatch.setenv("VLLM_BASE_URL", BASE_URL)
+    config_dict = (
+        BARE_AGENT_CONFIG_KW
+        | {
+            "provider_type": "vllm",
+        }
+        | base_url_kw
+    )
+
+    with pytest.raises(config_exc.FromYamlException) as exc_info:
+        config_agents.AgentConfig.from_yaml(
+            installation_config, tmp_path / "agent.yaml", config_dict
+        )
+
+    cause = exc_info.value.__cause__
+    assert isinstance(cause, ValueError)
+    assert str(cause) == "vllm agents require provider_base_url"
+
+
+def test_agentconfig_vllm_from_yaml(installation_config, tmp_path):
+    config_dict = yaml.safe_load(
+        f"""
+id: "{AGENT_ID}"
+model_name: "Qwen/Qwen3-8B"
+provider_type: "vllm"
+provider_base_url: "{BASE_URL}"
+"""
+    )
+
+    found = config_agents.AgentConfig.from_yaml(
+        installation_config, tmp_path / "agent.yaml", config_dict
+    )
+
+    assert found.provider_type == config_agents.LLMProviderType.VLLM
+    assert found.as_yaml["provider_type"] == "vllm"
+    assert found.provider_base_url == BASE_URL
 
 
 @pytest.mark.parametrize(
@@ -1623,8 +1669,11 @@ def test_get_context_window_from_config_unbuildable(monkeypatch):
         (config_agents.LLMProviderType.OPENAI, OPENAI_PROVIDER_KW),
         (config_agents.LLMProviderType.OPENAI, {"api_key": API_KEY}),
         (config_agents.LLMProviderType.GOOGLE, GOOGLE_PROVIDER_KW),
+        (config_agents.LLMProviderType.VLLM, OPENAI_PROVIDER_KW),
+        (config_agents.LLMProviderType.VLLM, {"base_url": BASE_URL}),
     ],
 )
+@mock.patch("pydantic_ai.providers.vllm.VLLMProvider")
 @mock.patch("pydantic_ai.providers.google.GoogleProvider")
 @mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
 @mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
@@ -1636,6 +1685,7 @@ def test_get_model_from_config(
     oai_provider_klass,
     oll_provider_klass,
     google_provider_klass,
+    vllm_provider_klass,
     provider_type,
     llm_provider_kw,
     w_model_settings,
@@ -1709,6 +1759,24 @@ def test_get_model_from_config(
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
 
+    elif provider_type == config_agents.LLMProviderType.VLLM:
+        assert model is oai_model_klass.return_value
+        expected_kw = expected_profile_kw(openai_compat=False)
+        if w_model_settings:
+            expected_kw["settings"] = w_model_settings
+        oai_model_klass.assert_called_once_with(
+            model_name=exp_model_name,
+            provider=vllm_provider_klass.return_value,
+            **expected_kw,
+        )
+        vllm_provider_klass.assert_called_once_with(**llm_provider_kw)
+        assert agent_config.llm_provider_kw == llm_provider_kw
+
+        oai_provider_klass.assert_not_called()
+        oll_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
+
     else:
         assert model is oai_model_klass.return_value
         expected_kw = expected_profile_kw(openai_compat=True)
@@ -1730,3 +1798,40 @@ def test_get_model_from_config(
         oai_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
+
+
+@pytest.mark.parametrize("context_window", [None, 32768])
+@pytest.mark.parametrize("provider_key", [None, "secret:VLLM_KEY"])
+def test_vllm_model_profile(
+    installation_config, monkeypatch, context_window, provider_key
+):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("VLLM_API_KEY", raising=False)
+    installation_config.interpolate_environment = lambda value: value
+    installation_config.get_secret.return_value = API_KEY
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name="Qwen/Qwen3-8B",
+        provider_type=config_agents.LLMProviderType.VLLM,
+        provider_base_url=BASE_URL,
+        provider_key=provider_key,
+        context_window=context_window,
+        _installation_config=installation_config,
+    )
+
+    model = config_agents.get_model_from_config(agent_config=agent_config)
+
+    assert isinstance(model, openai_models.OpenAIChatModel)
+    assert isinstance(model.provider, vllm_providers.VLLMProvider)
+    assert model.provider.base_url == f"{BASE_URL}/v1/"
+    assert (
+        model.profile["openai_chat_supports_multiple_system_messages"] is False
+    )
+    assert model.profile.get("supports_inline_system_prompts") is not True
+    if context_window is not None:
+        assert model.context_window == context_window
+    if provider_key is not None:
+        assert model.provider.client.api_key == API_KEY
+    else:
+        assert model.provider.client.api_key
+        installation_config.get_secret.assert_not_called()
