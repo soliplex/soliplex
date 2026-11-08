@@ -564,12 +564,16 @@ class InstallationConfigAuditLog(AuditLogWrapper):
     def installation_git_metadata_read(self):
         self._succeeded(AUDIT_INSTALLATION_GIT_METADATA_READ)
 
-    def rooms_reloaded(self, added, removed, changed):
+    def rooms_reloaded(
+        self, added, removed, changed, *, skills_reloaded=False
+    ):
+        extra = {"skills_reloaded": True} if skills_reloaded else {}
         self._succeeded(
             AUDIT_INSTALLATION_ROOMS_RELOADED,
             rooms_added=added,
             rooms_removed=removed,
             rooms_changed=changed,
+            **extra,
         )
 
 

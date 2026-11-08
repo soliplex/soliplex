@@ -3,6 +3,7 @@ from unittest import mock
 
 import fastapi
 import pytest
+from fastapi.testclient import TestClient
 
 from soliplex import authz
 from soliplex import installation
@@ -517,3 +518,76 @@ async def test_get_installation_identity_unconfigured_returns_404():
     the_unauth_logger.debug.assert_called_once_with(
         loggers.INST_NO_INSTALLATION_IDENTITY,
     )
+
+
+@pytest.mark.parametrize("skills", [None, "false", "true"])
+@pytest.mark.parametrize("status", [200, 403, 409])
+def test_reload_rooms_http_contract(monkeypatch, skills, status):
+    """Serve the optional skill delta with the existing access checks."""
+    monkeypatch.delenv("_SOLIPLEX_MULTIPLE_WRITERS", raising=False)
+    if status == 409:
+        monkeypatch.setenv("_SOLIPLEX_MULTIPLE_WRITERS", "Y")
+    service = mock.create_autospec(installation.Installation)
+    rooms = installation.RoomConfigsReloaded(
+        added=("new-room",), removed=("old-room",), changed=("room",)
+    )
+    service.reload_room_configs.return_value = rooms
+    service.reload_skill_and_room_configs.return_value = (
+        installation.SkillAndRoomConfigsReloaded(
+            added=rooms.added,
+            removed=rooms.removed,
+            changed=rooms.changed,
+            skills=installation.SkillConfigsReloaded(
+                added=("new-skill",),
+                removed=("old-skill",),
+                changed=("skill",),
+            ),
+        )
+    )
+    policy = mock.create_autospec(authz.AdminUserPolicy)
+    policy.check_admin_access.return_value = status != 403
+    logger = mock.create_autospec(loggers.LogWrapper)
+    audit = mock.create_autospec(loggers.InstallationConfigAuditLog)
+    app = fastapi.FastAPI()
+    app.include_router(installation_views.router)
+    app.dependency_overrides = {
+        installation_views.depend_the_installation.dependency: lambda: service,
+        installation_views.depend_the_admin_users.dependency: lambda: policy,
+        installation_views.depend_the_user_claims.dependency: (
+            lambda: THE_USER_CLAIMS
+        ),
+        installation_views.depend_the_logger.dependency: lambda: logger,
+        installation_views.depend_the_config_audit_log.dependency: lambda: (
+            audit
+        ),
+    }
+    params = {} if skills is None else {"skills": skills}
+    with TestClient(app) as client:
+        response = client.post("/v1/installation/reload/rooms", params=params)
+
+    assert response.status_code == status
+    if status != 200:
+        service.reload_room_configs.assert_not_awaited()
+        service.reload_skill_and_room_configs.assert_not_awaited()
+        audit.rooms_reloaded.assert_not_called()
+        return
+    expected = {
+        "added": ["new-room"],
+        "removed": ["old-room"],
+        "changed": ["room"],
+    }
+    audit_kwargs = expected.copy()
+    if skills == "true":
+        expected["skills"] = {
+            "added": ["new-skill"],
+            "removed": ["old-skill"],
+            "changed": ["skill"],
+        }
+        audit_kwargs["skills_reloaded"] = True
+        service.reload_skill_and_room_configs.assert_awaited_once_with()
+        service.reload_room_configs.assert_not_awaited()
+    else:
+        service.reload_room_configs.assert_awaited_once_with()
+        service.reload_skill_and_room_configs.assert_not_awaited()
+    assert response.json() == expected
+    audit.rooms_reloaded.assert_called_once_with(**audit_kwargs)

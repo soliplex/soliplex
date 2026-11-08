@@ -638,13 +638,15 @@ def test_installation_versions_read(audit_records):
     )
 
 
-def test_installation_rooms_reloaded(audit_records):
+@pytest.mark.parametrize("skills", [False, True])
+def test_installation_rooms_reloaded(audit_records, skills):
     wrapper = loggers.InstallationConfigAuditLog(claims=CLAIMS)
 
     wrapper.rooms_reloaded(
         added=["new-room"],
         removed=["old-room"],
         changed=["changed-room"],
+        **({"skills_reloaded": True} if skills else {}),
     )
 
     _assert_audit_record(
@@ -658,6 +660,7 @@ def test_installation_rooms_reloaded(audit_records):
             "rooms_added": ["new-room"],
             "rooms_removed": ["old-room"],
             "rooms_changed": ["changed-room"],
+            **({"skills_reloaded": True} if skills else {}),
         },
     )
 

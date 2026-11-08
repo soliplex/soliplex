@@ -512,6 +512,26 @@ It returns the IDs of the rooms it `added`, `removed`, and `changed`
 (a room is "changed" when its reloaded configuration differs from the one
 it replaced), each as a sorted tuple.
 
+Admins can also call `POST /v1/installation/reload/rooms`. By default, or
+with `?skills=false`, its response contains only the `added`, `removed`,
+and `changed` room ID lists. With `?skills=true`, it rescans the configured
+filesystem skill paths and resolves enabled skills before loading rooms.
+The response includes a `skills` object with `added`, `removed`, and
+`changed` skill name lists. A skill changes when its kind, description,
+instructions, or relative paths or bytes of regular files up to 16 MiB
+differ. Larger files use a fixed skip marker, symlinks and special files
+are ignored, and invalid skills are fingerprinted by their validation
+errors. Skill enablement still follows `skill_configs` in the installation
+configuration loaded at startup.
+
+The combined reload publishes skills and rooms only after every room
+validates successfully. A validation failure preserves the loaded skills
+and rooms. Python callers can use
+`await the_installation.reload_skill_and_room_configs()`.
+Both endpoint modes require admin access and return 409 when multiple
+writers are configured. The audit record for `skills=true` includes
+`skills_reloaded: true`.
+
 MCP endpoints are not reloaded:  Soliplex builds the `/mcp/<room_id>`
 endpoints once, at startup, from the rooms configured then.  So a room
 which a reload adds with `allow_mcp: true` has no MCP endpoint until the

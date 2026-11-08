@@ -2018,3 +2018,36 @@ async def test_create_async_engine_memory():
             assert fkeys == 1
     finally:
         await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_installation_reload_skills_runs_in_worker():
+    """Build combined deltas from snapshots collected in a worker thread."""
+    kept = object()
+    reloaded_in_threads = []
+
+    def reload():
+        reloaded_in_threads.append(threading.get_ident())
+        return (
+            {"kept": kept, "removed": object()},
+            {"kept": kept, "added": object()},
+            {"kept": ("same",), "changed": ("old",), "removed": ()},
+            {"kept": ("same",), "changed": ("new",), "added": ()},
+        )
+
+    config = mock.create_autospec(config_installation.InstallationConfig)
+    config.reload_skill_and_room_configs.side_effect = reload
+    result = await installation.Installation(
+        config
+    ).reload_skill_and_room_configs()
+
+    assert result == installation.SkillAndRoomConfigsReloaded(
+        added=("added",),
+        removed=("removed",),
+        changed=(),
+        skills=installation.SkillConfigsReloaded(
+            added=("added",), removed=("removed",), changed=("changed",)
+        ),
+    )
+    assert len(reloaded_in_threads) == 1
+    assert reloaded_in_threads != [threading.get_ident()]

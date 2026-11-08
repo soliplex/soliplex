@@ -3793,9 +3793,11 @@ def test_installationconfig_avl_fs_skill_configs_w_existing():
     assert found["skill_2"] == SC_2
 
 
-def test_installationconfig_skill_configs_permissive_default():
+def test_installationconfig_skill_configs_permissive_default(tmp_path):
     # With no '_skill_configs' set, every discovered skill is included.
-    fs_skill = object()
+    fs_skill = config_skills.FilesystemSkillConfig.from_capability(
+        test_skills._filesystem_capability(tmp_path)
+    )
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_available_filesystem_skill_configs"] = {
@@ -3824,9 +3826,11 @@ def test_installationconfig_skill_configs_empty_availability(
     ].assert_called_once_with(i_config)
 
 
-def test_installationconfig_skill_configs_w_whitelist():
+def test_installationconfig_skill_configs_w_whitelist(tmp_path):
     # A filesystem whitelist suppresses non-listed filesystem skills.
-    fs_skill = object()
+    fs_skill = config_skills.FilesystemSkillConfig.from_capability(
+        test_skills._filesystem_capability(tmp_path)
+    )
     other_fs = object()
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()

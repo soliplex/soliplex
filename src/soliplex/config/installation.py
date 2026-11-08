@@ -1,11 +1,15 @@
 from __future__ import annotations  # forward refs in typing decls
 
+import copy
 import dataclasses
 import enum
 import functools
+import hashlib
 import itertools
 import os
 import pathlib
+import stat
+import threading
 import typing
 
 import dotenv
@@ -230,7 +234,10 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
     fs_skill_configs = {}
 
     capabilities, validation_errors = cap_fs.discover_filesystem_capabilities(
-        i_config.filesystem_skills_paths,
+        [
+            pathlib.Path(path).resolve()
+            for path in i_config.filesystem_skills_paths
+        ],
     )
     for capability in capabilities:
         skill_config = config_skills.FilesystemSkillConfig.from_capability(
@@ -248,6 +255,63 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
         )
 
     return fs_skill_configs
+
+
+def _skill_fingerprint(config: config_skills.FilesystemSkillConfig) -> tuple:
+    """Fingerprint skill errors or bounded regular file content."""
+    if config.errors:
+        return config.kind, config.name, tuple(sorted(config.errors))
+
+    files = []
+    for directory, _dirs, filenames in os.walk(config.path, followlinks=False):
+        for filename in filenames:
+            path = pathlib.Path(directory) / filename
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode):
+                continue
+            try:
+                descriptor = os.open(
+                    path,
+                    os.O_RDONLY
+                    | getattr(os, "O_NOFOLLOW", 0)
+                    | getattr(os, "O_NONBLOCK", 0)
+                    | getattr(os, "O_CLOEXEC", 0),
+                )
+            except OSError:
+                fingerprint = "skipped: not a regular file"
+            else:
+                try:
+                    info = os.fstat(descriptor)
+                    if not stat.S_ISREG(info.st_mode):
+                        fingerprint = "skipped: not a regular file"
+                    elif info.st_size > 16 * 1024 * 1024:
+                        fingerprint = "skipped: larger than 16 MiB"
+                    else:
+                        digest = hashlib.sha256()
+                        remaining = 16 * 1024 * 1024 + 1
+                        while remaining and (
+                            chunk := os.read(
+                                descriptor, min(64 * 1024, remaining)
+                            )
+                        ):
+                            remaining -= len(chunk)
+                            digest.update(chunk)
+                        fingerprint = (
+                            digest.hexdigest()
+                            if remaining
+                            else "skipped: larger than 16 MiB"
+                        )
+                finally:
+                    os.close(descriptor)
+            files.append(
+                (path.relative_to(config.path).as_posix(), fingerprint)
+            )
+    return (
+        config.kind,
+        config.description,
+        config.capability.instructions,
+        tuple(sorted(files)),
+    )
 
 
 def resolve_skill_configs(
@@ -645,6 +709,12 @@ class InstallationConfig:
     _available_filesystem_skill_configs: config_skills.SkillConfigMap = None
     _skill_configs: list[dict] | None = None
     _resolved_skill_configs: config_skills.SkillConfigMap = None
+    _skill_fingerprints: dict[str, tuple] = dataclasses.field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
+    _reload_lock: threading.Lock = dataclasses.field(
+        default_factory=threading.Lock, init=False, repr=False, compare=False
+    )
 
     @property
     def available_filesystem_skill_configs(
@@ -660,10 +730,15 @@ class InstallationConfig:
     @property
     def skill_configs(self) -> config_skills.SkillConfigMap:
         if self._resolved_skill_configs is None:
-            self._resolved_skill_configs = resolve_skill_configs(
+            resolved = resolve_skill_configs(
                 self._skill_configs or [],
                 self.available_filesystem_skill_configs,
             )
+            self._skill_fingerprints = {
+                name: _skill_fingerprint(config)
+                for name, config in resolved.items()
+            }
+            self._resolved_skill_configs = resolved
 
         return self._resolved_skill_configs.copy()
 
@@ -1419,10 +1494,58 @@ class InstallationConfig:
 
         Returns a copy of the new map, as 'room_configs' does.
         """
-        room_configs = self._load_room_configs()
-        self._room_configs = room_configs
+        with self._reload_lock:
+            room_configs = self._load_room_configs()
+            self._room_configs = room_configs
 
         return room_configs.copy()
+
+    def reload_skill_and_room_configs(
+        self,
+    ) -> tuple[
+        config_rooms.RoomConfigMap,
+        config_rooms.RoomConfigMap,
+        dict[str, tuple],
+        dict[str, tuple],
+    ]:
+        """Validate on a copy and publish skills and rooms on the live config.
+
+        A request during publication can read new skills with the previous
+        rooms, as with reload_room_configs, and rooms retain the skill
+        objects they resolve.
+        """
+        with self._reload_lock:
+            if self._resolved_skill_configs is None:
+                _ = self.skill_configs
+            if self._room_configs is None:
+                _ = self.room_configs
+            before_rooms = self._room_configs.copy()
+            before_skills = self._skill_fingerprints.copy()
+            candidate = copy.copy(self)
+            candidate._available_filesystem_skill_configs = (
+                _load_filesystem_skill_configs(candidate)
+            )
+            candidate._resolved_skill_configs = None
+            _ = candidate.skill_configs
+            after_skills = candidate._skill_fingerprints.copy()
+            candidate._load_room_configs()
+            previous_available = self._available_filesystem_skill_configs
+            previous_resolved = self._resolved_skill_configs
+            previous_fingerprints = self._skill_fingerprints
+            self._available_filesystem_skill_configs = (
+                candidate._available_filesystem_skill_configs
+            )
+            self._resolved_skill_configs = candidate._resolved_skill_configs
+            self._skill_fingerprints = candidate._skill_fingerprints
+            try:
+                rooms = self._load_room_configs()
+            except Exception:
+                self._available_filesystem_skill_configs = previous_available
+                self._resolved_skill_configs = previous_resolved
+                self._skill_fingerprints = previous_fingerprints
+                raise
+            self._room_configs = rooms
+            return before_rooms, rooms.copy(), before_skills, after_skills
 
 
 def load_installation(config_path: pathlib.Path) -> InstallationConfig:

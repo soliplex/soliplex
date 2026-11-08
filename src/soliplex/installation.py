@@ -3,6 +3,7 @@ import dataclasses
 import enum
 import pathlib
 import sqlite3
+import typing
 import warnings
 from logging import config as logging_config
 
@@ -186,8 +187,8 @@ class RoomConfigsReloaded:
     @classmethod
     def between(
         cls,
-        before: config_rooms.RoomConfigMap,
-        after: config_rooms.RoomConfigMap,
+        before: typing.Mapping[str, object],
+        after: typing.Mapping[str, object],
     ) -> "RoomConfigsReloaded":
         kept = before.keys() & after.keys()
         return cls(
@@ -201,6 +202,18 @@ class RoomConfigsReloaded:
                 )
             ),
         )
+
+
+@dataclasses.dataclass(frozen=True)
+class SkillConfigsReloaded(RoomConfigsReloaded):
+    """Report skill names whose content fingerprints differ."""
+
+
+@dataclasses.dataclass(frozen=True)
+class SkillAndRoomConfigsReloaded(RoomConfigsReloaded):
+    """Report the room and skill deltas from a combined reload."""
+
+    skills: SkillConfigsReloaded
 
 
 @dataclasses.dataclass
@@ -473,6 +486,26 @@ class Installation:
         )
 
         return RoomConfigsReloaded.between(before, after)
+
+    async def reload_skill_and_room_configs(
+        self,
+    ) -> SkillAndRoomConfigsReloaded:
+        """Reload skills and rooms in a worker thread and report deltas."""
+        (
+            before,
+            after,
+            before_skills,
+            after_skills,
+        ) = await anyio.to_thread.run_sync(
+            self._config.reload_skill_and_room_configs,
+        )
+        rooms = RoomConfigsReloaded.between(before, after)
+        return SkillAndRoomConfigsReloaded(
+            added=rooms.added,
+            removed=rooms.removed,
+            changed=rooms.changed,
+            skills=SkillConfigsReloaded.between(before_skills, after_skills),
+        )
 
     async def get_completion_configs(
         self,
