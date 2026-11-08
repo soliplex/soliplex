@@ -209,6 +209,7 @@ async def test_reload_reports_only_edited_skill(
 
     result = await service.reload_skill_and_room_configs()
 
+    assert result.added == result.removed == result.changed == ()
     assert result.skills == installation.SkillConfigsReloaded(
         added=(), removed=(), changed=("alpha",)
     )
@@ -592,3 +593,82 @@ def test_fingerprint_reports_unreadable_file(
     monkeypatch.setattr(os, "open", denied)
     with pytest.raises(PermissionError, match="unreadable resource"):
         config_installation._skill_fingerprint(skill)
+
+
+@pytest.mark.parametrize("error", [PermissionError, OSError])
+def test_traversal_failure_preserves_caches(
+    loaded_skills_config, tmp_path, monkeypatch, error
+):
+    config = loaded_skills_config
+    resource = tmp_path / "skills" / "alpha" / "resources" / "data.bin"
+    resource.parent.mkdir()
+    resource.write_bytes(b"before")
+    config.reload_skill_and_room_configs()
+    rooms = config._room_configs
+    available = config._available_filesystem_skill_configs
+    enabled = config._resolved_skill_configs
+    fingerprints = config._skill_fingerprints
+    write_skill(tmp_path, "gamma")
+    original = os.scandir
+
+    def denied(path):
+        if os.fspath(path) == os.fspath(resource.parent):
+            message = "unreadable directory"
+            raise error(message)
+        return original(path)
+
+    monkeypatch.setattr(os, "scandir", denied)
+    with pytest.raises(error, match="unreadable directory"):
+        config.reload_skill_and_room_configs()
+
+    assert config._room_configs is rooms
+    assert config._available_filesystem_skill_configs is available
+    assert config._resolved_skill_configs is enabled
+    assert config._skill_fingerprints is fingerprints
+    assert "gamma" not in config.skill_configs
+
+
+def test_fingerprint_ignores_disappearing_directory(
+    loaded_skills_config, tmp_path, monkeypatch
+):
+    skill = loaded_skills_config.skill_configs["alpha"]
+    before = config_installation._skill_fingerprint(skill)
+    resource = tmp_path / "skills" / "alpha" / "resources"
+    resource.mkdir()
+    (resource / "data.bin").write_bytes(b"temporary")
+    original = os.scandir
+
+    def disappear(path):
+        if os.fspath(path) == os.fspath(resource):
+            raise FileNotFoundError
+        return original(path)
+
+    monkeypatch.setattr(os, "scandir", disappear)
+    assert config_installation._skill_fingerprint(skill) == before
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("empty_rooms", [False, True])
+async def test_startup_baseline_without_room_skills(
+    loaded_skills_config, tmp_path, empty_rooms
+):
+    config = loaded_skills_config
+    if empty_rooms:
+        shutil.rmtree(tmp_path / "rooms")
+    else:
+        (tmp_path / "rooms" / "foo" / "room_config.yaml").write_text(
+            test_installation._room_config_yaml("foo"), encoding="utf-8"
+        )
+    resource = tmp_path / "skills" / "alpha" / "data.bin"
+    resource.write_bytes(b"before")
+    config.reload_configurations()
+    resource.write_bytes(b"after!")
+
+    result = await installation.Installation(
+        config
+    ).reload_skill_and_room_configs()
+
+    assert result.skills == installation.SkillConfigsReloaded(
+        added=(), removed=(), changed=("alpha",)
+    )
+    assert result.added == result.removed == result.changed == ()

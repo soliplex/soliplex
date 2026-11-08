@@ -262,8 +262,14 @@ def _skill_fingerprint(config: config_skills.FilesystemSkillConfig) -> tuple:
     if config.errors:
         return config.kind, config.name, tuple(sorted(config.errors))
 
+    def onerror(error):
+        if not isinstance(error, FileNotFoundError):
+            raise error
+
     files = []
-    for directory, _dirs, filenames in os.walk(config.path, followlinks=False):
+    for directory, _dirs, filenames in os.walk(
+        config.path, followlinks=False, onerror=onerror
+    ):
         for filename in filenames:
             path = pathlib.Path(directory) / filename
             try:
@@ -1484,6 +1490,7 @@ class InstallationConfig:
             )
         )
         self._resolved_skill_configs = None
+        _ = self.skill_configs
         self._oidc_auth_system_configs = self._load_oidc_auth_system_configs()
         self._room_configs = self._load_room_configs()
         self._completion_configs = self._load_completion_configs()

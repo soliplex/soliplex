@@ -522,9 +522,10 @@ instructions, or relative paths or bytes of regular files up to 16 MiB
 differ. Larger files use a fixed skip marker, symlinks and special files
 are ignored, and invalid skills are fingerprinted by their validation
 errors. Skill enablement still follows `skill_configs` in the installation
-configuration loaded at startup. Initial skill resolution also fingerprints
-enabled skill trees, adding filesystem reads at startup. Files deleted while
-fingerprinting are ignored; unreadable regular files fail the reload.
+configuration loaded at startup. Startup fingerprints enabled skill trees
+even when no room uses skills, adding filesystem reads at startup. Files or
+directories deleted while fingerprinting are ignored; unreadable regular files
+or directories fail the reload.
 Room `changed` lists describe room configuration edits; changes to referenced
 installation skills appear in `skills.changed`.
 

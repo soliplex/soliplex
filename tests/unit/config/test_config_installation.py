@@ -4041,6 +4041,8 @@ def test_installationconfig_reload_configurations(temp_dir):
         **kw,
     )
 
+    i_config._skill_fingerprints = {"stale": ("old",)}
+
     with (
         mock.patch.multiple(
             i_config,
@@ -4077,9 +4079,10 @@ def test_installationconfig_reload_configurations(temp_dir):
         i_config,
     )
 
-    # Stale resolved-skills cache must be invalidated so the next access
-    # recomputes against the reloaded availability maps.
-    assert i_config._resolved_skill_configs is None
+    # Rebuild stale skills and fingerprints during startup even when
+    # parsing rooms does not resolve any skills.
+    assert i_config._resolved_skill_configs == {}
+    assert i_config._skill_fingerprints == {}
 
 
 def _write_room_config(rooms_path, dir_name, room_config_yaml):
