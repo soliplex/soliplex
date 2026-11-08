@@ -235,7 +235,7 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
 
     capabilities, validation_errors = cap_fs.discover_filesystem_capabilities(
         [
-            pathlib.Path(path).resolve()
+            pathlib.Path(path).absolute()
             for path in i_config.filesystem_skills_paths
         ],
     )
@@ -266,7 +266,10 @@ def _skill_fingerprint(config: config_skills.FilesystemSkillConfig) -> tuple:
     for directory, _dirs, filenames in os.walk(config.path, followlinks=False):
         for filename in filenames:
             path = pathlib.Path(directory) / filename
-            info = path.lstat()
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                continue
             if not stat.S_ISREG(info.st_mode):
                 continue
             try:
@@ -277,8 +280,8 @@ def _skill_fingerprint(config: config_skills.FilesystemSkillConfig) -> tuple:
                     | getattr(os, "O_NONBLOCK", 0)
                     | getattr(os, "O_CLOEXEC", 0),
                 )
-            except OSError:
-                fingerprint = "skipped: not a regular file"
+            except FileNotFoundError:
+                continue
             else:
                 try:
                     info = os.fstat(descriptor)
@@ -712,8 +715,8 @@ class InstallationConfig:
     _skill_fingerprints: dict[str, tuple] = dataclasses.field(
         default_factory=dict, init=False, repr=False, compare=False
     )
-    _reload_lock: threading.Lock = dataclasses.field(
-        default_factory=threading.Lock, init=False, repr=False, compare=False
+    _reload_lock: threading.RLock = dataclasses.field(
+        default_factory=threading.RLock, init=False, repr=False, compare=False
     )
 
     @property
@@ -1508,11 +1511,10 @@ class InstallationConfig:
         dict[str, tuple],
         dict[str, tuple],
     ]:
-        """Validate on a copy and publish skills and rooms on the live config.
+        """Build a validated snapshot before publishing it.
 
-        A request during publication can read new skills with the previous
-        rooms, as with reload_room_configs, and rooms retain the skill
-        objects they resolve.
+        Rooms retain their snapshot, including resolved installation skills,
+        so requests holding previous rooms remain valid after publication.
         """
         with self._reload_lock:
             if self._resolved_skill_configs is None:
@@ -1528,22 +1530,13 @@ class InstallationConfig:
             candidate._resolved_skill_configs = None
             _ = candidate.skill_configs
             after_skills = candidate._skill_fingerprints.copy()
-            candidate._load_room_configs()
-            previous_available = self._available_filesystem_skill_configs
-            previous_resolved = self._resolved_skill_configs
-            previous_fingerprints = self._skill_fingerprints
+            rooms = candidate._load_room_configs()
+            candidate._room_configs = rooms
             self._available_filesystem_skill_configs = (
                 candidate._available_filesystem_skill_configs
             )
             self._resolved_skill_configs = candidate._resolved_skill_configs
             self._skill_fingerprints = candidate._skill_fingerprints
-            try:
-                rooms = self._load_room_configs()
-            except Exception:
-                self._available_filesystem_skill_configs = previous_available
-                self._resolved_skill_configs = previous_resolved
-                self._skill_fingerprints = previous_fingerprints
-                raise
             self._room_configs = rooms
             return before_rooms, rooms.copy(), before_skills, after_skills
 

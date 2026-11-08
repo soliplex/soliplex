@@ -79,14 +79,15 @@ async def test_reload_discovers_added_skill(loaded_skills_config, tmp_path):
     )
     room = config.room_configs["foo"]
     assert "gamma" in room.skill_configs
-    assert room._installation_config is config
-    assert room.agent_config._installation_config is config
-    assert room.skills._installation_config is config
+    snapshot = room._installation_config
+    assert snapshot is not config
+    assert room.agent_config._installation_config is snapshot
+    assert room.skills._installation_config is snapshot
     assert (
         room.skills._skill_configs[
             config_skills.BwrapSandboxSkillConfig.name
         ]._installation_config
-        is config
+        is snapshot
     )
     assert config.filesystem_skills_paths == [tmp_path / "skills"]
 
@@ -109,7 +110,7 @@ async def test_reload_removes_skill(loaded_skills_config, tmp_path):
 
 @pytest.mark.parametrize(
     "failure",
-    ["room", "publication", "enabled-skill", "discovery", "fingerprint"],
+    ["room", "enabled-skill", "discovery", "fingerprint"],
 )
 def test_reload_failure_preserves_caches(
     loaded_skills_config, tmp_path, failure, monkeypatch
@@ -123,19 +124,6 @@ def test_reload_failure_preserves_caches(
     if failure == "room":
         write_room(tmp_path, ["missing"])
         expected = config_exc.FromYamlException
-    elif failure == "publication":
-        loader = config_installation.InstallationConfig._load_room_configs
-
-        def load(current):
-            if current is config:
-                assert "gamma" in current.skill_configs
-                raise ValueError
-            return loader(current)
-
-        monkeypatch.setattr(
-            config_installation.InstallationConfig, "_load_room_configs", load
-        )
-        expected = ValueError
     elif failure == "enabled-skill":
         config._skill_configs = [
             {"kind": "filesystem", "skill_name": "missing"}
@@ -181,7 +169,10 @@ async def test_repeated_reload_has_no_changes(loaded_skills_config):
         )
         assert "reload-skills" in repr(config)
         assert "foo" in repr(config.room_configs)
-        assert config.room_configs["foo"].skills._installation_config is config
+        assert (
+            config.room_configs["foo"].skills._installation_config
+            is not config
+        )
 
 
 @pytest.mark.anyio
@@ -246,7 +237,7 @@ def test_concurrent_reloads_serialize(loaded_skills_config, combined):
     second_entered = threading.Event()
     lock = config._reload_lock
     loads = []
-    loader = config._load_room_configs
+    loader = config_installation.InstallationConfig._load_room_configs
 
     class ObservedLock:
         def __enter__(self):
@@ -264,7 +255,7 @@ def test_concurrent_reloads_serialize(loaded_skills_config, combined):
             assert release.wait(5)
         else:
             second_entered.set()
-        return loader()
+        return loader(candidate)
 
     with (
         mock.patch.object(config, "_reload_lock", ObservedLock()),
@@ -290,54 +281,23 @@ def test_concurrent_reloads_serialize(loaded_skills_config, combined):
             release.set()
         first.result(timeout=5)
         second.result(timeout=5)
-    assert len(loads) == (4 if combined else 3)
+    assert len(loads) == 2
 
 
-def test_published_rooms_exclude_candidate(loaded_skills_config, monkeypatch):
+def test_published_rooms_retain_snapshot(loaded_skills_config):
     config = loaded_skills_config
-    loader = config_installation.InstallationConfig._load_room_configs
-    loads = []
-
-    def load(current):
-        rooms = loader(current)
-        rooms["foo"].references = {"nested": [current, (current,)]}
-        rooms["foo"].get_installation = lambda: current
-        loads.append((current, rooms))
-        return rooms
-
-    monkeypatch.setattr(
-        config_installation.InstallationConfig, "_load_room_configs", load
-    )
     before_rooms, after_rooms, before_skills, after_skills = (
         config.reload_skill_and_room_configs()
     )
-
-    (candidate, discarded_rooms), (live, published_rooms) = loads
-    assert candidate is not config
-    assert live is config
-    assert config._room_configs is published_rooms
-    assert discarded_rooms["foo"] is not after_rooms["foo"]
-    assert after_rooms["foo"].get_installation() is config
-    assert before_rooms["foo"] is not after_rooms["foo"]
+    room = after_rooms["foo"]
+    snapshot = room._installation_config
+    assert snapshot is not config
+    assert snapshot.room_configs == after_rooms
+    assert room.skills._installation_config is snapshot
+    assert before_rooms["foo"] is not room
     assert before_skills == after_skills
     assert before_skills is not config._skill_fingerprints
     assert after_skills is not config._skill_fingerprints
-
-    seen = set()
-    pending = [after_rooms]
-    while pending:
-        value = pending.pop()
-        assert value is not candidate
-        if id(value) in seen:
-            continue
-        seen.add(id(value))
-        if isinstance(value, dict):
-            pending.extend(value.keys())
-            pending.extend(value.values())
-        elif isinstance(value, (list, tuple)):
-            pending.extend(value)
-        else:
-            pending.extend(getattr(value, "__dict__", {}).values())
 
 
 def test_reload_initializes_caches_before_snapshots(loaded_skills_config):
@@ -439,9 +399,8 @@ def test_fingerprint_bounds_resource_reads(
     )
 
 
-@pytest.mark.parametrize("failure", ["type", "open"])
 def test_fingerprint_handles_type_race(
-    loaded_skills_config, tmp_path, monkeypatch, failure
+    loaded_skills_config, tmp_path, monkeypatch
 ):
     config = loaded_skills_config.skill_configs["alpha"]
     resource = tmp_path / "skills" / "alpha" / "swapped.bin"
@@ -462,8 +421,6 @@ def test_fingerprint_handles_type_race(
             assert flags & getattr(os, "O_CLOEXEC", 0) == getattr(
                 os, "O_CLOEXEC", 0
             )
-            if failure == "open":
-                raise OSError
             swapped, writer = os.pipe()
             os.close(writer)
             return swapped
@@ -537,3 +494,101 @@ def test_placeholder_fingerprint_sorts_errors():
         ("a error", "z error"),
     )
     assert config.mock_calls == []
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_old_room_skills_survive_publication(
+    loaded_skills_config, tmp_path, monkeypatch, fail
+):
+    config = loaded_skills_config
+    old_room = config.room_configs["foo"]
+    old_skill = old_room.skill_configs["alpha"]
+    shutil.rmtree(tmp_path / "skills" / "alpha")
+    write_room(tmp_path, ["beta"])
+    loader = config_installation.InstallationConfig._load_room_configs
+
+    def load(candidate):
+        rooms = loader(candidate)
+
+        def read_previous():
+            assert old_room.skill_configs["alpha"] == old_skill
+            assert "alpha" in config.room_configs["foo"].skill_configs
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(read_previous).result(timeout=5)
+        if fail:
+            message = "validation failed"
+            raise ValueError(message)
+        return rooms
+
+    monkeypatch.setattr(
+        config_installation.InstallationConfig, "_load_room_configs", load
+    )
+    if fail:
+        with pytest.raises(ValueError, match="validation failed"):
+            config.reload_skill_and_room_configs()
+        assert config.room_configs["foo"] is old_room
+    else:
+        config.reload_skill_and_room_configs()
+        assert "alpha" not in config.skill_configs
+        assert "beta" in config.room_configs["foo"].skill_configs
+    assert old_room.skill_configs["alpha"] == old_skill
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Requires symlink support")
+def test_discovery_preserves_symlink_name(tmp_path):
+    target = write_skill(tmp_path, "alpha")
+    renamed = target.with_name("release-v2")
+    target.rename(renamed)
+    target.symlink_to(renamed, target_is_directory=True)
+    config = config_installation.InstallationConfig(
+        id="symlink", filesystem_skills_paths=[target]
+    )
+    for _ in range(2):
+        skills = config_installation._load_filesystem_skill_configs(config)
+        assert set(skills) == {"alpha"}
+        assert skills["alpha"].errors == []
+
+
+@pytest.mark.parametrize("stage", ["stat", "open"])
+def test_fingerprint_ignores_disappearing_file(
+    loaded_skills_config, tmp_path, monkeypatch, stage
+):
+    from pathlib import Path
+
+    skill = loaded_skills_config.skill_configs["alpha"]
+    before = config_installation._skill_fingerprint(skill)
+    resource = tmp_path / "skills" / "alpha" / "temporary.bin"
+    resource.write_bytes(b"temporary")
+    original = Path.lstat if stage == "stat" else os.open
+
+    def disappear(path, *args, **kwargs):
+        if path == resource:
+            raise FileNotFoundError
+        return original(path, *args, **kwargs)
+
+    if stage == "stat":
+        monkeypatch.setattr(Path, "lstat", disappear)
+    else:
+        monkeypatch.setattr(os, "open", disappear)
+    assert config_installation._skill_fingerprint(skill) == before
+
+
+def test_fingerprint_reports_unreadable_file(
+    loaded_skills_config, tmp_path, monkeypatch
+):
+    skill = loaded_skills_config.skill_configs["alpha"]
+    resource = tmp_path / "skills" / "alpha" / "unreadable.bin"
+    resource.write_bytes(b"resource")
+    original = os.open
+
+    def denied(path, *args, **kwargs):
+        if path == resource:
+            message = "unreadable resource"
+            raise PermissionError(message)
+        return original(path, *args, **kwargs)
+
+    os.close(denied(skill.path / "SKILL.md", os.O_RDONLY))
+    monkeypatch.setattr(os, "open", denied)
+    with pytest.raises(PermissionError, match="unreadable resource"):
+        config_installation._skill_fingerprint(skill)

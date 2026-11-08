@@ -522,11 +522,17 @@ instructions, or relative paths or bytes of regular files up to 16 MiB
 differ. Larger files use a fixed skip marker, symlinks and special files
 are ignored, and invalid skills are fingerprinted by their validation
 errors. Skill enablement still follows `skill_configs` in the installation
-configuration loaded at startup.
+configuration loaded at startup. Initial skill resolution also fingerprints
+enabled skill trees, adding filesystem reads at startup. Files deleted while
+fingerprinting are ignored; unreadable regular files fail the reload.
+Room `changed` lists describe room configuration edits; changes to referenced
+installation skills appear in `skills.changed`.
 
 The combined reload publishes skills and rooms only after every room
 validates successfully. A validation failure preserves the loaded skills
-and rooms. Python callers can use
+and rooms. Requests holding older rooms retain their resolved skill bindings.
+Rooms are parsed once against the candidate configuration. Python callers
+can use
 `await the_installation.reload_skill_and_room_configs()`.
 Both endpoint modes require admin access and return 409 when multiple
 writers are configured. The audit record for `skills=true` includes

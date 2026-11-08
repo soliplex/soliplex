@@ -480,12 +480,14 @@ class Installation:
         does, a room config which fails to load raises, leaving the rooms
         already loaded in place.
         """
-        before = self._config.room_configs
-        after = await anyio.to_thread.run_sync(
-            self._config.reload_room_configs,
-        )
 
-        return RoomConfigsReloaded.between(before, after)
+        def reload():
+            with self._config._reload_lock:
+                before = self._config.room_configs
+                after = self._config.reload_room_configs()
+                return RoomConfigsReloaded.between(before, after)
+
+        return await anyio.to_thread.run_sync(reload)
 
     async def reload_skill_and_room_configs(
         self,
