@@ -3,6 +3,7 @@
 import hashlib
 import os
 import shutil
+import stat
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from unittest import mock
@@ -408,10 +409,8 @@ def test_fingerprint_handles_type_race(
     resource.write_bytes(b"before")
     original_open = os.open
     original_read = os.read
-    swapped = None
 
     def open_swapped(path, flags):
-        nonlocal swapped
         if path == resource:
             assert flags & getattr(os, "O_NONBLOCK", 0) == getattr(
                 os, "O_NONBLOCK", 0
@@ -428,7 +427,8 @@ def test_fingerprint_handles_type_race(
         return original_open(path, flags)
 
     def read_checked(descriptor, size):
-        assert descriptor != swapped
+        # A later regular file may reuse the closed pipe descriptor.
+        assert stat.S_ISREG(os.fstat(descriptor).st_mode)
         return original_read(descriptor, size)
 
     monkeypatch.setattr(os, "open", open_swapped)
