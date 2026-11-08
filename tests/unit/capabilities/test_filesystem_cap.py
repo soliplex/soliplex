@@ -1,12 +1,18 @@
+import hashlib
+import json
 import pathlib
+import re
 
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai import ModelRetry
+from pydantic_ai import RunContext
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.messages import TextPart
 from pydantic_ai.messages import ToolCallPart
 from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.usage import RunUsage
 
 from soliplex.capabilities import filesystem as cap_fs
 
@@ -172,15 +178,118 @@ def test_instruction_only_capability_has_no_toolset(temp_dir):
         (["resources", "scripts"], ["read_resource", "run_script"]),
     ],
 )
-def test_toolset_matches_bundled_directories(temp_dir, dirnames, tool_names):
+@pytest.mark.parametrize("capability_id", [None, "custom-id", "A_" + "x" * 48])
+@pytest.mark.anyio
+async def test_toolset_matches_bundled_directories(
+    temp_dir, dirnames, tool_names, capability_id
+):
     path = temp_dir / "test-capability"
     _write_skill(path)
     for dirname in dirnames:
         (path / dirname).mkdir()
 
-    toolset = _capability(path).get_toolset()
+    capability = _capability(path)
+    capability.id = capability_id
+    toolset = capability.get_toolset()
+    tools = await toolset.get_tools(
+        RunContext(deps=None, model=TestModel(), usage=RunUsage())
+    )
 
-    assert sorted(toolset.tools) == tool_names
+    prefix = capability_id or path.name
+    assert sorted(tools) == [f"{prefix}_{name}" for name in tool_names]
+
+
+@pytest.mark.parametrize(
+    "capability_id", [None, "a" * 51, "a" * 64, "custom.id"]
+)
+@pytest.mark.anyio
+async def test_toolset_hashes_invalid_or_long_prefixes(
+    temp_dir, capability_id
+):
+    prefixes = []
+    for name in ("a" * 64, "b" * 64):
+        path = temp_dir / name
+        _write_skill(path)
+        (path / "resources").mkdir()
+        (path / "scripts").mkdir()
+        capability = _capability(path)
+        capability.id = capability_id
+
+        tools = await capability.get_toolset().get_tools(
+            RunContext(deps=None, model=TestModel(), usage=RunUsage())
+        )
+
+        prefix = (
+            "skill_"
+            + hashlib.sha256((capability_id or name).encode()).hexdigest()[:12]
+        )
+        assert sorted(tools) == [
+            f"{prefix}_read_resource",
+            f"{prefix}_run_script",
+        ]
+        for tool_name in tools:
+            assert len(tool_name) <= 64
+            assert re.fullmatch(r"[A-Za-z0-9_-]+", tool_name)
+        prefixes.append(prefix)
+
+    assert (prefixes[0] != prefixes[1]) == (capability_id is None)
+
+
+@pytest.mark.parametrize("defer_loading", [False, True])
+@pytest.mark.anyio
+async def test_agent_runs_two_resource_capabilities(
+    temp_dir, monkeypatch, defer_loading
+):
+    capabilities = []
+    for name in ("alpha", "beta"):
+        path = temp_dir / name
+        _write_skill(path)
+        (path / "resources").mkdir()
+        capability = _capability(path)
+        capability.defer_loading = defer_loading
+        capabilities.append(capability)
+    model = TestModel(
+        call_tools=["load_capability"] * 2 if defer_loading else [],
+        custom_output_text="done",
+    )
+    capability_ids = iter(["alpha", "beta"])
+    monkeypatch.setattr(
+        model, "gen_tool_args", lambda tool: {"id": next(capability_ids)}
+    )
+    agent = Agent(model, capabilities=capabilities)
+
+    result = await agent.run("Use the capabilities")
+
+    assert result.output == "done"
+
+
+@pytest.mark.parametrize("capability_id", ["first", "second"])
+@pytest.mark.anyio
+async def test_prefixed_resource_tool_reads_own_skill(
+    temp_dir, monkeypatch, capability_id
+):
+    capabilities = []
+    for name, name_id in (("alpha", "first"), ("beta", "second")):
+        path = temp_dir / name
+        _write_skill(path)
+        (path / "resources").mkdir()
+        (path / "resources" / "shared.md").write_text(name, encoding="utf-8")
+        capability = _capability(path)
+        capability.id = name_id
+        capability.defer_loading = False
+        capabilities.append(capability)
+    tool_name = f"{capability_id}_read_resource"
+    model = TestModel(call_tools=[tool_name])
+    monkeypatch.setattr(
+        model, "gen_tool_args", lambda tool: {"path": "resources/shared.md"}
+    )
+    agent = Agent(model, capabilities=capabilities)
+
+    result = await agent.run("Read the resource")
+
+    assert json.loads(result.output) == {
+        tool_name: {"first": "alpha", "second": "beta"}[capability_id]
+    }
 
 
 @pytest.mark.anyio
@@ -326,7 +435,7 @@ async def test_agent_runs_capability_tools(temp_dir):
             return ModelResponse(
                 parts=[
                     ToolCallPart(
-                        "read_resource",
+                        "test-capability_read_resource",
                         {"path": "resources/poem.md"},
                     )
                 ]
