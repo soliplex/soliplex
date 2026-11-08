@@ -244,6 +244,8 @@ def _parse_skill_file(
 
 def discover_filesystem_capabilities(
     paths: typing.Iterable[pathlib.Path],
+    *,
+    raise_io_errors: bool = False,
 ) -> tuple[list[FilesystemCapability], list[FilesystemCapabilityError]]:
     """Discover instruction-only capabilities below configured paths."""
     capabilities = []
@@ -274,6 +276,8 @@ def discover_filesystem_capabilities(
             try:
                 capabilities.append(_parse_skill_file(candidate))
             except FilesystemCapabilityError as exc:
+                if raise_io_errors and isinstance(exc.__cause__, OSError):
+                    raise exc.__cause__ from None
                 errors.append(exc)
 
     return capabilities, errors

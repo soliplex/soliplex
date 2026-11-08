@@ -230,7 +230,9 @@ def resolve_environment_entry(
         raise MissingEnvVar(env_name) from None
 
 
-def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
+def _load_filesystem_skill_configs(
+    i_config, *, raise_io_errors: bool = False
+) -> config_skills.SkillConfigMap:
     fs_skill_configs = {}
 
     capabilities, validation_errors = cap_fs.discover_filesystem_capabilities(
@@ -238,6 +240,7 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
             pathlib.Path(path).absolute()
             for path in i_config.filesystem_skills_paths
         ],
+        raise_io_errors=raise_io_errors,
     )
     for capability in capabilities:
         skill_config = config_skills.FilesystemSkillConfig.from_capability(
@@ -251,7 +254,9 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
         skill_path = validation_error.path
         skill_name = skill_path.name
         fs_skill_configs[skill_name] = (
-            config_skills.FilesystemSkillConfig.from_path(skill_path)
+            config_skills.FilesystemSkillConfig.from_path(
+                skill_path, raise_io_errors=raise_io_errors
+            )
         )
 
     return fs_skill_configs
@@ -1532,7 +1537,7 @@ class InstallationConfig:
             before_skills = self._skill_fingerprints.copy()
             candidate = copy.copy(self)
             candidate._available_filesystem_skill_configs = (
-                _load_filesystem_skill_configs(candidate)
+                _load_filesystem_skill_configs(candidate, raise_io_errors=True)
             )
             candidate._resolved_skill_configs = None
             _ = candidate.skill_configs

@@ -155,9 +155,11 @@ class FilesystemSkillConfig:
         return cls(_capability=capability)
 
     @classmethod
-    def from_path(cls, capability_path: pathlib.Path):
+    def from_path(
+        cls, capability_path: pathlib.Path, *, raise_io_errors: bool = False
+    ):
         capabilities, errors = cap_fs.discover_filesystem_capabilities(
-            [capability_path]
+            [capability_path], raise_io_errors=raise_io_errors
         )
         if errors:
             placeholder = cap_fs.FilesystemCapability(

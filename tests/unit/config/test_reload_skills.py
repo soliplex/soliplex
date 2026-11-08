@@ -672,3 +672,45 @@ async def test_startup_baseline_without_room_skills(
         added=(), removed=(), changed=("alpha",)
     )
     assert result.added == result.removed == result.changed == ()
+
+
+@pytest.mark.anyio
+async def test_skill_read_failure_preserves_published_caches(
+    loaded_skills_config, tmp_path, monkeypatch
+):
+    from pathlib import Path
+
+    config = loaded_skills_config
+    service = installation.Installation(config)
+    rooms = config._room_configs
+    available = config._available_filesystem_skill_configs
+    enabled = config._resolved_skill_configs
+    fingerprints = config._skill_fingerprints
+    old_skill = rooms["foo"].skill_configs["alpha"]
+    write_skill(tmp_path, "gamma")
+    write_room(tmp_path, ["beta", "gamma"])
+    skill_file = tmp_path / "skills" / "alpha" / "SKILL.md"
+    original = Path.read_text
+
+    def denied(path, *args, **kwargs):
+        if path == skill_file:
+            message = "unreadable SKILL.md"
+            raise PermissionError(message)
+        return original(path, *args, **kwargs)
+
+    assert "name: beta" in denied(
+        tmp_path / "skills" / "beta" / "SKILL.md", encoding="utf-8"
+    )
+    monkeypatch.setattr(Path, "read_text", denied)
+    with pytest.raises(PermissionError, match="unreadable SKILL.md"):
+        await service.reload_skill_and_room_configs()
+
+    assert config._room_configs is rooms
+    assert config._available_filesystem_skill_configs is available
+    assert config._resolved_skill_configs is enabled
+    assert config._skill_fingerprints is fingerprints
+    assert "gamma" not in config.skill_configs
+    served_skill = config.room_configs["foo"].skill_configs["alpha"]
+    assert served_skill is old_skill
+    assert served_skill.errors == []
+    assert served_skill.capability.instructions == "Follow these instructions."
