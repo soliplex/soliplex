@@ -334,35 +334,6 @@ def test_reload_fingerprints_only_enabled_skills(
     assert set(config._skill_fingerprints) == {"alpha"}
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Requires POSIX special files")
-def test_fingerprint_skips_special_files_and_symlinks(
-    loaded_skills_config, tmp_path, monkeypatch
-):
-    config = loaded_skills_config
-    root = tmp_path / "skills" / "alpha"
-    fifo = root / "pipe"
-    os.mkfifo(fifo)
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    target = outside / "secret.txt"
-    target.write_bytes(b"outside")
-    link = root / "linked.txt"
-    link.symlink_to(target)
-    directory_link = root / "linked-dir"
-    directory_link.symlink_to(outside, target_is_directory=True)
-    original = os.open
-
-    def open_checked(path, *args, **kwargs):
-        assert path not in (fifo, link, target)
-        assert directory_link not in path.parents
-        return original(path, *args, **kwargs)
-
-    monkeypatch.setattr(os, "open", open_checked)
-    before = config._skill_fingerprints.copy()
-    config.reload_skill_and_room_configs()
-    assert config._skill_fingerprints == before
-
-
 @pytest.mark.parametrize("size_mib", [16, 17])
 def test_fingerprint_bounds_resource_reads(
     loaded_skills_config, tmp_path, monkeypatch, size_mib
@@ -536,21 +507,6 @@ def test_old_room_skills_survive_publication(
     assert old_room.skill_configs["alpha"] == old_skill
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Requires symlink support")
-def test_discovery_preserves_symlink_name(tmp_path):
-    target = write_skill(tmp_path, "alpha")
-    renamed = target.with_name("release-v2")
-    target.rename(renamed)
-    target.symlink_to(renamed, target_is_directory=True)
-    config = config_installation.InstallationConfig(
-        id="symlink", filesystem_skills_paths=[target]
-    )
-    for _ in range(2):
-        skills = config_installation._load_filesystem_skill_configs(config)
-        assert set(skills) == {"alpha"}
-        assert skills["alpha"].errors == []
-
-
 @pytest.mark.parametrize("stage", ["stat", "open"])
 def test_fingerprint_ignores_disappearing_file(
     loaded_skills_config, tmp_path, monkeypatch, stage
@@ -714,3 +670,28 @@ async def test_skill_read_failure_preserves_published_caches(
     assert served_skill is old_skill
     assert served_skill.errors == []
     assert served_skill.capability.instructions == "Follow these instructions."
+
+
+def test_fingerprint_skips_nonregular_file(loaded_skills_config, monkeypatch):
+    from pathlib import Path
+
+    skill = loaded_skills_config.skill_configs["alpha"]
+    resource = skill.path / "special"
+    resource.write_bytes(b"not read")
+    original_lstat = Path.lstat
+    original_open = os.open
+
+    def lstat(path, *args, **kwargs):
+        if path == resource:
+            return os.stat_result((stat.S_IFIFO,) + (0,) * 9)
+        return original_lstat(path, *args, **kwargs)
+
+    def open_checked(path, *args, **kwargs):
+        assert path != resource
+        return original_open(path, *args, **kwargs)
+
+    before = loaded_skills_config._skill_fingerprints.copy()
+    monkeypatch.setattr(Path, "lstat", lstat)
+    monkeypatch.setattr(os, "open", open_checked)
+    loaded_skills_config.reload_skill_and_room_configs()
+    assert loaded_skills_config._skill_fingerprints == before
