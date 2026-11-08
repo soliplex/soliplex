@@ -284,7 +284,10 @@ async def test_agent_runs_two_capability_tools(
     ).run("Use both capabilities")
 
     assert result.output == "done"
-    returns = {part.tool_name: part.content for part in requests[-1][-1].parts}
+    returns = {
+        part.tool_name: part.content.replace("\r\n", "\n")
+        for part in requests[-1][-1].parts
+    }
     newline = "" if tool_kind == "resource" else "\n"
     assert returns == {
         f"alpha_{suffix}": f"alpha{newline}",
