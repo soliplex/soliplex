@@ -79,7 +79,8 @@ async def reload_rooms_configs(
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
     the_audit: ConfigAuditLog = depend_the_config_audit_log,
-) -> models.RoomConfigsReloaded:
+    skills: bool = False,
+) -> models.SkillAndRoomConfigsReloaded | models.RoomConfigsReloaded:
     """Reload the room configs from the filesystem, swapping in place.
 
     Answers the room IDs the reload added, removed, or changed.
@@ -109,6 +110,26 @@ async def reload_rooms_configs(
             status_code=409,
             detail=loggers.INST_RELOAD_ROOMS_MULTI_WRITER,
         ) from None
+
+    if skills:
+        reloaded = await the_installation.reload_skill_and_room_configs()
+        delta = models.SkillAndRoomConfigsReloaded(
+            added=list(reloaded.added),
+            removed=list(reloaded.removed),
+            changed=list(reloaded.changed),
+            skills=models.SkillConfigsReloaded(
+                added=list(reloaded.skills.added),
+                removed=list(reloaded.skills.removed),
+                changed=list(reloaded.skills.changed),
+            ),
+        )
+        the_audit.rooms_reloaded(
+            added=delta.added,
+            removed=delta.removed,
+            changed=delta.changed,
+            skills_reloaded=True,
+        )
+        return delta
 
     reloaded = await the_installation.reload_room_configs()
 

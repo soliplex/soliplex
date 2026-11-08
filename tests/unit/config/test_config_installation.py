@@ -3793,9 +3793,11 @@ def test_installationconfig_avl_fs_skill_configs_w_existing():
     assert found["skill_2"] == SC_2
 
 
-def test_installationconfig_skill_configs_permissive_default():
+def test_installationconfig_skill_configs_permissive_default(tmp_path):
     # With no '_skill_configs' set, every discovered skill is included.
-    fs_skill = object()
+    fs_skill = config_skills.FilesystemSkillConfig.from_capability(
+        test_skills._filesystem_capability(tmp_path)
+    )
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_available_filesystem_skill_configs"] = {
@@ -3824,9 +3826,11 @@ def test_installationconfig_skill_configs_empty_availability(
     ].assert_called_once_with(i_config)
 
 
-def test_installationconfig_skill_configs_w_whitelist():
+def test_installationconfig_skill_configs_w_whitelist(tmp_path):
     # A filesystem whitelist suppresses non-listed filesystem skills.
-    fs_skill = object()
+    fs_skill = config_skills.FilesystemSkillConfig.from_capability(
+        test_skills._filesystem_capability(tmp_path)
+    )
     other_fs = object()
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
@@ -4037,6 +4041,8 @@ def test_installationconfig_reload_configurations(temp_dir):
         **kw,
     )
 
+    i_config._skill_fingerprints = {"stale": ("old",)}
+
     with (
         mock.patch.multiple(
             i_config,
@@ -4073,9 +4079,10 @@ def test_installationconfig_reload_configurations(temp_dir):
         i_config,
     )
 
-    # Stale resolved-skills cache must be invalidated so the next access
-    # recomputes against the reloaded availability maps.
-    assert i_config._resolved_skill_configs is None
+    # Rebuild stale skills and fingerprints during startup even when
+    # parsing rooms does not resolve any skills.
+    assert i_config._resolved_skill_configs == {}
+    assert i_config._skill_fingerprints == {}
 
 
 def _write_room_config(rooms_path, dir_name, room_config_yaml):

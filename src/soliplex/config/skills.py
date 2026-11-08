@@ -155,9 +155,11 @@ class FilesystemSkillConfig:
         return cls(_capability=capability)
 
     @classmethod
-    def from_path(cls, capability_path: pathlib.Path):
+    def from_path(
+        cls, capability_path: pathlib.Path, *, raise_io_errors: bool = False
+    ):
         capabilities, errors = cap_fs.discover_filesystem_capabilities(
-            [capability_path]
+            [capability_path], raise_io_errors=raise_io_errors
         )
         if errors:
             placeholder = cap_fs.FilesystemCapability(
@@ -309,7 +311,9 @@ class _HaikuRAGEvidenceSkillConfig:
     state_namespace: typing.ClassVar[str | None] = None
     state_type: typing.ClassVar[type[pydantic.BaseModel] | None] = None
 
-    _installation_config: config_installation.InstallationConfig = None
+    _installation_config: config_installation.InstallationConfig = (
+        _no_repr_no_compare_none()
+    )
     _config_path: pathlib.Path | None = None
 
     @classmethod
@@ -388,7 +392,9 @@ class BwrapSandboxSkillConfig:
     state_namespace: typing.ClassVar[None] = None
     agui_feature_names: typing.ClassVar[tuple[str, ...]] = ()
 
-    _installation_config: config_installation.InstallationConfig = None
+    _installation_config: config_installation.InstallationConfig = (
+        _no_repr_no_compare_none()
+    )
     _config_path: pathlib.Path | None = None
 
     id: str | None = None
@@ -508,7 +514,9 @@ class EntrypointCapabilityConfig:
     kind: typing.ClassVar[str] = "entrypoint"
     source: typing.ClassVar[SkillKind] = SkillKind.ENTRYPOINT
 
-    _installation_config: config_installation.InstallationConfig = None
+    _installation_config: config_installation.InstallationConfig = (
+        _no_repr_no_compare_none()
+    )
     _config_path: pathlib.Path | None = None
 
     name: str
@@ -689,6 +697,9 @@ class RoomSkillsConfig:
     _installation_config: config_installation.InstallationConfig = (
         _no_repr_no_compare_none()
     )
+    _bound_installation_skills: SkillConfigMap | None = (
+        _no_repr_no_compare_none()
+    )
     _config_path: pathlib.Path = None
 
     def __post_init__(self) -> None:
@@ -731,6 +742,9 @@ class RoomSkillsConfig:
                 config_path,
                 refs,
             )
+            config_dict["_bound_installation_skills"] = (
+                installation_config.skill_configs
+            )
             config_dict["installation_skill_names"] = refs
             config_dict["_skill_configs"] = extract_skill_configs(
                 installation_config,
@@ -764,7 +778,9 @@ class RoomSkillsConfig:
 
     @property
     def skill_configs(self) -> SkillConfigMap:
-        installation_configs = self._installation_config.skill_configs
+        installation_configs = self._bound_installation_skills
+        if installation_configs is None:
+            installation_configs = self._installation_config.skill_configs
         return {
             ref.name: installation_configs[ref.name].with_defer_loading(
                 ref.defer_loading

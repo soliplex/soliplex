@@ -947,6 +947,7 @@ async def test_installation_reload_room_configs():
 
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.room_configs = before
+    i_config._reload_lock = threading.RLock()
     i_config.reload_room_configs.side_effect = _reload_room_configs
     the_installation = installation.Installation(i_config)
 
@@ -966,6 +967,7 @@ async def test_installation_reload_room_configs():
 async def test_installation_reload_room_configs_w_failure():
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.room_configs = {"kept": object()}
+    i_config._reload_lock = threading.RLock()
     i_config.reload_room_configs.side_effect = ValueError("broken room")
     the_installation = installation.Installation(i_config)
 
@@ -2018,3 +2020,56 @@ async def test_create_async_engine_memory():
             assert fkeys == 1
     finally:
         await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_installation_reload_skills_runs_in_worker():
+    """Build combined deltas from snapshots collected in a worker thread."""
+    kept = object()
+    reloaded_in_threads = []
+
+    def reload():
+        reloaded_in_threads.append(threading.get_ident())
+        return (
+            {"kept": kept, "removed": object()},
+            {"kept": kept, "added": object()},
+            {"kept": ("same",), "changed": ("old",), "removed": ()},
+            {"kept": ("same",), "changed": ("new",), "added": ()},
+        )
+
+    config = mock.create_autospec(config_installation.InstallationConfig)
+    config.reload_skill_and_room_configs.side_effect = reload
+    result = await installation.Installation(
+        config
+    ).reload_skill_and_room_configs()
+
+    assert result == installation.SkillAndRoomConfigsReloaded(
+        added=("added",),
+        removed=("removed",),
+        changed=(),
+        skills=installation.SkillConfigsReloaded(
+            added=("added",), removed=("removed",), changed=("changed",)
+        ),
+    )
+    assert len(reloaded_in_threads) == 1
+    assert reloaded_in_threads != [threading.get_ident()]
+
+
+@pytest.mark.anyio
+async def test_room_reload_delta_captures_before_under_lock():
+    config = mock.create_autospec(config_installation.InstallationConfig)
+    config.room_configs = {"stale": object()}
+    config.reload_room_configs.return_value = {"current": object()}
+
+    class Lock:
+        def __enter__(self):
+            config.room_configs = config.reload_room_configs.return_value
+
+        def __exit__(self, *_args):
+            pass
+
+    config._reload_lock = Lock()
+    result = await installation.Installation(config).reload_room_configs()
+    assert result == installation.RoomConfigsReloaded(
+        added=(), removed=(), changed=()
+    )
