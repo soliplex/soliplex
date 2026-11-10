@@ -2562,8 +2562,8 @@ async def test_list_user_threads_page_filters_by_name(
     ts = agui_persistence.ThreadStorage(the_async_session)
 
     async with unit_of_work():
-        await _named_thread(ts, room_id=ROOM_ID, name="Osprey Pilot Manual")
-        await _named_thread(ts, room_id=ROOM_ID, name="Chinook Manual")
+        await _named_thread(ts, room_id=ROOM_ID, name="Toaster User Manual")
+        await _named_thread(ts, room_id=ROOM_ID, name="Blender Manual")
         await _named_thread(ts, room_id=ROOM_ID, name="Unrelated")
 
     pairs, position = await _page_names(
@@ -2574,8 +2574,8 @@ async def test_list_user_threads_page_filters_by_name(
 
     # Case-insensitive substring.
     assert sorted(name for _, name in pairs) == [
-        "Chinook Manual",
-        "Osprey Pilot Manual",
+        "Blender Manual",
+        "Toaster User Manual",
     ]
     assert position is None
 
@@ -2687,10 +2687,10 @@ async def test_list_user_threads_page_combines_both_filters(
         await _labelled(
             ts,
             room_id=ROOM_ID,
-            name="Osprey Manual",
+            name="Toaster Manual",
             label_ids=[urgent],
         )
-        await _named_thread(ts, room_id=ROOM_ID, name="Chinook Manual")
+        await _named_thread(ts, room_id=ROOM_ID, name="Blender Manual")
         await _labelled(
             ts,
             room_id=ROOM_ID,
@@ -2707,5 +2707,5 @@ async def test_list_user_threads_page_combines_both_filters(
 
     # AND across the two axes: the label chip narrows the text search
     # rather than widening it.
-    assert [name for _, name in pairs] == ["Osprey Manual"]
+    assert [name for _, name in pairs] == ["Toaster Manual"]
     assert position is None
