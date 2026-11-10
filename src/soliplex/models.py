@@ -956,7 +956,7 @@ MAX_THREAD_LABELS = 32
 class AGUI_Label(pydantic.BaseModel):
     """A category which may be attached to threads.
 
-    'usage_count' is present only for administrators.
+    'usage_count' is null except for administrators.
     """
 
     id: int = KW_ONLY

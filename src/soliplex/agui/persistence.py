@@ -85,7 +85,12 @@ def _sqlite_lower(value: str | None) -> str | None:
 
 
 async def _name_fold(session):
-    """Return the SQL function that folds a name as 'str.lower' does."""
+    """Return the SQL function that folds a name as 'str.lower' does.
+
+    On PostgreSQL that is 'lower()', which folds by the database's
+    'LC_CTYPE': under the 'C' or 'POSIX' locale it folds only ASCII, as
+    SQLite's built-in does, so a non-ASCII search is then case-sensitive.
+    """
     connection = await session.connection()
 
     if connection.dialect.name != "sqlite":
@@ -507,6 +512,11 @@ class ThreadStorage(agui.ThreadStorage):
             # contents from inside the assignment.
             await thread.awaitable_attrs.labels
             thread.labels = labels
+
+            # Reload so the caller sees the relationship's order, as a
+            # later read would, rather than the order of 'label_ids'.
+            await session.flush()
+            await session.refresh(thread, attribute_names=["labels"])
 
         return thread
 

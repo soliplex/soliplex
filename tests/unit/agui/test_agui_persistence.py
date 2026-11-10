@@ -2217,6 +2217,33 @@ async def test_set_thread_labels_replaces_the_whole_set(
 
 
 @pytest.mark.asyncio
+async def test_set_thread_labels_returns_them_in_read_order(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        urgent = await _label_id(ts, "Urgent")
+        blocked = await _label_id(ts, "Blocked")
+        thread_id = await _named_thread(ts, room_id=ROOM_ID, name="thread")
+
+    async with unit_of_work():
+        thread = await ts.set_thread_labels(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            label_ids=[urgent, blocked],
+        )
+        returned = [label.name for label in thread.labels]
+
+    found = await ts.get_threads_labels(thread_ids=[thread_id])
+
+    assert returned == ["Blocked", "Urgent"]
+    assert returned == [label.name for label in found[thread_id]]
+
+
+@pytest.mark.asyncio
 async def test_set_thread_labels_clears_with_an_empty_list(
     the_async_session,
     unit_of_work,

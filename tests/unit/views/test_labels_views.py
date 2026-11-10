@@ -277,7 +277,7 @@ async def test_delete_agui_label_id_deletes(
     the_threads.delete_label.assert_awaited_once_with(label_id=1)
     the_admin_users.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
-        resource=loggers.AUDIT_RESOURCE_THREAD_LABEL,
+        resource=loggers.AUDIT_RESOURCE_LABEL_CATALOGUE,
         action=loggers.AUDIT_ACTION_DELETE,
     )
 

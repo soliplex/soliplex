@@ -43,7 +43,7 @@ async def _check_admin(
     """Raise a 403 unless the caller is an administrator."""
     if not await the_admin_users.check_admin_access(
         the_user_claims,
-        resource=loggers.AUDIT_RESOURCE_THREAD_LABEL,
+        resource=loggers.AUDIT_RESOURCE_LABEL_CATALOGUE,
         action=action,
     ):
         raise fastapi.HTTPException(

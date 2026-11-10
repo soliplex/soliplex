@@ -186,7 +186,7 @@ AUDIT_RESOURCE_INSTALLATION_PROVIDERS = "installation-providers"
 AUDIT_RESOURCE_INSTALLATION_GIT_METADATA = "installation-git-metadata"
 AUDIT_RESOURCE_INSTALLATION_ROOMS = "installation-rooms"
 AUDIT_RESOURCE_ROOM_UPLOAD = "room-upload"
-AUDIT_RESOURCE_THREAD_LABEL = "thread-label"
+AUDIT_RESOURCE_LABEL_CATALOGUE = "label-catalogue"
 
 # room-authz audit events
 AUDIT_ROOM_POLICY_READ = "room policy read"
