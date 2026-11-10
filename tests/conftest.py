@@ -11,10 +11,16 @@ session-scoped fixture cannot request them (pytest raises
 'tests/unit/cli/conftest.py' does.
 """
 
+import os
+
 import pytest
 
 from tests import _platform
 from tests._dburi import sqlite_dburi
+
+# rich fixes color at  Console build time; force plain output for every
+# console under test, before any 'soliplex' import.
+os.environ["TTY_COMPATIBLE"] = "0"
 
 COVERAGE_NOT_REPORTED = (
     "coverage is not reported for POSIX-only code on this host: "
