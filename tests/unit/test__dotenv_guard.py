@@ -1,4 +1,3 @@
-import warnings
 from unittest import mock
 
 import _dotenv_guard
@@ -12,31 +11,19 @@ def repo_root(tmp_path):
     return root
 
 
-def test_guard_load_dotenv_w_repo_dotenv(repo_root):
+@pytest.mark.parametrize("w_file", [False, True])
+def test_guard_load_dotenv_w_repo_path(repo_root, w_file):
     dotenv_path = repo_root / ".env"
-    dotenv_path.write_text("KEY=value\n", encoding="utf-8")
+
+    if w_file:
+        dotenv_path.write_text("KEY=value\n", encoding="utf-8")
+
     load_dotenv = mock.Mock()
     guarded = _dotenv_guard.guard_load_dotenv(load_dotenv, repo_root)
 
-    with pytest.warns(
-        _dotenv_guard.RepoDotenvIgnoredWarning,
-        match=r"unit tests ignore .*\.env",
-    ):
-        found = guarded(dotenv_path)
+    with pytest.raises(pytest.fail.Exception):
+        guarded(dotenv_path)
 
-    assert found is None
-    load_dotenv.assert_not_called()
-
-
-def test_guard_load_dotenv_w_repo_path_wo_file(repo_root):
-    load_dotenv = mock.Mock()
-    guarded = _dotenv_guard.guard_load_dotenv(load_dotenv, repo_root)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        found = guarded(repo_root / ".env")
-
-    assert found is None
     load_dotenv.assert_not_called()
 
 

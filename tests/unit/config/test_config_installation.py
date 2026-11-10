@@ -1697,6 +1697,7 @@ def test_installationconfig_resolve_environment(
     exp_missing,
     exp_env,
 ):
+    (temp_dir / ".env").write_text("", encoding="utf-8")
     environment = {entry["name"]: entry.get("value") for entry in env_entries}
 
     from_dotenv, disable_dotenv = dotenv_opt

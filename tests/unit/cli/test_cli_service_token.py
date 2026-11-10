@@ -255,10 +255,7 @@ def test__get_stable_secret(scratch_installation, monkeypatch):
 def test__get_stable_secret_wo_stable_secret(
     scratch_installation,
     monkeypatch,
-    tmp_path,
 ):
-    # Keep a developer's '.env' in the cwd from supplying the secret.
-    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("SOLIPLEX_URL_SAFE_TOKEN_SECRET", raising=False)
     the_installation = cli_util.get_installation(scratch_installation.path)
 
@@ -649,12 +646,7 @@ def test_mint_quiet(scratch_installation, cli_runner, tmp_path, w_file):
 def test_mint_wo_stable_secret(
     scratch_installation,
     cli_runner,
-    tmp_path,
-    monkeypatch,
 ):
-    # Keep a developer's '.env' in the cwd from supplying the secret.
-    monkeypatch.chdir(tmp_path)
-
     result = cli_runner.invoke(
         cli_main.the_cli,
         [
@@ -1054,12 +1046,7 @@ def test_validate_quiet(scratch_installation, cli_runner, tmp_path, w_file):
 def test_validate_wo_stable_secret(
     scratch_installation,
     cli_runner,
-    tmp_path,
-    monkeypatch,
 ):
-    # Keep a developer's '.env' in the cwd from supplying the secret.
-    monkeypatch.chdir(tmp_path)
-
     result = cli_runner.invoke(
         cli_main.the_cli,
         ["service-token", "validate", str(scratch_installation.path)],

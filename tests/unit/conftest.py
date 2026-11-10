@@ -37,22 +37,17 @@ def _auth_systems(n_auth_systems):
     ]
 
 
-@pytest.fixture(autouse=True)
-def _no_repo_dotenv(monkeypatch):
-    """Keep the checkout's '.env' out of every unit test.
+def pytest_configure(config):
+    """Fail any unit test which would read a '.env' inside the checkout.
 
-    See '_dotenv_guard' for why, and for what is reported.
+    See '_dotenv_guard'.
     """
     klass = config_installation.InstallationConfig
-    monkeypatch.setattr(
-        klass,
-        "_load_dotenv",
-        staticmethod(
-            _dotenv_guard.guard_load_dotenv(
-                klass._load_dotenv,
-                _dotenv_guard.REPO_ROOT,
-            )
-        ),
+    klass._load_dotenv = staticmethod(
+        _dotenv_guard.guard_load_dotenv(
+            klass._load_dotenv,
+            _dotenv_guard.REPO_ROOT,
+        )
     )
 
 
