@@ -9,12 +9,21 @@ from soliplex import models
 from soliplex.cli import types
 from soliplex.cli.audit import _common as audit_common
 from soliplex.cli.audit import interpolation as audit_interpolation
+from soliplex.cli.audit import non_local_paths as audit_non_local
 
 
 def _invalid_installation(
     the_installation: installation.Installation,
+    non_local_prompt_ids: set,
 ) -> dict:
+    """Check that the installation config renders as a model
+
+    Skipped if 'non_local_prompt_ids' names any agent config.
+    """
     errors = {}
+
+    if non_local_prompt_ids:
+        return errors
 
     try:
         models.Installation.from_config(the_installation._config)
@@ -104,12 +113,31 @@ def _audit_installation_section(
     tc_rule("Configured installation model")
     tc_line()
 
-    errors = _invalid_installation(the_installation)
+    reports = audit_non_local._non_local_path_reports(ctx, the_installation)
+    non_local_errors = audit_non_local._non_local_path_findings(
+        reports, audit_non_local.INSTALLATION
+    )
+    non_local_ids = audit_non_local._non_local_prompt_ids(
+        reports, audit_non_local.INSTALLATION
+    )
+
+    errors = _invalid_installation(the_installation, non_local_ids)
     exc = errors.get("installation_model")
     if exc:
         tc_print(f"ERROR: {exc}")
+    elif non_local_ids:
+        tc_print("SKIPPED: an agent config's prompt file is not local")
     else:
         tc_print("OK")
+
+    for agent_id, findings in reports[audit_non_local.INSTALLATION].items():
+        tc_print()
+        tc_print(f"agent config '{agent_id}':")
+        audit_non_local._print_non_local_path_findings(
+            tc_print,
+            findings,
+            "  ",
+        )
 
     warning_errors = _audit_config_warnings(ctx, tc_print)
 
@@ -128,7 +156,7 @@ def _audit_installation_section(
         tc_print, interpolation_errors
     )
 
-    return errors | warning_errors | interpolation_errors
+    return errors | warning_errors | non_local_errors | interpolation_errors
 
 
 def audit_installation(

@@ -1072,6 +1072,26 @@ def test_roomconfig_get_logo_image(temp_dir, room_config_kw, w_config_path):
             assert room_config.get_logo_image() is None
 
 
+@pytest.mark.parametrize(
+    "logo_image",
+    ["../outside.jpg", "./../outside.jpg", "/etc/passwd"],
+)
+def test_roomconfig_get_logo_image_w_not_local(temp_dir, logo_image):
+    room_dir = temp_dir / "room"
+    room_dir.mkdir()
+    room_config_kw = BARE_ROOM_CONFIG_KW | {
+        "logo_image": logo_image,
+        "_config_path": room_dir / "room_config.yaml",
+    }
+    room_config = config_rooms.RoomConfig(**room_config_kw)
+
+    with pytest.raises(config_exc.PathNotLocal) as exc_info:
+        room_config.get_logo_image()
+
+    assert exc_info.value.config_dir == room_dir
+    assert exc_info.value.path == logo_image
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("incl_source_kwargs", [{}, {"include_source": True}])
 @pytest.mark.parametrize(

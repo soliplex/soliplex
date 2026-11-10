@@ -27,6 +27,15 @@ class NoConfigPath(ValueError):
         super().__init__("No '_config_path' set")
 
 
+class PathNotLocal(ValueError):
+    def __init__(self, config_dir, path):
+        self.config_dir = config_dir
+        self.path = path
+        super().__init__(
+            f"Path {path!r} resolves outside config directory: {config_dir}"
+        )
+
+
 class NoSuchConfig(ValueError):
     def __init__(self, _config_path):
         self._config_path = _config_path

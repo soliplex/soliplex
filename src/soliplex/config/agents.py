@@ -274,21 +274,35 @@ class AgentConfig:
                 config_dict,
             ) from exc
 
+    def get_system_prompt_path(self) -> pathlib.Path | None:
+        """Return the resolved path of the system prompt file, if any
+
+        Raises:
+
+        - 'exceptions.NoConfigPath' if a prompt file is configured but
+          '_config_path' is unset
+        - 'exceptions.PathNotLocal' if the prompt file resolves outside
+          the config's directory
+        """
+        if self._system_prompt_path is None:
+            return None
+
+        if self._config_path is None:
+            raise exceptions.NoConfigPath()
+
+        return _utils._local_path(
+            self._config_path.parent,
+            self._system_prompt_path,
+        )
+
     def get_system_prompt(self) -> str | None:
         if self._system_prompt_text is not None:
             return self._system_prompt_text
 
-        if self._system_prompt_path is not None:
-            if self._config_path is None:
-                raise exceptions.NoConfigPath()
+        system_prompt_file = self.get_system_prompt_path()
 
-            system_prompt_file = (
-                self._config_path.parent / self._system_prompt_path
-            )
+        if system_prompt_file is not None:
             return system_prompt_file.read_text(encoding="utf-8")
-
-        else:  # pragma: NO COVER
-            pass
 
     @property
     def llm_model_name(self) -> str | None:

@@ -38,7 +38,10 @@ def test__invalid_completions(
     the_installation._config.completion_configs = completion_configs
     mcfc.side_effect = side_effects
 
-    found = audit_completions._invalid_completions(the_installation)
+    found = audit_completions._invalid_completions(
+        the_installation,
+        set(),
+    )
 
     if exp_invalid_ids:
         assert found == {
@@ -53,6 +56,18 @@ def test__invalid_completions(
     assert mcfc.call_args_list == [
         mock.call(cfg) for cfg in completion_configs.values()
     ]
+
+
+@mock.patch("soliplex.models.Completion.from_config")
+def test__invalid_completions_w_non_local_prompt_ids(mcfc, the_installation):
+    cfg = mock.Mock()
+    cfg.id = "c1"
+    the_installation._config.completion_configs = {"c1": cfg}
+
+    found = audit_completions._invalid_completions(the_installation, {"c1"})
+
+    assert found == {}
+    mcfc.assert_not_called()
 
 
 # _audit_completions_section: ui only

@@ -9,6 +9,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex.config import exceptions as config_exc
 from soliplex.config import rooms as config_rooms
 from soliplex.views import rooms as rooms_views
 
@@ -296,6 +297,36 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
         the_logger=the_logger,
     )
     the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM_BG_IMAGE)
+
+
+@pytest.mark.anyio
+async def test_get_room_bg_image_w_not_local(temp_dir):
+    ROOM_ID = "foo"
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.get_logo_image.side_effect = config_exc.PathNotLocal(
+        temp_dir,
+        "../outside.jpg",
+    )
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_room_config.return_value = room_config
+    the_room_authz = mock.create_autospec(authz.RoomAuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with pytest.raises(fastapi.HTTPException) as exc_info:
+        await rooms_views.get_room_bg_image(
+            room_id=ROOM_ID,
+            the_installation=the_installation,
+            the_room_authz=the_room_authz,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "No image for room"
+    the_logger.exception.assert_called_once_with(
+        loggers.ROOM_BG_IMAGE_NOT_LOCAL,
+        room_id=ROOM_ID,
+    )
 
 
 @pytest.mark.anyio
