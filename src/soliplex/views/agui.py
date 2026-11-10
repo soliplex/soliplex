@@ -21,7 +21,7 @@ from soliplex import agui
 from soliplex import authn
 from soliplex import authz
 from soliplex import installation
-from soliplex import label
+from soliplex import labels
 from soliplex import loggers
 from soliplex import models
 from soliplex import titles
@@ -267,7 +267,7 @@ async def get_agui_threads(
         name_query=q,
     )
 
-    labels = await the_threads.get_threads_labels(
+    threads_labels = await the_threads.get_threads_labels(
         thread_ids=[a_thread.thread_id for a_thread, _ in rows],
     )
 
@@ -283,7 +283,7 @@ async def get_agui_threads(
                 ),
                 a_thread_runs=None,
                 a_thread_last_activity=last_activity,
-                a_thread_labels=labels.get(a_thread.thread_id),
+                a_thread_labels=threads_labels.get(a_thread.thread_id),
             )
         )
 
@@ -331,7 +331,7 @@ async def get_room_agui(
             room_id=room_id,
         )
     )
-    labels = await the_threads.get_threads_labels(
+    threads_labels = await the_threads.get_threads_labels(
         thread_ids=[a_thread.thread_id for a_thread in threads],
     )
 
@@ -347,7 +347,7 @@ async def get_room_agui(
                 ),
                 a_thread_runs=None,
                 a_thread_last_activity=last_activity.get(a_thread.thread_id),
-                a_thread_labels=labels.get(a_thread.thread_id),
+                a_thread_labels=threads_labels.get(a_thread.thread_id),
             )
         )
 
@@ -816,8 +816,9 @@ async def drive_llm_stream(
     room_id: str,
     thread_id: str,
     run_id: str,
+    *,
+    messages: list[agui_core.Message] = (),
     title_agent_config: config_agents.AgentConfig | None = None,
-    messages: list[agui_core.Message] | None = None,
     label_agent_config: config_agents.AgentConfig | None = None,
 ):
     """Primary consumer of LLM event stream
@@ -916,7 +917,12 @@ async def _after_finished_run(
     *,
     title_agent_config: config_agents.AgentConfig | None,
     label_agent_config: config_agents.AgentConfig | None,
-    **run_kwargs,
+    threads_engine: sqla_asyncio.AsyncEngine,
+    room_id: str,
+    thread_id: str,
+    user_name: str,
+    messages: list[agui_core.Message] = (),
+    event_list: list[agui_core.Event] = (),
 ):
     """Name and label the thread, side by side.
 
@@ -930,15 +936,25 @@ async def _after_finished_run(
         pending.append(
             titles.maybe_generate_title(
                 title_agent_config=title_agent_config,
-                **run_kwargs,
+                threads_engine=threads_engine,
+                room_id=room_id,
+                thread_id=thread_id,
+                user_name=user_name,
+                messages=list(messages),
+                event_list=list(event_list),
             )
         )
 
     if label_agent_config is not None:
         pending.append(
-            label.maybe_apply_labels(
+            labels.maybe_apply_labels(
                 label_agent_config=label_agent_config,
-                **run_kwargs,
+                threads_engine=threads_engine,
+                room_id=room_id,
+                thread_id=thread_id,
+                user_name=user_name,
+                messages=list(messages),
+                event_list=list(event_list),
             )
         )
 

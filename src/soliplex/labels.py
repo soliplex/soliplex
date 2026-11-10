@@ -81,12 +81,7 @@ async def maybe_apply_labels(
     messages: list[agui_core.Message],
     event_list: list[agui_core.Event] = (),
 ):
-    """Label a thread from the catalogue once its first run finishes.
-
-    Only the first run: labelling again on later runs would put back
-    labels the owner has since removed. A thread whose first run does
-    not finish is therefore never labelled automatically.
-    """
+    """Label a thread from the catalogue once its first run finishes"""
     try:
         async with sqla_asyncio.AsyncSession(
             bind=threads_engine,
