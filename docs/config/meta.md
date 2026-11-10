@@ -493,6 +493,14 @@ meta:
 Given the registration above, a room ACL entry could allow access with a
 predicate such as `$[?is_admin($.roles)]`.
 
+Server administrators can list the registered functions with
+`GET /api/v1/installation/jsonpath_functions`, which returns each one's
+`name` and a `description`: the first paragraph of the function's
+docstring, on one line, or `null` when it has none. Admin clients show
+that description when an administrator picks a function for a room ACL
+entry, so give each function a docstring whose summary says who it
+matches.
+
 A registered predicate must not return `None`. Soliplex wraps each
 registered function:  when a query runs, a predicate call returning
 `None` raises `InvalidPredicateResult` (a `ValueError`), rather than

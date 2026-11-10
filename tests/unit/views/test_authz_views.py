@@ -329,6 +329,58 @@ async def test_get_user_authz(
     )
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_admin_access", [False, True])
+@mock.patch("soliplex.authz.registered_jsonpath_functions")
+@mock.patch("soliplex.models.JSONPathFunction")
+async def test_get_jsonpath_functions(jpf_klass, rjf, w_admin_access):
+    is_staff_func, has_badge_func = object(), object()
+    rjf.return_value = {
+        "is_staff_func": is_staff_func,
+        "has_badge_func": has_badge_func,
+    }
+    has_badge_model, is_staff_model = object(), object()
+    jpf_klass.from_registered.side_effect = [has_badge_model, is_staff_model]
+
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
+    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
+
+    if not w_admin_access:
+        with pytest.raises(fastapi.HTTPException) as exc:
+            await authz_views.get_jsonpath_functions(
+                the_admin_users=the_admin_users,
+                the_user_claims=THE_USER_CLAIMS,
+                the_authz_logger=the_authz_logger,
+            )
+
+        assert exc.value.status_code == 403
+        assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+
+    else:
+        found = await authz_views.get_jsonpath_functions(
+            the_admin_users=the_admin_users,
+            the_user_claims=THE_USER_CLAIMS,
+            the_authz_logger=the_authz_logger,
+        )
+
+        assert found == [has_badge_model, is_staff_model]  # view sorts by name
+
+        first, second = jpf_klass.from_registered.call_args_list
+        assert first == mock.call("has_badge_func", has_badge_func)
+        assert second == mock.call("is_staff_func", is_staff_func)
+
+    the_admin_users.check_admin_access.assert_awaited_once_with(
+        THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_JSONPATH_FUNCTIONS,
+        action=loggers.AUDIT_ACTION_READ,
+    )
+
+    the_authz_logger.debug.assert_called_once_with(
+        loggers.AUTHZ_GET_JSONPATH_FUNCTIONS,
+    )
+
+
 @pytest.mark.parametrize(
     "resource, expected",
     [
