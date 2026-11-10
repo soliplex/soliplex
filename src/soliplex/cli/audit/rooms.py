@@ -60,6 +60,24 @@ def _invalid_rooms(
     return {}
 
 
+def _mismatched_room_ids(
+    the_installation: installation.Installation,
+) -> dict:
+    """Return a finding for each room whose ID is not its directory's name"""
+    findings = {}
+
+    for room_config in the_installation._config.room_configs.values():
+        room_dir = room_config._config_path.parent
+
+        if room_config.id != room_dir.name:
+            findings[room_config.id] = {"directory": str(room_dir)}
+
+    if findings:
+        return {"rooms_id_mismatch": findings}
+
+    return {}
+
+
 def _iter_room_rag_candidates(room_config):
     """Yield ``(source_label, cfg)`` for each RAG-bearing sub-config."""
     if isinstance(room_config.agent_config, config_rag._RAGConfigBase):
@@ -180,6 +198,10 @@ def _audit_rooms_section(
     errors |= feature_invalid
     feature_invalid_rooms = feature_invalid.get("agui_features", {})
 
+    mismatched = _mismatched_room_ids(the_installation)
+    errors |= mismatched
+    mismatched_rooms = mismatched.get("rooms_id_mismatch", {})
+
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_rooms = the_installation._config.room_configs
 
@@ -190,6 +212,13 @@ def _audit_rooms_section(
         room_exc = invalid_rooms.get(room_config.id)
         if room_exc is not None:
             tc_print(f"  ERROR: {room_exc}")
+
+        mismatch = mismatched_rooms.get(room_config.id)
+        if mismatch is not None:
+            tc_print(
+                "  ERROR: room ID does not match its directory: "
+                f"{mismatch['directory']}"
+            )
 
         audit_non_local._print_non_local_path_findings(
             tc_print,

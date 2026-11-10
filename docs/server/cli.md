@@ -801,6 +801,16 @@ room header before the "AG-UI features" block:
   ERROR: <message>
 ```
 
+Further `ERROR` lines are printed there for a room whose `id` does not
+match the name of its directory, and for a `logo_image` or agent
+`system_prompt` file which resolves outside the room's directory:
+
+```text
+  ERROR: room ID does not match its directory: <directory>
+  ERROR: logo_image path not local to <directory>: <path>
+  ERROR: system_prompt path not local to <directory>: <path>
+```
+
 Rooms with no AG-UI features in their aggregate set
 ([agent](../config/agents.md) ∪ room ∪ tools ∪ skills) omit the
 "AG-UI features" block. Within the block, each feature name is checked
@@ -835,14 +845,18 @@ shown as `error` rather than a number.
 
 #### Exit Status
 
-- `0` — every room's runtime model converted, every aggregated AG-UI
-  feature name resolved against the registry, every RAG configuration
-  resolved, and every document count completed.
-- `1` — at least one room failed runtime-model validation, referenced
-  an unregistered AG-UI feature name, had a missing RAG file, or had
-  a failing `count_documents` query. In `--quiet` mode, the per-room
-  errors are printed as JSON on stdout before exit; unregistered
-  feature names appear under the `agui_features` key.
+- `0` — every room's runtime model converted, every room's `id` matched
+  its directory, every file a room names was inside its directory,
+  every aggregated AG-UI feature name resolved against the registry,
+  every RAG configuration resolved, and every document count completed.
+- `1` — at least one room failed runtime-model validation, had an `id`
+  not matching its directory, named a file outside its directory,
+  referenced an unregistered AG-UI feature name, had a missing RAG
+  file, or had a failing `count_documents` query. In `--quiet` mode,
+  the per-room errors are printed as JSON on stdout before exit;
+  unregistered feature names appear under the `agui_features` key,
+  mismatched IDs under `rooms_id_mismatch`, and files outside a room's
+  directory under `rooms_non_local_paths`.
 
 #### Examples
 

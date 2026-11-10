@@ -33,6 +33,8 @@ The `room_config.yaml`  file should be a mapping, with at least
 the following required elements:
 
 - `id` (a string) should match the name of the room's directory.
+  `soliplex-cli audit rooms` reports a room whose `id` does not match as
+  a finding.
 
 - `name` (a string) is the "title" of the room, as would be shown in a list.
 
