@@ -7,8 +7,6 @@ alembic would prove nothing about whether one arrives.
 
 from __future__ import annotations
 
-import pathlib
-
 import pytest
 import sqlalchemy as sa
 import typer
@@ -568,16 +566,14 @@ def test_upgrade_reports_a_revision_the_tree_lacks(
 
 
 def test_upgrade_sql_writes_the_pending_delta(
-    cli_dburis, write_installation, tmp_path, cli_runner, capsys
+    cli_dburis, write_installation, tmp_path, cli_runner, monkeypatch
 ):
     path = write_installation()
     alembic_migrations.upgrade(_BASELINE, dburis=cli_dburis)
 
-    with cli_runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
-        result = _invoke(cli_runner, "upgrade", path, "--sql")
-        written = (pathlib.Path(cwd) / f"{AGUI}.sql").read_text(
-            encoding="utf-8"
-        )
+    monkeypatch.chdir(tmp_path)
+    result = _invoke(cli_runner, "upgrade", path, "--sql")
+    written = (tmp_path / f"{AGUI}.sql").read_text(encoding="utf-8")
 
     assert result.exit_code == 0
     # From the stamp, not from base: the baseline's own DDL is not here.
@@ -587,7 +583,7 @@ def test_upgrade_sql_writes_the_pending_delta(
 
 
 def test_upgrade_sql_accepts_an_unreachable_database_with_a_range(
-    write_installation, tmp_path, cli_runner
+    write_installation, tmp_path, cli_runner, monkeypatch
 ):
     # The DBA's case: the databases cannot be reached from here at all, so
     # the operator says where they stand and gets the SQL to hand over.
@@ -596,20 +592,18 @@ def test_upgrade_sql_accepts_an_unreachable_database_with_a_range(
         agui={"migration_dburi": sqlite_dburi(missing / "x.sqlite")}
     )
 
-    with cli_runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
-        result = _invoke(
-            cli_runner,
-            "upgrade",
-            path,
-            "-d",
-            "agui",
-            "--sql",
-            "--revision",
-            f"{_BASELINE}:head",
-        )
-        written = (pathlib.Path(cwd) / f"{AGUI}.sql").read_text(
-            encoding="utf-8"
-        )
+    monkeypatch.chdir(tmp_path)
+    result = _invoke(
+        cli_runner,
+        "upgrade",
+        path,
+        "-d",
+        "agui",
+        "--sql",
+        "--revision",
+        f"{_BASELINE}:head",
+    )
+    written = (tmp_path / f"{AGUI}.sql").read_text(encoding="utf-8")
 
     assert result.exit_code == 0
     assert f"Running upgrade {_BASELINE}" in written
@@ -646,18 +640,16 @@ def test_downgrade_refuses_a_disabled_database(
 
 
 def test_downgrade_sql_writes_the_delta(
-    cli_dburis, write_installation, tmp_path, cli_runner
+    cli_dburis, write_installation, tmp_path, cli_runner, monkeypatch
 ):
     path = write_installation()
     alembic_migrations.upgrade(dburis=cli_dburis)
 
-    with cli_runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
-        result = _invoke(
-            cli_runner, "downgrade", path, _BASELINE, "-d", "authz", "--sql"
-        )
-        written = (pathlib.Path(cwd) / f"{AUTHZ}.sql").read_text(
-            encoding="utf-8"
-        )
+    monkeypatch.chdir(tmp_path)
+    result = _invoke(
+        cli_runner, "downgrade", path, _BASELINE, "-d", "authz", "--sql"
+    )
+    written = (tmp_path / f"{AUTHZ}.sql").read_text(encoding="utf-8")
 
     assert result.exit_code == 0
     assert f"Running downgrade {alembic_migrations.head_revision()}" in written
@@ -666,7 +658,7 @@ def test_downgrade_sql_writes_the_delta(
 
 
 def test_downgrade_sql_accepts_an_unreachable_database_with_a_range(
-    write_installation, tmp_path, cli_runner
+    write_installation, tmp_path, cli_runner, monkeypatch
 ):
     # The escape hatch 'upgrade --sql' offers, on the command most likely
     # to need it: a rollback is planned from somewhere that cannot reach
@@ -677,19 +669,17 @@ def test_downgrade_sql_accepts_an_unreachable_database_with_a_range(
     )
     head = alembic_migrations.head_revision()
 
-    with cli_runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
-        result = _invoke(
-            cli_runner,
-            "downgrade",
-            path,
-            f"{head}:{_BASELINE}",
-            "-d",
-            "authz",
-            "--sql",
-        )
-        written = (pathlib.Path(cwd) / f"{AUTHZ}.sql").read_text(
-            encoding="utf-8"
-        )
+    monkeypatch.chdir(tmp_path)
+    result = _invoke(
+        cli_runner,
+        "downgrade",
+        path,
+        f"{head}:{_BASELINE}",
+        "-d",
+        "authz",
+        "--sql",
+    )
+    written = (tmp_path / f"{AUTHZ}.sql").read_text(encoding="utf-8")
 
     assert result.exit_code == 0
     assert f"Running downgrade {head}" in written
