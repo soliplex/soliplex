@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import inspect
 import pathlib
 import typing
 
@@ -1123,6 +1124,27 @@ class InstallationAuthorization(pydantic.BaseModel):
 
 class UserAuthorization(pydantic.BaseModel):
     is_admin_user: bool
+
+
+class JSONPathFunction(pydantic.BaseModel):
+    """A registered filter function an ACL entry's JSONPath can call
+
+    'description' is the first paragraph of the function's docstring,
+    on one line, or 'None' when it has none.
+    """
+
+    name: str
+    description: str | None = None
+
+    @classmethod
+    def from_registered(
+        cls,
+        name: str,
+        func: typing.Any,
+    ) -> JSONPathFunction:
+        doc = inspect.getdoc(func)
+        summary = " ".join(doc.split("\n\n", 1)[0].split()) if doc else ""
+        return cls(name=name, description=summary or None)
 
 
 # ----------------------------------------------------------------------------

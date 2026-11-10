@@ -176,6 +176,41 @@ async def get_installation_authz(
     )
 
 
+@util.logfire_span("GET /v1/installation/jsonpath_functions")
+@router.get(
+    "/v1/installation/jsonpath_functions",
+    summary="List the filter functions room ACL JSONPath queries can call",
+)
+async def get_jsonpath_functions(
+    the_admin_users: authz.AdminUserPolicy = depend_the_admin_users,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
+) -> list[models.JSONPathFunction]:
+    """Return the config-registered JSONPath filter functions, by name
+
+    The RFC 9535 built-ins are left out: see
+    'authz.registered_jsonpath_functions'.  Lets an admin client offer
+    the registered functions when adding a 'json_path' ACL entry.
+    """
+    the_authz_logger.debug(loggers.AUTHZ_GET_JSONPATH_FUNCTIONS)
+
+    if not await the_admin_users.check_admin_access(
+        the_user_claims,
+        resource=loggers.AUDIT_RESOURCE_JSONPATH_FUNCTIONS,
+        action=loggers.AUDIT_ACTION_READ,
+    ):
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
+        ) from None
+
+    registered = authz.registered_jsonpath_functions()
+    return [
+        models.JSONPathFunction.from_registered(name, registered[name])
+        for name in sorted(registered)
+    ]
+
+
 @util.logfire_span("GET /v1/user/authz")
 @router.get(
     "/v1/user/authz",

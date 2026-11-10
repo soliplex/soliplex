@@ -329,6 +329,63 @@ async def test_get_user_authz(
     )
 
 
+def _is_staff(claims):
+    """Match staff logins.
+
+    Not part of the summary.
+    """
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_admin_access", [False, True])
+async def test_get_jsonpath_functions(w_admin_access):
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = w_admin_access
+    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
+    registered = {"is_staff": _is_staff, "has_badge": lambda claims: True}
+
+    with mock.patch.object(
+        authz,
+        "registered_jsonpath_functions",
+        return_value=registered,
+    ):
+        if not w_admin_access:
+            with pytest.raises(fastapi.HTTPException) as exc:
+                await authz_views.get_jsonpath_functions(
+                    the_admin_users=the_admin_users,
+                    the_user_claims=THE_USER_CLAIMS,
+                    the_authz_logger=the_authz_logger,
+                )
+
+            assert exc.value.status_code == 403
+            assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+
+        else:
+            found = await authz_views.get_jsonpath_functions(
+                the_admin_users=the_admin_users,
+                the_user_claims=THE_USER_CLAIMS,
+                the_authz_logger=the_authz_logger,
+            )
+
+            assert found == [
+                models.JSONPathFunction(name="has_badge"),
+                models.JSONPathFunction(
+                    name="is_staff",
+                    description="Match staff logins.",
+                ),
+            ]
+
+    the_admin_users.check_admin_access.assert_awaited_once_with(
+        THE_USER_CLAIMS,
+        resource=loggers.AUDIT_RESOURCE_JSONPATH_FUNCTIONS,
+        action=loggers.AUDIT_ACTION_READ,
+    )
+
+    the_authz_logger.debug.assert_called_once_with(
+        loggers.AUTHZ_GET_JSONPATH_FUNCTIONS,
+    )
+
+
 @pytest.mark.parametrize(
     "resource, expected",
     [

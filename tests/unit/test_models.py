@@ -1674,3 +1674,42 @@ def test_label_requests_normalize_name_and_color(request_class):
 def test_label_requests_reject_bad_values(request_class, kwargs):
     with pytest.raises(pydantic.ValidationError):
         request_class(**kwargs)
+
+
+def _wrapped_summary(claims):
+    """Match logins whose
+    summary wraps.
+
+    Details stay out.
+    """
+
+
+@pytest.mark.parametrize(
+    "func, expected",
+    [
+        (lambda claims: True, None),
+        (_wrapped_summary, "Match logins whose summary wraps."),
+    ],
+)
+def test_jsonpathfunction_from_registered(func, expected):
+    found = models.JSONPathFunction.from_registered("check", func)
+
+    assert found == models.JSONPathFunction(
+        name="check",
+        description=expected,
+    )
+
+
+def test_jsonpathfunction_from_registered_w_wrapper():
+    with mock.patch.dict(
+        authz.the_jsonpath_environment.function_extensions,
+    ):
+        authz.register_jsonpath_function("wrapped_check", _wrapped_summary)
+        registered = authz.registered_jsonpath_functions()
+
+        found = models.JSONPathFunction.from_registered(
+            "wrapped_check",
+            registered["wrapped_check"],
+        )
+
+    assert found.description == "Match logins whose summary wraps."
