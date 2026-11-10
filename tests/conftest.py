@@ -18,17 +18,8 @@ import pytest
 from tests import _platform
 from tests._dburi import sqlite_dburi
 
-# rich fixes a Console's colour system when the Console is built, from
-# whether sys.stdout is a terminal at that moment -- and 'cli_util' builds
-# the console the CLI prints through at import.  xdist's workers run with
-# fd 1 on the null device, which Windows reports as a tty, so under '-s'
-# (CI's flag) every CLI test there got ANSI in the CliRunner's buffers and
-# an assertion on 'applied: 0' missed it inside '\x1b[1;36m0\x1b[0m'.
-# (click 8.3's runner hid this: its stream wrapper's fileno() sent rich
-# down the legacy-Windows path, which colours through the console API;
-# typer 0.26's wrapper has none.)  Settle it before any soliplex module
-# imports: TTY_COMPATIBLE is rich's documented override, and it outranks
-# FORCE_COLOR and the tty probe.
+# rich fixes color at  Console build time; force plain output for every
+# console under test, before any 'soliplex' import.
 os.environ["TTY_COMPATIBLE"] = "0"
 
 COVERAGE_NOT_REPORTED = (
