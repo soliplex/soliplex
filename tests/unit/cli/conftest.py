@@ -121,6 +121,9 @@ def _installation_template(tmp_path_factory):
     base = tmp_path_factory.mktemp("cli_installation")
     dst = base / "example"
     shutil.copytree(_EXAMPLE_DIR, dst)
+    # Replaces any copied 'example/.env', and stops 'from_dotenv' before
+    # it reaches the cwd's.
+    (dst / ".env").write_text("", encoding="utf-8")
 
     config_path = dst / "minimal.yaml"
     db_path = base / "authz.sqlite"

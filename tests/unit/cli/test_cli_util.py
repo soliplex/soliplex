@@ -43,6 +43,7 @@ def haiku_rag_yaml(tmp_path):
 def installation_yaml(tmp_path, haiku_rag_yaml):  # , oidc_config_yaml):
     yaml_file = tmp_path / "installation.yaml"
     yaml_file.write_text(BARE_INSTALLATION_CONFIG)
+    (tmp_path / ".env").write_text("", encoding="utf-8")
 
     return yaml_file
 

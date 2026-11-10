@@ -644,6 +644,7 @@ def test_resolve_dburis_from_the_command_line(tmp_path, monkeypatch):
     (tmp_path / "installation.yaml").write_text(
         _DBURI_ONLY_INSTALLATION, encoding="utf-8"
     )
+    (tmp_path / ".env").write_text("", encoding="utf-8")
     monkeypatch.setenv("SOLIPLEX_TEST_PGHOST", "db.example.net")
     context = _context(x_args={"soliplex.installation_path": str(tmp_path)})
 
