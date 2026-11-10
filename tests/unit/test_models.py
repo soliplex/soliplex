@@ -1676,11 +1676,27 @@ def test_label_requests_reject_bad_values(request_class, kwargs):
         request_class(**kwargs)
 
 
+def _is_staff(claims):
+    """Match staff logins.
+
+    Not part of the summary.
+    """
+
+
 def _wrapped_summary(claims):
     """Match logins whose
     summary wraps.
 
+    Details stay out (PEP 257 nonetheless).
+    """
+
+
+def _extra_lines(claims):
+    """Has extra lines.
+
     Details stay out.
+
+    Even these.
     """
 
 
@@ -1688,7 +1704,9 @@ def _wrapped_summary(claims):
     "func, expected",
     [
         (lambda claims: True, None),
+        (_is_staff, "Match staff logins."),
         (_wrapped_summary, "Match logins whose summary wraps."),
+        (_extra_lines, "Has extra lines."),
     ],
 )
 def test_jsonpathfunction_from_registered(func, expected):

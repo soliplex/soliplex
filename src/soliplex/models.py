@@ -1142,8 +1142,15 @@ class JSONPathFunction(pydantic.BaseModel):
         name: str,
         func: typing.Any,
     ) -> JSONPathFunction:
+        """Construct from a registered JSONPath discriminator function"""
+        summary = None
         doc = inspect.getdoc(func)
-        summary = " ".join(doc.split("\n\n", 1)[0].split()) if doc else ""
+
+        if doc is not None:
+            doc = doc.strip()
+            summary, _sep, _rest = doc.partition("\n\n")
+            summary = " ".join(summary.split())
+
         return cls(name=name, description=summary or None)
 
 
