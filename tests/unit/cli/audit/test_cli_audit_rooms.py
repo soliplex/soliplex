@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pathlib
 from unittest import mock
 
 import pytest
@@ -168,6 +169,42 @@ def test__invalid_rooms_w_non_local_prompt_ids(mrfc, the_installation):
 
     assert found == {}
     mrfc.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_room_id_and_dir, exp_mismatched",
+    [
+        ([], {}),
+        ([("r1", "r1")], {}),
+        ([("r1", "other")], {"r1": "other"}),
+        ([("r1", "r1"), ("r2", "other")], {"r2": "other"}),
+        ([("R1", "r1")], {"R1": "r1"}),
+    ],
+)
+def test__mismatched_room_ids(
+    the_installation,
+    w_room_id_and_dir,
+    exp_mismatched,
+):
+    room_configs = {}
+    for room_id, dir_name in w_room_id_and_dir:
+        cfg = mock.Mock()
+        cfg.id = room_id
+        cfg._config_path = pathlib.Path("rooms", dir_name, "room_config.yaml")
+        room_configs[room_id] = cfg
+    the_installation._config.room_configs = room_configs
+
+    found = audit_rooms._mismatched_room_ids(the_installation)
+
+    if exp_mismatched:
+        assert found == {
+            "rooms_id_mismatch": {
+                room_id: {"directory": str(pathlib.Path("rooms", dir_name))}
+                for room_id, dir_name in exp_mismatched.items()
+            },
+        }
+    else:
+        assert found == {}
 
 
 def _rag_cfg(**attrs):
