@@ -11,6 +11,7 @@ from soliplex import models
 from soliplex.cli import types
 from soliplex.cli.audit import _common as audit_common
 from soliplex.cli.audit import interpolation as audit_interpolation
+from soliplex.cli.audit import non_local_paths as audit_non_local
 from soliplex.config import agui as config_agui
 from soliplex.config import rag as config_rag
 
@@ -35,10 +36,20 @@ def _count_rag_documents(rag: hr_client.HaikuRAG):
     return f"{count} documents", None
 
 
-def _invalid_rooms(the_installation: installation.Installation) -> dict:
+def _invalid_rooms(
+    the_installation: installation.Installation,
+    non_local_prompt_ids: set,
+) -> dict:
+    """Check that each room config renders as a model
+
+    Skips the rooms named in 'non_local_prompt_ids'.
+    """
     errors: dict[str, str] = {}
 
     for room_config in the_installation._config.room_configs.values():
+        if room_config.id in non_local_prompt_ids:
+            continue
+
         try:
             models.Room.from_config(room_config)
         except Exception as exc:
@@ -148,7 +159,16 @@ def _audit_rooms_section(
 
     errors: dict = {}
 
-    invalid = _invalid_rooms(the_installation)
+    reports = audit_non_local._non_local_path_reports(ctx, the_installation)
+    errors |= audit_non_local._non_local_path_findings(
+        reports, audit_non_local.ROOMS
+    )
+    non_local_rooms = reports[audit_non_local.ROOMS]
+
+    invalid = _invalid_rooms(
+        the_installation,
+        audit_non_local._non_local_prompt_ids(reports, audit_non_local.ROOMS),
+    )
     errors |= invalid
     invalid_rooms = invalid.get("room", {})
 
@@ -170,6 +190,12 @@ def _audit_rooms_section(
         room_exc = invalid_rooms.get(room_config.id)
         if room_exc is not None:
             tc_print(f"  ERROR: {room_exc}")
+
+        audit_non_local._print_non_local_path_findings(
+            tc_print,
+            non_local_rooms.get(room_config.id, {}),
+            "  ",
+        )
 
         room_features = room_config.agui_feature_names
         if room_features:

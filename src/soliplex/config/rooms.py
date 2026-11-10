@@ -362,7 +362,10 @@ class RoomConfig:
             if self._config_path is None:
                 raise config_exc.NoConfigPath()
 
-            return self._config_path.parent / self._logo_image
+            return _utils._local_path(
+                self._config_path.parent,
+                self._logo_image,
+            )
 
     def list_haiku_rag_client_kw(
         self,

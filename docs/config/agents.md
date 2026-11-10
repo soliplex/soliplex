@@ -43,7 +43,10 @@ agent:
 
 - `system_prompt` is the "instructions" for the LLM serving the room.
   If it starts with a `./`, it will be treated as a filename in the
-  same directory, whose contents will be read in its place.
+  same directory, whose contents will be read in its place.  The file
+  must resolve (following any symlinks) to a path inside that
+  directory: reading a prompt file which escapes it, e.g. via `..`,
+  raises an error.
 
 **Template exception:** When an agent config uses `template_id` to
 inherit from an entry in the installation-level `agent_configs`, both

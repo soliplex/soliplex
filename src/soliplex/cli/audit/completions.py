@@ -7,17 +7,26 @@ from soliplex import models
 from soliplex.cli import types
 from soliplex.cli.audit import _common as audit_common
 from soliplex.cli.audit import interpolation as audit_interpolation
+from soliplex.cli.audit import non_local_paths as audit_non_local
 
 
 def _invalid_completions(
     the_installation: installation.Installation,
+    non_local_prompt_ids: set,
 ) -> dict:
+    """Check that each completion config renders as a model
+
+    Skips the completions named in 'non_local_prompt_ids'.
+    """
     errors = {}
 
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_completions = the_installation._config.completion_configs
 
     for compl_config in available_completions.values():
+        if compl_config.id in non_local_prompt_ids:
+            continue
+
         try:
             models.Completion.from_config(compl_config)
         except Exception as exc:
@@ -39,16 +48,33 @@ def _audit_completions_section(
     tc_rule("Configured completions")
     tc_line()
 
-    errors = _invalid_completions(the_installation)
+    reports = audit_non_local._non_local_path_reports(ctx, the_installation)
+    non_local_errors = audit_non_local._non_local_path_findings(
+        reports, audit_non_local.COMPLETIONS
+    )
+    non_local_completions = reports[audit_non_local.COMPLETIONS]
+
+    errors = _invalid_completions(
+        the_installation,
+        audit_non_local._non_local_prompt_ids(
+            reports, audit_non_local.COMPLETIONS
+        ),
+    )
     invalid_completions = errors.get("completions", {})
 
     available_completions = the_installation._config.completion_configs
     for compl_config in available_completions.values():
         tc_print(f"- [ {compl_config.id} ] {compl_config.name}: ")
         exc = invalid_completions.get(compl_config.id)
+        non_local = non_local_completions.get(compl_config.id, {})
         if exc is not None:
             tc_print(f"  ERROR: {exc}")
-        else:
+        audit_non_local._print_non_local_path_findings(
+            tc_print,
+            non_local,
+            "  ",
+        )
+        if exc is None and not non_local:
             tc_print("  OK")
         tc_line()
 
@@ -61,7 +87,7 @@ def _audit_completions_section(
         tc_print, interpolation_errors
     )
 
-    return errors | interpolation_errors
+    return errors | non_local_errors | interpolation_errors
 
 
 def audit_completions(

@@ -81,9 +81,12 @@ A minimal room configuration must include the above elements, e.g.:
   registered AG-UI feature; see [AG-UI Features](agui.md).
 
 - `logo_image` (a string, default unset) is a path to an image file that
-  the UI can display as the room's logo.  Relative paths are resolved
-  against the room's configuration directory.  The image is served via
-  the `/v1/rooms/{room_id}/image` endpoint.  E.g.:
+  the UI can display as the room's logo.  The path is resolved against
+  the room's configuration directory, and must resolve (following any
+  symlinks) to a file inside it:  an absolute path elsewhere, or one
+  which escapes the directory via `..`, is refused.  The image is
+  served via the `/v1/rooms/{room_id}/bg_image` endpoint, which returns
+  404 for a refused path.  E.g.:
 
   ```yaml
   logo_image: "./logo.png"

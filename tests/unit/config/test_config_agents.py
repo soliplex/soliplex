@@ -768,6 +768,74 @@ def test_agentconfig_from_yaml(
         assert found._installation_config is installation_config
 
 
+@pytest.mark.parametrize(
+    "agent_config_kw",
+    [BARE_AGENT_CONFIG_KW, W_MODEL_SETTINGS_AGENT_CONFIG_KW],
+)
+def test_agentconfig_get_system_prompt_path_wo_prompt_file(
+    temp_dir,
+    agent_config_kw,
+):
+    agent_config = config_agents.AgentConfig(
+        **agent_config_kw,
+        _config_path=temp_dir / "room_config.yaml",
+    )
+
+    found = agent_config.get_system_prompt_path()
+
+    assert found is None
+
+
+def test_agentconfig_get_system_prompt_path_wo_config_path():
+    agent_config = config_agents.AgentConfig(**W_PROMPT_FILE_AGENT_CONFIG_KW)
+
+    with pytest.raises(config_exc.NoConfigPath):
+        agent_config.get_system_prompt_path()
+
+
+@pytest.mark.parametrize(
+    "prompt_path",
+    ["./prompt.txt", "./sub/../prompt.txt"],
+)
+def test_agentconfig_get_system_prompt_path_w_local(temp_dir, prompt_path):
+    agent_config = config_agents.AgentConfig(
+        **W_PROMPT_FILE_AGENT_CONFIG_KW
+        | {
+            "_system_prompt_path": prompt_path,
+            "_config_path": temp_dir / "room_config.yaml",
+        },
+    )
+
+    found = agent_config.get_system_prompt_path()
+
+    assert found == temp_dir / "prompt.txt"
+
+
+@pytest.mark.parametrize(
+    "prompt_path",
+    ["./../prompt.txt", "./sub/../../prompt.txt"],
+)
+def test_agentconfig_get_system_prompt_path_w_not_local(
+    temp_dir,
+    prompt_path,
+):
+    room_dir = temp_dir / "room"
+    room_dir.mkdir()
+    agent_config = config_agents.AgentConfig(
+        **W_PROMPT_FILE_AGENT_CONFIG_KW
+        | {
+            "_system_prompt_path": prompt_path,
+            "_config_path": room_dir / "room_config.yaml",
+        },
+    )
+
+    with pytest.raises(config_exc.PathNotLocal) as exc_info:
+        agent_config.get_system_prompt_path()
+
+    assert exc_info.value.config_dir == room_dir
+    assert exc_info.value.path == prompt_path
+
+
 @pytest.mark.parametrize("w_config_path", [False, True])
 @pytest.mark.parametrize(
     "agent_config_kw",

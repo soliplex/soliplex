@@ -1,7 +1,10 @@
 import dataclasses
 from unittest import mock
 
+import pytest
+
 from soliplex.config import _utils as config__utils
+from soliplex.config import exceptions as config_exc
 
 
 def test__dotted_name():
@@ -19,6 +22,56 @@ def test__from_dotted_name(im):
     klass = config__utils._from_dotted_name(dotted_name)
 
     assert klass is faux_module.SomeClass
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["logo.png", "./logo.png", "./sub/../logo.png"],
+)
+def test__local_path_w_local(temp_dir, path):
+    room_dir = temp_dir / "room"
+    room_dir.mkdir()
+
+    found = config__utils._local_path(room_dir, path)
+
+    assert found == room_dir / "logo.png"
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["../outside.png", "./../outside.png", "./sub/../../outside.png"],
+)
+def test__local_path_w_parent_escape(temp_dir, path):
+    room_dir = temp_dir / "room"
+    room_dir.mkdir()
+
+    with pytest.raises(config_exc.PathNotLocal) as exc_info:
+        config__utils._local_path(room_dir, path)
+
+    assert exc_info.value.config_dir == room_dir
+    assert exc_info.value.path == path
+
+
+def test__local_path_w_absolute_outside(temp_dir):
+    room_dir = temp_dir / "room"
+    room_dir.mkdir()
+    path = str(temp_dir / "outside.png")
+
+    with pytest.raises(config_exc.PathNotLocal) as exc_info:
+        config__utils._local_path(room_dir, path)
+
+    assert exc_info.value.config_dir == room_dir
+    assert exc_info.value.path == path
+
+
+def test__local_path_w_absolute_inside(temp_dir):
+    room_dir = temp_dir / "room"
+    room_dir.mkdir()
+    path = str(room_dir / "logo.png")
+
+    found = config__utils._local_path(room_dir, path)
+
+    assert found == room_dir / "logo.png"
 
 
 def test__no_repr():

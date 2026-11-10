@@ -141,7 +141,7 @@ def test__invalid_rooms(
     the_installation._config.room_configs = room_configs
     mrfc.side_effect = side_effects
 
-    found = audit_rooms._invalid_rooms(the_installation)
+    found = audit_rooms._invalid_rooms(the_installation, set())
 
     if exp_invalid_ids:
         assert found == {
@@ -156,6 +156,18 @@ def test__invalid_rooms(
     assert mrfc.call_args_list == [
         mock.call(cfg) for cfg in room_configs.values()
     ]
+
+
+@mock.patch("soliplex.models.Room.from_config")
+def test__invalid_rooms_w_non_local_prompt_ids(mrfc, the_installation):
+    cfg = mock.Mock()
+    cfg.id = "r1"
+    the_installation._config.room_configs = {"r1": cfg}
+
+    found = audit_rooms._invalid_rooms(the_installation, {"r1"})
+
+    assert found == {}
+    mrfc.assert_not_called()
 
 
 def _rag_cfg(**attrs):

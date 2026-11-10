@@ -15,6 +15,7 @@ from soliplex import models
 from soliplex import token_mint
 from soliplex import util
 from soliplex import views
+from soliplex.config import exceptions as config_exc
 
 router = fastapi.APIRouter(tags=["rooms"])
 
@@ -139,7 +140,11 @@ async def get_room_bg_image(
             detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
         ) from None
 
-    logo_image = room_config.get_logo_image()
+    try:
+        logo_image = room_config.get_logo_image()
+    except config_exc.PathNotLocal:
+        the_logger.exception(loggers.ROOM_BG_IMAGE_NOT_LOCAL, room_id=room_id)
+        logo_image = None
 
     if logo_image is None:
         raise fastapi.HTTPException(

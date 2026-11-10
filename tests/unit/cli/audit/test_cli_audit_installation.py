@@ -16,7 +16,10 @@ def test__invalid_installation(mifc, the_installation, w_error):
     if w_error:
         mifc.side_effect = audit_helpers.ModelException()
 
-    found = audit_installation._invalid_installation(the_installation)
+    found = audit_installation._invalid_installation(
+        the_installation,
+        set(),
+    )
 
     if w_error:
         assert found == {
@@ -26,6 +29,17 @@ def test__invalid_installation(mifc, the_installation, w_error):
         assert found == {}
 
     mifc.assert_called_once_with(the_installation._config)
+
+
+@mock.patch("soliplex.models.Installation.from_config")
+def test__invalid_installation_w_non_local_prompt_ids(mifc, the_installation):
+    found = audit_installation._invalid_installation(
+        the_installation,
+        {"badprompt"},
+    )
+
+    assert found == {}
+    mifc.assert_not_called()
 
 
 def _warning_message(message, category):
