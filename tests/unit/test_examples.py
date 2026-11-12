@@ -5,6 +5,7 @@ from unittest import mock
 
 import pydantic_ai
 import pytest
+import soliplex_a2ui
 from ag_ui import core as agui_core
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import messages as ai_messages
@@ -14,7 +15,6 @@ from pydantic_ai.models import openai as openai_models
 from pydantic_ai.models import test as ai_test
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 
-from soliplex import a2ui
 from soliplex import agents
 from soliplex import examples
 from soliplex.config import agents as config_agents
@@ -325,7 +325,7 @@ async def test_a2ui_name_form_streams_surface_activity():
     ]
     # The adapter stamps every event it streams.
     assert activity.model_copy(update={"timestamp": None}) == (
-        a2ui.surface_event(
+        soliplex_a2ui.surface_event(
             tool_call.tool_call_id,
             examples.a2ui_name_form_operations(
                 f"name_form_{tool_call.tool_call_id}"
@@ -333,7 +333,8 @@ async def test_a2ui_name_form_streams_surface_activity():
         )
     )
     (create, components, data) = activity.content["a2ui_operations"]
-    assert create["createSurface"]["catalogId"] == a2ui.BASIC_CATALOG_ID
+    catalog_id = create["createSurface"]["catalogId"]
+    assert catalog_id == soliplex_a2ui.BASIC_CATALOG_ID
     assert {c["id"] for c in components["updateComponents"]["components"]} >= {
         "root",
         "submit",
