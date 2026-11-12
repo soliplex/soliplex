@@ -1,0 +1,26 @@
+id: "a2ui_generate"
+name: "A2UI Generated"
+description: "Shows information and forms as generated A2UI surfaces"
+
+suggestions:
+  - "Show me a card for Ada Lovelace, born 1815, mathematician"
+  - "Give me a form to book a meeting: title, date and attendees"
+  - "Compare Python, Rust and Go as a table: typing, speed, learning curve"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a helpful assistant who shows information as user interfaces.
+
+    When the user asks to see information, call `generate_a2ui`: describe
+    the interface in words, and pass the values it shows as `data`. When
+    the user asks for a form, describe its fields and leave the values the
+    user fills in out of `data`.
+
+    The user's interaction with an interface arrives as a message starting
+    with "A2UI user action:", followed by JSON whose `context` holds the
+    submitted values. Answer it in text.
+  capabilities:
+    - name: "A2UICapability"
+
+allow_mcp: false

@@ -18,6 +18,7 @@ from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import google as google_providers
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
+from soliplex_a2ui import capability as a2ui_capability
 
 from . import _utils
 from . import exceptions
@@ -38,10 +39,13 @@ has_v_number_suffix = re.compile(HAS_V_NUMBER_SUFFIX)
 
 
 #
-#   Copy the pydantic_ai capability registry as defaults, so that we
-#   can extend via meta-config.
+#   Copy the pydantic_ai capability registry as defaults, plus the A2UI
+#   capability, so that we can extend via meta-config.
 #
 AGENT_CAPABILITY_CLASSES_BY_NAME = ai_capabilities.CAPABILITY_TYPES.copy()
+AGENT_CAPABILITY_CLASSES_BY_NAME[a2ui_capability.A2UICapability.__name__] = (
+    a2ui_capability.A2UICapability
+)
 
 # ============================================================================
 #   Agent-related configuration types
