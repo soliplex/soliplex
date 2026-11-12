@@ -43,6 +43,7 @@ nav = [
     { "SQLAlchemy DBURIs" = "config/dburis.md" },
     { "AI Skills" = "config/skills.md" },
     { "AGUI Features" = "config/agui.md" },
+    { "A2UI Surfaces" = "config/a2ui.md" },
   ]},
   { "Usage" = "usage.md" },
 ]

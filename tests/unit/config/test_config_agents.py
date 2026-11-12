@@ -12,6 +12,7 @@ from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import vllm as vllm_providers
+from soliplex_a2ui import capability as a2ui_capability
 
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
@@ -1965,3 +1966,24 @@ def test_vllm_model_profile(
     else:
         assert model.provider.client.api_key
         installation_config.get_secret.assert_not_called()
+
+
+def test_agent_capability_registry_includes_a2ui():
+    registry = config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME
+
+    assert registry["A2UICapability"] is a2ui_capability.A2UICapability
+    for name, klass in ai_capabilities.CAPABILITY_TYPES.items():
+        assert registry[name] is klass
+
+
+def test_agentcapabilityconfig_builds_a2ui(temp_dir):
+    acc = config_agents.AgentCapabilityConfig.from_yaml(
+        temp_dir / "config.yaml",
+        {"name": "A2UICapability", "kwargs": {"max_retries": 2}},
+    )
+
+    found = acc.as_capability
+
+    assert isinstance(found, a2ui_capability.A2UICapability)
+    assert found.max_retries == 2
+    assert found.model is None
