@@ -9,6 +9,7 @@ from collections import abc
 
 import jsonpatch
 import pydantic_ai
+import soliplex_a2ui
 from ag_ui import core as agui_core
 from pydantic_ai import messages as ai_messages
 from pydantic_ai import output as ai_output
@@ -18,7 +19,6 @@ from pydantic_ai import usage as ai_usage
 from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
 
-from soliplex import a2ui
 from soliplex import agents
 from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
@@ -116,7 +116,7 @@ def a2ui_name_form_operations(surface_id: str) -> list[dict[str, typing.Any]]:
         return {"version": "1.0", kind: {"surfaceId": surface_id, **body}}
 
     return [
-        op("createSurface", catalogId=a2ui.BASIC_CATALOG_ID),
+        op("createSurface", catalogId=soliplex_a2ui.BASIC_CATALOG_ID),
         op(
             "updateComponents",
             components=[
@@ -168,7 +168,7 @@ async def a2ui_name_form(
             "Showed the user a form asking for their name. "
             "Their answer arrives as an 'A2UI user action' message."
         ),
-        metadata=[a2ui.surface_event(tool_call_id, operations)],
+        metadata=[soliplex_a2ui.surface_event(tool_call_id, operations)],
     )
 
 

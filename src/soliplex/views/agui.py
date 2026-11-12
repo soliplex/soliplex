@@ -11,13 +11,13 @@ import fastapi
 import logfire
 import pydantic
 import pydantic_ai
+import soliplex_a2ui
 from ag_ui import core as agui_core
 from fastapi import responses
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import a2ui
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
@@ -1151,7 +1151,7 @@ async def post_room_agui_thread_id_run_id(
         )
 
     # Before anything reads the adapter's cached 'messages'.
-    agui_adapter.run_input = a2ui.apply_user_action(run_input)
+    agui_adapter.run_input = soliplex_a2ui.apply_user_action(run_input)
 
     try:
         async with sqla_asyncio.AsyncSession(
