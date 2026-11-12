@@ -262,4 +262,4 @@ executable = "ruff"
 options = "check --fix REVISION_SCRIPT_FILENAME"
 
 [tool.uv.sources]
-soliplex-a2ui = { path = "../soliplex-a2ui", editable = true }
+soliplex-a2ui = { git = "https://github.com/ggozad/soliplex-a2ui", branch = "chore/ag-ui-protocol-1" }
