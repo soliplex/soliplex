@@ -17,6 +17,7 @@ from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+from soliplex import a2ui
 from soliplex import agui
 from soliplex import authn
 from soliplex import authz
@@ -999,6 +1000,9 @@ async def post_room_agui_thread_id_run_id(
             status_code=400,
             detail="Invalid run input",
         )
+
+    # Before anything reads the adapter's cached 'messages'.
+    agui_adapter.run_input = a2ui.apply_user_action(run_input)
 
     try:
         async with sqla_asyncio.AsyncSession(
