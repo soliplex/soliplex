@@ -5,12 +5,16 @@ from unittest import mock
 
 import pydantic_ai
 import pytest
+from ag_ui import core as agui_core
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import messages as ai_messages
 from pydantic_ai import run as ai_run
 from pydantic_ai import usage as ai_usage
 from pydantic_ai.models import openai as openai_models
+from pydantic_ai.models import test as ai_test
+from pydantic_ai.ui import ag_ui as ai_ag_ui
 
+from soliplex import a2ui
 from soliplex import agents
 from soliplex import examples
 from soliplex.config import agents as config_agents
@@ -292,3 +296,50 @@ async def test_run_stream_events_returns_event_stream(faux_agent):
         collected = [event async for event in events]
 
     assert collected[-1].result.output == "I don't know!"
+
+
+@pytest.mark.anyio
+async def test_a2ui_name_form_streams_surface_activity():
+    agent = pydantic_ai.Agent(
+        ai_test.TestModel(),
+        tools=[examples.a2ui_name_form],
+    )
+    run_input = agui_core.RunAgentInput(
+        thread_id="thread-1",
+        run_id="run-1",
+        state={},
+        messages=[agui_core.UserMessage(id="m1", content="hi")],
+        tools=[],
+        context=[],
+        forwarded_props=None,
+    )
+    adapter = ai_ag_ui.AGUIAdapter(agent=agent, run_input=run_input)
+
+    events = [event async for event in adapter.run_stream()]
+
+    (tool_call,) = [
+        e for e in events if isinstance(e, agui_core.ToolCallStartEvent)
+    ]
+    (activity,) = [
+        e for e in events if isinstance(e, agui_core.ActivitySnapshotEvent)
+    ]
+    # The adapter stamps every event it streams.
+    assert activity.model_copy(update={"timestamp": None}) == (
+        a2ui.surface_event(
+            tool_call.tool_call_id,
+            examples.a2ui_name_form_operations(
+                f"name_form_{tool_call.tool_call_id}"
+            ),
+        )
+    )
+    (create, components, data) = activity.content["a2ui_operations"]
+    assert create["createSurface"]["catalogId"] == a2ui.BASIC_CATALOG_ID
+    assert {c["id"] for c in components["updateComponents"]["components"]} >= {
+        "root",
+        "submit",
+    }
+    assert data["updateDataModel"] == {
+        "surfaceId": f"name_form_{tool_call.tool_call_id}",
+        "path": "/",
+        "value": {"name": ""},
+    }
