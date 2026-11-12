@@ -380,7 +380,7 @@ class RunAgentInput(Base):
 
     @property
     def state(self) -> typing.Any:
-        return copy.deepcopy(self.data["state"])
+        return copy.deepcopy(self.data.get("state"))
 
     @property
     def messages(self) -> list[agui_core.Message]:
@@ -389,21 +389,25 @@ class RunAgentInput(Base):
             for msg_data in self.data["messages"]
         ]
 
+    # AG-UI's dump leaves out a 'None' field, so the optional fields may be
+    # absent from 'data'.
     @property
-    def context(self) -> list[agui_core.Context]:
-        return [
-            agui_core.Context(**ctx_data) for ctx_data in self.data["context"]
-        ]
+    def context(self) -> list[agui_core.Context] | None:
+        context = self.data.get("context")
+        if context is None:
+            return None
+        return [agui_core.Context(**ctx_data) for ctx_data in context]
 
     @property
-    def tools(self) -> list[agui_core.Tool]:
-        return [
-            agui_core.Tool(**tool_data) for tool_data in self.data["tools"]
-        ]
+    def tools(self) -> list[agui_core.Tool] | None:
+        tools = self.data.get("tools")
+        if tools is None:
+            return None
+        return [agui_core.Tool(**tool_data) for tool_data in tools]
 
     @property
     def forwarded_props(self) -> typing.Any:
-        return copy.deepcopy(self.data["forwarded_props"])
+        return copy.deepcopy(self.data.get("forwarded_props"))
 
 
 class RunEvent(Base):

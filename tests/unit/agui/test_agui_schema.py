@@ -165,6 +165,7 @@ async def test_runusage_as_tuple_wo_final_request(the_session):
     "agui_rai",
     [
         agui_constants.EMPTY_RUN_AGENT_INPUT,
+        agui_constants.OMITTED_RUN_AGENT_INPUT,
         agui_constants.FULL_RUN_AGENT_INPUT,
     ],
 )

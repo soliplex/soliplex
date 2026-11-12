@@ -112,15 +112,19 @@ async def faux_tool(
 class _FauxRunResult:
     """Minimal stand-in for a pydantic-ai ``AgentRunResult``.
 
-    Exposes just the surface a non-streaming caller reads: ``output`` (the
-    final text) and ``usage()`` (a zeroed ``RunUsage``, since the faux agent
-    never contacts a model).
+    Exposes the surface callers and the AG-UI event stream read: ``output``
+    (the final text), ``usage`` (a zeroed ``RunUsage``) and an empty
+    message history, since the faux agent never contacts a model.
     """
 
     output: str
 
+    @property
     def usage(self) -> ai_usage.RunUsage:
         return ai_usage.RunUsage()
+
+    def all_messages(self) -> list[ai_messages.ModelMessage]:
+        return []
 
 
 class FailingOnRequest(ValueError):
@@ -266,7 +270,9 @@ class FauxAgent:
             part=text_part,
         )
 
-        yield ai_run.AgentRunResultEvent(result=text_part.content)
+        yield ai_run.AgentRunResultEvent(
+            result=_FauxRunResult(output=text_part.content)
+        )
 
     def run_stream_events(
         self,

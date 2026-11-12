@@ -82,8 +82,8 @@ def test_ask_json_success(no_cli_logging, cli_runner, scratch_installation):
     assert payload["prompt"] == "what is up?"
     assert payload["response"] == "I don't know!"
     assert payload["thread_id"]
-    # The faux agent contacts no model, so no token usage is reported.
-    assert payload["usage"] == {}
+    # The faux agent contacts no model, so its usage is zero.
+    assert payload["usage"] == {"input_tokens": 0, "output_tokens": 0}
 
 
 def test_ask_plain_failure_reports_on_stderr(
