@@ -1,7 +1,9 @@
 import contextlib
 import datetime
+import errno
 import os
 import pathlib
+import re
 from unittest import mock
 
 import logfire
@@ -474,6 +476,187 @@ def test_upload_files_skips_file_removed_before_stat(temp_dir):
         found = util.upload_files(temp_dir)
 
     assert list(found) == ["kept.txt"]
+
+
+def test_upload_files_hides_internal_names(temp_dir):
+    (temp_dir / "kept.txt").write_text("kept")
+    (temp_dir / f"{util.UPLOAD_RESERVATION_PREFIX}abc").write_text("x")
+    (temp_dir / ".nfs0001").write_text("x")
+
+    found = util.upload_files(temp_dir)
+
+    assert list(found) == ["kept.txt"]
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        (f"{util.UPLOAD_RESERVATION_PREFIX}0123abcd", True),
+        (".nfs000000000001", True),
+        ("report.pdf", False),
+        (".env", False),
+        ("a.nfs1", False),
+        ("x.soliplex-upload-1", False),
+    ],
+)
+def test_is_internal_upload_name(name, expected):
+    assert util.is_internal_upload_name(name) is expected
+
+
+def test_stored_size_w_regular_file(temp_dir):
+    file_path = temp_dir / "a.txt"
+    file_path.write_bytes(b"abc")
+
+    assert util.stored_size(file_path) == 3
+
+
+def test_stored_size_w_directory(temp_dir):
+    (temp_dir / "sub").mkdir()
+
+    assert util.stored_size(temp_dir / "sub") == 0
+
+
+def test_stored_size_wo_file(temp_dir):
+    assert util.stored_size(temp_dir / "nonesuch") == 0
+
+
+def _lstat_raising(*errnos):
+    """Patch 'Path.lstat' to raise 'OSError(e)' for each of 'errnos' in turn
+
+    Once they are used up, the real 'lstat' answers.
+    """
+    real_lstat = pathlib.Path.lstat
+    pending = list(errnos)
+
+    def lstat(path):
+        if pending:
+            err = pending.pop(0)
+            raise OSError(err, os.strerror(err))
+        return real_lstat(path)
+
+    return mock.patch.object(
+        pathlib.Path, "lstat", autospec=True, side_effect=lstat
+    )
+
+
+def test_stored_size_retries_estale_once(temp_dir):
+    file_path = temp_dir / "a.txt"
+    file_path.write_bytes(b"abc")
+
+    with _lstat_raising(errno.ESTALE):
+        found = util.stored_size(file_path)
+
+    assert found == 3
+
+
+def test_stored_size_retried_estale_removed(temp_dir):
+    # Stale, and then gone on the retry:  it no longer occupies storage.
+    with _lstat_raising(errno.ESTALE):
+        found = util.stored_size(temp_dir / "nonesuch")
+
+    assert found == 0
+
+
+def test_stored_size_raises_estale_twice(temp_dir):
+    file_path = temp_dir / "a.txt"
+    file_path.write_bytes(b"abc")
+
+    with (
+        _lstat_raising(errno.ESTALE, errno.ESTALE),
+        pytest.raises(OSError, match=re.escape(os.strerror(errno.ESTALE))),
+    ):
+        util.stored_size(file_path)
+
+
+def test_stored_size_raises_other_oserror(temp_dir):
+    file_path = temp_dir / "a.txt"
+    file_path.write_bytes(b"abc")
+
+    with (
+        _lstat_raising(errno.EIO),
+        pytest.raises(OSError, match=re.escape(os.strerror(errno.EIO))),
+    ):
+        util.stored_size(file_path)
+
+
+def test_scan_uploads(temp_dir):
+    (temp_dir / "a.txt").write_bytes(b"abc")
+    (temp_dir / "b.txt").write_bytes(b"defgh")
+    (temp_dir / "sub").mkdir()
+    (temp_dir / "sub" / "nested.txt").write_bytes(b"not counted")
+    reservation = temp_dir / f"{util.UPLOAD_RESERVATION_PREFIX}abc"
+    reservation.write_bytes(b"0123456789")
+    os.utime(reservation, (1_700_000_000, 1_700_000_000))
+    (temp_dir / ".nfs0001").write_bytes(b"xy")
+    (temp_dir / ".nfs-dir").mkdir()  # internal, but not a regular file
+
+    found = util.scan_uploads(temp_dir)
+
+    assert sorted(found.files) == ["a.txt", "b.txt"]
+    assert found.files["a.txt"].st_size == 3
+    assert found.stored_bytes == 3 + 5 + 10 + 2
+    assert sorted(found.hidden, key=lambda h: h.name) == [
+        util.HiddenUpload(name=".nfs0001", size_bytes=2, mtime=mock.ANY),
+        util.HiddenUpload(
+            name=f"{util.UPLOAD_RESERVATION_PREFIX}abc",
+            size_bytes=10,
+            mtime=1_700_000_000,
+        ),
+    ]
+
+
+def test_scan_uploads_wo_directory(temp_dir):
+    found = util.scan_uploads(temp_dir / "nonesuch")
+
+    assert found == util.UploadsScan(files={}, stored_bytes=0, hidden=[])
+
+
+def test_scan_uploads_skips_file_removed_before_lstat(temp_dir):
+    (temp_dir / "kept.txt").write_bytes(b"kept")
+    (temp_dir / "vanishing.txt").write_bytes(b"vanishing")
+    real_scandir = os.scandir
+
+    def scandir_then_remove(path):
+        found = list(real_scandir(path))
+        (temp_dir / "vanishing.txt").unlink()
+        return iter(found)
+
+    with mock.patch("os.scandir", side_effect=scandir_then_remove):
+        found = util.scan_uploads(temp_dir)
+
+    assert list(found.files) == ["kept.txt"]
+    assert found.stored_bytes == 4
+
+
+def test_scan_uploads_skips_unstatable_non_regular(temp_dir):
+    # A non-regular entry is listed only when it stats as a regular file
+    # (a link to one);  one which cannot be stat'd is left out, as
+    # 'upload_files' leaves it out.
+    (temp_dir / "sub").mkdir()
+    real_stat = pathlib.Path.stat
+
+    def stat(path, *args, **kwargs):
+        # Only the followed 'stat':  'lstat' delegates here too.
+        if path.name == "sub" and kwargs.get("follow_symlinks", True):
+            raise PermissionError(errno.EACCES, "denied")
+        return real_stat(path, *args, **kwargs)
+
+    with mock.patch.object(
+        pathlib.Path, "stat", autospec=True, side_effect=stat
+    ):
+        found = util.scan_uploads(temp_dir)
+
+    assert found.files == {}
+
+
+def test_scan_uploads_fails_closed(temp_dir):
+    (temp_dir / "a.txt").write_bytes(b"abc")
+
+    with (
+        _lstat_raising(errno.EIO),
+        pytest.raises(OSError, match=re.escape(os.strerror(errno.EIO))),
+    ):
+        util.scan_uploads(temp_dir)
 
 
 @pytest.fixture

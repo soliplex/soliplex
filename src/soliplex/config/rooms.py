@@ -9,6 +9,7 @@ from . import _utils
 from . import agents as config_agents
 from . import exceptions as config_exc
 from . import quizzes as config_quizzes
+from . import quotas as config_quotas
 from . import rag as config_rag
 from . import skills as config_skills
 from . import sse_delivery as config_sse_delivery
@@ -105,6 +106,13 @@ class RoomConfig:
     sse_delivery_config_name: str | None = None
 
     #
+    # Quotas
+    #
+    quotas: config_quotas.QuotasConfig = dataclasses.field(
+        default_factory=config_quotas.QuotasConfig,
+    )
+
+    #
     # Quiz-specific options
     #
     quizzes: list[config_quizzes.QuizConfig] = _default_list_field()
@@ -187,6 +195,14 @@ class RoomConfig:
 
                 config_dict["sse_delivery_config_name"] = sse_delivery_name
 
+            quotas_config_yaml = config_dict.pop("quotas", None)
+            if quotas_config_yaml is not None:
+                config_dict["quotas"] = config_quotas.QuotasConfig.from_yaml(
+                    installation_config,
+                    config_path,
+                    quotas_config_yaml,
+                )
+
             quizzes_config_yaml = config_dict.pop("quizzes", None)
             if quizzes_config_yaml is not None:
                 config_dict["quizzes"] = [
@@ -259,6 +275,10 @@ class RoomConfig:
 
         if self.sse_delivery_config_name is not None:
             result["sse_delivery_config_name"] = self.sse_delivery_config_name
+
+        quotas_yaml = self.quotas.as_yaml
+        if quotas_yaml:
+            result["quotas"] = quotas_yaml
 
         return result
 

@@ -228,7 +228,8 @@ def no_interpolation_field(**kw) -> dataclasses.Field:
 #   secret_whole_field       'provider_key', Logfire 'token'
 #   secret_whole_or_literal  OIDC 'client_secret'
 #   secret_embedded_field    third-party tool configs (e.g. concierge)
-#   env_whole_or_literal     the seven Logfire 'env:' fields
+#   env_whole_or_literal     the seven Logfire 'env:' fields, the migration
+#                            policies, room 'quotas.room_uploads_bytes'
 #   env_embedded_field       'model_name', 'provider_base_url'
 #   both_embedded_field      the four dburis, the MCP toolset fields
 secret_whole_field = functools.partial(
