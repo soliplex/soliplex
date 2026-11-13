@@ -34,3 +34,9 @@ skills:
     - kind: "haiku.rag.skills.citation_policy"
 
 allow_mcp: true
+
+# Cap the total size of this room's uploaded files, in bytes:  an upload
+# which would exceed it is refused (HTTP 507).  May instead be an
+# 'env:NAME' marker, resolved from the installation's 'environment'.
+quotas:
+  room_uploads_bytes: 1000000000

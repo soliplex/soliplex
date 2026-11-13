@@ -304,3 +304,60 @@ async def test_get_thread_file_upload(
 
     if not isinstance(expected, pytest.ExceptionInfo):
         assert found == expected
+
+
+INTERNAL_NAMES = [".soliplex-upload-abc", ".nfs0001"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("which", ["room", "thread"])
+async def test_list_file_uploads_skips_internal_names(
+    the_installation,
+    ctx_w_deps,
+    rooms_upload_path,
+    threads_upload_path,
+    which,
+):
+    the_installation.rooms_upload_path = rooms_upload_path
+    the_installation.threads_upload_path = threads_upload_path
+    upload_dir = (
+        rooms_upload_path / TEST_ROOM_ID
+        if which == "room"
+        else threads_upload_path / TEST_THREAD_ID
+    )
+    upload_dir.mkdir(parents=True)
+
+    for filename in [TEST_FILENAME, *INTERNAL_NAMES]:
+        (upload_dir / filename).write_text("")
+
+    list_tool = getattr(file_uploads_tools, f"list_{which}_file_uploads")
+    found = await list_tool(ctx_w_deps)
+
+    assert found == [TEST_FILENAME]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("which", ["room", "thread"])
+@pytest.mark.parametrize("filename", INTERNAL_NAMES)
+async def test_get_file_upload_refuses_internal_names(
+    the_installation,
+    ctx_w_deps,
+    rooms_upload_path,
+    threads_upload_path,
+    which,
+    filename,
+):
+    the_installation.rooms_upload_path = rooms_upload_path
+    the_installation.threads_upload_path = threads_upload_path
+    upload_dir = (
+        rooms_upload_path / TEST_ROOM_ID
+        if which == "room"
+        else threads_upload_path / TEST_THREAD_ID
+    )
+    upload_dir.mkdir(parents=True)
+    (upload_dir / filename).write_text("internal")
+
+    get_tool = getattr(file_uploads_tools, f"get_{which}_file_upload")
+
+    with pytest.raises(file_uploads_tools.UploadNotFound):
+        await get_tool(ctx_w_deps, filename)

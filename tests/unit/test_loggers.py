@@ -964,6 +964,34 @@ def test_room_upload_deleted(audit_records):
     )
 
 
+def test_room_upload_quota_exceeded(audit_records):
+    wrapper = loggers.RoomUploadAuditLog(claims=CLAIMS)
+
+    wrapper.room_upload_quota_exceeded(
+        "test-room",
+        "model.md",
+        quota_bytes=100,
+        used_bytes=90,
+        upload_bytes=20,
+    )
+
+    _assert_audit_record(
+        audit_records[-1],
+        message=loggers.AUDIT_ROOM_UPLOAD_QUOTA_EXCEEDED,
+        levelno=logging.ERROR,
+        outcome=loggers.AUDIT_OUTCOME_ERROR,
+        scope=SCOPE_ROOM_UPLOAD,
+        fields={
+            "claims": CLAIMS,
+            "room_id": "test-room",
+            "upload_filename": "model.md",
+            "quota_bytes": 100,
+            "used_bytes": 90,
+            "upload_bytes": 20,
+        },
+    )
+
+
 # --- RoomAccessAuditLog --------------------------------------------------
 
 

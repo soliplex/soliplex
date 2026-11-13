@@ -73,5 +73,6 @@ POSIX_ONLY_COVERAGE_OMIT = (
     "tests/unit/views/test_sandbox_workdirs.py",
     "tests/unit/cli/test_cli_service_token_file_modes.py",
     "tests/unit/test_util_symlinks.py",
+    "tests/unit/views/test_room_file_uploads_symlinks.py",
     "tests/unit/config/test_config__utils_symlinks.py",
 )

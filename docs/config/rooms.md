@@ -352,6 +352,103 @@ whose default profile delivers bounded deltas:
   sse_delivery_config_name: "whole-message"
   ```
 
+### Quotas
+
+- `quotas` (a mapping, optional) limits what the room may consume. Its
+  one key, for now, is:
+
+  - `room_uploads_bytes` (a non-negative integer, optional): the most
+    bytes the room's uploaded files may occupy, in its directory under
+    the installation's
+    [`rooms_upload_path`](installation.md#upload-paths). Unset (or
+    `quotas` absent, `null`, or `{}`) means no limit; `0` refuses every
+    new upload.
+
+  ```yaml
+  quotas:
+    room_uploads_bytes: 500000000
+  ```
+
+  The value may instead be a single `env:NAME` marker, resolved from the
+  installation environment, so that each deployment can set its own
+  quota without editing the room. Declare the name in the installation's
+  `environment` section (see [Environment](environment.md)), and supply
+  its value there, in `.env`, or in the OS environment:
+
+  ```yaml
+  # installation.yaml
+  environment:
+    - "RESEARCH_ROOM_UPLOAD_QUOTA"
+  ```
+
+  ```yaml
+  # rooms/research/room_config.yaml
+  quotas:
+    room_uploads_bytes: "env:RESEARCH_ROOM_UPLOAD_QUOTA"
+  ```
+
+  Unlike the [Logfire fields](installation.md#fields-which-interpolate-only-environment-variables),
+  a name with no value is an error, not "no limit": a typo must never
+  lift the quota silently. The resolved value must be plain digits
+  (`500000000`, not `500MB`), and only a whole `env:` marker is accepted
+  (no `secret:` marker, nor one embedded in other text).
+
+  An invalid quota fails when the configuration loads: an unknown key
+  (`Invalid 'quotas' in ...: unknown key(s): ['room_uploads_byte']`), or a
+  value which is negative, not an integer, or not a whole `env:` marker.
+  An `env:` value which will not resolve stops the server at startup,
+  and makes a room-config reload fail, naming the room's config file;
+  `soliplex-cli audit rooms` reports it too.
+
+What counts against `room_uploads_bytes`:
+
+- The regular files in the room's uploads directory.
+- **Uploads in progress**, at their full size from the moment they
+  start. Each upload is written through a hidden
+  `.soliplex-upload-<id>` reservation file, then renamed into place.
+  Reservations, and any `.nfs*` files the NFS client leaves behind, are
+  never listed, downloaded, or shown to the room's agent, but they occupy
+  storage, so they count.
+- **Not** symlinks an operator places in the room to share a file: they
+  store none of its bytes. Linked files are listed, but not counted.
+
+So the uploads listing's `total_size_bytes` can differ from the sum of
+the listed files' sizes, either way.
+
+At the limit:
+
+- An upload which would take the room past its quota is refused with
+  `507 Insufficient Storage`, and nothing is written. Replacing an
+  existing file counts only the difference in size.
+- Lowering a quota below the room's current usage keeps the existing
+  files, but refuses new uploads until enough are deleted. Deleting is
+  always allowed.
+- Uploads to a room are checked one at a time, in a step which normally
+  takes milliseconds. If that step cannot start within 30 seconds (the
+  storage is stalled), the upload is refused with `503`, and a
+  `Retry-After` header.
+
+**Note:** the quota is exact only when **one active soliplex server
+process** writes to the uploads tree. With `serve --workers N` (N > 1),
+or several replicas or containers sharing the same `rooms_upload_path`
+(for example on EFS), it is a *soft* limit, and usage can go slightly
+over it:
+
+- uploads starting at the same moment in different processes can each
+  pass the check;
+- on a network filesystem, another server may see a new upload's
+  reservation only after a short delay;
+- two uploads replacing the same filename at once are each credited with
+  the file they replace.
+
+`soliplex-cli audit rooms` prints a `NOTE:` for each room over its quota.
+The note does not fail the audit, so that an audit used to gate, say,
+adding a room never fails because of another room's usage; run it on a
+schedule, *without* `--quiet`, to watch for overages (see
+[`audit rooms`](../server/cli.md#audit-rooms)). Each room's quota and
+usage are also in the API's uploads listing, `GET /v1/uploads/{room_id}`
+(`quota_bytes`, `total_size_bytes`, and `available_bytes`).
+
 ### Quiz-related elements
 
 - `quizzes` is a list of mappings (default `()`):  each mapping defines a

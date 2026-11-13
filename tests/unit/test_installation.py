@@ -1932,6 +1932,7 @@ root:
     assert [record.category for record in lcw_records] == [DeprecationWarning]
     i_config.resolve_environment.assert_called_once_with()
     i_config.resolve_app_routers.assert_called_once_with()
+    i_config.check_room_quotas.assert_called_once_with()
 
     arr.assert_called_once_with(app)
 

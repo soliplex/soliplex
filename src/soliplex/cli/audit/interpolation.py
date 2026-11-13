@@ -371,6 +371,7 @@ def _iter_room_interpolation_configs(room_config):
     if room_config.agent_config is not None:
         yield room_config.agent_config
 
+    yield room_config.quotas
     yield from room_config.tool_configs.values()
     yield from room_config.mcp_client_toolset_configs.values()
 

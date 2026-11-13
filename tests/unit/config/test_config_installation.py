@@ -21,6 +21,7 @@ from soliplex.config import installation as config_installation
 from soliplex.config import logfire as config_logfire
 from soliplex.config import meta as config_meta
 from soliplex.config import middleware as config_middleware
+from soliplex.config import quotas as config_quotas
 from soliplex.config import routing as config_routing
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
@@ -4149,6 +4150,61 @@ def test_installationconfig_reload_room_configs_w_broken_room(
 
     assert i_config._room_configs is existing
     assert list(existing) == ["foo"]
+
+
+def _room_config_yaml_w_quota(room_id, quota):
+    return f"""{_room_config_yaml(room_id)}
+quotas:
+    room_uploads_bytes: "{quota}"
+"""
+
+
+def test_installationconfig_reload_room_configs_w_unresolved_quota(
+    loaded_rooms_config,
+):
+    i_config, rooms = loaded_rooms_config
+    existing = i_config._room_configs
+    _write_room_config(
+        rooms,
+        "quota",
+        _room_config_yaml_w_quota("quota", "env:NO_SUCH_QUOTA"),
+    )
+
+    with pytest.raises(config_quotas.QuotasUnresolvedEnvironment) as exc:
+        i_config.reload_room_configs()
+
+    assert exc.value._config_path == rooms / "quota" / "room_config.yaml"
+    assert i_config._room_configs is existing
+    assert list(existing) == ["foo"]
+
+
+@pytest.mark.parametrize(
+    "w_environment, expectation",
+    [
+        ({}, pytest.raises(config_quotas.QuotasUnresolvedEnvironment)),
+        (
+            {"ROOM_QUOTA": "500MB"},
+            pytest.raises(config_quotas.QuotasInvalidEnvironmentValue),
+        ),
+        ({"ROOM_QUOTA": "500"}, contextlib.nullcontext()),
+    ],
+)
+def test_installationconfig_check_room_quotas(
+    loaded_rooms_config,
+    w_environment,
+    expectation,
+):
+    i_config, rooms = loaded_rooms_config
+    _write_room_config(
+        rooms,
+        "quota",
+        _room_config_yaml_w_quota("quota", "env:ROOM_QUOTA"),
+    )
+    i_config._room_configs = i_config._load_room_configs()
+    i_config.environment = i_config.environment | w_environment
+
+    with expectation:
+        i_config.check_room_quotas()
 
 
 @pytest.fixture

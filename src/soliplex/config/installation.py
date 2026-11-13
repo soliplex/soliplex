@@ -226,6 +226,12 @@ def resolve_environment_entry(
         raise MissingEnvVar(env_name) from None
 
 
+def _check_room_quotas(room_configs: config_rooms.RoomConfigMap):
+    """Resolve each room's quotas:  raise 'InvalidQuotasConfig' on failure"""
+    for room_config in room_configs.values():
+        _ = room_config.quotas.room_uploads_bytes
+
+
 def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
     fs_skill_configs = {}
 
@@ -1427,9 +1433,20 @@ class InstallationConfig:
         Returns a copy of the new map, as 'room_configs' does.
         """
         room_configs = self._load_room_configs()
+        _check_room_quotas(room_configs)
         self._room_configs = room_configs
 
         return room_configs.copy()
+
+    def check_room_quotas(self):
+        """Resolve every room's quotas, raising on the first which fails
+
+        A quota may be an 'env:' marker, resolved only on access:  this
+        makes a bad value fail at startup, naming its room's config file,
+        rather than on the first request which reads it.  Needs the
+        environment resolved first.
+        """
+        _check_room_quotas(self.room_configs)
 
 
 def load_installation(config_path: pathlib.Path) -> InstallationConfig:

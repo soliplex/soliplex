@@ -12,6 +12,7 @@ from haiku.rag.capabilities import rag as hr_rag
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
 from soliplex.config import quizzes as config_quizzes
+from soliplex.config import quotas as config_quotas
 from soliplex.config import rag as config_rag
 from soliplex.config import rooms as config_rooms
 from soliplex.config import skills as config_skills
@@ -108,6 +109,28 @@ sse_delivery_config_name: "nonexistent"
 W_NULL_SSE_DELIVERY_ROOM_CONFIG_YAML = f"""\
 {BARE_ROOM_CONFIG_YAML}
 sse_delivery_config_name: null
+"""
+
+QUOTA_BYTES = 500_000_000
+W_QUOTAS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
+    "quotas": config_quotas.QuotasConfig(_room_uploads_bytes=QUOTA_BYTES),
+}
+W_QUOTAS_ROOM_CONFIG_YAML = f"""{BARE_ROOM_CONFIG_YAML}
+quotas:
+    room_uploads_bytes: {QUOTA_BYTES}
+"""
+
+W_EMPTY_QUOTAS_ROOM_CONFIG_YAML = f"""{BARE_ROOM_CONFIG_YAML}
+quotas: {{}}
+"""
+
+W_NULL_QUOTAS_ROOM_CONFIG_YAML = f"""{BARE_ROOM_CONFIG_YAML}
+quotas: null
+"""
+
+W_INVALID_QUOTAS_ROOM_CONFIG_YAML = f"""{BARE_ROOM_CONFIG_YAML}
+quotas:
+    room_uploads_bytes: "500MB"
 """
 
 
@@ -353,6 +376,22 @@ NoRaise = contextlib.nullcontext()
             contextlib.nullcontext(BARE_ROOM_CONFIG_KW),
         ),
         (
+            W_QUOTAS_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(W_QUOTAS_ROOM_CONFIG_KW),
+        ),
+        (
+            W_EMPTY_QUOTAS_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(BARE_ROOM_CONFIG_KW),
+        ),
+        (
+            W_NULL_QUOTAS_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(BARE_ROOM_CONFIG_KW),
+        ),
+        (
+            W_INVALID_QUOTAS_ROOM_CONFIG_YAML,
+            pytest.raises(config_exc.FromYamlException),
+        ),
+        (
             FULL_ROOM_CONFIG_YAML,
             contextlib.nullcontext(FULL_ROOM_CONFIG_KW),
         ),
@@ -455,6 +494,7 @@ def test_roomconfig_from_yaml(
         W_HR_SKILLS_ROOM_CONFIG_KW.copy(),
         W_NON_HR_TOOLS_ROOM_CONFIG_KW.copy(),
         W_SSE_DELIVERY_ROOM_CONFIG_KW.copy(),
+        W_QUOTAS_ROOM_CONFIG_KW.copy(),
         FULL_ROOM_CONFIG_KW.copy(),
     ],
 )
@@ -515,6 +555,9 @@ def test_roomconfig_as_yaml(temp_dir, installation_config, w_kw):
     if "sse_delivery_config_name" in w_kw:
         expected["sse_delivery_config_name"] = w_kw["sse_delivery_config_name"]
 
+    if "quotas" in w_kw:
+        expected["quotas"] = w_kw["quotas"].as_yaml
+
     found = inst.as_yaml
 
     assert found == expected
@@ -550,6 +593,8 @@ def _round_trip_room_config(installation_config, config_path, config_dict):
         W_HR_SKILLS_ROOM_CONFIG_YAML,
         W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
         W_SSE_DELIVERY_ROOM_CONFIG_YAML,
+        W_QUOTAS_ROOM_CONFIG_YAML,
+        W_EMPTY_QUOTAS_ROOM_CONFIG_YAML,
     ],
 )
 def test_roomconfig_as_yaml_round_trips(

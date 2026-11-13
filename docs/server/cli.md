@@ -841,6 +841,65 @@ row is replaced by `- <source>: ERROR: <message>`. If the database
 is present but the `count_documents` query fails, the count column is
 shown as `error` rather than a number.
 
+When the installation sets `rooms_upload_path`, each room's uploads
+directory is scanned once. A room with an upload
+[quota](../config/rooms.md#quotas) shows its usage (with the variable, for
+an `env:` quota):
+
+```text
+   Room uploads quota: 500000000 bytes (from env:RESEARCH_QUOTA) (used 480000000, 96%)
+```
+
+Two more `ERROR` lines may follow the room header:
+
+```text
+  ERROR: Invalid 'quotas' in <path>: 'room_uploads_bytes' names environment variable 'X', which has no value
+  ERROR: room uploads cannot be read: <message>
+```
+
+The first is a quota which will not resolve (the server would refuse to
+start with it); the second, an uploads directory which cannot be read. A
+room whose directory does not exist yet, such as a new room, is simply
+empty.
+
+Three conditions are reported as `NOTE:` lines. Unlike `ERROR`s, notes
+do **not** affect the exit status, and `--quiet` does not print them:
+
+```text
+   NOTE: room uploads OVER QUOTA by 12000000 bytes
+   NOTE: 2 orphaned upload files, 1048576 bytes (counted against any quota)
+   - .soliplex-upload-3f2a...               reservation 1048576 bytes, 7260s old
+   - .nfs000000000123abcd                   nfs         0 bytes, 4000s old
+   NOTE: the quota has no effect: no 'rooms_upload_path'
+```
+
+- **Over quota.** With several server processes sharing the uploads tree,
+  a room's quota is soft, and usage can go slightly over it (see
+  [Quotas](../config/rooms.md#quotas)).
+- **Orphaned upload files.** `.soliplex-upload-*` reservations and
+  `.nfs*` files last modified more than an hour ago. A reservation is left
+  behind when a server crashes, or loses its host, mid-upload; an `.nfs*`
+  file, when a file deleted on NFS was never closed. Orphaned reservations
+  still count against the room's quota.
+- **A quota with no effect**, because room uploads are not configured.
+
+Overages and orphans are notes, not errors, so that an audit used as a
+gate -- when adding a room, say -- never fails because of the state of
+another room. To watch for them, run `soliplex-cli audit rooms` on a
+schedule *without* `--quiet`, and look for `NOTE:` lines.
+
+`audit` never deletes anything. To remove orphaned reservations, first
+confirm they are reported again by a second run, then list and delete
+them:
+
+```bash
+find <rooms_upload_path> -name '.soliplex-upload-*' -mmin +60
+find <rooms_upload_path> -name '.soliplex-upload-*' -mmin +60 -delete
+```
+
+Leave `.nfs*` files alone while any server process may still hold them
+open: they disappear when the last holder closes them, or exits.
+
 #### Behavior Notes
 
 - **Bypasses authorization.** This command deliberately lists every room
@@ -861,15 +920,20 @@ shown as `error` rather than a number.
 - `0` — every room's runtime model converted, every room's `id` matched
   its directory, every file a room names was inside its directory,
   every aggregated AG-UI feature name resolved against the registry,
-  every RAG configuration resolved, and every document count completed.
+  every RAG configuration resolved, every document count completed,
+  every upload quota resolved, and every uploads directory could be
+  read. Rooms over quota, and orphaned upload files, are only noted.
 - `1` — at least one room failed runtime-model validation, had an `id`
   not matching its directory, named a file outside its directory,
   referenced an unregistered AG-UI feature name, had a missing RAG
-  file, or had a failing `count_documents` query. In `--quiet` mode,
-  the per-room errors are printed as JSON on stdout before exit;
-  unregistered feature names appear under the `agui_features` key,
-  mismatched IDs under `rooms_id_mismatch`, and files outside a room's
-  directory under `rooms_non_local_paths`.
+  file, had a failing `count_documents` query, had an upload quota which
+  would not resolve, or had an uploads directory which could not be
+  read. In `--quiet` mode, the per-room errors are printed as JSON on
+  stdout before exit; unregistered feature names appear under the
+  `agui_features` key, mismatched IDs under `rooms_id_mismatch`, files
+  outside a room's directory under `rooms_non_local_paths`, unresolvable
+  quotas under `room_quotas`, and unreadable uploads directories under
+  `room_upload_scan`.
 
 #### Examples
 

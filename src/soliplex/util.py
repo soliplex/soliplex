@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
+import dataclasses
 import datetime
+import errno
 import functools
 import json
 import logging
@@ -202,17 +204,41 @@ def modified_at(stat_result: os.stat_result) -> datetime.datetime | None:
         return None
 
 
+# Room uploads are written through a hidden reservation file, which
+# holds the upload's quota until it is renamed into place.
+UPLOAD_RESERVATION_PREFIX = ".soliplex-upload-"
+
+# The Linux NFS client (EFS included) renames a file which is unlinked
+# while still open to '.nfsXXXX', until the last holder closes it.
+NFS_SILLY_RENAME_PREFIX = ".nfs"
+
+
+def is_internal_upload_name(name: str) -> bool:
+    """Is 'name' an internal file in an uploads directory?
+
+    Internal files are never listed, downloaded, or deleted through the
+    API, nor shown to the agent's tools;  they still occupy storage.
+    """
+    return name.startswith(
+        (UPLOAD_RESERVATION_PREFIX, NFS_SILLY_RENAME_PREFIX),
+    )
+
+
 def upload_files(directory: pathlib.Path) -> dict[str, os.stat_result]:
     """Map each file in the uploads 'directory' to its stat.
 
     Symlinks are followed, as the download views follow them: the
     operator may link a shared file in.  A missing 'directory' has no
     files.  One stat decides each entry, so an entry which is not a
-    regular file when stat'd, or cannot be stat'd, is left out.
+    regular file when stat'd, or cannot be stat'd, is left out, as are
+    internal files (see 'is_internal_upload_name').
     """
     files = {}
 
     for file_or_sub in directory.glob("*"):
+        if is_internal_upload_name(file_or_sub.name):
+            continue
+
         try:
             stat_result = file_or_sub.stat()
         except OSError:  # removed, a dangling or looping link, access denied
@@ -222,6 +248,129 @@ def upload_files(directory: pathlib.Path) -> dict[str, os.stat_result]:
             files[file_or_sub.name] = stat_result
 
     return files
+
+
+def _lstat_counted(path: pathlib.Path) -> os.stat_result | None:
+    """'lstat' 'path' for counting stored bytes, failing closed.
+
+    Return 'None' only for a file which is gone (removed since it was
+    listed):  it no longer occupies storage.  Retry 'ESTALE' (another
+    NFS client replaced the file) once.  Raise every other 'OSError':
+    an unreadable file must never be counted as zero bytes.
+    """
+    try:
+        return path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        if exc.errno != errno.ESTALE:
+            raise
+
+    try:
+        return path.lstat()
+    except FileNotFoundError:
+        return None
+
+
+def stored_size(path: pathlib.Path) -> int:
+    """Return the bytes 'path' itself stores: its size, if a regular file.
+
+    Unlike 'upload_files', symlinks are *not* followed:  a link placed by
+    the operator stores none of its target's bytes in the uploads tree,
+    so it counts as zero, as do a missing path and anything not a regular
+    file.  One 'lstat' decides, so no branch is reachable only through a
+    symlink.  Fails closed:  see '_lstat_counted'.
+    """
+    stat_result = _lstat_counted(path)
+
+    if stat_result is None or not stat.S_ISREG(stat_result.st_mode):
+        return 0
+
+    return stat_result.st_size
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class HiddenUpload:
+    """An internal file in an uploads directory (a reservation, '.nfs*')"""
+
+    name: str
+    size_bytes: int
+    mtime: float
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class UploadsScan:
+    """One pass over an uploads directory
+
+    'files' is the listing, as 'upload_files' returns it.  'stored_bytes'
+    counts what the quota counts:  every regular file, internal ones
+    included, but no symlink.  'hidden' holds the internal files.
+    """
+
+    files: dict[str, os.stat_result]
+    stored_bytes: int
+    hidden: list[HiddenUpload]
+
+
+def scan_uploads(directory: pathlib.Path) -> UploadsScan:
+    """Scan the uploads 'directory' once, for its listing and its usage
+
+    On a network filesystem each metadata call is a round trip, so one
+    pass serves both:  a regular file costs a single 'lstat', which is
+    also its listing stat.  The count fails closed (see
+    '_lstat_counted'), so this raises 'OSError' rather than undercount.
+    A missing 'directory' is empty.
+    """
+    files = {}
+    stored_bytes = 0
+    hidden = []
+
+    try:
+        entries = list(os.scandir(directory))
+    except FileNotFoundError:
+        entries = []
+
+    for entry in entries:
+        path = pathlib.Path(entry.path)
+        lstat_result = _lstat_counted(path)
+
+        if lstat_result is None:
+            continue
+
+        is_regular = stat.S_ISREG(lstat_result.st_mode)
+
+        if is_regular:
+            stored_bytes += lstat_result.st_size
+
+        if is_internal_upload_name(entry.name):
+            if is_regular:
+                hidden.append(
+                    HiddenUpload(
+                        name=entry.name,
+                        size_bytes=lstat_result.st_size,
+                        mtime=lstat_result.st_mtime,
+                    )
+                )
+            continue
+
+        if is_regular:  # its 'lstat' is its listing stat
+            stat_result = lstat_result
+        else:  # list it if it links to a regular file, as 'upload_files'
+            try:
+                stat_result = path.stat()
+            except OSError:  # a dangling or looping link, access denied
+                continue
+
+        # One test for files and links alike:  no branch is reachable
+        # only through a symlink, which some hosts cannot create.
+        if stat.S_ISREG(stat_result.st_mode):
+            files[entry.name] = stat_result
+
+    return UploadsScan(
+        files=files,
+        stored_bytes=stored_bytes,
+        hidden=hidden,
+    )
 
 
 @contextlib.contextmanager

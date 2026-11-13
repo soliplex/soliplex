@@ -49,6 +49,9 @@ UPLOADS_GET_ROOM_THREAD = "uploads get room thread"
 UPLOADS_GET_ROOM_THREAD_FILE = "uploads get room thread file"
 UPLOADS_POST_ROOM = "uploads post room"
 UPLOADS_DELETE_ROOM_FILE = "uploads delete room file"
+UPLOADS_ROOM_QUOTA_EXCEEDED = "room upload quota exceeded"
+UPLOADS_ROOM_BUSY = "room upload busy"
+UPLOADS_ROOM_STORAGE_UNAVAILABLE = "room upload storage unavailable"
 UPLOADS_POST_ROOM_THREAD = "uploads post room thread"
 
 WORKDIRS_GET_ROOM_THREAD = "workdirs get room thread"
@@ -244,6 +247,9 @@ AUDIT_SANDBOX_REASON_EXIT_CODE = "exit-code"
 # material to a room, changing what the room's agent and members can access.
 AUDIT_ROOM_UPLOAD_ADDED = "room upload added"
 AUDIT_ROOM_UPLOAD_DELETED = "room upload deleted"
+# A refusal under the room's 'quotas.room_uploads_bytes': a validation
+# failure, not an authorization denial.
+AUDIT_ROOM_UPLOAD_QUOTA_EXCEEDED = "room upload quota exceeded"
 
 # room-access audit events. 'AUDIT_ROOM_ACCESS' is the single "a principal
 # accessed room X" event, emitted across every entry path: the authenticated
@@ -812,6 +818,26 @@ class RoomUploadAuditLog(AuditLogWrapper):
             AUDIT_ROOM_UPLOAD_DELETED,
             room_id=room_id,
             upload_filename=filename,
+        )
+
+    def room_upload_quota_exceeded(
+        self,
+        room_id: str,
+        filename: str,
+        *,
+        quota_bytes: int,
+        used_bytes: int,
+        upload_bytes: int,
+    ):
+        # NB: 'filename' is a reserved LogRecord attribute, so the refused
+        # file is recorded under 'upload_filename'.
+        self._failed(
+            AUDIT_ROOM_UPLOAD_QUOTA_EXCEEDED,
+            room_id=room_id,
+            upload_filename=filename,
+            quota_bytes=quota_bytes,
+            used_bytes=used_bytes,
+            upload_bytes=upload_bytes,
         )
 
 
