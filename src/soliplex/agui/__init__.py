@@ -14,6 +14,13 @@ AGUI_Events = list[agui_core.Event]
 AGUI_State = dict[str, typing.Any]
 
 
+NAME_QUERY_DEPRECATION = """\
+'name_query' is deprecated, and will be removed after 'soliplex v0.94'.
+
+Use 'text_query' instead.
+"""
+
+
 class AGUI_Exception(ValueError):
     status_code = 400
 
@@ -343,6 +350,7 @@ class ThreadStorage(abc.ABC):
         after: ThreadPagePosition | None = None,
         label_ids: list[int] = None,
         unlabeled: bool = False,
+        text_query: str = None,
         name_query: str = None,
     ) -> tuple[
         list[tuple[Thread, datetime.datetime]],
@@ -369,9 +377,14 @@ class ThreadStorage(abc.ABC):
         It joins 'label_ids' as one more alternative: passing both keeps
         threads carrying any of those labels *or* none.
 
-        'name_query', when given, keeps only threads whose name contains
-        it, case-insensitively. The two filters combine: passing both
-        keeps threads that match the name *and* carry one of the labels.
+        'text_query', when given, keeps only threads whose name contains
+        it, case-insensitively, *or* (where the storage supports
+        full-text search) whose user prompts and agent responses match
+        it as a full-text query.  The text and label filters combine:
+        passing both keeps threads that match the text *and* carry one
+        of the labels.
+
+        'name_query' is a deprecated alias for 'text_query'.
 
         Paging is by position rather than by offset: 'after' is the
         position of the last thread on the previous page, and the second
@@ -633,6 +646,21 @@ class ThreadStorage(abc.ABC):
         run_id: str,
     ) -> None:
         """Mark a run as finished"""
+
+    @abc.abstractmethod
+    async def index_run_text(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> None:
+        """Add a finished run's text to its thread's full-text search
+
+        The text is the run's new user prompts and its agent responses.
+        A no-op where the storage does not support full-text search.
+        """
 
     @abc.abstractmethod
     async def list_run_events_after(

@@ -5,6 +5,8 @@ from unittest import mock
 
 import pytest
 import pytest_asyncio
+import sqlalchemy
+from ag_ui import core as agui_core
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
@@ -12,6 +14,7 @@ from soliplex import agui
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.agui import sse_delivery as agui_sse_delivery
+from soliplex.agui import text_search as agui_text_search
 from soliplex.agui import util as agui_util
 from soliplex.config import installation as config_installation
 from tests.unit.agui import agui_constants
@@ -1631,6 +1634,7 @@ async def test_finish_run_helper(t_storage, fake_async_session):
     w_session = fake_async_session.session
     the_threads = t_storage.return_value
     the_threads.finish_run = mock.AsyncMock(spec_set=())
+    the_threads.index_run_text = mock.AsyncMock(spec_set=())
     sqla_engine = object()
 
     with mock.patch(
@@ -1651,9 +1655,53 @@ async def test_finish_run_helper(t_storage, fake_async_session):
         thread_id=TEST_THREAD_ID_STR,
         run_id=TEST_RUN_ID_STR,
     )
+    the_threads.index_run_text.assert_called_once_with(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+    )
+    # Two transactions: indexing must not share the finish's.
+    assert w_session.begin.call_count == 2
 
     t_storage.assert_called_once_with(w_session)
     fake_async_session.cls.assert_called_once_with(bind=sqla_engine)
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.agui.persistence.logfire")
+@mock.patch("soliplex.agui.persistence.ThreadStorage")
+async def test_finish_run_helper_index_failure_is_logged(
+    t_storage,
+    logfire_mock,
+    fake_async_session,
+):
+    the_threads = t_storage.return_value
+    the_threads.finish_run = mock.AsyncMock(spec_set=())
+    the_threads.index_run_text = mock.AsyncMock(
+        spec_set=(),
+        side_effect=ValueError("boom"),
+    )
+    sqla_engine = object()
+
+    with mock.patch(
+        "soliplex.views.agui.sqla_asyncio.AsyncSession",
+        new=fake_async_session.cls,
+    ):
+        await agui_persistence.finish_run(
+            sqla_engine,
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+        )
+
+    the_threads.finish_run.assert_called_once()
+    logfire_mock.exception.assert_called_once_with(
+        "Error indexing run text: {thread_id}/{run_id}",
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1767,7 +1815,7 @@ async def _page_names(
     after=None,
     label_ids=None,
     unlabeled=False,
-    name_query=None,
+    text_query=None,
 ):
     """Return (room_id, name) pairs for one page, and the next position."""
     rows, position = await ts.list_user_threads_page(
@@ -1777,7 +1825,7 @@ async def _page_names(
         after=after,
         label_ids=label_ids,
         unlabeled=unlabeled,
-        name_query=name_query,
+        text_query=text_query,
     )
     pairs = []
     for a_thread, _last_activity in rows:
@@ -2569,7 +2617,7 @@ async def test_list_user_threads_page_filters_by_name(
     pairs, position = await _page_names(
         ts,
         room_ids=[ROOM_ID],
-        name_query="manual",
+        text_query="manual",
     )
 
     # Case-insensitive substring.
@@ -2595,7 +2643,7 @@ async def test_list_user_threads_page_filters_by_non_ascii_name(
     pairs, position = await _page_names(
         ts,
         room_ids=[ROOM_ID],
-        name_query="ärger",
+        text_query="ärger",
     )
 
     assert [name for _, name in pairs] == ["Ärger im Büro"]
@@ -2634,7 +2682,7 @@ async def test_list_user_threads_page_escapes_name_wildcards(
     pairs, position = await _page_names(
         ts,
         room_ids=[ROOM_ID],
-        name_query="100%",
+        text_query="100%",
     )
 
     # Unescaped, the '%' would match every thread in the room.
@@ -2660,7 +2708,7 @@ async def test_list_user_threads_page_name_filter_drops_unnamed_threads(
     pairs, position = await _page_names(
         ts,
         room_ids=[ROOM_ID],
-        name_query="named",
+        text_query="named",
     )
 
     # A thread with no metadata row cannot match a name search -- but it
@@ -2702,10 +2750,268 @@ async def test_list_user_threads_page_combines_both_filters(
         ts,
         room_ids=[ROOM_ID],
         label_ids=[urgent],
-        name_query="manual",
+        text_query="manual",
     )
 
     # AND across the two axes: the label chip narrows the text search
     # rather than widening it.
     assert [name for _, name in pairs] == ["Toaster Manual"]
     assert position is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_name_query_is_deprecated_alias(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="Toaster Manual")
+        await _named_thread(ts, room_id=ROOM_ID, name="Unrelated")
+
+    with pytest.warns(DeprecationWarning, match=agui.NAME_QUERY_DEPRECATION):
+        rows, _ = await ts.list_user_threads_page(
+            user_name=USER_NAME,
+            room_ids=[ROOM_ID],
+            limit=50,
+            name_query="manual",
+        )
+
+    names = [
+        (await a_thread.awaitable_attrs.thread_metadata).name
+        for a_thread, _ in rows
+    ]
+    assert names == ["Toaster Manual"]
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_text_query_wins_over_name_query(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="Toaster Manual")
+        await _named_thread(ts, room_id=ROOM_ID, name="Blender Guide")
+
+    with pytest.warns(DeprecationWarning, match=agui.NAME_QUERY_DEPRECATION):
+        rows, _ = await ts.list_user_threads_page(
+            user_name=USER_NAME,
+            room_ids=[ROOM_ID],
+            limit=50,
+            text_query="guide",
+            name_query="manual",
+        )
+
+    names = [
+        (await a_thread.awaitable_attrs.thread_metadata).name
+        for a_thread, _ in rows
+    ]
+    assert names == ["Blender Guide"]
+
+
+@pytest.mark.asyncio
+async def test_list_user_threads_page_text_query_matches_title_or_content(
+    the_async_session,
+    unit_of_work,
+    monkeypatch,
+):
+    # SQLite has no '@@': stand in for the full-text match with a plain
+    # comparison on the (here, raw text) 'text_search' column.
+    def _matches_clause(text_query):
+        return agui_schema.Thread.text_search == text_query
+
+    monkeypatch.setattr(
+        agui_text_search, "supports_text_search", lambda name: True
+    )
+    monkeypatch.setattr(agui_text_search, "matches_clause", _matches_clause)
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        await _named_thread(ts, room_id=ROOM_ID, name="Brake Manual")
+        content_id = await _named_thread(ts, room_id=ROOM_ID, name="Other")
+        await _named_thread(ts, room_id=ROOM_ID, name="Unrelated")
+        await the_async_session.execute(
+            sqlalchemy.update(agui_schema.Thread)
+            .where(agui_schema.Thread.thread_id == content_id)
+            .values(text_search="brake")
+        )
+
+    pairs, position = await _page_names(
+        ts,
+        room_ids=[ROOM_ID],
+        text_query="brake",
+    )
+
+    # One thread matches on its name, the other on its content.
+    assert sorted(name for _, name in pairs) == ["Brake Manual", "Other"]
+    assert position is None
+
+
+def _fake_to_tsvector(config, text):
+    return f"<{config}:{text}>"
+
+
+@pytest_asyncio.fixture()
+async def sqlite_to_tsvector(the_async_session):
+    """Register a stand-in 'to_tsvector' SQL function on SQLite.
+
+    With it (and the 'text_search' column being plain text on SQLite),
+    the PostgreSQL 'UPDATE' appending to the vector runs on SQLite,
+    concatenating the stand-in's output.
+    """
+    connection = await the_async_session.connection()
+    raw = await connection.get_raw_connection()
+    await raw.driver_connection.create_function(
+        "to_tsvector", 2, _fake_to_tsvector, deterministic=True
+    )
+    return _fake_to_tsvector
+
+
+async def _text_search_of(session, thread_id):
+    return await session.scalar(
+        sqlalchemy.select(agui_schema.Thread.text_search).where(
+            agui_schema.Thread.thread_id == thread_id
+        )
+    )
+
+
+async def _run_with_text(ts, *, thread_id, run_id, messages, events):
+    await ts.add_run_input(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+        run_input=agui_core.RunAgentInput(
+            thread_id=thread_id,
+            run_id=run_id,
+            state={},
+            messages=messages,
+            tools=[],
+            context=[],
+            forwarded_props={},
+        ),
+    )
+    for event in events:
+        await ts.save_single_event(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=run_id,
+            event=event,
+        )
+
+
+async def _thread_and_run_ids(ts):
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+    (run,) = await thread.list_runs()
+    return thread.thread_id, run.run_id
+
+
+@pytest.mark.asyncio
+async def test_threadstorage_index_run_text_noop_on_sqlite(
+    the_async_session,
+    unit_of_work,
+):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        thread_id, run_id = await _thread_and_run_ids(ts)
+        await _run_with_text(
+            ts,
+            thread_id=thread_id,
+            run_id=run_id,
+            messages=[agui_core.UserMessage(id="u1", content="hello")],
+            events=[],
+        )
+
+    async with unit_of_work():
+        await ts.index_run_text(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+    assert await _text_search_of(the_async_session, thread_id) is None
+
+
+@pytest.mark.asyncio
+async def test_threadstorage_index_run_text_appends_run_text(
+    the_async_session,
+    unit_of_work,
+    sqlite_to_tsvector,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        agui_text_search, "supports_text_search", lambda name: True
+    )
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        thread_id, run_id = await _thread_and_run_ids(ts)
+        await _run_with_text(
+            ts,
+            thread_id=thread_id,
+            run_id=run_id,
+            messages=[agui_core.UserMessage(id="u1", content="hello")],
+            events=[
+                agui_core.TextMessageContentEvent(
+                    message_id="a1", delta="hi "
+                ),
+                agui_core.TextMessageContentEvent(
+                    message_id="a1", delta="there"
+                ),
+            ],
+        )
+        await the_async_session.execute(
+            sqlalchemy.update(agui_schema.Thread)
+            .where(agui_schema.Thread.thread_id == thread_id)
+            .values(text_search="<earlier>")
+        )
+
+    async with unit_of_work():
+        await ts.index_run_text(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+    expected = "<earlier>" + sqlite_to_tsvector(
+        agui_text_search.TEXT_SEARCH_CONFIG, "hello\n\nhi there"
+    )
+    assert await _text_search_of(the_async_session, thread_id) == expected
+
+
+@pytest.mark.asyncio
+async def test_threadstorage_index_run_text_skips_run_without_text(
+    the_async_session,
+    unit_of_work,
+    sqlite_to_tsvector,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        agui_text_search, "supports_text_search", lambda name: True
+    )
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    async with unit_of_work():
+        # No run input, and no text events.
+        thread_id, run_id = await _thread_and_run_ids(ts)
+
+    async with unit_of_work():
+        await ts.index_run_text(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+    assert await _text_search_of(the_async_session, thread_id) is None

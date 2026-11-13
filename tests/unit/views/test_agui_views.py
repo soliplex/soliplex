@@ -2803,7 +2803,7 @@ async def test_get_agui_threads(
         after=None,
         label_ids=None,
         unlabeled=False,
-        name_query=None,
+        text_query=None,
     )
 
     the_logger.debug.assert_called_once_with(loggers.AGUI_GET_THREADS)
@@ -2994,11 +2994,11 @@ async def test_get_agui_threads_forwards_the_filters(the_threads):
     )
 
     # Every part of the search box reaches the query. 'q' is the wire
-    # name; the storage layer calls it 'name_query'.
+    # name; the storage layer calls it 'text_query'.
     _args, kwargs = the_threads.list_user_threads_page.call_args
     assert kwargs["label_ids"] == [1, 2]
     assert kwargs["unlabeled"] is True
-    assert kwargs["name_query"] == "manual"
+    assert kwargs["text_query"] == "manual"
 
 
 @pytest.mark.anyio
