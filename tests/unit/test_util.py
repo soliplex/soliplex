@@ -633,16 +633,20 @@ def test_scan_uploads_skips_unstatable_non_regular(temp_dir):
     # (a link to one);  one which cannot be stat'd is left out, as
     # 'upload_files' leaves it out.
     (temp_dir / "sub").mkdir()
-    real_stat = pathlib.Path.stat
 
-    def stat(path, *args, **kwargs):
-        # Only the followed 'stat':  'lstat' delegates here too.
-        if path.name == "sub" and kwargs.get("follow_symlinks", True):
-            raise PermissionError(errno.EACCES, "denied")
-        return real_stat(path, *args, **kwargs)
+    def lstat(path):
+        # 'Path.lstat' delegates to 'Path.stat' on some platforms (Windows)
+        # but not others:  pin it, so that only the followed 'stat' fails,
+        # by the same path everywhere.
+        return os.lstat(path)
 
-    with mock.patch.object(
-        pathlib.Path, "stat", autospec=True, side_effect=stat
+    with (
+        mock.patch.object(pathlib.Path, "lstat", lstat),
+        mock.patch.object(
+            pathlib.Path,
+            "stat",
+            side_effect=PermissionError(errno.EACCES, "denied"),
+        ),
     ):
         found = util.scan_uploads(temp_dir)
 
