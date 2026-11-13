@@ -556,12 +556,25 @@ For each secret declared in the installation, one line is printed in the
 form:
 
 ```text
-- <secret_name>               OK
+- <secret_name>               OK (<source_kind>)
 - <secret_name>               MISSING
 ```
 
 `OK` means the secret resolved via at least one of its configured
-sources; `MISSING` means no source produced a value.
+sources, and names the kind of the source which resolved it (e.g.,
+`OK (env_var)`); `MISSING` means no source produced a value.
+
+If any secret resolved from a `random_chars` source, a warning follows
+the list:  such values change whenever the server restarts
+(including a `serve --reload=config` reload), and differ between server
+processes, which breaks e.g. `SESSION_MIDDLEWARE_TOKEN` (in-progress
+logins and authn cookies) and `URL_SAFE_TOKEN_SECRET` (tokens).  The
+warning does not change the exit status.
+
+The audit runs in its own process, so it resolves secrets from that
+process's environment:  for a container deployment, run it in the
+backend's service (e.g., `docker compose run --rm backend soliplex-cli
+audit ...`) so that its answer matches the server's.
 
 #### Exit Status
 

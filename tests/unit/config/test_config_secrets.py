@@ -34,6 +34,9 @@ ENV_VAR_HIT = config_secrets.EnvVarSecretSource(
     secret_name=SECRET_NAME,
     env_var_name=ENV_VAR_NAME,
 )
+RANDOM_CHARS = config_secrets.RandomCharsSecretSource(
+    secret_name=SECRET_NAME,
+)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -515,6 +518,33 @@ def test_secretconfig_resolved():
     assert secret.resolved == SECRET_VALUE
 
 
+@pytest.mark.parametrize("w_resolved_by", [None, ENV_VAR_HIT])
+def test_secretconfig_resolved_by(w_resolved_by):
+    secret = config_secrets.SecretConfig(secret_name=SECRET_NAME)
+    secret._resolved_by = w_resolved_by
+
+    found = secret.resolved_by
+
+    assert found is w_resolved_by
+
+
+@pytest.mark.parametrize(
+    "w_resolved_by, expected",
+    [
+        (None, False),
+        (ENV_VAR_HIT, False),
+        (RANDOM_CHARS, True),
+    ],
+)
+def test_secretconfig_is_ephemeral(w_resolved_by, expected):
+    secret = config_secrets.SecretConfig(secret_name=SECRET_NAME)
+    secret._resolved_by = w_resolved_by
+
+    found = secret.is_ephemeral
+
+    assert found is expected
+
+
 @pytest.mark.parametrize(
     "config_str, expectation, expected",
     [
@@ -531,12 +561,14 @@ def test_strip_secret_prefix(config_str, expectation, expected):
 
 
 @pytest.mark.parametrize(
-    "sources, expectation, expected",
+    "sources, expectation, expected, exp_resolved_by",
     [
-        ([ENV_VAR_MISS], ExcGroup, ERROR_MISS),
-        ([ENV_VAR_MISS, ENV_VAR_HIT], NoRaise, SECRET_VALUE),
-        ([NO_GETTER], ExcGroup, ERROR_MISS),
-        ([NO_GETTER, ENV_VAR_HIT], NoRaise, SECRET_VALUE),
+        ([ENV_VAR_MISS], ExcGroup, ERROR_MISS, None),
+        ([ENV_VAR_MISS, ENV_VAR_HIT], NoRaise, SECRET_VALUE, ENV_VAR_HIT),
+        ([NO_GETTER], ExcGroup, ERROR_MISS, None),
+        ([NO_GETTER, ENV_VAR_HIT], NoRaise, SECRET_VALUE, ENV_VAR_HIT),
+        ([ENV_VAR_HIT, RANDOM_CHARS], NoRaise, SECRET_VALUE, ENV_VAR_HIT),
+        ([ENV_VAR_MISS, RANDOM_CHARS], NoRaise, "deadbeef", RANDOM_CHARS),
     ],
 )
 @mock.patch("os.urandom")
@@ -545,12 +577,13 @@ def test_get_secret_secret_ctor_w_sources(
     sources,
     expectation,
     expected,
+    exp_resolved_by,
 ):
+    o_ur.return_value = bytes.fromhex(SECRET_VALUE)
     secret_config = config_secrets.SecretConfig(
         secret_name=SECRET_NAME,
         sources=sources,
     )
-
     env_patch = {ENV_VAR_NAME: SECRET_VALUE}
 
     with mock.patch.dict("os.environ", clear=True, **env_patch):
@@ -559,6 +592,8 @@ def test_get_secret_secret_ctor_w_sources(
 
     if expected is not ERROR_MISS:
         assert found == expected
+
+    assert secret_config.resolved_by is exp_resolved_by
 
 
 def test_get_secret_w_source_kind_wo_registered_getter():

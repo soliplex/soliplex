@@ -83,6 +83,11 @@ secrets:
        n_chars: 32
 ```
 
+A secret resolved from a `random_chars` source gets a new value whenever
+the server restarts, and a different one in each server process.
+[`soliplex-cli audit secrets`](../server/cli.md#audit-secrets) reports
+such a secret as `OK (random_chars)`, followed by a warning.
+
 ## Secrets without Sources
 
 Secrets which list no sources are treated as though they were configured
