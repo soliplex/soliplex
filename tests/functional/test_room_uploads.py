@@ -20,6 +20,7 @@ from fastapi import testclient
 
 from soliplex import main
 from soliplex import util
+from soliplex.config import installation as config_installation
 from soliplex.config import quotas as config_quotas
 from soliplex.config import routing as config_routing
 from tests._dburi import sqlite_dburi
@@ -48,8 +49,11 @@ def _upload_installation(
 ) -> pathlib.Path:
     """Copy 'example/' into 'tmp_path', for room-upload tests
 
-    - Both databases are repointed at scratch sqlite files:  the example's
-      DBURIs are relative to the working directory, i.e. the checkout.
+    - The example's DBURIs are relative to the working directory, i.e. the
+      checkout, so both databases are repointed:  threads at a scratch
+      sqlite file, and authorization at an in-memory database.  In
+      no-auth mode only an in-memory authz database seeds the no-auth
+      user as an admin (#1512), which uploading needs (room 'WRITE').
     - Only the 'faux' and 'joker' rooms are loaded.
     - 'faux' takes its upload quota from 'env:FAUX_UPLOAD_QUOTA', whose
       value is 'quota_env_value' (with 'None', the name is not declared).
@@ -61,19 +65,30 @@ def _upload_installation(
     config_path = dst / "minimal.yaml"
     text = config_path.read_text(encoding="utf-8")
 
-    for db_name, db_stem in [
-        ("thread_persistence_db", "thread_persistence"),
-        ("authorization_db", "authorization"),
+    threads_db = tmp_path / "thread_persistence.sqlite"
+
+    for db_name, db_stem, sync_dburi, async_dburi in [
+        (
+            "thread_persistence_db",
+            "thread_persistence",
+            sqlite_dburi(threads_db),
+            sqlite_dburi(threads_db, "+aiosqlite"),
+        ),
+        (
+            "authorization_db",
+            "authorization",
+            config_installation.SYNC_MEMORY_ENGINE_URL,
+            config_installation.ASYNC_MEMORY_ENGINE_URL,
+        ),
     ]:
-        db_path = tmp_path / f"{db_stem}.sqlite"
         text = _replace_once(
             text,
             f"{db_name}:\n"
             f'  sync_dburi: "sqlite:///db/sqlite/{db_stem}.sqlite"\n'
             f'  async_dburi: "sqlite+aiosqlite:///db/sqlite/{db_stem}.sqlite"',
             f"{db_name}:\n"
-            f'  sync_dburi: "{sqlite_dburi(db_path)}"\n'
-            f'  async_dburi: "{sqlite_dburi(db_path, "+aiosqlite")}"',
+            f'  sync_dburi: "{sync_dburi}"\n'
+            f'  async_dburi: "{async_dburi}"',
         )
 
     environment = (
