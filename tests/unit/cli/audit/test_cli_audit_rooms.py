@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 import pathlib
 from unittest import mock
 
 import pytest
 
+from soliplex import util
 from soliplex.cli.audit import rooms as audit_rooms
+from soliplex.config import quotas as config_quotas
 from soliplex.config import rag as config_rag
 from tests.unit.cli.audit import audit_helpers
 
@@ -457,3 +460,211 @@ def test__invalid_room_rag_dbs_w_unbuildable_config(
 
 # _audit_rooms_section: ui only
 # audit_rooms: command
+
+
+# ---------------------------------------------------------------------------
+# Room upload quotas, overages, and orphans
+# ---------------------------------------------------------------------------
+
+
+def _quota_room(room_uploads_bytes=None, installation_config=None):
+    cfg = mock.Mock()
+    cfg.quotas = config_quotas.QuotasConfig(
+        _room_uploads_bytes=room_uploads_bytes,
+        _installation_config=installation_config,
+    )
+    return cfg
+
+
+@pytest.fixture
+def w_uploads(the_installation, temp_dir):
+    rooms_path = temp_dir / "rooms"
+    rooms_path.mkdir()
+    the_installation._config.rooms_upload_path = rooms_path
+    return rooms_path
+
+
+def test__scan_room_uploads_wo_uploads_path(the_installation):
+    the_installation._config.rooms_upload_path = None
+    the_installation._config.room_configs = {"r1": _quota_room()}
+
+    assert audit_rooms._scan_room_uploads(the_installation) == ({}, {})
+
+
+def test__scan_room_uploads(the_installation, w_uploads):
+    (w_uploads / "r1").mkdir()
+    (w_uploads / "r1" / "a.txt").write_bytes(b"abc")
+    the_installation._config.room_configs = {
+        "r1": _quota_room(),
+        "new": _quota_room(),  # no directory yet:  empty, not an error
+    }
+
+    scans, findings = audit_rooms._scan_room_uploads(the_installation)
+
+    assert findings == {}
+    assert scans["r1"].stored_bytes == 3
+    assert scans["new"].stored_bytes == 0
+
+
+def test__scan_room_uploads_w_error(the_installation, w_uploads):
+    the_installation._config.room_configs = {"r1": _quota_room()}
+
+    with mock.patch("soliplex.util.scan_uploads", side_effect=OSError("EIO")):
+        scans, findings = audit_rooms._scan_room_uploads(the_installation)
+
+    assert scans == {}
+    assert findings == {"room_upload_scan": {"r1": "EIO"}}
+
+
+def _scan(stored_bytes=0, hidden=()):
+    return util.UploadsScan(
+        files={},
+        stored_bytes=stored_bytes,
+        hidden=list(hidden),
+    )
+
+
+@pytest.mark.parametrize(
+    "w_quota, w_used, exp_report",
+    [
+        (None, 10, None),
+        (100, 10, {"used_bytes": 10, "over_bytes": 0}),
+        (100, 100, {"used_bytes": 100, "over_bytes": 0}),
+        # Over quota:  reported, but never a finding.
+        (100, 112, {"used_bytes": 112, "over_bytes": 12}),
+    ],
+)
+def test__room_quota_reports(the_installation, w_quota, w_used, exp_report):
+    the_installation._config.rooms_upload_path = pathlib.Path("/uploads")
+    the_installation._config.room_configs = {"r1": _quota_room(w_quota)}
+
+    findings, reports = audit_rooms._room_quota_reports(
+        the_installation,
+        {"r1": _scan(w_used)},
+    )
+
+    assert findings == {}
+
+    if exp_report is None:
+        assert reports == {}
+    else:
+        assert reports == {
+            "r1": {
+                "quota_bytes": w_quota,
+                "env_name": None,
+                "uploads_configured": True,
+                **exp_report,
+            },
+        }
+
+
+def test__room_quota_reports_wo_uploads_path(the_installation):
+    # A quota with no uploads path has no effect:  reported, not a finding.
+    the_installation._config.rooms_upload_path = None
+    the_installation._config.room_configs = {"r1": _quota_room(100)}
+
+    findings, reports = audit_rooms._room_quota_reports(the_installation, {})
+
+    assert findings == {}
+    assert reports == {
+        "r1": {
+            "quota_bytes": 100,
+            "env_name": None,
+            "uploads_configured": False,
+        },
+    }
+
+
+def test__room_quota_reports_w_env(the_installation):
+    i_config = the_installation._config
+    i_config.rooms_upload_path = pathlib.Path("/uploads")
+    i_config.get_environment.side_effect = {"GOOD": "100"}.get
+    i_config.room_configs = {
+        "good": _quota_room("env:GOOD", i_config),
+        "bad": _quota_room("env:MISSING", i_config),
+    }
+
+    findings, reports = audit_rooms._room_quota_reports(
+        the_installation,
+        {"good": _scan(5), "bad": _scan(5)},
+    )
+
+    assert list(findings) == ["room_quotas"]
+    assert list(findings["room_quotas"]) == ["bad"]
+    assert "'MISSING'" in findings["room_quotas"]["bad"]
+    assert reports["good"]["env_name"] == "GOOD"
+    assert reports["good"]["quota_bytes"] == 100
+    assert "bad" not in reports
+
+
+NOW = 1_800_000_000.0
+STALE = NOW - audit_rooms.ORPHANED_UPLOAD_AGE_SECONDS - 1
+FRESH = NOW - 10
+
+
+@pytest.mark.parametrize(
+    "w_hidden, exp_orphans",
+    [
+        ([], None),
+        (
+            [
+                util.HiddenUpload(
+                    name=".soliplex-upload-a", size_bytes=7, mtime=FRESH
+                )
+            ],
+            None,
+        ),
+        (
+            [
+                util.HiddenUpload(
+                    name=".soliplex-upload-a", size_bytes=7, mtime=STALE
+                )
+            ],
+            [
+                {
+                    "name": ".soliplex-upload-a",
+                    "kind": "reservation",
+                    "size_bytes": 7,
+                    "age_seconds": audit_rooms.ORPHANED_UPLOAD_AGE_SECONDS + 1,
+                }
+            ],
+        ),
+        (
+            [util.HiddenUpload(name=".nfs0001", size_bytes=3, mtime=STALE)],
+            [
+                {
+                    "name": ".nfs0001",
+                    "kind": "nfs",
+                    "size_bytes": 3,
+                    "age_seconds": audit_rooms.ORPHANED_UPLOAD_AGE_SECONDS + 1,
+                }
+            ],
+        ),
+    ],
+)
+def test__room_orphan_reports(w_hidden, exp_orphans):
+    found = audit_rooms._room_orphan_reports(
+        {"r1": _scan(hidden=w_hidden)},
+        now=NOW,
+    )
+
+    if exp_orphans is None:
+        assert found == {}
+    else:
+        assert found == {"r1": exp_orphans}
+
+
+def test__room_orphan_reports_deletes_nothing(the_installation, w_uploads):
+    # End to end through a real scan:  orphans are reported, and left.
+    room_dir = w_uploads / "r1"
+    room_dir.mkdir()
+    orphan = room_dir / ".soliplex-upload-abc"
+    orphan.write_bytes(b"0123456789")
+    os.utime(orphan, (STALE, STALE))
+    the_installation._config.room_configs = {"r1": _quota_room()}
+
+    scans, _ = audit_rooms._scan_room_uploads(the_installation)
+    found = audit_rooms._room_orphan_reports(scans, now=NOW)
+
+    assert [o["name"] for o in found["r1"]] == [".soliplex-upload-abc"]
+    assert orphan.exists()

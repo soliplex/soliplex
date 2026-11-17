@@ -2,8 +2,10 @@ import contextlib
 import datetime
 import io
 import os
+import threading
 from unittest import mock
 
+import anyio
 import fastapi
 import pytest
 
@@ -11,6 +13,8 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import util
+from soliplex.config import quotas as config_quotas
 from soliplex.config import rooms as config_rooms
 from soliplex.views import room_file_uploads as room_views
 
@@ -36,6 +40,16 @@ def raises_httpexc(*, match, code, headers=None) -> pytest.raises:
             return exc.status_code == code
 
     return pytest.raises(fastapi.HTTPException, match=match, check=_check)
+
+
+@pytest.fixture(autouse=True)
+def fresh_upload_sync():
+    """Locks and limiters attach to an event loop:  one per test"""
+    room_views._ROOM_UPLOAD_LOCKS.clear()
+    room_views._UPLOAD_IO_LIMITER = None
+    yield
+    room_views._ROOM_UPLOAD_LOCKS.clear()
+    room_views._UPLOAD_IO_LIMITER = None
 
 
 @pytest.fixture
@@ -157,6 +171,7 @@ async def test_get_uploads_room_only(
     request.url_for.side_effect = download_url
 
     room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
     cuir.return_value = room_config
 
     the_installation = mock.create_autospec(
@@ -201,24 +216,34 @@ async def test_get_uploads_room_only(
         else:
             assert found.uploads == []
 
+        exp_total = sum(size for _, size in exp_stats.values())
+        assert found.total_size_bytes == exp_total
+        assert found.quota_bytes is None
+        assert found.available_bytes is None
+
     the_logger.debug.assert_called_once_with(
         loggers.UPLOADS_GET_ROOM,
     )
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.util.upload_files")
+@mock.patch("soliplex.util.scan_uploads")
 @mock.patch("soliplex.views.agui._check_user_in_room")
 async def test_get_uploads_room_w_unrepresentable_time(
     cuir,
-    upload_files,
+    scan_uploads,
     uploads_path,
 ):
     # A file's time can be set beyond year 9999, but the filesystem under
     # the test may not store it as set, so the stat is built by hand.
-    upload_files.return_value = {
-        "far.txt": os.stat_result((0,) * 8 + (253_402_300_800, 0)),
-    }
+    scan_uploads.return_value = util.UploadsScan(
+        files={"far.txt": os.stat_result((0,) * 8 + (253_402_300_800, 0))},
+        stored_bytes=0,
+        hidden=[],
+    )
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
+    cuir.return_value = room_config
     request = mock.create_autospec(fastapi.Request)
     request.url_for.return_value = f"{URL_PREFIX}/file"
     the_installation = mock.create_autospec(installation.Installation)
@@ -283,6 +308,7 @@ async def test_get_uploads_room_filename(
             file_path.write_text(f"filename: {TEST_FILENAME}")
 
     room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
     cuir.return_value = room_config
 
     the_installation = mock.create_autospec(
@@ -368,6 +394,7 @@ async def test_post_uploads_room(
 ):
     hwatr.return_value = w_has_write
     room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),
         filename=w_filename,
@@ -545,6 +572,7 @@ async def test_delete_uploads_room(
 ):
     hwatr.return_value = w_has_write
     room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
 
     the_installation = mock.create_autospec(
         installation.Installation,
@@ -732,4 +760,570 @@ async def test_delete_uploads_room_file_missing(
             the_audit=the_audit,
         )
 
+    the_audit.room_upload_deleted.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Quotas, reservations, and storage behaviour
+# ---------------------------------------------------------------------------
+
+RESERVATION_GLOB = f"{util.UPLOAD_RESERVATION_PREFIX}*"
+
+
+def _room_config_w_quota(quota_bytes):
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig(
+        _room_uploads_bytes=quota_bytes,
+    )
+    return room_config
+
+
+def _upload_file(content=TEST_CONTENT, filename=TEST_FILENAME, size=None):
+    return fastapi.UploadFile(
+        file=io.BytesIO(content),
+        filename=filename,
+        size=size,
+        headers={"Content-Type": "application/octet-stream"},
+    )
+
+
+class _Poster:
+    """Call 'post_uploads_room' with mocked dependencies for one room"""
+
+    def __init__(self, uploads_path, quota_bytes=None):
+        self.rooms_path = uploads_path / "rooms"
+        self.room_dir = self.rooms_path / TEST_ROOM_ID
+        self.the_installation = mock.create_autospec(installation.Installation)
+        self.the_installation.rooms_upload_path = str(self.rooms_path)
+        self.the_installation.get_room_config.return_value = (
+            _room_config_w_quota(quota_bytes)
+        )
+        self.the_logger = mock.create_autospec(loggers.LogWrapper)
+        self.the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
+
+    async def post(self, upload_file):
+        with mock.patch(
+            "soliplex.views.room_file_uploads.has_write_access_to_room",
+            return_value=True,
+        ):
+            return await room_views.post_uploads_room(
+                room_id=TEST_ROOM_ID,
+                upload_file=upload_file,
+                the_installation=self.the_installation,
+                the_admin_users=mock.create_autospec(authz.AdminUserPolicy),
+                the_room_authz=mock.create_autospec(
+                    authz.RoomAuthorizationPolicy
+                ),
+                the_user_claims=THE_USER_CLAIMS,
+                the_logger=self.the_logger,
+                the_authz_logger=mock.create_autospec(loggers.LogWrapper),
+                the_audit=self.the_audit,
+            )
+
+    def reservations(self):
+        return sorted(self.room_dir.glob(RESERVATION_GLOB))
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_quota, w_existing, exp_status",
+    [
+        pytest.param(None, b"", 204, id="no-quota"),
+        pytest.param(100, b"", 204, id="under"),
+        pytest.param(len(TEST_CONTENT), b"", 204, id="exactly-at"),
+        pytest.param(len(TEST_CONTENT) - 1, b"", 507, id="over"),
+        pytest.param(0, b"", 507, id="zero"),
+        # Replacing a file counts only the difference in size.
+        pytest.param(len(TEST_CONTENT), b"12345678", 204, id="replace-same"),
+        pytest.param(len(TEST_CONTENT) + 2, b"0123456789", 204, id="shrink"),
+    ],
+)
+async def test_post_uploads_room_w_quota(
+    uploads_path,
+    w_quota,
+    w_existing,
+    exp_status,
+):
+    poster = _Poster(uploads_path, w_quota)
+    target = poster.room_dir / TEST_FILENAME
+
+    if w_existing:
+        poster.room_dir.mkdir(parents=True)
+        target.write_bytes(w_existing)
+
+    if exp_status == 204:
+        response = await poster.post(_upload_file())
+
+        assert response.status_code == 204
+        assert target.read_bytes() == TEST_CONTENT
+        poster.the_audit.room_upload_added.assert_called_once()
+    else:
+        with raises_httpexc(
+            code=507,
+            match=loggers.UPLOADS_ROOM_QUOTA_EXCEEDED,
+        ) as exc_info:
+            await poster.post(_upload_file())
+
+        assert exc_info.value.detail == (
+            f"{loggers.UPLOADS_ROOM_QUOTA_EXCEEDED}: "
+            f"{len(TEST_CONTENT)} bytes requested, {w_quota} available"
+        )
+        assert not target.exists()
+        poster.the_audit.room_upload_added.assert_not_called()
+        poster.the_audit.room_upload_quota_exceeded.assert_called_once_with(
+            room_id=TEST_ROOM_ID,
+            filename=TEST_FILENAME,
+            quota_bytes=w_quota,
+            used_bytes=0,
+            upload_bytes=len(TEST_CONTENT),
+        )
+        poster.the_logger.error.assert_called_once_with(
+            loggers.UPLOADS_ROOM_QUOTA_EXCEEDED,
+            room_id=TEST_ROOM_ID,
+            quota_bytes=w_quota,
+            used_bytes=0,
+            upload_bytes=len(TEST_CONTENT),
+        )
+
+    assert poster.reservations() == []
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_counts_other_reservations(uploads_path):
+    # An upload in progress elsewhere holds its reservation at full size.
+    poster = _Poster(uploads_path, 20)
+    poster.room_dir.mkdir(parents=True)
+    other = poster.room_dir / f"{util.UPLOAD_RESERVATION_PREFIX}other"
+    other.write_bytes(b"x" * 15)
+
+    with raises_httpexc(code=507, match="5 available"):
+        await poster.post(_upload_file())
+
+    assert poster.reservations() == [other]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_filename",
+    [f"{util.UPLOAD_RESERVATION_PREFIX}abc", ".nfs0001"],
+)
+async def test_post_uploads_room_w_internal_name(uploads_path, w_filename):
+    poster = _Poster(uploads_path)
+
+    with raises_httpexc(code=400, match="Reserved upload filename"):
+        await poster.post(_upload_file(filename=w_filename))
+
+    assert not poster.room_dir.exists()
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_reported_size(uploads_path):
+    # 'UploadFile.size' is used when Starlette reports it.
+    poster = _Poster(uploads_path, len(TEST_CONTENT) - 1)
+
+    with raises_httpexc(code=507, match=f"{len(TEST_CONTENT)} bytes"):
+        await poster.post(_upload_file(size=len(TEST_CONTENT)))
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_spool_smaller_than_reported(uploads_path):
+    poster = _Poster(uploads_path)
+
+    await poster.post(_upload_file(size=100))
+
+    assert (poster.room_dir / TEST_FILENAME).read_bytes() == TEST_CONTENT
+    assert poster.reservations() == []
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_spool_larger_than_reported(uploads_path):
+    poster = _Poster(uploads_path)
+
+    with pytest.raises(room_views.UploadLargerThanReserved):
+        await poster.post(_upload_file(size=2))
+
+    assert not (poster.room_dir / TEST_FILENAME).exists()
+    assert poster.reservations() == []
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_store_failure(uploads_path):
+    poster = _Poster(uploads_path)
+    poster.room_dir.mkdir(parents=True)
+    target = poster.room_dir / TEST_FILENAME
+    target.write_bytes(b"original")
+
+    with (
+        mock.patch("os.replace", side_effect=OSError("EFS gone")),
+        raises_httpexc(
+            code=503,
+            match=loggers.UPLOADS_ROOM_STORAGE_UNAVAILABLE,
+            headers={"Retry-After": "5"},
+        ),
+    ):
+        await poster.post(_upload_file())
+
+    assert target.read_bytes() == b"original"
+    assert poster.reservations() == []
+    poster.the_logger.exception.assert_called_once_with(
+        loggers.UPLOADS_ROOM_STORAGE_UNAVAILABLE,
+        room_id=TEST_ROOM_ID,
+    )
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_scan_failure(uploads_path):
+    poster = _Poster(uploads_path, 100)
+
+    with (
+        mock.patch(
+            "soliplex.util.scan_uploads",
+            side_effect=OSError("EIO"),
+        ),
+        raises_httpexc(
+            code=503,
+            match=loggers.UPLOADS_ROOM_STORAGE_UNAVAILABLE,
+        ),
+    ):
+        await poster.post(_upload_file())
+
+    assert poster.reservations() == []
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_ftruncate_failure(uploads_path):
+    poster = _Poster(uploads_path)
+
+    with (
+        mock.patch("os.ftruncate", side_effect=OSError("ENOSPC")),
+        raises_httpexc(
+            code=503,
+            match=loggers.UPLOADS_ROOM_STORAGE_UNAVAILABLE,
+        ),
+    ):
+        await poster.post(_upload_file())
+
+    assert poster.reservations() == []
+
+
+def test__discard_reservation_suppresses_oserror(temp_dir):
+    reservation = temp_dir / "reservation"
+
+    with mock.patch.object(
+        type(reservation),
+        "unlink",
+        side_effect=OSError("EIO"),
+    ):
+        room_views._discard_reservation(reservation)  # does not raise
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_busy_room(uploads_path):
+    poster = _Poster(uploads_path)
+    lock = room_views._room_upload_lock(TEST_ROOM_ID)
+    await lock.acquire()
+
+    try:
+        with (
+            mock.patch.object(
+                room_views,
+                "ROOM_UPLOAD_LOCK_TIMEOUT_SECONDS",
+                0.01,
+            ),
+            raises_httpexc(
+                code=503,
+                match=loggers.UPLOADS_ROOM_BUSY,
+                headers={"Retry-After": "5"},
+            ),
+        ):
+            await poster.post(_upload_file())
+    finally:
+        lock.release()
+
+    assert not poster.room_dir.exists()  # nothing reserved
+    poster.the_logger.exception.assert_called_once_with(
+        loggers.UPLOADS_ROOM_BUSY,
+        room_id=TEST_ROOM_ID,
+    )
+
+
+def _blocking(func, entered, release):
+    """Wrap a worker-thread function to report entry, then wait"""
+
+    def wrapper(*args):
+        entered.set()
+        assert release.wait(5)
+        return func(*args)
+
+    return wrapper
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_copies_outside_lock(uploads_path):
+    # While A's copy is held, B's reservation step runs (the lock is free)
+    # and sees A's reservation at full size:  B alone would fit, but the
+    # two together do not.
+
+    poster_a = _Poster(uploads_path, len(TEST_CONTENT) * 2 - 1)
+    poster_b = _Poster(uploads_path, len(TEST_CONTENT) * 2 - 1)
+    entered, release = threading.Event(), threading.Event()
+    real_store = room_views._store_room_upload
+
+    async with anyio.create_task_group() as tg:
+        with mock.patch.object(
+            room_views,
+            "_store_room_upload",
+            _blocking(real_store, entered, release),
+        ):
+            tg.start_soon(poster_a.post, _upload_file(filename="a.txt"))
+            await anyio.to_thread.run_sync(entered.wait, 5)
+
+        assert not room_views._room_upload_lock(TEST_ROOM_ID).locked()
+
+        with raises_httpexc(
+            code=507, match=loggers.UPLOADS_ROOM_QUOTA_EXCEEDED
+        ):
+            await poster_b.post(_upload_file(filename="b.txt"))
+
+        release.set()
+
+    assert (poster_a.room_dir / "a.txt").read_bytes() == TEST_CONTENT
+    assert not (poster_a.room_dir / "b.txt").exists()
+    assert poster_a.reservations() == []
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_copies_in_parallel(uploads_path):
+    # Two uploads which both fit are both copying at once.
+
+    poster = _Poster(uploads_path, 1000)
+    barrier = threading.Barrier(2, timeout=5)
+    real_store = room_views._store_room_upload
+
+    def store_at_barrier(*args):
+        barrier.wait()  # breaks, raising, unless both copies run at once
+        return real_store(*args)
+
+    with mock.patch.object(
+        room_views,
+        "_store_room_upload",
+        store_at_barrier,
+    ):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(poster.post, _upload_file(filename="a.txt"))
+            tg.start_soon(poster.post, _upload_file(filename="b.txt"))
+
+    assert sorted(p.name for p in poster.room_dir.iterdir()) == [
+        "a.txt",
+        "b.txt",
+    ]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_step", ["_reserve_room_upload", "_store_room_upload"]
+)
+async def test_post_uploads_room_cancelled(uploads_path, w_step):
+    # Cancelled while either step's thread is running:  the thread is not
+    # abandoned, the lock is held until the reserve thread returns, and no
+    # reservation is left behind either way.
+
+    poster = _Poster(uploads_path)
+    entered, release = threading.Event(), threading.Event()
+    real_func = getattr(room_views, w_step)
+
+    with mock.patch.object(
+        room_views,
+        w_step,
+        _blocking(real_func, entered, release),
+    ):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(poster.post, _upload_file())
+            await anyio.to_thread.run_sync(entered.wait, 5)
+            tg.cancel_scope.cancel()
+
+            if w_step == "_reserve_room_upload":
+                # Still held:  the reserve thread has not returned.
+                assert room_views._room_upload_lock(TEST_ROOM_ID).locked()
+
+            release.set()
+
+    assert poster.reservations() == []
+    assert not room_views._room_upload_lock(TEST_ROOM_ID).locked()
+    target = poster.room_dir / TEST_FILENAME
+
+    if w_step == "_store_room_upload":
+        # The copy ran to completion:  the file landed, and is audited.
+        assert target.read_bytes() == TEST_CONTENT
+        poster.the_audit.room_upload_added.assert_called_once()
+    else:
+        # Cancelled before the store step:  nothing landed.
+        assert not target.exists()
+        poster.the_audit.room_upload_added.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_room_upload_lock_table_is_weak(uploads_path):
+    poster = _Poster(uploads_path)
+
+    await poster.post(_upload_file())
+
+    assert TEST_ROOM_ID not in room_views._ROOM_UPLOAD_LOCKS
+
+
+def test__upload_io_limiter_is_shared():
+    first = room_views._upload_io_limiter()
+
+    assert room_views._upload_io_limiter() is first
+    assert first.total_tokens == room_views.UPLOAD_IO_THREADS
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_quota, w_files, exp_total, exp_available",
+    [
+        (None, {}, 0, None),
+        (100, {"a.txt": b"abc"}, 3, 97),
+        (100, {"a.txt": b"abc", ".nfs01": b"xy"}, 5, 95),
+        (2, {"a.txt": b"abc"}, 3, 0),  # over quota
+        (
+            100,
+            {f"{util.UPLOAD_RESERVATION_PREFIX}x": b"0123456789"},
+            10,
+            90,
+        ),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_w_quota(
+    cuir,
+    uploads_path,
+    w_quota,
+    w_files,
+    exp_total,
+    exp_available,
+):
+    room_dir = uploads_path / "rooms" / TEST_ROOM_ID
+    room_dir.mkdir(parents=True)
+
+    for name, content in w_files.items():
+        (room_dir / name).write_bytes(content)
+
+    cuir.return_value = _room_config_w_quota(w_quota)
+    request = mock.create_autospec(fastapi.Request)
+    request.url_for.return_value = f"{URL_PREFIX}/file"
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+
+    found = await room_views.get_uploads_room(
+        request=request,
+        room_id=TEST_ROOM_ID,
+        the_installation=the_installation,
+        the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=mock.create_autospec(loggers.LogWrapper),
+    )
+
+    assert found.total_size_bytes == exp_total
+    assert found.quota_bytes == w_quota
+    assert found.available_bytes == exp_available
+    assert [f_up.filename for f_up in found.uploads] == [
+        name for name in w_files if not util.is_internal_upload_name(name)
+    ]
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.util.scan_uploads")
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_w_scan_failure(
+    cuir, scan_uploads, uploads_path
+):
+    scan_uploads.side_effect = OSError("EIO")
+    cuir.return_value = _room_config_w_quota(None)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with raises_httpexc(
+        code=503,
+        match=loggers.UPLOADS_ROOM_STORAGE_UNAVAILABLE,
+        headers={"Retry-After": "5"},
+    ):
+        await room_views.get_uploads_room(
+            request=mock.create_autospec(fastapi.Request),
+            room_id=TEST_ROOM_ID,
+            the_installation=the_installation,
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    the_logger.exception.assert_called_once_with(
+        loggers.UPLOADS_ROOM_STORAGE_UNAVAILABLE,
+        room_id=TEST_ROOM_ID,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_filename",
+    [f"{util.UPLOAD_RESERVATION_PREFIX}abc", ".nfs0001"],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_filename_w_internal_name(
+    cuir,
+    uploads_path,
+    w_filename,
+):
+    room_dir = uploads_path / "rooms" / TEST_ROOM_ID
+    room_dir.mkdir(parents=True)
+    (room_dir / w_filename).write_bytes(b"internal")
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+
+    with raises_httpexc(code=404, match="No room upload"):
+        await room_views.get_uploads_room_filename(
+            room_id=TEST_ROOM_ID,
+            filename=w_filename,
+            the_installation=the_installation,
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=mock.create_autospec(loggers.LogWrapper),
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_filename",
+    [f"{util.UPLOAD_RESERVATION_PREFIX}abc", ".nfs0001"],
+)
+@mock.patch("soliplex.views.room_file_uploads.has_write_access_to_room")
+async def test_delete_uploads_room_w_internal_name(
+    hwatr,
+    uploads_path,
+    w_filename,
+):
+    hwatr.return_value = True
+    room_dir = uploads_path / "rooms" / TEST_ROOM_ID
+    room_dir.mkdir(parents=True)
+    internal = room_dir / w_filename
+    internal.write_bytes(b"internal")
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+    the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
+
+    with raises_httpexc(code=404, match="No room upload"):
+        await room_views.delete_uploads_room(
+            room_id=TEST_ROOM_ID,
+            filename=w_filename,
+            the_installation=the_installation,
+            the_admin_users=mock.create_autospec(authz.AdminUserPolicy),
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=mock.create_autospec(loggers.LogWrapper),
+            the_authz_logger=mock.create_autospec(loggers.LogWrapper),
+            the_audit=the_audit,
+        )
+
+    assert internal.exists()
     the_audit.room_upload_deleted.assert_not_called()

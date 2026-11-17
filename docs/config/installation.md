@@ -126,6 +126,16 @@ name one of the migration policies, and anything else is an error rather
 than a value used literally.  See
 [Migrations](dburis.md#migrations).
 
+In a room configuration:
+
+- `quotas.room_uploads_bytes`
+
+Also constrained by its own value domain: a literal has to be a
+non-negative integer, and the variable's value plain digits; anything
+else is an error rather than a value used literally.  Unlike the Logfire
+fields below, a name with no value is an error too.  See
+[Quotas](rooms.md#quotas).
+
 In the `logfire:` configuration (see [Logfire](logfire.md)):
 
 - `service_name`, `service_version`, and `environment`
@@ -304,6 +314,80 @@ skill_configs:
 With this configuration, discovered skills other than `bare-bones` cannot
 be referenced by other parts of the configuration, such as rooms.
 
+## Upload Paths
+
+Two top-level options turn on file uploads, each naming a directory
+(relative paths are evaluated relative to the installation directory):
+
+```yaml
+rooms_upload_path: ../uploads/rooms
+threads_upload_path: ../uploads/threads
+```
+
+- `rooms_upload_path` (optional) -- holds each room's shared uploads, in
+  `<rooms_upload_path>/<room_id>`. Uploading needs the room's `WRITE`
+  permission. A room may cap the total size of its uploads with
+  [`quotas.room_uploads_bytes`](rooms.md#quotas). If unset, room uploads
+  are disabled.
+- `threads_upload_path` (optional) -- holds each thread's uploads, in
+  `<threads_upload_path>/<thread_id>`, for rooms which configure the
+  sandbox skill (see [Uploaded files in the
+  sandbox](#uploaded-files-in-the-sandbox)). If unset, thread uploads are
+  disabled.
+
+Each upload directory may hold hidden files of soliplex's own: an upload
+in progress is written through a `.soliplex-upload-<id>` reservation file,
+then renamed into place, and on NFS (EFS included) the client may leave
+`.nfs*` files behind. They are never listed, downloaded, or shown to the
+agent's tools. Leftovers from an upload interrupted by a crash are
+reported by [`soliplex-cli audit rooms`](../server/cli.md#audit-rooms),
+which explains how to remove them.
+
+### The temporary directory
+
+Starlette writes every upload larger than 1 MB to the temporary directory
+(`tempfile.gettempdir()`: `TMPDIR`, else `/tmp`) before soliplex sees it,
+and keeps it there until the request ends. Every upload in flight holds
+its full size there, including one waiting for its room's turn.
+
+- **If many large uploads are expected, don't use a memory-backed
+  temporary directory** -- a tmpfs `/tmp`, common in read-only
+  containers. Each upload there takes its full size in RAM, so a few
+  large uploads at once can exhaust the container's memory.
+- **Prefer local, disk-backed storage** for `TMPDIR`: the host's or the
+  container's own disk. Soliplex always copies the spooled file into the
+  uploads directory, never renames it, so putting `TMPDIR` on the uploads
+  filesystem gains nothing.
+- A network filesystem such as EFS works for `TMPDIR`, but is not
+  recommended: each upload would cross the network twice, and receiving
+  it would be bound by the filesystem's throughput.
+- Size it for the largest expected upload, times the number of uploads
+  expected at once. When it fills up, uploads fail with `ENOSPC` (HTTP
+  500) before soliplex's handler runs.
+
+### Uploads on EFS
+
+The upload directories may live on a network filesystem such as Amazon
+EFS, shared by several soliplex replicas:
+
+- Every listing, quota check and copy is a network operation. Soliplex
+  runs them in worker threads, so slow storage slows uploads without
+  stalling other requests or streams.
+- Copy speed depends on the filesystem's throughput mode and, for
+  bursting throughput, its credits. Copies run in parallel, so a slow one
+  holds up only its own upload; it can still outlast a proxy's timeout
+  for that client, though the upload completes on the server.
+- Keep the proxy's timeout above 30 seconds -- the longest an upload
+  waits for its room's quota check before answering `503` -- so that the
+  client sees the `503` rather than a proxy's `504`.
+- Mount with the EFS defaults (a `hard`, NFSv4.1 mount, as
+  `amazon-efs-utils` sets up). A `soft` mount turns stalls into I/O
+  errors, which uploads answer with `503`.
+- Several replicas sharing the tree make room quotas *soft* (see
+  [Quotas](rooms.md#quotas)). Run `soliplex-cli audit rooms` on a
+  schedule, without `--quiet`, and watch its `NOTE:` lines for rooms over
+  quota and for orphaned upload files.
+
 ## Sandbox Configuration
 
 The `sandbox_config` stanza configures the bubblewrap sandbox that backs the
@@ -357,7 +441,8 @@ sandbox_config:
 ### Uploaded files in the sandbox
 
 When the top-level `rooms_upload_path` / `threads_upload_path` options are
-configured (these are installation-level options, not part of `sandbox_config`),
+configured (these are installation-level options, not part of
+`sandbox_config`: see [Upload Paths](#upload-paths)),
 the skill mounts the corresponding uploaded files into the sandbox
 **read-only**, as the `room` and `thread` volumes. The agent discovers their
 names by listing those directories with the `run` tool, which records a

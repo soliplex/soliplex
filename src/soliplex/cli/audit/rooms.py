@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import pathlib
+import time
 import warnings
 
 import typer
@@ -8,11 +10,13 @@ from haiku.rag import client as hr_client
 
 from soliplex import installation
 from soliplex import models
+from soliplex import util
 from soliplex.cli import types
 from soliplex.cli.audit import _common as audit_common
 from soliplex.cli.audit import interpolation as audit_interpolation
 from soliplex.cli.audit import non_local_paths as audit_non_local
 from soliplex.config import agui as config_agui
+from soliplex.config import quotas as config_quotas
 from soliplex.config import rag as config_rag
 
 
@@ -76,6 +80,173 @@ def _mismatched_room_ids(
         return {"rooms_id_mismatch": findings}
 
     return {}
+
+
+# An internal upload file this old belongs to an upload which will never
+# finish:  a live copy keeps its reservation's 'mtime' moving.  Generous,
+# to cover clock skew between this host and the storage server.
+ORPHANED_UPLOAD_AGE_SECONDS = 3600
+
+
+def _scan_room_uploads(
+    the_installation: installation.Installation,
+) -> tuple[dict[str, util.UploadsScan], dict]:
+    """Scan each room's uploads directory once:  '(scans, findings)'
+
+    No scans when the installation configures no room uploads.  A room
+    whose directory does not exist yet (a new room) scans as empty;  one
+    which cannot be read is a 'room_upload_scan' finding.
+    """
+    uploads_path = the_installation.rooms_upload_path
+
+    if uploads_path is None:
+        return {}, {}
+
+    scans = {}
+    errors: dict[str, str] = {}
+
+    for room_id in the_installation._config.room_configs:
+        try:
+            scans[room_id] = util.scan_uploads(
+                pathlib.Path(uploads_path) / room_id,
+            )
+        except OSError as exc:
+            errors[room_id] = str(exc)
+
+    if errors:
+        return scans, {"room_upload_scan": errors}
+
+    return scans, {}
+
+
+def _room_quota_reports(
+    the_installation: installation.Installation,
+    scans: dict[str, util.UploadsScan],
+) -> tuple[dict, dict]:
+    """Report each room's upload quota:  '(findings, reports)'
+
+    A quota which will not resolve is a 'room_quotas' finding.  Usage over
+    the quota is *not* a finding, only reported:  the quota is soft across
+    server processes, and an overage in one room must not fail an audit
+    run, say, to provision another.
+    """
+    errors: dict[str, str] = {}
+    reports: dict[str, dict] = {}
+    uploads_configured = the_installation.rooms_upload_path is not None
+
+    for room_id, room_config in the_installation._config.room_configs.items():
+        quotas = room_config.quotas
+
+        try:
+            quota_bytes = quotas.room_uploads_bytes
+        except config_quotas.InvalidQuotasConfig as exc:
+            errors[room_id] = str(exc)
+            continue
+
+        if quota_bytes is None:
+            continue
+
+        report = {
+            "quota_bytes": quota_bytes,
+            "env_name": quotas.room_uploads_bytes_env_name,
+            "uploads_configured": uploads_configured,
+        }
+        scan = scans.get(room_id)
+
+        if scan is not None:
+            report["used_bytes"] = scan.stored_bytes
+            report["over_bytes"] = max(scan.stored_bytes - quota_bytes, 0)
+
+        reports[room_id] = report
+
+    if errors:
+        return {"room_quotas": errors}, reports
+
+    return {}, reports
+
+
+def _orphan_kind(name: str) -> str:
+    if name.startswith(util.UPLOAD_RESERVATION_PREFIX):
+        return "reservation"
+
+    return "nfs"
+
+
+def _room_orphan_reports(
+    scans: dict[str, util.UploadsScan],
+    *,
+    now: float,
+) -> dict[str, list[dict]]:
+    """Report each room's orphaned internal upload files
+
+    Only reported, never a finding, and never removed:  a replica cannot
+    tell another's slow upload from an abandoned one except by age (see
+    'ORPHANED_UPLOAD_AGE_SECONDS').
+    """
+    reports = {}
+
+    for room_id, scan in scans.items():
+        orphans = [
+            {
+                "name": hidden.name,
+                "kind": _orphan_kind(hidden.name),
+                "size_bytes": hidden.size_bytes,
+                "age_seconds": int(now - hidden.mtime),
+            }
+            for hidden in scan.hidden
+            if now - hidden.mtime > ORPHANED_UPLOAD_AGE_SECONDS
+        ]
+
+        if orphans:
+            reports[room_id] = orphans
+
+    return reports
+
+
+def _print_room_quota_report(
+    tc_print,
+    quota_report: dict,
+):  # pragma NO COVER UI ONLY
+    quota_bytes = quota_report["quota_bytes"]
+    env_name = quota_report["env_name"]
+    source = f" (from env:{env_name})" if env_name else ""
+    tc_print()
+
+    if not quota_report["uploads_configured"]:
+        tc_print(f"   Room uploads quota: {quota_bytes} bytes{source}")
+        tc_print("   NOTE: the quota has no effect: no 'rooms_upload_path'")
+        return
+
+    used_bytes = quota_report["used_bytes"]
+    pct = f"{used_bytes * 100 // quota_bytes}%" if quota_bytes else "-"
+    tc_print(
+        f"   Room uploads quota: {quota_bytes} bytes{source} "
+        f"(used {used_bytes}, {pct})"
+    )
+
+    if quota_report["over_bytes"]:
+        tc_print(
+            "   NOTE: room uploads OVER QUOTA by "
+            f"{quota_report['over_bytes']} bytes"
+        )
+
+
+def _print_room_orphan_report(
+    tc_print,
+    orphans: list[dict],
+):  # pragma NO COVER UI ONLY
+    orphan_bytes = sum(orphan["size_bytes"] for orphan in orphans)
+    tc_print()
+    tc_print(
+        f"   NOTE: {len(orphans)} orphaned upload files, "
+        f"{orphan_bytes} bytes (counted against any quota)"
+    )
+
+    for orphan in orphans:
+        tc_print(
+            f"   - {orphan['name']:40} {orphan['kind']:11} "
+            f"{orphan['size_bytes']} bytes, {orphan['age_seconds']}s old"
+        )
 
 
 def _iter_room_rag_candidates(room_config):
@@ -202,6 +373,17 @@ def _audit_rooms_section(
     errors |= mismatched
     mismatched_rooms = mismatched.get("rooms_id_mismatch", {})
 
+    upload_scans, scan_errors = _scan_room_uploads(the_installation)
+    errors |= scan_errors
+    scan_failed_rooms = scan_errors.get("room_upload_scan", {})
+    quota_errors, quota_reports = _room_quota_reports(
+        the_installation,
+        upload_scans,
+    )
+    errors |= quota_errors
+    quota_failed_rooms = quota_errors.get("room_quotas", {})
+    orphan_reports = _room_orphan_reports(upload_scans, now=time.time())
+
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_rooms = the_installation._config.room_configs
 
@@ -225,6 +407,25 @@ def _audit_rooms_section(
             non_local_rooms.get(room_config.id, {}),
             "  ",
         )
+
+        quota_exc = quota_failed_rooms.get(room_config.id)
+        if quota_exc is not None:
+            tc_print(f"  ERROR: {quota_exc}")
+
+        scan_exc = scan_failed_rooms.get(room_config.id)
+        if scan_exc is not None:
+            tc_print(f"  ERROR: room uploads cannot be read: {scan_exc}")
+
+        quota_report = quota_reports.get(room_config.id)
+        if quota_report is not None and (
+            "used_bytes" in quota_report
+            or not quota_report["uploads_configured"]
+        ):
+            _print_room_quota_report(tc_print, quota_report)
+
+        orphans = orphan_reports.get(room_config.id)
+        if orphans:
+            _print_room_orphan_report(tc_print, orphans)
 
         room_features = room_config.agui_feature_names
         if room_features:

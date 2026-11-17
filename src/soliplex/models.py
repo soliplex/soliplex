@@ -18,6 +18,7 @@ from soliplex.config import authsystem as config_authsystem
 from soliplex.config import completions as config_completions
 from soliplex.config import installation as config_installation
 from soliplex.config import quizzes as config_quizzes
+from soliplex.config import quotas as config_quotas
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
@@ -258,6 +259,20 @@ class AGUI_Feature(pydantic.BaseModel):
         )
 
 
+class RoomQuotas(pydantic.BaseModel):
+    room_uploads_bytes: int | None = pydantic.Field(
+        default=None,
+        description=(
+            "Cap on the bytes stored in the room's uploads, counting "
+            "uploads in progress; null means no limit"
+        ),
+    )
+
+    @classmethod
+    def from_config(cls, quotas_config: config_quotas.QuotasConfig):
+        return cls(room_uploads_bytes=quotas_config.room_uploads_bytes)
+
+
 class Room(pydantic.BaseModel):
     id: str
     name: str
@@ -273,6 +288,7 @@ class Room(pydantic.BaseModel):
     allow_mcp: bool
     has_thread_uploads: bool
     has_room_uploads: bool
+    quotas: RoomQuotas = pydantic.Field(default_factory=RoomQuotas)
     user_has_write: bool = False
 
     @classmethod
@@ -317,6 +333,7 @@ class Room(pydantic.BaseModel):
             allow_mcp=room_config.allow_mcp,
             has_thread_uploads=room_config.has_thread_uploads,
             has_room_uploads=room_config.has_room_uploads,
+            quotas=RoomQuotas.from_config(room_config.quotas),
         )
 
 
@@ -732,6 +749,26 @@ class FileUpload(pydantic.BaseModel):
 class RoomUploads(pydantic.BaseModel):
     room_id: str
     uploads: list[FileUpload]
+    # Counts regular files, uploads in progress included, but not
+    # symlinks:  so it may differ from the sum of 'uploads[].size_bytes'
+    # either way (links are listed, reservations are not).
+    total_size_bytes: int = pydantic.Field(
+        default=0,
+        description=(
+            "Bytes counted against the room's quota: stored files and "
+            "uploads in progress, but not operator-linked files"
+        ),
+    )
+    quota_bytes: int | None = pydantic.Field(
+        default=None,
+        description="The room's upload quota; null means no limit",
+    )
+    available_bytes: int | None = pydantic.Field(
+        default=None,
+        description=(
+            "max(quota_bytes - total_size_bytes, 0); null means no limit"
+        ),
+    )
 
 
 class ThreadUploads(pydantic.BaseModel):
