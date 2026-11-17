@@ -3823,7 +3823,7 @@ def test_installationconfig_skill_configs_permissive_default():
 def test_installationconfig_skill_configs_empty_availability(
     no_skill_discovery,
 ):
-    # Sanity check: no whitelist + no discovered skills → empty map, and
+    # Sanity check: no allow-list + no discovered skills → empty map, and
     # the loader is consulted exactly once via the cached property.
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
 
@@ -3835,8 +3835,8 @@ def test_installationconfig_skill_configs_empty_availability(
     ].assert_called_once_with(i_config)
 
 
-def test_installationconfig_skill_configs_w_whitelist():
-    # A filesystem whitelist suppresses non-listed filesystem skills.
+def test_installationconfig_skill_configs_w_allow_list():
+    # A filesystem allow-list suppresses non-listed filesystem skills.
     fs_skill = object()
     other_fs = object()
 
@@ -3885,7 +3885,7 @@ def test_resolve_skill_configs_permissive_default_returns_available():
     }
 
 
-def test_resolve_skill_configs_whitelist():
+def test_resolve_skill_configs_allow_list():
     named_fs = object()
     other_fs = object()
     explicit = [{"kind": "filesystem", "skill_name": "named-fs"}]

@@ -293,7 +293,7 @@ filesystem_skills_paths:
 ## Selecting Skill Configurations
 
 All discovered filesystem skills are enabled by default. If `skill_configs`
-contains any entries, it acts as a whitelist. For example:
+contains any entries, it acts as an allow-list. For example:
 
 ```yaml
 skill_configs:
