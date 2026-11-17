@@ -10,6 +10,7 @@ import pytest
 import yaml
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import settings as ai_settings
+from soliplex_a2ui import capability as a2ui_capability
 
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
@@ -1730,3 +1731,24 @@ def test_get_model_from_config(
         oai_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
+
+
+def test_agent_capability_registry_includes_a2ui():
+    registry = config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME
+
+    assert registry["A2UICapability"] is a2ui_capability.A2UICapability
+    for name, klass in ai_capabilities.CAPABILITY_TYPES.items():
+        assert registry[name] is klass
+
+
+def test_agentcapabilityconfig_builds_a2ui(temp_dir):
+    acc = config_agents.AgentCapabilityConfig.from_yaml(
+        temp_dir / "config.yaml",
+        {"name": "A2UICapability", "kwargs": {"max_retries": 2}},
+    )
+
+    found = acc.as_capability
+
+    assert isinstance(found, a2ui_capability.A2UICapability)
+    assert found.max_retries == 2
+    assert found.model is None

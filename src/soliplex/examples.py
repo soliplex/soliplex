@@ -9,6 +9,7 @@ from collections import abc
 
 import jsonpatch
 import pydantic_ai
+import soliplex_a2ui
 from ag_ui import core as agui_core
 from pydantic_ai import messages as ai_messages
 from pydantic_ai import output as ai_output
@@ -105,6 +106,69 @@ async def faux_tool(
     return pydantic_ai.ToolReturn(
         return_value="something random",
         metadata=metadata,
+    )
+
+
+def a2ui_name_form_operations(surface_id: str) -> list[dict[str, typing.Any]]:
+    """A card asking for a name, with a button sending it back"""
+
+    def op(kind: str, **body) -> dict[str, typing.Any]:
+        return {"version": "1.0", kind: {"surfaceId": surface_id, **body}}
+
+    return [
+        op("createSurface", catalogId=soliplex_a2ui.BASIC_CATALOG_ID),
+        op(
+            "updateComponents",
+            components=[
+                {"id": "root", "component": "Card", "child": "form"},
+                {
+                    "id": "form",
+                    "component": "Column",
+                    "children": ["prompt", "name_field", "submit"],
+                },
+                {
+                    "id": "prompt",
+                    "component": "Text",
+                    "text": "What should I call you?",
+                },
+                {
+                    "id": "name_field",
+                    "component": "TextField",
+                    "label": "Name",
+                    "value": {"@path": "/name"},
+                },
+                {
+                    "id": "submit",
+                    "component": "Button",
+                    "child": "submit_label",
+                    "variant": "primary",
+                    "action": {
+                        "event": {
+                            "name": "submit_name",
+                            "context": {"name": {"@path": "/name"}},
+                        },
+                    },
+                },
+                {"id": "submit_label", "component": "Text", "text": "Submit"},
+            ],
+        ),
+        op("updateDataModel", path="/", value={"name": ""}),
+    ]
+
+
+async def a2ui_name_form(
+    ctx: pydantic_ai.RunContext,
+) -> pydantic_ai.ToolReturn:
+    """Show the user a form asking for their name"""
+    tool_call_id = ctx.tool_call_id or "unknown"
+    operations = a2ui_name_form_operations(f"name_form_{tool_call_id}")
+
+    return pydantic_ai.ToolReturn(
+        return_value=(
+            "Showed the user a form asking for their name. "
+            "Their answer arrives as an 'A2UI user action' message."
+        ),
+        metadata=[soliplex_a2ui.surface_event(tool_call_id, operations)],
     )
 
 
