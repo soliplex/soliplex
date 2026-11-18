@@ -48,6 +48,13 @@ EMPTY_RUN_AGENT_INPUT = agui_core.RunAgentInput(
     forwarded_props=None,
 )
 
+# The client may omit the collections, which then read as 'None'.
+OMITTED_RUN_AGENT_INPUT = agui_core.RunAgentInput(
+    thread_id=THREAD_UUID,
+    run_id=RUN_UUID,
+    messages=[],
+)
+
 FULL_RUN_AGENT_INPUT = agui_core.RunAgentInput(
     thread_id=THREAD_UUID,
     run_id=RUN_UUID,
@@ -80,22 +87,20 @@ TEXT_MESSAGE_CHUNK_EVENT = agui_core.TextMessageChunkEvent(
     delta=TEXT_MESSAGE_DELTA,
 )
 
-THINKING_TEXT_MESSAGE_ID = str(uuid.uuid4())
-THINKING_TEXT_MESSAGE_DELTA = "delta - thinking"
+REASONING_MESSAGE_ID = str(uuid.uuid4())
+REASONING_MESSAGE_DELTA = "delta - reasoning"
 
-THINKING_TEXT_MESSAGE_START_EVENT = agui_core.ThinkingTextMessageStartEvent(
-    message_id=THINKING_TEXT_MESSAGE_ID,
+REASONING_MESSAGE_START_EVENT = agui_core.ReasoningMessageStartEvent(
+    message_id=REASONING_MESSAGE_ID,
 )
 
-THINKING_TEXT_MESSAGE_CONTENT_EVENT = (
-    agui_core.ThinkingTextMessageContentEvent(
-        message_id=THINKING_TEXT_MESSAGE_ID,
-        delta=THINKING_TEXT_MESSAGE_DELTA,
-    )
+REASONING_MESSAGE_CONTENT_EVENT = agui_core.ReasoningMessageContentEvent(
+    message_id=REASONING_MESSAGE_ID,
+    delta=REASONING_MESSAGE_DELTA,
 )
 
-THINKING_TEXT_MESSAGE_END_EVENT = agui_core.ThinkingTextMessageEndEvent(
-    message_id=THINKING_TEXT_MESSAGE_ID,
+REASONING_MESSAGE_END_EVENT = agui_core.ReasoningMessageEndEvent(
+    message_id=REASONING_MESSAGE_ID,
 )
 
 TOOL_CALL_ID = str(uuid.uuid4())
@@ -135,7 +140,7 @@ TOOL_CALL_RESULT_EVENT = agui_core.ToolCallResultEvent(
 )
 
 STATE_SNAPTSHOT = {"foo": "Bar", "baz": "Quz"}
-STATE_DELTA = {"baz": "Spam"}
+STATE_DELTA = {"op": "add", "path": "/baz", "value": "Spam"}
 STATE_SNAPSHOT_EVENT = agui_core.StateSnapshotEvent(
     snapshot=STATE_SNAPTSHOT,
 )
@@ -162,7 +167,7 @@ MESSAGES_SNAPSHOT_EVENT = agui_core.MessagesSnapshotEvent(
 ACTIVITY_MESSAGE_ID = str(uuid.uuid4())
 ACTIVITY_TYPE = "test activity"
 ACTIVITY_CONTENT = {"waaa": "Blaah"}
-ACTIVITY_PATCH = {"waaa": "Oooph"}
+ACTIVITY_PATCH = {"op": "add", "path": "/waaa", "value": "Oooph"}
 ACTIVITY_SNAPSHOT_EVENT = agui_core.ActivitySnapshotEvent(
     message_id=ACTIVITY_MESSAGE_ID,
     activity_type=ACTIVITY_TYPE,
@@ -246,9 +251,9 @@ TEST_AGUI_RUN_EVENTS = [
     ACTIVITY_SNAPSHOT_EVENT,
     ACTIVITY_DELTA_EVENT,
     STEP_FINISHED_EVENT,
-    THINKING_TEXT_MESSAGE_START_EVENT,
-    THINKING_TEXT_MESSAGE_CONTENT_EVENT,
-    THINKING_TEXT_MESSAGE_END_EVENT,
+    REASONING_MESSAGE_START_EVENT,
+    REASONING_MESSAGE_CONTENT_EVENT,
+    REASONING_MESSAGE_END_EVENT,
     TOOL_CALL_START_EVENT,
     TOOL_CALL_ARGS_EVENT,
     TOOL_CALL_END_EVENT,
