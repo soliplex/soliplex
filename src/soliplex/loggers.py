@@ -149,6 +149,14 @@ ROOM_GET_SEARCH = "get search"
 ROOM_UNKNOWN_ROOM_ID = "unknown room id"
 ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available"
 ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id"
+ROOM_GET_DOCUMENT_FILE = "get document file"
+ROOM_GET_DOCUMENT_BOXES = "get document boxes"
+ROOM_UNKNOWN_DOCUMENT_ID = "unknown document id"
+ROOM_DOCUMENT_NOT_LOCAL = "document not a local file"
+ROOM_DOCUMENT_FILE_UNAVAILABLE = "document file unavailable"
+ROOM_DOCUMENT_BOXES_NOT_AVAILABLE = "document boxes not available"
+ROOM_INVALID_CHUNK_IDS = "invalid chunk ids"
+ROOM_INVALID_CONTEXT_REFS = "invalid context refs"
 
 STATS_GET_ROOMS_STATS = "get rooms stats"
 STATS_GET_ROOM_STATS = "get room stats"
@@ -224,6 +232,8 @@ AUDIT_RAG_ACTION_RETRIEVAL = "rag-retrieval"
 AUDIT_RAG_ACTION_SEARCH = "search"
 AUDIT_RAG_ACTION_CHUNK_VIZ = "chunk-viz"
 AUDIT_RAG_ACTION_DOC_LIST = "doc-list"
+AUDIT_RAG_ACTION_DOC_FILE = "doc-file"
+AUDIT_RAG_ACTION_DOC_BOXES = "doc-boxes"
 
 # sandbox-exec audit events (data change): the room agent's sandbox skill
 # executes code against the thread's writable working directory, or reads
@@ -691,6 +701,50 @@ class RAGAccessAuditLog(AuditLogWrapper):
         self._failed(
             AUDIT_RAG_ACCESS,
             action=AUDIT_RAG_ACTION_CHUNK_VIZ,
+            db_path=db_path,
+            selector=selector,
+            reason=reason,
+        )
+
+    def doc_file(
+        self, db_path: str, selector: typing.Any, result_refs: typing.Any
+    ):
+        self._succeeded(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_DOC_FILE,
+            db_path=db_path,
+            selector=selector,
+            result_refs=result_refs,
+        )
+
+    def doc_file_failed(
+        self, db_path: str | None, selector: typing.Any, reason: str
+    ):
+        self._failed(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_DOC_FILE,
+            db_path=db_path,
+            selector=selector,
+            reason=reason,
+        )
+
+    def doc_boxes(
+        self, db_path: str, selector: typing.Any, result_refs: typing.Any
+    ):
+        self._succeeded(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_DOC_BOXES,
+            db_path=db_path,
+            selector=selector,
+            result_refs=result_refs,
+        )
+
+    def doc_boxes_failed(
+        self, db_path: str | None, selector: typing.Any, reason: str
+    ):
+        self._failed(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_DOC_BOXES,
             db_path=db_path,
             selector=selector,
             reason=reason,
