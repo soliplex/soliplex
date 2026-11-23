@@ -44,9 +44,11 @@ def raises_httpexc(*, match, code, headers=None) -> pytest.raises:
 
 @pytest.fixture(autouse=True)
 def fresh_upload_sync():
-    """Limiters attach to an event loop:  one per test"""
+    """Locks and limiters attach to an event loop:  one per test"""
+    room_views._ROOM_UPLOAD_LOCKS.clear()
     room_views._UPLOAD_IO_LIMITER = None
     yield
+    room_views._ROOM_UPLOAD_LOCKS.clear()
     room_views._UPLOAD_IO_LIMITER = None
 
 
@@ -880,6 +882,142 @@ class _Poster:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_quota, w_existing, exp_status",
+    [
+        pytest.param(None, b"", 204, id="no-quota"),
+        pytest.param(100, b"", 204, id="under"),
+        pytest.param(len(TEST_CONTENT), b"", 204, id="exactly-at"),
+        pytest.param(len(TEST_CONTENT) - 1, b"", 507, id="over"),
+        pytest.param(0, b"", 507, id="zero"),
+        # Replacing a file counts only the difference in size.
+        pytest.param(len(TEST_CONTENT), b"12345678", 204, id="replace-same"),
+        pytest.param(len(TEST_CONTENT) + 2, b"0123456789", 204, id="shrink"),
+    ],
+)
+async def test_post_uploads_room_w_quota(
+    uploads_path,
+    w_quota,
+    w_existing,
+    exp_status,
+):
+    poster = _Poster(uploads_path, w_quota)
+    target = poster.room_dir / TEST_FILENAME
+
+    if w_existing:
+        poster.room_dir.mkdir(parents=True)
+        target.write_bytes(w_existing)
+
+    if exp_status == 204:
+        response = await poster.post(_upload_file())
+
+        assert response.status_code == 204
+        assert target.read_bytes() == TEST_CONTENT
+        poster.the_audit.room_upload_added.assert_called_once()
+    else:
+        with raises_httpexc(
+            code=507,
+            match=loggers.UPLOADS_ROOM_QUOTA_EXCEEDED,
+        ) as exc_info:
+            await poster.post(_upload_file())
+
+        assert exc_info.value.detail == (
+            f"{loggers.UPLOADS_ROOM_QUOTA_EXCEEDED}: "
+            f"{len(TEST_CONTENT)} bytes requested, {w_quota} available"
+        )
+        assert not target.exists()
+        poster.the_audit.room_upload_added.assert_not_called()
+        poster.the_audit.room_upload_quota_exceeded.assert_called_once_with(
+            room_id=TEST_ROOM_ID,
+            filename=TEST_FILENAME,
+            quota_bytes=w_quota,
+            used_bytes=0,
+            upload_bytes=len(TEST_CONTENT),
+        )
+        poster.the_logger.error.assert_called_once_with(
+            loggers.UPLOADS_ROOM_QUOTA_EXCEEDED,
+            room_id=TEST_ROOM_ID,
+            quota_bytes=w_quota,
+            used_bytes=0,
+            upload_bytes=len(TEST_CONTENT),
+        )
+
+    assert poster.partials() == []
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_counts_other_partials(uploads_path):
+    # An upload in progress elsewhere holds its partial at full size.
+    poster = _Poster(uploads_path, 20)
+    poster.room_dir.mkdir(parents=True)
+    other = poster.room_dir / f"{util.UPLOAD_PARTIAL_PREFIX}other"
+    other.write_bytes(b"x" * 15)
+
+    with raises_httpexc(code=507, match="5 available"):
+        await poster.post(_upload_file())
+
+    assert poster.partials() == [other]
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_reported_size(uploads_path):
+    # 'UploadFile.size' is used when Starlette reports it.
+    poster = _Poster(uploads_path, len(TEST_CONTENT) - 1)
+
+    with raises_httpexc(code=507, match=f"{len(TEST_CONTENT)} bytes"):
+        await poster.post(_upload_file(size=len(TEST_CONTENT)))
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_scan_failure(uploads_path):
+    poster = _Poster(uploads_path, 100)
+
+    with (
+        mock.patch(
+            "soliplex.util.scan_uploads",
+            side_effect=OSError("EIO"),
+        ),
+        raises_httpexc(
+            code=503,
+            match=loggers.UPLOADS_POST_ROOM_STORE_FAILED,
+        ),
+    ):
+        await poster.post(_upload_file())
+
+    assert poster.partials() == []
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_w_busy_room(uploads_path):
+    poster = _Poster(uploads_path)
+    lock = room_views._room_upload_lock(TEST_ROOM_ID)
+    await lock.acquire()
+
+    try:
+        with (
+            mock.patch.object(
+                room_views,
+                "ROOM_UPLOAD_LOCK_TIMEOUT_SECONDS",
+                0.01,
+            ),
+            raises_httpexc(
+                code=503,
+                match=loggers.UPLOADS_ROOM_BUSY,
+                headers={"Retry-After": "5"},
+            ),
+        ):
+            await poster.post(_upload_file())
+    finally:
+        lock.release()
+
+    assert not poster.room_dir.exists()  # nothing reserved
+    poster.the_logger.exception.assert_called_once_with(
+        loggers.UPLOADS_ROOM_BUSY,
+        room_id=TEST_ROOM_ID,
+    )
+
+
+@pytest.mark.anyio
 async def test_post_uploads_room_w_spool_smaller_than_reported(uploads_path):
     poster = _Poster(uploads_path)
 
@@ -955,10 +1093,44 @@ def _blocking(func, entered, release):
 
 
 @pytest.mark.anyio
-async def test_post_uploads_room_copies_in_parallel(uploads_path):
-    # Two uploads are both copying at once.
+async def test_post_uploads_room_copies_outside_lock(uploads_path):
+    # While A's copy is held, B's reserve step runs (the lock is free) and
+    # sees A's partial at full size:  B alone would fit, but the two
+    # together do not.
 
-    poster = _Poster(uploads_path)
+    poster_a = _Poster(uploads_path, len(TEST_CONTENT) * 2 - 1)
+    poster_b = _Poster(uploads_path, len(TEST_CONTENT) * 2 - 1)
+    entered, release = threading.Event(), threading.Event()
+    real_fill = util.fill_upload
+
+    async with anyio.create_task_group() as tg:
+        with mock.patch.object(
+            util,
+            "fill_upload",
+            _blocking(real_fill, entered, release),
+        ):
+            tg.start_soon(poster_a.post, _upload_file(filename="a.txt"))
+            await anyio.to_thread.run_sync(entered.wait, 5)
+
+        assert not room_views._room_upload_lock(TEST_ROOM_ID).locked()
+
+        with raises_httpexc(
+            code=507, match=loggers.UPLOADS_ROOM_QUOTA_EXCEEDED
+        ):
+            await poster_b.post(_upload_file(filename="b.txt"))
+
+        release.set()
+
+    assert (poster_a.room_dir / "a.txt").read_bytes() == TEST_CONTENT
+    assert not (poster_a.room_dir / "b.txt").exists()
+    assert poster_a.partials() == []
+
+
+@pytest.mark.anyio
+async def test_post_uploads_room_copies_in_parallel(uploads_path):
+    # Two uploads which both fit are both copying at once.
+
+    poster = _Poster(uploads_path, 1000)
     barrier = threading.Barrier(2, timeout=5)
     real_store = util.fill_upload
 
@@ -981,7 +1153,8 @@ async def test_post_uploads_room_copies_in_parallel(uploads_path):
 @pytest.mark.parametrize("w_step", ["reserve_upload", "fill_upload"])
 async def test_post_uploads_room_cancelled(uploads_path, w_step):
     # Cancelled while either step's thread is running:  the thread is not
-    # abandoned, and no partial file is left behind either way.
+    # abandoned, the lock is held until the reserve thread returns, and no
+    # partial file is left behind either way.
 
     poster = _Poster(uploads_path)
     entered, release = threading.Event(), threading.Event()
@@ -997,9 +1170,14 @@ async def test_post_uploads_room_cancelled(uploads_path, w_step):
             await anyio.to_thread.run_sync(entered.wait, 5)
             tg.cancel_scope.cancel()
 
+            if w_step == "reserve_upload":
+                # Still held:  the reserve thread has not returned.
+                assert room_views._room_upload_lock(TEST_ROOM_ID).locked()
+
             release.set()
 
     assert poster.partials() == []
+    assert not room_views._room_upload_lock(TEST_ROOM_ID).locked()
     target = poster.room_dir / TEST_FILENAME
 
     if w_step == "fill_upload":
@@ -1010,6 +1188,15 @@ async def test_post_uploads_room_cancelled(uploads_path, w_step):
         # Cancelled before the store step:  nothing landed.
         assert not target.exists()
         poster.the_audit.room_upload_added.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_room_upload_lock_table_is_weak(uploads_path):
+    poster = _Poster(uploads_path)
+
+    await poster.post(_upload_file())
+
+    assert TEST_ROOM_ID not in room_views._ROOM_UPLOAD_LOCKS
 
 
 def test__upload_io_limiter_is_shared():
