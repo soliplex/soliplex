@@ -11,6 +11,8 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import util
+from soliplex.config import quotas as config_quotas
 from soliplex.config import rooms as config_rooms
 from soliplex.views import room_file_uploads as room_views
 
@@ -36,6 +38,14 @@ def raises_httpexc(*, match, code, headers=None) -> pytest.raises:
             return exc.status_code == code
 
     return pytest.raises(fastapi.HTTPException, match=match, check=_check)
+
+
+@pytest.fixture(autouse=True)
+def fresh_upload_sync():
+    """Limiters attach to an event loop:  one per test"""
+    room_views._UPLOAD_IO_LIMITER = None
+    yield
+    room_views._UPLOAD_IO_LIMITER = None
 
 
 @pytest.fixture
@@ -157,6 +167,7 @@ async def test_get_uploads_room_only(
     request.url_for.side_effect = download_url
 
     room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
     cuir.return_value = room_config
 
     the_installation = mock.create_autospec(
@@ -201,24 +212,34 @@ async def test_get_uploads_room_only(
         else:
             assert found.uploads == []
 
+        exp_total = sum(size for _, size in exp_stats.values())
+        assert found.total_size_bytes == exp_total
+        assert found.quota_bytes is None
+        assert found.available_bytes is None
+
     the_logger.debug.assert_called_once_with(
         loggers.UPLOADS_GET_ROOM,
     )
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.util.upload_files")
+@mock.patch("soliplex.util.scan_uploads")
 @mock.patch("soliplex.views.agui._check_user_in_room")
 async def test_get_uploads_room_w_unrepresentable_time(
     cuir,
-    upload_files,
+    scan_uploads,
     uploads_path,
 ):
     # A file's time can be set beyond year 9999, but the filesystem under
     # the test may not store it as set, so the stat is built by hand.
-    upload_files.return_value = {
-        "far.txt": os.stat_result((0,) * 8 + (253_402_300_800, 0)),
-    }
+    scan_uploads.return_value = util.UploadsScan(
+        files={"far.txt": os.stat_result((0,) * 8 + (253_402_300_800, 0))},
+        stored_bytes=0,
+        hidden=[],
+    )
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
+    cuir.return_value = room_config
     request = mock.create_autospec(fastapi.Request)
     request.url_for.return_value = f"{URL_PREFIX}/file"
     the_installation = mock.create_autospec(installation.Installation)
@@ -283,6 +304,7 @@ async def test_get_uploads_room_filename(
             file_path.write_text(f"filename: {TEST_FILENAME}")
 
     room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
     cuir.return_value = room_config
 
     the_installation = mock.create_autospec(
@@ -392,6 +414,7 @@ async def test_post_uploads_room(
 ):
     hwatr.return_value = w_has_write
     room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),
         filename=w_filename,
@@ -646,6 +669,7 @@ async def test_delete_uploads_room(
 ):
     hwatr.return_value = w_has_write
     room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig()
 
     the_installation = mock.create_autospec(
         installation.Installation,
@@ -834,6 +858,112 @@ async def test_delete_uploads_room_file_missing(
         )
 
     the_audit.room_upload_deleted.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Quotas and storage behaviour
+# ---------------------------------------------------------------------------
+
+
+def _room_config_w_quota(quota_bytes):
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    room_config.quotas = config_quotas.QuotasConfig(
+        _room_uploads_bytes=quota_bytes,
+    )
+    return room_config
+
+
+def test__upload_io_limiter_is_shared():
+    first = room_views._upload_io_limiter()
+
+    assert room_views._upload_io_limiter() is first
+    assert first.total_tokens == room_views.UPLOAD_IO_THREADS
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_quota, w_files, exp_total, exp_available",
+    [
+        (None, {}, 0, None),
+        (100, {"a.txt": b"abc"}, 3, 97),
+        (100, {"a.txt": b"abc", ".nfs01": b"xy"}, 5, 95),
+        (2, {"a.txt": b"abc"}, 3, 0),  # over quota
+        (
+            100,
+            {f"{util.UPLOAD_PARTIAL_PREFIX}x": b"0123456789"},
+            10,
+            90,
+        ),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_w_quota(
+    cuir,
+    uploads_path,
+    w_quota,
+    w_files,
+    exp_total,
+    exp_available,
+):
+    room_dir = uploads_path / "rooms" / TEST_ROOM_ID
+    room_dir.mkdir(parents=True)
+
+    for name, content in w_files.items():
+        (room_dir / name).write_bytes(content)
+
+    cuir.return_value = _room_config_w_quota(w_quota)
+    request = mock.create_autospec(fastapi.Request)
+    request.url_for.return_value = f"{URL_PREFIX}/file"
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+
+    found = await room_views.get_uploads_room(
+        request=request,
+        room_id=TEST_ROOM_ID,
+        the_installation=the_installation,
+        the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=mock.create_autospec(loggers.LogWrapper),
+    )
+
+    assert found.total_size_bytes == exp_total
+    assert found.quota_bytes == w_quota
+    assert found.available_bytes == exp_available
+    assert [f_up.filename for f_up in found.uploads] == [
+        name for name in w_files if not util.is_hidden_upload_name(name)
+    ]
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.util.scan_uploads")
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_w_scan_failure(
+    cuir, scan_uploads, uploads_path
+):
+    scan_uploads.side_effect = OSError("EIO")
+    cuir.return_value = _room_config_w_quota(None)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with raises_httpexc(
+        code=503,
+        match=loggers.UPLOADS_ROOM_STORAGE_UNAVAILABLE,
+        headers={"Retry-After": "5"},
+    ):
+        await room_views.get_uploads_room(
+            request=mock.create_autospec(fastapi.Request),
+            room_id=TEST_ROOM_ID,
+            the_installation=the_installation,
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    the_logger.exception.assert_called_once_with(
+        loggers.UPLOADS_ROOM_STORAGE_UNAVAILABLE,
+        room_id=TEST_ROOM_ID,
+    )
 
 
 @pytest.mark.anyio

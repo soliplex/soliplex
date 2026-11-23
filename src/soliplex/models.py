@@ -749,6 +749,26 @@ class FileUpload(pydantic.BaseModel):
 class RoomUploads(pydantic.BaseModel):
     room_id: str
     uploads: list[FileUpload]
+    # Counts regular files, uploads in progress included, but not
+    # symlinks:  so it may differ from the sum of 'uploads[].size_bytes'
+    # either way (links are listed, reservations are not).
+    total_size_bytes: int = pydantic.Field(
+        default=0,
+        description=(
+            "Bytes counted against the room's quota: stored files and "
+            "uploads in progress, but not operator-linked files"
+        ),
+    )
+    quota_bytes: int | None = pydantic.Field(
+        default=None,
+        description="The room's upload quota; null means no limit",
+    )
+    available_bytes: int | None = pydantic.Field(
+        default=None,
+        description=(
+            "max(quota_bytes - total_size_bytes, 0); null means no limit"
+        ),
+    )
 
 
 class ThreadUploads(pydantic.BaseModel):
