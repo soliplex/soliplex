@@ -58,6 +58,7 @@ def threads_upload_path(uploads_path):
     [
         (True, (), no_error(set())),
         (True, ["foo.txt", "bar.txt"], no_error({"foo.txt", "bar.txt"})),
+        (True, ["foo.txt", ".hidden"], no_error({"foo.txt"})),
         (
             True,
             None,
@@ -180,11 +181,30 @@ async def test_get_room_file_upload(
 
 
 @pytest.mark.anyio
+async def test_get_room_file_upload_w_hidden_name(
+    the_installation,
+    ctx_w_deps,
+    rooms_upload_path,
+):
+    the_installation.rooms_upload_path = rooms_upload_path
+    room_dir = rooms_upload_path / TEST_ROOM_ID
+    room_dir.mkdir(parents=True)
+    (room_dir / ".hidden").write_text(FILE_CONTENT_TEXT)
+
+    with pytest.raises(file_uploads_tools.UploadNotFound):
+        await file_uploads_tools.get_room_file_upload(
+            ctx_w_deps,
+            filename=".hidden",
+        )
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_upload_env, w_thread_files, expectation",
     [
         (True, (), no_error(set())),
         (True, ["foo.txt", "bar.txt"], no_error({"foo.txt", "bar.txt"})),
+        (True, ["foo.txt", ".hidden"], no_error({"foo.txt"})),
         (
             True,
             None,
@@ -304,3 +324,21 @@ async def test_get_thread_file_upload(
 
     if not isinstance(expected, pytest.ExceptionInfo):
         assert found == expected
+
+
+@pytest.mark.anyio
+async def test_get_thread_file_upload_w_hidden_name(
+    the_installation,
+    ctx_w_deps,
+    threads_upload_path,
+):
+    the_installation.threads_upload_path = threads_upload_path
+    thread_dir = threads_upload_path / TEST_THREAD_ID
+    thread_dir.mkdir(parents=True)
+    (thread_dir / ".hidden").write_text(FILE_CONTENT_TEXT)
+
+    with pytest.raises(file_uploads_tools.UploadNotFound):
+        await file_uploads_tools.get_thread_file_upload(
+            ctx_w_deps,
+            filename=".hidden",
+        )

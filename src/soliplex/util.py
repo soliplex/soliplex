@@ -7,12 +7,16 @@ import logging
 import os
 import pathlib
 import re
+import shutil
 import stat
 import subprocess
 import typing
+import uuid
 
 import logfire
 from starlette import datastructures
+
+from soliplex import loggers
 
 FOUR_OR_MORE_PERIODS = re.compile(r"\.{4,}")
 TWO_OR_MORE_ELLIPSES = re.compile(r"…{2,}")
@@ -202,17 +206,73 @@ def modified_at(stat_result: os.stat_result) -> datetime.datetime | None:
         return None
 
 
+# An upload is written to a hidden file in its target's directory, then
+# renamed onto the target's name.
+UPLOAD_PARTIAL_PREFIX = ".soliplex-upload-"
+
+_UPLOAD_COPY_CHUNK_BYTES = 1024 * 1024
+
+
+def is_hidden_upload_name(name: str) -> bool:
+    """Is 'name' hidden in an uploads directory?
+
+    Hidden files (a leading '.') cannot be uploaded, and are never listed,
+    downloaded, or deleted through the API, nor shown to the agent's
+    tools.  They include partial uploads ('UPLOAD_PARTIAL_PREFIX') and the
+    Linux NFS client's '.nfsXXXX' files.
+    """
+    return name.startswith(".")
+
+
+def store_upload(source: typing.BinaryIO, target: pathlib.Path):
+    """Copy 'source' onto 'target', replacing any file or symlink there
+
+    Blocking:  call from a worker thread.  'source' is copied in chunks
+    from its start into a hidden file in 'target's directory (created if
+    needed), which is then renamed onto 'target'.  On failure, the hidden
+    file is removed and 'target' is left as it was;  if the removal fails
+    too, it is logged, naming the hidden file left behind.
+
+    Raises:
+
+    - 'OSError' if the directory, the hidden file, or the rename fails.
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.parent / f"{UPLOAD_PARTIAL_PREFIX}{uuid.uuid4().hex}"
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0)
+
+    try:
+        with open(os.open(partial, flags, 0o666), "wb") as out:
+            source.seek(0)
+            shutil.copyfileobj(source, out, _UPLOAD_COPY_CHUNK_BYTES)
+            out.flush()
+            os.fsync(out.fileno())
+
+        os.replace(partial, target)
+    except BaseException:
+        # Closed already:  on NFS, unlinking an open file leaves '.nfs*'.
+        try:
+            partial.unlink(missing_ok=True)
+        except OSError:
+            logger.exception(loggers.UPLOADS_PARTIAL_NOT_REMOVED, partial)
+        raise
+
+
 def upload_files(directory: pathlib.Path) -> dict[str, os.stat_result]:
     """Map each file in the uploads 'directory' to its stat.
 
     Symlinks are followed, as the download views follow them: the
     operator may link a shared file in.  A missing 'directory' has no
     files.  One stat decides each entry, so an entry which is not a
-    regular file when stat'd, or cannot be stat'd, is left out.
+    regular file when stat'd, or cannot be stat'd, is left out, as are
+    hidden files (see 'is_hidden_upload_name').
     """
     files = {}
 
     for file_or_sub in directory.glob("*"):
+        if is_hidden_upload_name(file_or_sub.name):
+            continue
+
         try:
             stat_result = file_or_sub.stat()
         except OSError:  # removed, a dangling or looping link, access denied

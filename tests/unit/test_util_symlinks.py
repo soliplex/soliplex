@@ -1,3 +1,5 @@
+import io
+
 from soliplex import util
 from tests import _platform
 
@@ -23,3 +25,19 @@ def test_upload_files_skips_looping_symlink(temp_dir):
     found = util.upload_files(temp_dir)
 
     assert found == {}
+
+
+def test_store_upload_replaces_symlink_not_target(temp_dir):
+    shared = temp_dir / "shared.dat"
+    shared.write_bytes(b"shared")
+    uploads = temp_dir / "uploads"
+    uploads.mkdir()
+    target = uploads / "linked.dat"
+    target.symlink_to(shared)
+    source = io.BytesIO(b"uploaded")
+
+    util.store_upload(source, target)
+
+    assert not target.is_symlink()
+    assert target.read_bytes() == b"uploaded"
+    assert shared.read_bytes() == b"shared"
