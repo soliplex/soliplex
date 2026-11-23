@@ -94,6 +94,41 @@ Pick the tag for the updates you want:
   fetch the newest image behind the tag.
 - An exact `<major>.<minor>.<patch>` tag rebuilds reproducibly.
 
+## Uploads and the temporary directory
+
+Every upload is first written whole to the container's temporary
+directory, then copied into the uploads tree. A read-only container often
+mounts a small tmpfs at `/tmp`, which keeps each upload in RAM, and caps
+its size at the tmpfs's. If many or large uploads are expected, point
+`TMPDIR` at a local, disk-backed volume instead, and keep the uploads
+tree on its own volume (here, EFS):
+
+```yaml
+services:
+  soliplex:
+    image: ghcr.io/soliplex/soliplex:0.86
+    environment:
+      TMPDIR: /var/tmp/soliplex
+    volumes:
+      - upload-spool:/var/tmp/soliplex   # local disk, not tmpfs
+      - uploads:/app/uploads             # e.g. an EFS-backed volume
+
+volumes:
+  upload-spool: {}
+  uploads:
+    driver_opts:
+      type: nfs
+      o: "addr=fs-0123456789abcdef.efs.us-east-1.amazonaws.com,nfsvers=4.1,hard"
+      device: ":/"
+```
+
+Running several replicas against one shared uploads tree makes room
+upload quotas *soft*: uploads arriving at once on different replicas can
+take a room slightly over its quota. See [The temporary
+directory](config/installation.md#the-temporary-directory), [Uploads on
+EFS](config/installation.md#uploads-on-efs), and
+[Quotas](config/rooms.md#quotas).
+
 ## Building the images locally
 
 The `Dockerfile` installs a wheel, not the checkout. From a checkout, build
