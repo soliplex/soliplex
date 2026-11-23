@@ -567,6 +567,22 @@ def get_context_window_from_config(
     return model.context_window
 
 
+# Models served through ollama and vllm write malformed tool calls on a
+# system prompt without Pydantic AI's `<system>` framing announcement.
+SELF_HOSTED_MODEL_SETTINGS = ai_settings.ModelSettings(
+    framing_announcement="always",
+)
+
+
+def self_hosted_settings(
+    agent_config: AgentConfig,
+) -> ai_settings.ModelSettings:
+    """`SELF_HOSTED_MODEL_SETTINGS` under the agent's own model settings."""
+    return ai_settings.ModelSettings(
+        **(SELF_HOSTED_MODEL_SETTINGS | (agent_config.model_settings or {})),
+    )
+
+
 def get_model_from_config(
     *,
     agent_config: AgentConfig,
@@ -598,7 +614,7 @@ def get_model_from_config(
             model_name=model_name,
             provider=provider,
             **_profile_kw(agent_config, openai_compat=True),
-            **model_settings_kw,
+            settings=self_hosted_settings(agent_config),
         )
 
     elif agent_config.provider_type == LLMProviderType.VLLM:
@@ -608,7 +624,7 @@ def get_model_from_config(
             model_name=model_name,
             provider=provider,
             profile=_VLLM_PROFILE | _context_window_kw(agent_config),
-            **model_settings_kw,
+            settings=self_hosted_settings(agent_config),
         )
 
     else:

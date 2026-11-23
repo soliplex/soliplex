@@ -49,16 +49,22 @@ def get_quiz_judge_agent(quiz: config_quizzes.QuizConfig):
     provider_type = quiz.judge_agent.provider_type
     llm_provider_kw = quiz.judge_agent.llm_provider_kw
 
+    settings_kw = {}
     if provider_type == config_agents.LLMProviderType.OPENAI:
         model_provider = openai_providers.OpenAIProvider(**llm_provider_kw)
-    elif provider_type == config_agents.LLMProviderType.VLLM:
-        model_provider = vllm_providers.VLLMProvider(**llm_provider_kw)
     else:
-        model_provider = ollama_providers.OllamaProvider(**llm_provider_kw)
+        if provider_type == config_agents.LLMProviderType.VLLM:
+            model_provider = vllm_providers.VLLMProvider(**llm_provider_kw)
+        else:
+            model_provider = ollama_providers.OllamaProvider(**llm_provider_kw)
+        settings_kw["settings"] = config_agents.self_hosted_settings(
+            quiz.judge_agent,
+        )
 
     ollama_model = openai_models.OpenAIChatModel(
         model_name=quiz.judge_agent.llm_model_name,
         provider=model_provider,
+        **settings_kw,
     )
 
     # Create Pydantic AI agent
