@@ -9,6 +9,7 @@ import pytest
 from soliplex import installation
 from soliplex.cli.audit import interpolation as audit_interpolation
 from soliplex.config import interpolation as config_interp
+from soliplex.config import quotas as config_quotas
 
 A_CONFIG_PATH = pathlib.Path("/tmp/installation.yaml")
 
@@ -100,6 +101,9 @@ class _InterpRoomCfg:
 
     id: str = "the-room"
     agent_config: object = None
+    quotas: object = dataclasses.field(
+        default_factory=lambda: _InterpCfg(id="the-quotas"),
+    )
     tool_configs: dict = dataclasses.field(default_factory=dict)
     mcp_client_toolset_configs: dict = dataclasses.field(default_factory=dict)
     quizzes: list = dataclasses.field(default_factory=list)
@@ -554,13 +558,18 @@ def test__iter_installation_interpolation_configs():
 @pytest.mark.parametrize(
     "w_agent, w_judge, exp_ids",
     [
-        (False, False, ["the-room", "the-tool", "the-toolset", "the-quiz"]),
+        (
+            False,
+            False,
+            ["the-room", "the-quotas", "the-tool", "the-toolset", "the-quiz"],
+        ),
         (
             True,
             True,
             [
                 "the-room",
                 "the-agent",
+                "the-quotas",
                 "the-tool",
                 "the-toolset",
                 "the-quiz",
@@ -583,6 +592,35 @@ def test__iter_room_interpolation_configs(w_agent, w_judge, exp_ids):
     )
 
     assert [config.id for config in found] == exp_ids
+
+
+@pytest.mark.parametrize(
+    "w_value, exp_markers",
+    [
+        (None, []),
+        (500, []),
+        ("env:KNOWN_ENV", []),
+        ("env:NO_SUCH_ENV", [(_UNDECLARED, _ENVIRONMENT, "NO_SUCH_ENV")]),
+    ],
+)
+def test__config_interpolation_findings_w_room_quotas(w_value, exp_markers):
+    quotas = config_quotas.QuotasConfig(
+        _room_uploads_bytes=w_value,
+        _config_path=A_CONFIG_PATH,
+    )
+
+    found = audit_interpolation._config_interpolation_findings(
+        quotas,
+        _DECLARED,
+    )
+
+    assert [
+        (finding.code, finding.marker_kind, finding.marker_name)
+        for finding in found
+    ] == exp_markers
+    for finding in found:
+        assert finding.config_key == "quotas.room_uploads_bytes"
+        assert finding.config_path == A_CONFIG_PATH
 
 
 @pytest.mark.parametrize(

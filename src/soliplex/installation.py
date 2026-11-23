@@ -465,7 +465,7 @@ class Installation:
         Reading and parsing the room configs is blocking file I/O, so it
         runs in a worker thread.  As 'InstallationConfig.reload_room_configs'
         does, a room config which fails to load raises, leaving the rooms
-        already loaded in place.
+        already loaded in place;  so does one whose quota will not resolve.
         """
         before = self._config.room_configs
         after = await anyio.to_thread.run_sync(
@@ -845,6 +845,10 @@ async def lifespan(
 
     # Extract room configs FBO mcp_server.setup_mcp_for_rooms
     available_rooms = the_installation._config.room_configs
+
+    # A room quota may be an 'env:' marker:  resolve them all now, so a
+    # bad value stops startup instead of failing requests later.
+    i_config.check_room_quotas()
 
     # Extract values needed by the FastMCPTokenProvider
     auth_disabled = the_installation.auth_disabled
