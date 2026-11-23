@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import pathlib
+import time
 import warnings
 
 import typer
@@ -81,6 +82,12 @@ def _mismatched_room_ids(
     return {}
 
 
+# An internal upload file this old belongs to an upload which will never
+# finish:  a live copy keeps its reservation's 'mtime' moving.  Generous,
+# to cover clock skew between this host and the storage server.
+ORPHANED_UPLOAD_AGE_SECONDS = 3600
+
+
 def _scan_room_uploads(
     the_installation: installation.Installation,
 ) -> tuple[dict[str, util.UploadsScan], dict]:
@@ -158,6 +165,58 @@ def _room_quota_reports(
     return {}, reports
 
 
+def _orphan_kind(name: str) -> str | None:
+    """Which of soliplex's own hidden files is 'name', if either?
+
+    Other hidden files (an operator's '.DS_Store', say) are no orphans.
+    """
+    if name.startswith(util.UPLOAD_PARTIAL_PREFIX):
+        return "reservation"
+
+    if name.startswith(".nfs"):
+        return "nfs"
+
+    return None
+
+
+def _room_orphan_reports(
+    scans: dict[str, util.UploadsScan],
+    *,
+    now: float,
+) -> dict[str, list[dict]]:
+    """Report each room's orphaned upload files (reservations, '.nfs*')
+
+    Only reported, never a finding, and never removed:  a replica cannot
+    tell another's slow upload from an abandoned one except by age (see
+    'ORPHANED_UPLOAD_AGE_SECONDS').
+    """
+    reports = {}
+
+    for room_id, scan in scans.items():
+        orphans = []
+
+        for hidden in scan.hidden:
+            kind = _orphan_kind(hidden.name)
+
+            if kind is None:
+                continue
+
+            if now - hidden.mtime > ORPHANED_UPLOAD_AGE_SECONDS:
+                orphans.append(
+                    {
+                        "name": hidden.name,
+                        "kind": kind,
+                        "size_bytes": hidden.size_bytes,
+                        "age_seconds": int(now - hidden.mtime),
+                    }
+                )
+
+        if orphans:
+            reports[room_id] = orphans
+
+    return reports
+
+
 def _print_room_quota_report(
     tc_print,
     quota_report: dict,
@@ -183,6 +242,24 @@ def _print_room_quota_report(
         tc_print(
             "   NOTE: room uploads OVER QUOTA by "
             f"{quota_report['over_bytes']} bytes"
+        )
+
+
+def _print_room_orphan_report(
+    tc_print,
+    orphans: list[dict],
+):  # pragma NO COVER UI ONLY
+    orphan_bytes = sum(orphan["size_bytes"] for orphan in orphans)
+    tc_print()
+    tc_print(
+        f"   NOTE: {len(orphans)} orphaned upload files, "
+        f"{orphan_bytes} bytes (counted against any quota)"
+    )
+
+    for orphan in orphans:
+        tc_print(
+            f"   - {orphan['name']:40} {orphan['kind']:11} "
+            f"{orphan['size_bytes']} bytes, {orphan['age_seconds']}s old"
         )
 
 
@@ -319,6 +396,7 @@ def _audit_rooms_section(
     )
     errors |= quota_errors
     quota_failed_rooms = quota_errors.get("room_quotas", {})
+    orphan_reports = _room_orphan_reports(upload_scans, now=time.time())
 
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_rooms = the_installation._config.room_configs
@@ -358,6 +436,10 @@ def _audit_rooms_section(
             or not quota_report["uploads_configured"]
         ):
             _print_room_quota_report(tc_print, quota_report)
+
+        orphans = orphan_reports.get(room_config.id)
+        if orphans:
+            _print_room_orphan_report(tc_print, orphans)
 
         room_features = room_config.agui_feature_names
         if room_features:
