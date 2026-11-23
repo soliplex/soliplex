@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pathlib
 from unittest import mock
 
@@ -594,3 +595,81 @@ def test__room_quota_reports_w_env(the_installation):
     assert reports["good"]["env_name"] == "GOOD"
     assert reports["good"]["quota_bytes"] == 100
     assert "bad" not in reports
+
+
+NOW = 1_800_000_000.0
+STALE = NOW - audit_rooms.ORPHANED_UPLOAD_AGE_SECONDS - 1
+FRESH = NOW - 10
+
+
+@pytest.mark.parametrize(
+    "w_hidden, exp_orphans",
+    [
+        ([], None),
+        (
+            [
+                util.HiddenUpload(
+                    name=".soliplex-upload-a", size_bytes=7, mtime=FRESH
+                )
+            ],
+            None,
+        ),
+        (
+            [
+                util.HiddenUpload(
+                    name=".soliplex-upload-a", size_bytes=7, mtime=STALE
+                )
+            ],
+            [
+                {
+                    "name": ".soliplex-upload-a",
+                    "kind": "reservation",
+                    "size_bytes": 7,
+                    "age_seconds": audit_rooms.ORPHANED_UPLOAD_AGE_SECONDS + 1,
+                }
+            ],
+        ),
+        (
+            [util.HiddenUpload(name=".nfs0001", size_bytes=3, mtime=STALE)],
+            [
+                {
+                    "name": ".nfs0001",
+                    "kind": "nfs",
+                    "size_bytes": 3,
+                    "age_seconds": audit_rooms.ORPHANED_UPLOAD_AGE_SECONDS + 1,
+                }
+            ],
+        ),
+        (
+            # Hidden, but not soliplex's own:  no orphan.
+            [util.HiddenUpload(name=".DS_Store", size_bytes=3, mtime=STALE)],
+            None,
+        ),
+    ],
+)
+def test__room_orphan_reports(w_hidden, exp_orphans):
+    found = audit_rooms._room_orphan_reports(
+        {"r1": _scan(hidden=w_hidden)},
+        now=NOW,
+    )
+
+    if exp_orphans is None:
+        assert found == {}
+    else:
+        assert found == {"r1": exp_orphans}
+
+
+def test__room_orphan_reports_deletes_nothing(the_installation, w_uploads):
+    # End to end through a real scan:  orphans are reported, and left.
+    room_dir = w_uploads / "r1"
+    room_dir.mkdir()
+    orphan = room_dir / ".soliplex-upload-abc"
+    orphan.write_bytes(b"0123456789")
+    os.utime(orphan, (STALE, STALE))
+    the_installation._config.room_configs = {"r1": _quota_room()}
+
+    scans, _ = audit_rooms._scan_room_uploads(the_installation)
+    found = audit_rooms._room_orphan_reports(scans, now=NOW)
+
+    assert [o["name"] for o in found["r1"]] == [".soliplex-upload-abc"]
+    assert orphan.exists()
