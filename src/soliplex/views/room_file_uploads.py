@@ -1,9 +1,21 @@
 """Room uploads:  list, download, upload, and delete a room's shared files
 
-Listing and deleting run their filesystem work in worker threads (the
-uploads tree may be on a network filesystem), on a limiter of their own.
+An upload is written through a hidden *partial* file in the room's
+directory ('util.UPLOAD_PARTIAL_PREFIX'):
+
+1. Reserve:  create the partial, at the upload's full size
+   ('util.reserve_upload').
+2. Store:  copy the spooled upload into it, then rename it onto the
+   upload's name ('util.fill_upload').  Readers never see a partly
+   written file under that name.
+
+All filesystem work runs in worker threads (the uploads tree may be on a
+network filesystem), on a limiter of their own, through
+'anyio.to_thread.run_sync', which does not abandon the thread on
+cancellation:  so a partial is always renamed or removed.
 """
 
+import os
 import pathlib
 
 import anyio
@@ -95,6 +107,18 @@ def _storage_unavailable(
     return _service_unavailable(
         f"{loggers.UPLOADS_ROOM_STORAGE_UNAVAILABLE}: {room_id}",
     )
+
+
+def _upload_size(upload_file: fastapi.UploadFile) -> int:
+    """Return the size of the (already spooled) uploaded file"""
+    if upload_file.size is not None:
+        return upload_file.size
+
+    stream = upload_file.file
+    size = stream.seek(0, os.SEEK_END)
+    stream.seek(0)
+
+    return size
 
 
 async def has_write_access_to_room(
@@ -279,10 +303,13 @@ async def post_uploads_room(
     the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
     the_audit: RoomUploadAuditLog = depend_the_room_upload_audit_log,
 ) -> fastapi.Response:
-    """Upload a file for a thread within the given room
+    """Upload a file to the given room
 
     Body of request must be a file matching the `Content-Type' header
-    of the request.
+    of the request.  An upload with an existing file's name replaces it.
+
+    Answers 503, with 'Retry-After', when the storage fails;  nothing is
+    written.
 
     Requires room 'WRITE' permission (or admin access):  'READ' access
     is not required, allowing narrowly-scoped automation tokens to push
@@ -339,26 +366,39 @@ async def post_uploads_room(
             detail=f"Upload filename starts with '.': {stripped_filename}",
         )
 
-    upload_target = pathlib.Path(uploads_path) / room_id / stripped_filename
+    room_dir = pathlib.Path(uploads_path) / room_id
+    upload_target = room_dir / stripped_filename
+    upload_bytes = _upload_size(upload_file)
+    # Named here, so that it can be removed even when cancelled before
+    # the reserve step's result arrives.
+    partial = views_util.upload_partial_path(room_dir)
+
     try:
-        await anyio.to_thread.run_sync(
-            views_util.store_upload,
+        await _run_upload_io(views_util.reserve_upload, partial, upload_bytes)
+        await _run_upload_io(
+            views_util.fill_upload,
+            partial,
             upload_file.file,
             upload_target,
+            upload_bytes,
         )
     except OSError:
+        # Either step has already removed whatever it reserved.
         the_logger.exception(
             loggers.UPLOADS_POST_ROOM_STORE_FAILED,
             room_id=room_id,
             filename=stripped_filename,
         )
-        raise fastapi.HTTPException(
-            status_code=500,
-            detail=(
-                f"{loggers.UPLOADS_POST_ROOM_STORE_FAILED}: "
-                f"{stripped_filename}"
-            ),
-        ) from None
+        failed = _service_unavailable(
+            f"{loggers.UPLOADS_POST_ROOM_STORE_FAILED}: {stripped_filename}",
+        )
+        raise failed from None
+    except BaseException:
+        # Cancelled, or failed otherwise, at any point:  the partial must
+        # not be left behind (once stored, it is gone already).
+        with anyio.CancelScope(shield=True):
+            await _run_upload_io(views_util.discard_partial_upload, partial)
+        raise
 
     the_audit.room_upload_added(room_id=room_id, filename=stripped_filename)
 
