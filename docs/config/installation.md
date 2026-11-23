@@ -303,7 +303,7 @@ filesystem_skills_paths:
 ## Selecting Skill Configurations
 
 All discovered filesystem skills are enabled by default. If `skill_configs`
-contains any entries, it acts as a whitelist. For example:
+contains any entries, it acts as an allow-list. For example:
 
 ```yaml
 skill_configs:
@@ -335,13 +335,15 @@ threads_upload_path: ../uploads/threads
   sandbox](#uploaded-files-in-the-sandbox)). If unset, thread uploads are
   disabled.
 
-Each upload directory may hold hidden files of soliplex's own: an upload
-in progress is written through a `.soliplex-upload-<id>` reservation file,
+An uploaded file's name may not start with `.`: such an upload answers
+`400`. Hidden files are left to soliplex and the operator. An upload in
+progress is written through a `.soliplex-upload-<id>` reservation file,
 then renamed into place, and on NFS (EFS included) the client may leave
-`.nfs*` files behind. They are never listed, downloaded, or shown to the
-agent's tools. Leftovers from an upload interrupted by a crash are
-reported by [`soliplex-cli audit rooms`](../server/cli.md#audit-rooms),
-which explains how to remove them.
+`.nfs*` files behind. No hidden file is ever listed, downloaded, deleted,
+or shown to the agent's tools. Leftovers from an upload interrupted by a
+crash are reported by
+[`soliplex-cli audit rooms`](../server/cli.md#audit-rooms), which explains
+how to remove them.
 
 ### The temporary directory
 

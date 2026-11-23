@@ -341,6 +341,30 @@ async def test_get_uploads_room_filename(
     )
 
 
+@pytest.mark.anyio
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_filename_w_hidden_name(
+    cuir,
+    uploads_path,
+):
+    room_path = uploads_path / "rooms" / TEST_ROOM_ID
+    room_path.mkdir(parents=True)
+    (room_path / ".hidden").write_text("hidden")
+    cuir.return_value = mock.create_autospec(config_rooms.RoomConfig)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+
+    with raises_httpexc(code=404, match="No room upload: .hidden"):
+        await room_views.get_uploads_room_filename(
+            room_id=TEST_ROOM_ID,
+            filename=".hidden",
+            the_installation=the_installation,
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=mock.create_autospec(loggers.LogWrapper),
+        )
+
+
 @mock.patch("soliplex.views.room_file_uploads.RoomUploadAuditLog")
 def test_get_the_room_upload_audit_log(rual_klass):
     found = room_views.get_the_room_upload_audit_log(THE_USER_CLAIMS)
@@ -524,6 +548,39 @@ async def test_post_uploads_room_unknown_room(
         the_admin_users=the_admin_users,
         the_room_authz=the_room_authz,
     )
+    the_audit.room_upload_added.assert_not_called()
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.views.room_file_uploads.has_write_access_to_room")
+async def test_post_uploads_room_w_hidden_name(
+    hwatr,
+    uploads_path,
+):
+    hwatr.return_value = True
+    upload_file = fastapi.UploadFile(
+        file=io.BytesIO(TEST_CONTENT),
+        filename=".hidden",
+        headers={"Content-Type": "text/plain"},
+    )
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+    the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
+
+    with raises_httpexc(code=400, match="starts with '.': .hidden"):
+        await room_views.post_uploads_room(
+            room_id=TEST_ROOM_ID,
+            upload_file=upload_file,
+            the_installation=the_installation,
+            the_admin_users=mock.create_autospec(authz.AdminUserPolicy),
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=mock.create_autospec(loggers.LogWrapper),
+            the_authz_logger=mock.create_autospec(loggers.LogWrapper),
+            the_audit=the_audit,
+        )
+
+    assert not (uploads_path / "rooms").exists()
     the_audit.room_upload_added.assert_not_called()
 
 
@@ -767,7 +824,7 @@ async def test_delete_uploads_room_file_missing(
 # Quotas, reservations, and storage behaviour
 # ---------------------------------------------------------------------------
 
-RESERVATION_GLOB = f"{util.UPLOAD_RESERVATION_PREFIX}*"
+RESERVATION_GLOB = f"{util.UPLOAD_PARTIAL_PREFIX}*"
 
 
 def _room_config_w_quota(quota_bytes):
@@ -893,27 +950,13 @@ async def test_post_uploads_room_counts_other_reservations(uploads_path):
     # An upload in progress elsewhere holds its reservation at full size.
     poster = _Poster(uploads_path, 20)
     poster.room_dir.mkdir(parents=True)
-    other = poster.room_dir / f"{util.UPLOAD_RESERVATION_PREFIX}other"
+    other = poster.room_dir / f"{util.UPLOAD_PARTIAL_PREFIX}other"
     other.write_bytes(b"x" * 15)
 
     with raises_httpexc(code=507, match="5 available"):
         await poster.post(_upload_file())
 
     assert poster.reservations() == [other]
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    "w_filename",
-    [f"{util.UPLOAD_RESERVATION_PREFIX}abc", ".nfs0001"],
-)
-async def test_post_uploads_room_w_internal_name(uploads_path, w_filename):
-    poster = _Poster(uploads_path)
-
-    with raises_httpexc(code=400, match="Reserved upload filename"):
-        await poster.post(_upload_file(filename=w_filename))
-
-    assert not poster.room_dir.exists()
 
 
 @pytest.mark.anyio
@@ -1188,7 +1231,7 @@ def test__upload_io_limiter_is_shared():
         (2, {"a.txt": b"abc"}, 3, 0),  # over quota
         (
             100,
-            {f"{util.UPLOAD_RESERVATION_PREFIX}x": b"0123456789"},
+            {f"{util.UPLOAD_PARTIAL_PREFIX}x": b"0123456789"},
             10,
             90,
         ),
@@ -1228,7 +1271,7 @@ async def test_get_uploads_room_w_quota(
     assert found.quota_bytes == w_quota
     assert found.available_bytes == exp_available
     assert [f_up.filename for f_up in found.uploads] == [
-        name for name in w_files if not util.is_internal_upload_name(name)
+        name for name in w_files if not util.is_hidden_upload_name(name)
     ]
 
 
@@ -1265,59 +1308,24 @@ async def test_get_uploads_room_w_scan_failure(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize(
-    "w_filename",
-    [f"{util.UPLOAD_RESERVATION_PREFIX}abc", ".nfs0001"],
-)
-@mock.patch("soliplex.views.agui._check_user_in_room")
-async def test_get_uploads_room_filename_w_internal_name(
-    cuir,
+async def test_delete_uploads_room_w_hidden_name(
     uploads_path,
-    w_filename,
 ):
-    room_dir = uploads_path / "rooms" / TEST_ROOM_ID
-    room_dir.mkdir(parents=True)
-    (room_dir / w_filename).write_bytes(b"internal")
+    hidden = uploads_path / "rooms" / TEST_ROOM_ID / ".hidden"
+    hidden.parent.mkdir(parents=True)
+    hidden.write_text("hidden")
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.rooms_upload_path = str(uploads_path / "rooms")
-
-    with raises_httpexc(code=404, match="No room upload"):
-        await room_views.get_uploads_room_filename(
-            room_id=TEST_ROOM_ID,
-            filename=w_filename,
-            the_installation=the_installation,
-            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
-            the_user_claims=THE_USER_CLAIMS,
-            the_logger=mock.create_autospec(loggers.LogWrapper),
-        )
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    "w_filename",
-    [f"{util.UPLOAD_RESERVATION_PREFIX}abc", ".nfs0001"],
-)
-@mock.patch("soliplex.views.room_file_uploads.has_write_access_to_room")
-async def test_delete_uploads_room_w_internal_name(
-    hwatr,
-    uploads_path,
-    w_filename,
-):
-    hwatr.return_value = True
-    room_dir = uploads_path / "rooms" / TEST_ROOM_ID
-    room_dir.mkdir(parents=True)
-    internal = room_dir / w_filename
-    internal.write_bytes(b"internal")
-    the_installation = mock.create_autospec(installation.Installation)
-    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+    the_admin_users = mock.create_autospec(authz.AdminUserPolicy)
+    the_admin_users.check_admin_access.return_value = True
     the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
 
-    with raises_httpexc(code=404, match="No room upload"):
+    with raises_httpexc(code=404, match="No room upload: .hidden"):
         await room_views.delete_uploads_room(
             room_id=TEST_ROOM_ID,
-            filename=w_filename,
+            filename=".hidden",
             the_installation=the_installation,
-            the_admin_users=mock.create_autospec(authz.AdminUserPolicy),
+            the_admin_users=the_admin_users,
             the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
             the_user_claims=THE_USER_CLAIMS,
             the_logger=mock.create_autospec(loggers.LogWrapper),
@@ -1325,5 +1333,5 @@ async def test_delete_uploads_room_w_internal_name(
             the_audit=the_audit,
         )
 
-    assert internal.exists()
+    assert hidden.read_text() == "hidden"
     the_audit.room_upload_deleted.assert_not_called()

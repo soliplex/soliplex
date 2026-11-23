@@ -1,3 +1,5 @@
+import io
+
 from soliplex import util
 from tests import _platform
 
@@ -23,6 +25,22 @@ def test_upload_files_skips_looping_symlink(temp_dir):
     found = util.upload_files(temp_dir)
 
     assert found == {}
+
+
+def test_store_upload_replaces_symlink_not_target(temp_dir):
+    shared = temp_dir / "shared.dat"
+    shared.write_bytes(b"shared")
+    uploads = temp_dir / "uploads"
+    uploads.mkdir()
+    target = uploads / "linked.dat"
+    target.symlink_to(shared)
+    source = io.BytesIO(b"uploaded")
+
+    util.store_upload(source, target)
+
+    assert not target.is_symlink()
+    assert target.read_bytes() == b"uploaded"
+    assert shared.read_bytes() == b"shared"
 
 
 def test_stored_size_w_symlink_counts_zero(temp_dir):
@@ -51,13 +69,13 @@ def test_scan_uploads_lists_but_does_not_count_symlinks(temp_dir):
     assert found.hidden == []
 
 
-def test_scan_uploads_skips_internal_symlink(temp_dir):
-    # A link with an internal name is neither listed, counted, nor hidden.
+def test_scan_uploads_skips_hidden_symlink(temp_dir):
+    # A link with an hidden name is neither listed, counted, nor hidden.
     shared = temp_dir / "shared.dat"
     shared.write_bytes(b"shared")
     uploads = temp_dir / "uploads"
     uploads.mkdir()
-    (uploads / f"{util.UPLOAD_RESERVATION_PREFIX}x").symlink_to(shared)
+    (uploads / f"{util.UPLOAD_PARTIAL_PREFIX}x").symlink_to(shared)
 
     found = util.scan_uploads(uploads)
 

@@ -306,6 +306,34 @@ async def test_get_uploads_room_id_thread_thread_id_filename(
 
 
 @pytest.mark.anyio
+@mock.patch("soliplex.views.agui._check_thread_ownership")
+async def test_get_uploads_room_id_thread_thread_id_filename_w_hidden_name(
+    cto,
+    the_threads,
+    uploads_path,
+):
+    thread_path = uploads_path / "threads" / TEST_THREAD_ID_STR
+    thread_path.mkdir(parents=True)
+    (thread_path / ".hidden").write_text("hidden")
+    cto.return_value = mock.create_autospec(config_rooms.RoomConfig)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.threads_upload_path = str(uploads_path / "threads")
+    t_views = thread_views
+
+    with raises_httpexc(code=404, match="No thread upload: .hidden"):
+        await t_views.get_uploads_room_id_thread_thread_id_filename(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            filename=".hidden",
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=mock.create_autospec(loggers.LogWrapper),
+        )
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_filename, exp_filename",
     [
@@ -404,26 +432,29 @@ async def test_post_uploads_room_id_thread_thread_id(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("w_filename", [".soliplex-upload-abc", ".nfs0001"])
 @mock.patch("soliplex.views.agui._check_thread_ownership")
-async def test_get_uploads_room_id_thread_thread_id_filename_w_internal(
+async def test_post_uploads_room_id_thread_thread_id_w_hidden_name(
     cto,
-    the_threads,
     uploads_path,
-    w_filename,
+    the_threads,
 ):
-    thread_uploads_path = uploads_path / "threads"
-    thread_path = thread_uploads_path / TEST_THREAD_ID_STR
-    thread_path.mkdir(parents=True)
-    (thread_path / w_filename).write_text("internal")
+    cto.return_value = mock.create_autospec(
+        config_rooms.RoomConfig,
+        has_sandbox=True,
+    )
+    upload_file = fastapi.UploadFile(
+        file=io.BytesIO(TEST_CONTENT),
+        filename=".hidden",
+        headers={"Content-Type": "text/plain"},
+    )
     the_installation = mock.create_autospec(installation.Installation)
-    the_installation.threads_upload_path = str(thread_uploads_path)
+    the_installation.threads_upload_path = str(uploads_path / "threads")
 
-    with pytest.raises(fastapi.HTTPException) as exc_info:
-        await thread_views.get_uploads_room_id_thread_thread_id_filename(
+    with raises_httpexc(code=400, match="starts with '.': .hidden"):
+        await thread_views.post_uploads_room_id_thread_thread_id(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
-            filename=w_filename,
+            upload_file=upload_file,
             the_installation=the_installation,
             the_threads=the_threads,
             the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
@@ -431,4 +462,48 @@ async def test_get_uploads_room_id_thread_thread_id_filename_w_internal(
             the_logger=mock.create_autospec(loggers.LogWrapper),
         )
 
-    assert exc_info.value.status_code == 404
+    assert not (uploads_path / "threads").exists()
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.util.store_upload")
+@mock.patch("soliplex.views.agui._check_thread_ownership")
+async def test_post_uploads_room_id_thread_thread_id_w_store_failure(
+    cto,
+    store_upload,
+    uploads_path,
+    the_threads,
+):
+    cto.return_value = mock.create_autospec(
+        config_rooms.RoomConfig,
+        has_sandbox=True,
+    )
+    store_upload.side_effect = OSError("No space left on device")
+    upload_file = fastapi.UploadFile(
+        file=io.BytesIO(TEST_CONTENT),
+        filename=TEST_FILENAME,
+        headers={"Content-Type": "text/plain"},
+    )
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.threads_upload_path = str(uploads_path / "threads")
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+    failed = loggers.UPLOADS_POST_ROOM_THREAD_STORE_FAILED
+
+    with raises_httpexc(code=500, match=f"{failed}: {TEST_FILENAME}"):
+        await thread_views.post_uploads_room_id_thread_thread_id(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            upload_file=upload_file,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    the_logger.exception.assert_called_once_with(
+        failed,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        filename=TEST_FILENAME,
+    )

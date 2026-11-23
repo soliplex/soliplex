@@ -227,8 +227,9 @@ class SecretConfig:
         _no_repr_no_compare_none()
     )
 
-    # Set by 'soliplex.secrets.get_secret'
+    # Set by 'get_secret' below
     _resolved: str = None
+    _resolved_by: SecretSource = _no_repr_no_compare_none()
 
     def __post_init__(self):
         if self.sources is None:
@@ -273,6 +274,23 @@ class SecretConfig:
     def resolved(self) -> str | None:
         return self._resolved
 
+    @property
+    def resolved_by(self) -> SecretSource | None:
+        """The source which resolved the secret, or 'None' if unresolved"""
+        return self._resolved_by
+
+    @property
+    def is_ephemeral(self) -> bool:
+        """True if the secret was resolved from a 'random_chars' source
+
+        Such a value changes whenever the process restarts, and differs
+        between processes.
+        """
+        return (
+            self._resolved_by is not None
+            and self._resolved_by.kind == RandomCharsSecretSource.kind
+        )
+
 
 def get_secret(secret_config: SecretConfig) -> str:
     excs = []
@@ -292,6 +310,7 @@ def get_secret(secret_config: SecretConfig) -> str:
                 )
 
             secret_config._resolved = getter(source)
+            secret_config._resolved_by = source
         except secrets.SecretError as exc:
             excs.append(exc)
 

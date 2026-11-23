@@ -49,7 +49,7 @@ async def list_room_file_uploads(
     return [
         sub.name
         for sub in room_dir.glob("*")
-        if not util.is_internal_upload_name(sub.name) and sub.is_file()
+        if not util.is_hidden_upload_name(sub.name) and sub.is_file()
     ]
 
 
@@ -76,7 +76,7 @@ async def get_room_file_upload(
     room_dir = uploads_path / room_id
     file_path = room_dir / filename
 
-    if util.is_internal_upload_name(filename) or not file_path.exists():
+    if util.is_hidden_upload_name(filename) or not file_path.exists():
         raise UploadNotFound("room", filename)
 
     try:
@@ -104,7 +104,7 @@ async def list_thread_file_uploads(
     return [
         sub.name
         for sub in thread_dir.glob("*")
-        if not util.is_internal_upload_name(sub.name) and sub.is_file()
+        if not util.is_hidden_upload_name(sub.name) and sub.is_file()
     ]
 
 
@@ -131,7 +131,7 @@ async def get_thread_file_upload(
     thread_dir = uploads_path / thread_id
     file_path = thread_dir / filename
 
-    if util.is_internal_upload_name(filename) or not file_path.exists():
+    if util.is_hidden_upload_name(filename) or not file_path.exists():
         raise UploadNotFound("thread", filename)
 
     try:

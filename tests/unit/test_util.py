@@ -1,6 +1,7 @@
 import contextlib
 import datetime
 import errno
+import io
 import os
 import pathlib
 import re
@@ -10,6 +11,7 @@ import logfire
 import pytest
 from starlette import datastructures
 
+from soliplex import loggers
 from soliplex import util
 
 GIT_HASH = "test-git-hash"
@@ -478,10 +480,9 @@ def test_upload_files_skips_file_removed_before_stat(temp_dir):
     assert list(found) == ["kept.txt"]
 
 
-def test_upload_files_hides_internal_names(temp_dir):
+def test_upload_files_skips_hidden_file(temp_dir):
     (temp_dir / "kept.txt").write_text("kept")
-    (temp_dir / f"{util.UPLOAD_RESERVATION_PREFIX}abc").write_text("x")
-    (temp_dir / ".nfs0001").write_text("x")
+    (temp_dir / ".hidden").write_text("hidden")
 
     found = util.upload_files(temp_dir)
 
@@ -491,16 +492,76 @@ def test_upload_files_hides_internal_names(temp_dir):
 @pytest.mark.parametrize(
     "name, expected",
     [
-        (f"{util.UPLOAD_RESERVATION_PREFIX}0123abcd", True),
-        (".nfs000000000001", True),
         ("report.pdf", False),
-        (".env", False),
         ("a.nfs1", False),
-        ("x.soliplex-upload-1", False),
+        (".env", True),
+        (".nfs000000000001", True),
+        (f"{util.UPLOAD_PARTIAL_PREFIX}0123abcd", True),
     ],
 )
-def test_is_internal_upload_name(name, expected):
-    assert util.is_internal_upload_name(name) is expected
+def test_is_hidden_upload_name(name, expected):
+    found = util.is_hidden_upload_name(name)
+
+    assert found is expected
+
+
+def test_store_upload_wo_directory(temp_dir):
+    source = io.BytesIO(b"content")
+    source.seek(3)
+    target = temp_dir / "uploads" / "a.txt"
+
+    util.store_upload(source, target)
+
+    assert target.read_bytes() == b"content"
+    assert [path.name for path in target.parent.iterdir()] == ["a.txt"]
+
+
+def test_store_upload_replaces_existing(temp_dir):
+    source = io.BytesIO(b"new")
+    target = temp_dir / "a.txt"
+    target.write_bytes(b"old content")
+
+    util.store_upload(source, target)
+
+    assert target.read_bytes() == b"new"
+    assert [path.name for path in temp_dir.iterdir()] == ["a.txt"]
+
+
+def test_store_upload_w_copy_failure(temp_dir):
+    source = mock.create_autospec(io.BytesIO, instance=True)
+    source.read.side_effect = OSError("broken spool")
+    target = temp_dir / "a.txt"
+    target.write_bytes(b"old content")
+
+    with pytest.raises(OSError, match="broken spool"):
+        util.store_upload(source, target)
+
+    assert target.read_bytes() == b"old content"
+    assert [path.name for path in temp_dir.iterdir()] == ["a.txt"]
+
+
+@mock.patch.object(util, "logger")
+def test_store_upload_w_cleanup_failure(logger, temp_dir):
+    source = mock.create_autospec(io.BytesIO, instance=True)
+    source.read.side_effect = OSError("broken spool")
+    target = temp_dir / "a.txt"
+
+    with (
+        mock.patch.object(
+            pathlib.Path,
+            "unlink",
+            side_effect=OSError("stuck"),
+        ),
+        pytest.raises(OSError, match="broken spool"),
+    ):
+        util.store_upload(source, target)
+
+    (left_behind,) = temp_dir.iterdir()
+    assert left_behind.name.startswith(util.UPLOAD_PARTIAL_PREFIX)
+    logger.exception.assert_called_once_with(
+        loggers.UPLOADS_PARTIAL_NOT_REMOVED,
+        left_behind,
+    )
 
 
 def test_stored_size_w_regular_file(temp_dir):
@@ -584,11 +645,11 @@ def test_scan_uploads(temp_dir):
     (temp_dir / "b.txt").write_bytes(b"defgh")
     (temp_dir / "sub").mkdir()
     (temp_dir / "sub" / "nested.txt").write_bytes(b"not counted")
-    reservation = temp_dir / f"{util.UPLOAD_RESERVATION_PREFIX}abc"
+    reservation = temp_dir / f"{util.UPLOAD_PARTIAL_PREFIX}abc"
     reservation.write_bytes(b"0123456789")
     os.utime(reservation, (1_700_000_000, 1_700_000_000))
     (temp_dir / ".nfs0001").write_bytes(b"xy")
-    (temp_dir / ".nfs-dir").mkdir()  # internal, but not a regular file
+    (temp_dir / ".nfs-dir").mkdir()  # hidden, but not a regular file
 
     found = util.scan_uploads(temp_dir)
 
@@ -598,7 +659,7 @@ def test_scan_uploads(temp_dir):
     assert sorted(found.hidden, key=lambda h: h.name) == [
         util.HiddenUpload(name=".nfs0001", size_bytes=2, mtime=mock.ANY),
         util.HiddenUpload(
-            name=f"{util.UPLOAD_RESERVATION_PREFIX}abc",
+            name=f"{util.UPLOAD_PARTIAL_PREFIX}abc",
             size_bytes=10,
             mtime=1_700_000_000,
         ),

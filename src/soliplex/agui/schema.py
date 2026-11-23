@@ -9,6 +9,7 @@ import sqlalchemy
 from ag_ui import core as agui_core
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy import schema as sqla_schema
+from sqlalchemy.dialects import postgresql as sqla_postgresql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 from sqlalchemy.sql import sqltypes as sqla_sqltypes
 
@@ -94,6 +95,24 @@ class Thread(Base):
     #
     user_name: Mapped[str] = mapped_column(index=True)
     email: Mapped[str | None] = mapped_column(index=True)
+
+    # Accumulated full-text search vector of the thread's user prompts
+    # and agent responses (PostgreSQL only; always NULL on SQLite).
+    text_search: Mapped[str | None] = mapped_column(
+        sqla_postgresql.TSVECTOR().with_variant(
+            sqla_sqltypes.Text(), "sqlite"
+        ),
+        deferred=True,
+    )
+
+    __table_args__ = (
+        sqlalchemy.Index(
+            "ix_thread_text_search",
+            "text_search",
+            postgresql_using="gin",
+        ).ddl_if(dialect="postgresql"),
+    )
+
     runs: Mapped[list[Run]] = relationship(
         back_populates="thread",
         order_by="Run.created",

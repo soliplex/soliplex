@@ -53,6 +53,8 @@ UPLOADS_ROOM_QUOTA_EXCEEDED = "room upload quota exceeded"
 UPLOADS_ROOM_BUSY = "room upload busy"
 UPLOADS_ROOM_STORAGE_UNAVAILABLE = "room upload storage unavailable"
 UPLOADS_POST_ROOM_THREAD = "uploads post room thread"
+UPLOADS_POST_ROOM_THREAD_STORE_FAILED = "uploads post room thread store failed"
+UPLOADS_PARTIAL_NOT_REMOVED = "partial upload file not removed: %s"
 
 WORKDIRS_GET_ROOM_THREAD = "workdirs get room thread"
 WORKDIRS_GET_ROOM_THREAD_FILE = "workdirs get room thread file"

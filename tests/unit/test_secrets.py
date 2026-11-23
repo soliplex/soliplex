@@ -59,6 +59,21 @@ SubprocessError = pytest.raises(secrets.SecretSubprocessError)
             NoRaise,
             SECRET_VALUE,
         ),
+        # Whitespace is stripped
+        (
+            SECRET_NAME,
+            None,
+            {SECRET_NAME: f"{SECRET_VALUE}\n"},
+            NoRaise,
+            SECRET_VALUE,
+        ),
+        (
+            SECRET_NAME,
+            None,
+            {SECRET_NAME: f" {SECRET_VALUE} "},
+            NoRaise,
+            SECRET_VALUE,
+        ),
     ],
 )
 def test_get_env_var_secret_wo_installation_config(
@@ -153,6 +168,23 @@ def test_get_env_var_secret_wo_installation_config(
             NoRaise,
             SECRET_VALUE,
         ),
+        # Whitespace is stripped
+        (
+            SECRET_NAME,
+            ENV_VAR_NAME,
+            {},
+            {ENV_VAR_NAME: f"{SECRET_VALUE}\n"},
+            NoRaise,
+            SECRET_VALUE,
+        ),
+        (
+            SECRET_NAME,
+            ENV_VAR_NAME,
+            {},
+            {ENV_VAR_NAME: f" {SECRET_VALUE} "},
+            NoRaise,
+            SECRET_VALUE,
+        ),
     ],
 )
 def test_get_env_var_secret_w_installation_config(
@@ -198,6 +230,7 @@ def test_get_env_var_secret_w_installation_config(
         ),
         ("./nonesuch", FilePathNotFound, ERROR_MISS, None),
         ("./secret_file", NoRaise, SECRET_VALUE, SECRET_VALUE),
+        # Whitespace is stripped
         ("./secret_file", NoRaise, f"{SECRET_VALUE} ", SECRET_VALUE),
         ("./secret_file", NoRaise, f"{SECRET_VALUE}\n", SECRET_VALUE),
         ("./secret_file", NoRaise, f"\n {SECRET_VALUE}\n", SECRET_VALUE),

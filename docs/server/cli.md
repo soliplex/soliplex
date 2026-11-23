@@ -556,12 +556,25 @@ For each secret declared in the installation, one line is printed in the
 form:
 
 ```text
-- <secret_name>               OK
+- <secret_name>               OK (<source_kind>)
 - <secret_name>               MISSING
 ```
 
 `OK` means the secret resolved via at least one of its configured
-sources; `MISSING` means no source produced a value.
+sources, and names the kind of the source which resolved it (e.g.,
+`OK (env_var)`); `MISSING` means no source produced a value.
+
+If any secret resolved from a `random_chars` source, a warning follows
+the list:  such values change whenever the server restarts
+(including a `serve --reload=config` reload), and differ between server
+processes, which breaks e.g. `SESSION_MIDDLEWARE_TOKEN` (in-progress
+logins and authn cookies) and `URL_SAFE_TOKEN_SECRET` (tokens).  The
+warning does not change the exit status.
+
+The audit runs in its own process, so it resolves secrets from that
+process's environment:  for a container deployment, run it in the
+backend's service (e.g., `docker compose run --rm backend soliplex-cli
+audit ...`) so that its answer matches the server's.
 
 #### Exit Status
 
@@ -863,11 +876,14 @@ do **not** affect the exit status, and `--quiet` does not print them:
 - **Over quota.** With several server processes sharing the uploads tree,
   a room's quota is soft, and usage can go slightly over it (see
   [Quotas](../config/rooms.md#quotas)).
-- **Orphaned upload files.** `.soliplex-upload-*` reservations and
-  `.nfs*` files last modified more than an hour ago. A reservation is left
-  behind when a server crashes, or loses its host, mid-upload; an `.nfs*`
-  file, when a file deleted on NFS was never closed. Orphaned reservations
-  still count against the room's quota.
+- **Orphaned upload files.** Hidden files last modified more than an
+  hour ago: `.soliplex-upload-*` reservations (kind `reservation`), `.nfs*`
+  files (kind `nfs`), and any other name starting with `.` (kind `hidden`).
+  A reservation is left behind when a server crashes, or loses its host,
+  mid-upload; an `.nfs*` file, when a file deleted on NFS was never
+  closed; any other hidden file was placed by an operator, or uploaded
+  before soliplex refused names starting with `.`. All of them count
+  against the room's quota.
 - **A quota with no effect**, because room uploads are not configured.
 
 Overages and orphans are notes, not errors, so that an audit used as a

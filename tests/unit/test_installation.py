@@ -1668,10 +1668,20 @@ async def test_open_engines_refuses_under_a_policy():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("w_authz_ram", [False, True])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 @mock.patch("soliplex.installation.add_no_auth_user_as_admin")
-async def test_open_engines_handles_no_auth_mode(anauaa, w_no_auth_mode):
+async def test_open_engines_handles_no_auth_mode(
+    anauaa,
+    tmp_path,
+    w_no_auth_mode,
+    w_authz_ram,
+):
+    authz_disk_dburi = f"sqlite+aiosqlite:///{tmp_path}/authz.db"
     the_installation = _memory_installation()
+
+    if not w_authz_ram:
+        the_installation._config._authorization_async_dburi = authz_disk_dburi
 
     with mock.patch.object(alembic_migrations, "ensure_current_engine"):
         async with installation.open_engines(
@@ -1681,7 +1691,7 @@ async def test_open_engines_handles_no_auth_mode(anauaa, w_no_auth_mode):
         ):
             pass
 
-    if w_no_auth_mode:
+    if w_no_auth_mode and w_authz_ram:
         (anauaa_called,) = anauaa.call_args_list
         (conn,) = anauaa_called.args
         assert isinstance(conn, sqlalchemy.Connection)

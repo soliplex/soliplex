@@ -406,9 +406,10 @@ What counts against `room_uploads_bytes`:
 - **Uploads in progress**, at their full size from the moment they
   start. Each upload is written through a hidden
   `.soliplex-upload-<id>` reservation file, then renamed into place.
-  Reservations, and any `.nfs*` files the NFS client leaves behind, are
-  never listed, downloaded, or shown to the room's agent, but they occupy
-  storage, so they count.
+- **Hidden files**, whose names start with `.`: reservations, any
+  `.nfs*` files the NFS client leaves behind, and any others an operator
+  places. They are never listed, downloaded, or shown to the room's agent,
+  but they occupy storage, so they count.
 - **Not** symlinks an operator places in the room to share a file: they
   store none of its bytes. Linked files are listed, but not counted.
 

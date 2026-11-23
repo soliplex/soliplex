@@ -640,6 +640,17 @@ FRESH = NOW - 10
                 }
             ],
         ),
+        (
+            [util.HiddenUpload(name=".env", size_bytes=5, mtime=STALE)],
+            [
+                {
+                    "name": ".env",
+                    "kind": "hidden",
+                    "size_bytes": 5,
+                    "age_seconds": audit_rooms.ORPHANED_UPLOAD_AGE_SECONDS + 1,
+                }
+            ],
+        ),
     ],
 )
 def test__room_orphan_reports(w_hidden, exp_orphans):

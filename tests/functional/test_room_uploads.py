@@ -171,7 +171,7 @@ def test_upload_list_download(client, room_dir):
     assert posted.status_code == 204
     assert posted.content == b""
     assert (room_dir / "a.txt").read_bytes() == content
-    assert list(room_dir.glob(f"{util.UPLOAD_RESERVATION_PREFIX}*")) == []
+    assert list(room_dir.glob(f"{util.UPLOAD_PARTIAL_PREFIX}*")) == []
 
     listing = client.get(f"{API}/uploads/{QUOTA_ROOM}")
 
@@ -204,7 +204,7 @@ def test_upload_over_quota(client, room_dir):
         ),
     }
     assert not (room_dir / "b.txt").exists()
-    assert list(room_dir.glob(f"{util.UPLOAD_RESERVATION_PREFIX}*")) == []
+    assert list(room_dir.glob(f"{util.UPLOAD_PARTIAL_PREFIX}*")) == []
 
     # Replacing a file counts only the difference in size.
     replaced = _post(client, "a.txt", b"y" * QUOTA_BYTES)
@@ -241,7 +241,7 @@ def test_internal_files_counted_not_served(client, room_dir):
     # An upload in progress (or orphaned) holds its reservation:  counted
     # against the quota, but never listed, downloaded, or deleted.
     room_dir.mkdir(parents=True)
-    reservation = room_dir / f"{util.UPLOAD_RESERVATION_PREFIX}abc"
+    reservation = room_dir / f"{util.UPLOAD_PARTIAL_PREFIX}abc"
     reservation.write_bytes(b"r" * 15)
 
     body = client.get(f"{API}/uploads/{QUOTA_ROOM}").json()
@@ -311,7 +311,7 @@ def test_audit_rooms_notes_overage_and_orphans(tmp_path, room_dir):
     config_path = _upload_installation(tmp_path)
     room_dir.mkdir(parents=True)
     (room_dir / "big.bin").write_bytes(b"x" * (QUOTA_BYTES + 5))
-    orphan = room_dir / f"{util.UPLOAD_RESERVATION_PREFIX}orphan"
+    orphan = room_dir / f"{util.UPLOAD_PARTIAL_PREFIX}orphan"
     orphan.write_bytes(b"r" * 7)
     two_hours_ago = time.time() - 7200
     os.utime(orphan, (two_hours_ago, two_hours_ago))

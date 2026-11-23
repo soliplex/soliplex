@@ -79,6 +79,10 @@ class SecretsNotFound(ExceptionGroup, SecretError):
 def get_env_var_secret(
     source: config_secrets.EnvVarSecretSource,
 ):
+    """Look up a secret value from the environment / doenv
+
+    Strip any whitespace from a found value.
+    """
     if source._installation_config is not None:
         from_dotenv = source._installation_config.from_dotenv
     else:
@@ -87,7 +91,7 @@ def get_env_var_secret(
     merged = os.environ | from_dotenv
 
     try:
-        return merged[source.env_var_name]
+        return merged[source.env_var_name].strip()
     except KeyError as exc:
         raise SecretEnvVarNotFound(
             source.secret_name,
@@ -98,6 +102,10 @@ def get_env_var_secret(
 def get_file_path_secret(
     source: config_secrets.FilePathSecretSource,
 ):
+    """Look up a secret value from a file path.
+
+    Strip any whitespace from a found value.
+    """
     file_path = pathlib.Path(source.file_path)
     if not file_path.is_absolute():
         file_path = source._config_path.parent / source.file_path
@@ -115,6 +123,10 @@ def get_file_path_secret(
 def get_subprocess_secret(
     source: config_secrets.SubprocessSecretSource,
 ):
+    """Look up a secret value from a subprocess call.
+
+    Strip any whitespace from a found value.
+    """
     try:
         found = subprocess.check_output(
             [source.command, *source.args],
@@ -138,4 +150,5 @@ def get_subprocess_secret(
 def get_random_chars_secret(
     source: config_secrets.RandomCharsSecretSource,
 ):
+    """Compute a secret value from random characters."""
     return os.urandom(source.n_chars).hex()

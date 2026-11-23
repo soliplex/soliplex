@@ -725,8 +725,8 @@ async def open_engines(
 ):
     """Yield both engines, at the revision this release of soliplex expects.
 
-    Handle the special case for `no_auth_mode` (add the default user
-    as an admin) here.
+    Handle the special case for `no_auth_mode` here, adding the default user
+    as an admin for RAM-based authz databases.  See #1512.
 
     The engines are disposed on the way out, however the block ends -- a
     refused migration included.
@@ -738,17 +738,23 @@ async def open_engines(
     Refuse migrations prohibited by the installation's 'migration_policy',
     as well as in the case that the application runs with 'multiple_writers'.
     """
+    threads_engine = _create_async_engine(
+        the_installation.thread_persistence_async_dburi,
+        json_serializer=util.serialize_sqla_json,
+        pool_pre_ping=True,
+    )
+    authz_is_ram = (
+        the_installation.authorization_async_dburi
+        == config_installation.ASYNC_MEMORY_ENGINE_URL
+    )
+    authz_engine = _create_async_engine(
+        the_installation.authorization_async_dburi,
+        json_serializer=util.serialize_sqla_json,
+        pool_pre_ping=True,
+    )
     engines = Engines(
-        threads_engine=_create_async_engine(
-            the_installation.thread_persistence_async_dburi,
-            json_serializer=util.serialize_sqla_json,
-            pool_pre_ping=True,
-        ),
-        authorization_engine=_create_async_engine(
-            the_installation.authorization_async_dburi,
-            json_serializer=util.serialize_sqla_json,
-            pool_pre_ping=True,
-        ),
+        threads_engine=threads_engine,
+        authorization_engine=authz_engine,
     )
     try:
         for database, engine in (
@@ -764,8 +770,7 @@ async def open_engines(
                 ),
             )
 
-        if no_auth_mode:
-            authz_engine = engines.authorization_engine
+        if no_auth_mode and authz_is_ram:
             async with authz_engine.begin() as ra_connection:
                 await ra_connection.run_sync(
                     add_no_auth_user_as_admin,

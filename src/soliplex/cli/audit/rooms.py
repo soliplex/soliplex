@@ -165,11 +165,19 @@ def _room_quota_reports(
     return {}, reports
 
 
+# The Linux NFS client renames a file which is unlinked while still open
+# to '.nfsXXXX', until the last holder closes it.
+NFS_SILLY_RENAME_PREFIX = ".nfs"
+
+
 def _orphan_kind(name: str) -> str:
-    if name.startswith(util.UPLOAD_RESERVATION_PREFIX):
+    if name.startswith(util.UPLOAD_PARTIAL_PREFIX):
         return "reservation"
 
-    return "nfs"
+    if name.startswith(NFS_SILLY_RENAME_PREFIX):
+        return "nfs"
+
+    return "hidden"
 
 
 def _room_orphan_reports(

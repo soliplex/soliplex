@@ -4,6 +4,7 @@ import collections.abc
 import contextlib
 import datetime
 import typing
+import warnings
 
 import logfire
 from ag_ui import core as agui_core
@@ -15,6 +16,7 @@ from soliplex import agui
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.agui import sse_delivery as agui_sse_delivery
+from soliplex.agui import text_search as agui_text_search
 from soliplex.agui import util as agui_util
 
 FeedbackReviewStatus = agui.FeedbackReviewStatus
@@ -188,11 +190,21 @@ class ThreadStorage(agui.ThreadStorage):
         after: agui.ThreadPagePosition | None = None,
         label_ids: list[int] = None,
         unlabeled: bool = False,
+        text_query: str = None,
         name_query: str = None,
     ) -> tuple[
         list[tuple[agui_schema.Thread, datetime.datetime]],
         agui.ThreadPagePosition | None,
     ]:
+        if name_query is not None:
+            warnings.warn(
+                agui.NAME_QUERY_DEPRECATION,
+                category=DeprecationWarning,
+                stacklevel=2,
+            )
+            if text_query is None:
+                text_query = name_query
+
         room_ids = list(room_ids)
 
         if not room_ids:
@@ -270,13 +282,13 @@ class ThreadStorage(agui.ThreadStorage):
             if label_filters:
                 query = query.where(sqla_sql.or_(*label_filters))
 
-            if name_query:
+            if text_query:
                 # Correlated rather than joined to 'thread_metadata',
                 # which is optional: a never-titled thread has no row,
                 # and must still appear in an unfiltered listing.
                 fold = await _name_fold(session)
-                pattern = f"%{_like_escape(name_query).lower()}%"
-                query = query.where(
+                pattern = f"%{_like_escape(text_query).lower()}%"
+                text_matches = [
                     sqla_sql.select(sqla_sql.literal(1))
                     .select_from(agui_schema.ThreadMetadata)
                     .where(
@@ -288,7 +300,17 @@ class ThreadStorage(agui.ThreadStorage):
                     )
                     .correlate(agui_schema.Thread)
                     .exists()
-                )
+                ]
+
+                connection = await session.connection()
+                if agui_text_search.supports_text_search(
+                    connection.dialect.name
+                ):
+                    text_matches.append(
+                        agui_text_search.matches_clause(text_query)
+                    )
+
+                query = query.where(sqla_sql.or_(*text_matches))
 
             if after is not None:
                 # Strictly past the previous page's last thread in the
@@ -831,6 +853,47 @@ class ThreadStorage(agui.ThreadStorage):
             run.finished = agui_util._timestamp()
             session.add(run)
 
+    async def index_run_text(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> None:
+        """Add a finished run's text to its thread's full-text search
+
+        The text is the run's new user prompts and its agent responses.
+        A no-op unless the database is PostgreSQL.
+        """
+        async with self.session as session:
+            connection = await session.connection()
+            if not agui_text_search.supports_text_search(
+                connection.dialect.name
+            ):
+                return
+
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            run_input = await run.awaitable_attrs.run_agent_input
+            messages = [] if run_input is None else run_input.messages
+            events = await run.list_events()
+
+            text = agui_text_search.run_search_text(messages, events)
+
+            if text:
+                await session.execute(
+                    agui_text_search.append_text_statement(
+                        run.thread_id_, text
+                    )
+                )
+
     async def list_run_events_after(
         self,
         *,
@@ -1360,7 +1423,12 @@ async def finish_run(
     thread_id: str,
     run_id: str,
 ):
-    """Mark a run as finished in the database."""
+    """Mark a run as finished in the database.
+
+    Then, in a separate transaction, add the run's text to its thread's
+    full-text search.  A failure there is logged, and leaves the run
+    finished.
+    """
     async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
         the_threads = ThreadStorage(session)
 
@@ -1368,6 +1436,21 @@ async def finish_run(
             await the_threads.finish_run(
                 user_name=user_name,
                 room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+            )
+
+        try:
+            async with session.begin():
+                await the_threads.index_run_text(
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                )
+        except Exception:
+            logfire.exception(
+                "Error indexing run text: {thread_id}/{run_id}",
                 thread_id=thread_id,
                 run_id=run_id,
             )

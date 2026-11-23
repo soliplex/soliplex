@@ -1,7 +1,7 @@
 """Room uploads:  list, download, upload, and delete a room's shared files
 
 An upload is written through a hidden *reservation* file in the room's
-directory ('util.UPLOAD_RESERVATION_PREFIX'):
+directory ('util.UPLOAD_PARTIAL_PREFIX'):
 
 1. Reserve, under the room's lock (milliseconds):  check the room's
    quota against its stored bytes (reservations included), then create
@@ -200,9 +200,7 @@ class UploadLargerThanReserved(ValueError):
 
 
 def _reservation_path(room_dir: pathlib.Path) -> pathlib.Path:
-    return room_dir / (
-        f"{views_util.UPLOAD_RESERVATION_PREFIX}{uuid.uuid4().hex}"
-    )
+    return room_dir / (f"{views_util.UPLOAD_PARTIAL_PREFIX}{uuid.uuid4().hex}")
 
 
 def _reserve_room_upload(
@@ -435,7 +433,7 @@ async def get_uploads_room_filename(
     are under purview of the admin / operator:  symlinks to share e.g.
     large datasets between rooms may be intentional and appropriate.
 
-    Internal files (upload reservations, '.nfs*') are never served.
+    Hidden files (a leading '.') are never served.
     """
     the_logger.debug(loggers.UPLOADS_GET_ROOM_FILE)
 
@@ -465,7 +463,7 @@ async def get_uploads_room_filename(
 
     file_path = room_dir / filename
 
-    if views_util.is_internal_upload_name(filename) or not file_path.is_file():
+    if views_util.is_hidden_upload_name(filename) or not file_path.is_file():
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"No room upload: {filename}",
@@ -553,11 +551,10 @@ async def post_uploads_room(
 
     stripped_filename = pathlib.Path(upload_file.filename).name
 
-    if views_util.is_internal_upload_name(stripped_filename):
-        # It would be hidden from the listing, yet count against the quota.
+    if views_util.is_hidden_upload_name(stripped_filename):
         raise fastapi.HTTPException(
             status_code=400,
-            detail=f"Reserved upload filename: {stripped_filename}",
+            detail=f"Upload filename starts with '.': {stripped_filename}",
         )
 
     room_dir = pathlib.Path(uploads_path) / room_id
@@ -639,7 +636,7 @@ def _delete_room_upload(room_dir: pathlib.Path, filename: str) -> str | None:
 
     file_path = room_dir / filename
 
-    if views_util.is_internal_upload_name(filename) or not file_path.is_file():
+    if views_util.is_hidden_upload_name(filename) or not file_path.is_file():
         return f"No room upload: {filename}"
 
     file_path.unlink()
@@ -665,7 +662,7 @@ async def delete_uploads_room(
     """Delete one uploaded file from the room.
 
     The room has to have an upload with the given name:  a delete of
-    anything else, internal files included, answers 404, leaving the rest
+    anything else, hidden files included, answers 404, leaving the rest
     of the room's uploads alone.
 
     Requires the room's 'WRITE' permission (or admin access):  'READ'

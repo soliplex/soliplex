@@ -1,5 +1,6 @@
 import pathlib
 
+import anyio
 import fastapi
 import pydantic
 from fastapi import responses
@@ -144,7 +145,7 @@ async def get_uploads_room_id_thread_thread_id_filename(
     file_path = thread_dir / filename
 
     if (
-        soliplex_views_util.is_internal_upload_name(filename)
+        soliplex_views_util.is_hidden_upload_name(filename)
         or not file_path.is_file()
     ):
         raise fastapi.HTTPException(
@@ -204,10 +205,34 @@ async def post_uploads_room_id_thread_thread_id(
             headers={"Allow": "GET"},
         )
 
-    thread_dir = pathlib.Path(uploads_path) / thread_id
-    thread_dir.mkdir(parents=True, exist_ok=True)
     stripped_filename = pathlib.Path(upload_file.filename).name
-    upload_target = thread_dir / stripped_filename
-    upload_target.write_bytes(await upload_file.read())
+
+    if soliplex_views_util.is_hidden_upload_name(stripped_filename):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail=f"Upload filename starts with '.': {stripped_filename}",
+        )
+
+    upload_target = pathlib.Path(uploads_path) / thread_id / stripped_filename
+    try:
+        await anyio.to_thread.run_sync(
+            soliplex_views_util.store_upload,
+            upload_file.file,
+            upload_target,
+        )
+    except OSError:
+        the_logger.exception(
+            loggers.UPLOADS_POST_ROOM_THREAD_STORE_FAILED,
+            room_id=room_id,
+            thread_id=thread_id,
+            filename=stripped_filename,
+        )
+        raise fastapi.HTTPException(
+            status_code=500,
+            detail=(
+                f"{loggers.UPLOADS_POST_ROOM_THREAD_STORE_FAILED}: "
+                f"{stripped_filename}"
+            ),
+        ) from None
 
     return fastapi.Response(status_code=204)

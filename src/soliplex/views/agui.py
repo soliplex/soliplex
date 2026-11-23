@@ -264,7 +264,7 @@ async def get_agui_threads(
         after=after,
         label_ids=label_ids,
         unlabeled=unlabeled,
-        name_query=q,
+        text_query=q,
     )
 
     threads_labels = await the_threads.get_threads_labels(
