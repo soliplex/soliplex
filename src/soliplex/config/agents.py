@@ -509,18 +509,35 @@ _OPENAI_COMPAT_PROFILE = {
     "openai_chat_supports_multiple_system_messages": False,
 }
 
+# vLLM grammar-constrains strict tool arguments, and for a tool without
+# parameters the constrained decode can run on to 'max_tokens'.
+_VLLM_PROFILE = {
+    "openai_supports_strict_tool_definition": False,
+}
 
-def _profile_kw(agent_config: AgentConfig, *, openai_compat: bool) -> dict:
+
+def _context_window_kw(agent_config: AgentConfig) -> dict:
+    """Kwargs overriding PydanticAI 'context_window', if configured."""
+    return (
+        {"context_window": agent_config.context_window}
+        if agent_config.context_window is not None
+        else {}
+    )
+
+
+def _profile_kw(
+    agent_config: AgentConfig,
+    *,
+    openai_compat: bool,
+) -> dict:
     """Return the 'profile=' keyword for the model, or nothing.
 
     A partial profile is merged over Pydantic AI's own, so only what the
-    configuration actually says is passed. 'context_window' left unset
-    lets Pydantic AI fill it for a model it knows; set, it overrides.
+    configuration actually says is passed.
     """
-    profile = dict(_OPENAI_COMPAT_PROFILE) if openai_compat else {}
-
-    if agent_config.context_window is not None:
-        profile["context_window"] = agent_config.context_window
+    profile = (
+        _OPENAI_COMPAT_PROFILE if openai_compat else {}
+    ) | _context_window_kw(agent_config)
 
     return {"profile": profile} if profile else {}
 
@@ -529,16 +546,12 @@ def get_context_window_from_config(
     *,
     agent_config: AgentConfig,
 ) -> int | None:
-    """Return the model's context window, or None when nothing knows it.
+    """Return the model's context window, or None.
 
-    A declared window is the answer without building anything. Otherwise
-    it is what the model's profile resolves -- pydantic-ai fills it for
-    hosted models it recognises, and leaves it unset for a local one.
+    Use the explicitly-configured window, or else the value derived
+    from Pydantic AI's profile.
 
-    None also covers a configuration the model cannot be built from: an
-    agent template with no model name, or a provider whose key is not
-    set. Both fail loudly the moment a run starts; listing the room is
-    not that moment.
+    None means that no value could be derived.
     """
     if agent_config.context_window is not None:
         return agent_config.context_window
@@ -590,10 +603,11 @@ def get_model_from_config(
 
     elif agent_config.provider_type == LLMProviderType.VLLM:
         provider = vllm_providers.VLLMProvider(**provider_kw)
+
         return openai_models.OpenAIChatModel(
             model_name=model_name,
             provider=provider,
-            **_profile_kw(agent_config, openai_compat=False),
+            profile=_VLLM_PROFILE | _context_window_kw(agent_config),
             **model_settings_kw,
         )
 
