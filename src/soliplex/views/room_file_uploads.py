@@ -1,5 +1,6 @@
 import pathlib
 
+import anyio
 import fastapi
 from fastapi import responses
 
@@ -174,7 +175,7 @@ async def get_uploads_room_filename(
 
     file_path = room_dir / filename
 
-    if not file_path.is_file():
+    if views_util.is_hidden_upload_name(filename) or not file_path.is_file():
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"No room upload: {filename}",
@@ -250,14 +251,34 @@ async def post_uploads_room(
             headers={"Allow": ""},
         )
 
-    room_dir = pathlib.Path(uploads_path) / room_id
-    room_dir.mkdir(parents=True, exist_ok=True)
     stripped_filename = pathlib.Path(upload_file.filename).name
-    upload_target = room_dir / stripped_filename
-    content = await upload_file.read()
-    # Replace an operator-placed symlink, rather than writing through it.
-    upload_target.unlink(missing_ok=True)
-    upload_target.write_bytes(content)
+
+    if views_util.is_hidden_upload_name(stripped_filename):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail=f"Upload filename starts with '.': {stripped_filename}",
+        )
+
+    upload_target = pathlib.Path(uploads_path) / room_id / stripped_filename
+    try:
+        await anyio.to_thread.run_sync(
+            views_util.store_upload,
+            upload_file.file,
+            upload_target,
+        )
+    except OSError:
+        the_logger.exception(
+            loggers.UPLOADS_POST_ROOM_STORE_FAILED,
+            room_id=room_id,
+            filename=stripped_filename,
+        )
+        raise fastapi.HTTPException(
+            status_code=500,
+            detail=(
+                f"{loggers.UPLOADS_POST_ROOM_STORE_FAILED}: "
+                f"{stripped_filename}"
+            ),
+        ) from None
 
     the_audit.room_upload_added(room_id=room_id, filename=stripped_filename)
 
@@ -344,7 +365,10 @@ async def delete_uploads_room(
     stripped_filename = pathlib.Path(filename).name
     file_path = room_dir / stripped_filename
 
-    if not file_path.is_file():
+    if (
+        views_util.is_hidden_upload_name(stripped_filename)
+        or not file_path.is_file()
+    ):
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"No room upload: {filename}",
