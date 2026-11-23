@@ -1,4 +1,5 @@
 import dataclasses
+import hashlib
 import pathlib
 import re
 import shlex
@@ -136,7 +137,15 @@ class FilesystemCapability(ai_capabilities.AbstractCapability[typing.Any]):
             tools.append(self.run_script)
         if not tools:
             return None
-        return ai_toolsets.FunctionToolset(tools)
+        prefix = self.id or self.path.name
+        if (
+            not re.fullmatch(r"[A-Za-z0-9_-]+", prefix)
+            or len(prefix) + len("_read_resource") > 64
+        ):
+            prefix = (
+                "skill_" + hashlib.sha256(prefix.encode()).hexdigest()[:12]
+            )
+        return ai_toolsets.FunctionToolset(tools).prefixed(prefix)
 
     def _confined(self, dirname: str, value: str) -> pathlib.Path:
         root = (self.path / dirname).resolve()

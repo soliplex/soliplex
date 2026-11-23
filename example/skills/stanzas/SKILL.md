@@ -19,10 +19,10 @@ write new verse, and do not supply lines from memory.
 
 ## Your tools
 
-`read_resource` reads a bundled poem file. Its `path` argument always
+`stanzas_read_resource` reads a bundled poem file. Its `path` argument always
 starts with `resources/`.
 
-`run_script` runs a bundled script. Its `script` argument is always
+`stanzas_run_script` runs a bundled script. Its `script` argument is always
 `scripts/poem.py`, and its `arguments` argument is one string holding the
 command line.
 
@@ -165,7 +165,8 @@ with letters such as ABAB, and quote the stanza so the reader can check. Say
 Request: "What is the third stanza of Jabberwocky?"
 
 There is no verse in the request, so the poem is bundled. Call
-`run_script(script="scripts/poem.py", arguments="stanza jabberwocky --stanza 3")`.
+`stanzas_run_script` with `script="scripts/poem.py"` and
+`arguments="stanza jabberwocky --stanza 3"`.
 The script prints labels, `---`, and four lines. The answer:
 
 Jabberwocky - stanza 3 of 7
