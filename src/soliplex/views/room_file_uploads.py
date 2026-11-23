@@ -3,20 +3,28 @@
 An upload is written through a hidden *partial* file in the room's
 directory ('util.UPLOAD_PARTIAL_PREFIX'):
 
-1. Reserve:  create the partial, at the upload's full size
-   ('util.reserve_upload').
-2. Store:  copy the spooled upload into it, then rename it onto the
-   upload's name ('util.fill_upload').  Readers never see a partly
-   written file under that name.
+1. Reserve, under the room's lock (milliseconds):  check the room's
+   quota against its stored bytes (partials included), then create the
+   partial at the upload's full size ('util.reserve_upload').  From then
+   on, the upload counts against the quota for every process sharing the
+   uploads tree.
+2. Store, outside the lock:  copy the spooled upload into the partial,
+   then rename it onto the upload's name ('util.fill_upload').  Readers
+   never see a partly written file under that name.
 
 All filesystem work runs in worker threads (the uploads tree may be on a
 network filesystem), on a limiter of their own, through
 'anyio.to_thread.run_sync', which does not abandon the thread on
-cancellation:  so a partial is always renamed or removed.
+cancellation:  so the lock covers the whole reserve step, and a partial
+is always renamed or removed.
 """
 
+import asyncio
+import contextlib
+import dataclasses
 import os
 import pathlib
+import weakref
 
 import anyio
 import fastapi
@@ -45,6 +53,12 @@ depend_the_authz_logger = authz_views.depend_the_authz_logger
 
 RoomUploadAuditLog = loggers.RoomUploadAuditLog
 
+# The longest an upload waits for its room's lock before answering 503.
+# The lock covers only the reserve step, so a long wait means the
+# storage is stalled.  Kept below the usual 60-second proxy timeout, so
+# that the client sees the 503, not a proxy's 504.
+ROOM_UPLOAD_LOCK_TIMEOUT_SECONDS = 30
+
 # 'Retry-After' for every 503 this module answers.
 ROOM_UPLOAD_RETRY_AFTER_SECONDS = 5
 
@@ -64,9 +78,33 @@ depend_the_room_upload_audit_log = fastapi.Depends(
     get_the_room_upload_audit_log,
 )
 
+# One lock per room with an upload reserving, making "scan, check, and
+# create the partial" atomic within this process.  Weak values drop a
+# room's lock as soon as no upload holds or awaits it, so the table never
+# outgrows the uploads in flight.  Module level, not on 'Installation':
+# a config reload replaces the installation, and an upload under the old
+# lock would then race one under a fresh lock.
+#
+# The locks are per-process:  with more than one server process (e.g.
+# 'serve --workers N', or several replicas sharing the uploads tree) the
+# quota is soft.  Partials keep the overshoot small;  'soliplex-cli
+# audit rooms' reports it.
+_ROOM_UPLOAD_LOCKS: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+    weakref.WeakValueDictionary()
+)
+
 # Created on first use:  a limiter attaches to the event loop which first
 # waits on it.
 _UPLOAD_IO_LIMITER: anyio.CapacityLimiter | None = None
+
+
+def _room_upload_lock(room_id: str) -> asyncio.Lock:
+    lock = _ROOM_UPLOAD_LOCKS.get(room_id)
+
+    if lock is None:
+        lock = _ROOM_UPLOAD_LOCKS[room_id] = asyncio.Lock()
+
+    return lock
 
 
 def _upload_io_limiter() -> anyio.CapacityLimiter:
@@ -109,6 +147,28 @@ def _storage_unavailable(
     )
 
 
+@contextlib.asynccontextmanager
+async def _acquire_room_upload_lock(
+    room_id: str,
+    the_logger: loggers.LogWrapper,
+):
+    """Hold the room's upload lock;  raise 503 if it cannot be had in time"""
+    lock = _room_upload_lock(room_id)
+
+    try:
+        with anyio.fail_after(ROOM_UPLOAD_LOCK_TIMEOUT_SECONDS):
+            await lock.acquire()
+    except TimeoutError:
+        the_logger.exception(loggers.UPLOADS_ROOM_BUSY, room_id=room_id)
+        busy = _service_unavailable(f"{loggers.UPLOADS_ROOM_BUSY}: {room_id}")
+        raise busy from None
+
+    try:
+        yield
+    finally:
+        lock.release()
+
+
 def _upload_size(upload_file: fastapi.UploadFile) -> int:
     """Return the size of the (already spooled) uploaded file"""
     if upload_file.size is not None:
@@ -119,6 +179,42 @@ def _upload_size(upload_file: fastapi.UploadFile) -> int:
     stream.seek(0)
 
     return size
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class _OverQuota:
+    used_bytes: int
+    available_bytes: int
+
+
+def _reserve_room_upload(
+    partial: pathlib.Path,
+    upload_target: pathlib.Path,
+    upload_bytes: int,
+    quota_bytes: int | None,
+) -> _OverQuota | None:
+    """Check the quota, then create 'partial' for 'upload_bytes'
+
+    Runs in a worker thread, under the room's lock.  Replacing an existing
+    file counts only the difference in size;  other uploads' partials
+    count at their full size.  Return an '_OverQuota' (having created
+    nothing), or 'None' once reserved.  Raise 'OSError' when the storage
+    fails, leaving no partial behind.
+    """
+    if quota_bytes is not None:
+        used_bytes = views_util.scan_uploads(partial.parent).stored_bytes
+        replaced_bytes = views_util.stored_size(upload_target)
+        available_bytes = max(quota_bytes - used_bytes + replaced_bytes, 0)
+
+        if upload_bytes > available_bytes:
+            return _OverQuota(
+                used_bytes=used_bytes,
+                available_bytes=available_bytes,
+            )
+
+    views_util.reserve_upload(partial, upload_bytes)
+
+    return None
 
 
 async def has_write_access_to_room(
@@ -308,8 +404,15 @@ async def post_uploads_room(
     Body of request must be a file matching the `Content-Type' header
     of the request.  An upload with an existing file's name replaces it.
 
-    Answers 503, with 'Retry-After', when the storage fails;  nothing is
-    written.
+    If the room configures 'quotas.room_uploads_bytes', an upload which
+    would take the room's stored bytes past it answers 507, and nothing
+    is written.  Replacing a file counts only the difference in size, and
+    uploads in progress count at their full size.  With more than one
+    server process sharing the uploads tree, the quota is soft:  uploads
+    starting at the same moment in different processes may overshoot it.
+
+    Answers 503, with 'Retry-After', when the room's upload lock cannot
+    be had in time, or the storage fails;  nothing is written either way.
 
     Requires room 'WRITE' permission (or admin access):  'READ' access
     is not required, allowing narrowly-scoped automation tokens to push
@@ -338,7 +441,7 @@ async def post_uploads_room(
     # so 'READ' access is not required.  A KeyError can only mean that
     # the room is not (or no longer) configured.
     try:
-        _room_config = await the_installation.get_room_config(
+        room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=the_user_claims,
         )
@@ -368,20 +471,37 @@ async def post_uploads_room(
 
     room_dir = pathlib.Path(uploads_path) / room_id
     upload_target = room_dir / stripped_filename
+    quota_bytes = room_config.quotas.room_uploads_bytes
     upload_bytes = _upload_size(upload_file)
     # Named here, so that it can be removed even when cancelled before
     # the reserve step's result arrives.
     partial = views_util.upload_partial_path(room_dir)
 
     try:
-        await _run_upload_io(views_util.reserve_upload, partial, upload_bytes)
-        await _run_upload_io(
-            views_util.fill_upload,
-            partial,
-            upload_file.file,
-            upload_target,
-            upload_bytes,
-        )
+        # 1. Reserve.  Locked only after the lookup above has found the
+        #    room configured, so no unknown 'room_id' ever gets a lock.
+        async with _acquire_room_upload_lock(room_id, the_logger):
+            over_quota = await _run_upload_io(
+                _reserve_room_upload,
+                partial,
+                upload_target,
+                upload_bytes,
+                quota_bytes,
+            )
+
+        # 2. Store, outside the lock.
+        if over_quota is None:
+            await _run_upload_io(
+                views_util.fill_upload,
+                partial,
+                upload_file.file,
+                upload_target,
+                upload_bytes,
+            )
+    except fastapi.HTTPException:
+        # Busy:  nothing reserved.  No cleanup either, which on stalled
+        # storage would itself stall.
+        raise
     except OSError:
         # Either step has already removed whatever it reserved.
         the_logger.exception(
@@ -399,6 +519,30 @@ async def post_uploads_room(
         with anyio.CancelScope(shield=True):
             await _run_upload_io(views_util.discard_partial_upload, partial)
         raise
+
+    if over_quota is not None:
+        the_logger.error(
+            loggers.UPLOADS_ROOM_QUOTA_EXCEEDED,
+            room_id=room_id,
+            quota_bytes=quota_bytes,
+            used_bytes=over_quota.used_bytes,
+            upload_bytes=upload_bytes,
+        )
+        the_audit.room_upload_quota_exceeded(
+            room_id=room_id,
+            filename=stripped_filename,
+            quota_bytes=quota_bytes,
+            used_bytes=over_quota.used_bytes,
+            upload_bytes=upload_bytes,
+        )
+        raise fastapi.HTTPException(
+            status_code=507,
+            detail=(
+                f"{loggers.UPLOADS_ROOM_QUOTA_EXCEEDED}: "
+                f"{upload_bytes} bytes requested, "
+                f"{over_quota.available_bytes} available"
+            ),
+        )
 
     the_audit.room_upload_added(room_id=room_id, filename=stripped_filename)
 
