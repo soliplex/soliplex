@@ -254,7 +254,10 @@ async def post_uploads_room(
     room_dir.mkdir(parents=True, exist_ok=True)
     stripped_filename = pathlib.Path(upload_file.filename).name
     upload_target = room_dir / stripped_filename
-    upload_target.write_bytes(await upload_file.read())
+    content = await upload_file.read()
+    # Replace an operator-placed symlink, rather than writing through it.
+    upload_target.unlink(missing_ok=True)
+    upload_target.write_bytes(content)
 
     the_audit.room_upload_added(room_id=room_id, filename=stripped_filename)
 
