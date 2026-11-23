@@ -19,6 +19,7 @@ from soliplex.config import authsystem as config_authsystem
 from soliplex.config import completions as config_completions
 from soliplex.config import installation as config_installation
 from soliplex.config import quizzes as config_quizzes
+from soliplex.config import quotas as config_quotas
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
@@ -838,6 +839,34 @@ def test_room_from_config_bare(room_ic, which_agent):
     assert not room_model.allow_mcp
     assert not room_model.has_thread_uploads
     assert not room_model.has_room_uploads
+    assert room_model.quotas == models.RoomQuotas()
+    assert room_model.quotas.room_uploads_bytes is None
+
+
+@pytest.mark.parametrize("room_uploads_bytes", [None, 0, 500_000_000])
+def test_roomquotas_from_config(room_uploads_bytes):
+    quotas_config = config_quotas.QuotasConfig(
+        _room_uploads_bytes=room_uploads_bytes,
+    )
+
+    found = models.RoomQuotas.from_config(quotas_config)
+
+    assert found.room_uploads_bytes == room_uploads_bytes
+
+
+def test_room_from_config_w_quotas(room_ic, default_agent):
+    room_config = config_rooms.RoomConfig(
+        id=ROOM_ID,
+        name=ROOM_NAME,
+        description=ROOM_DESCRIPTION,
+        agent_config=default_agent,
+        quotas=config_quotas.QuotasConfig(_room_uploads_bytes=42),
+        _installation_config=room_ic,
+    )
+
+    room_model = models.Room.from_config(room_config)
+
+    assert room_model.quotas == models.RoomQuotas(room_uploads_bytes=42)
 
 
 def test_room_from_config_w_welcome(room_ic, default_agent):
