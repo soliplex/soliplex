@@ -9,7 +9,6 @@ import logging
 import os
 import pathlib
 import re
-import shutil
 import stat
 import subprocess
 import typing
@@ -208,8 +207,10 @@ def modified_at(stat_result: os.stat_result) -> datetime.datetime | None:
         return None
 
 
-# An upload is written to a hidden file in its target's directory, then
-# renamed onto the target's name.
+# An upload is written to a hidden *partial* file in its target's
+# directory, then renamed onto the target's name.  A room upload creates
+# its partial at full size first ('reserve_upload'), so that it counts
+# against the room's quota before any of it is copied.
 UPLOAD_PARTIAL_PREFIX = ".soliplex-upload-"
 
 _UPLOAD_COPY_CHUNK_BYTES = 1024 * 1024
@@ -226,6 +227,112 @@ def is_hidden_upload_name(name: str) -> bool:
     return name.startswith(".")
 
 
+class UploadLargerThanReserved(ValueError):
+    """The upload's source held more bytes than were reserved for it"""
+
+    def __init__(self, reserved_bytes: int):
+        self.reserved_bytes = reserved_bytes
+        super().__init__(
+            f"Upload is larger than its reserved {reserved_bytes} bytes",
+        )
+
+
+def upload_partial_path(directory: pathlib.Path) -> pathlib.Path:
+    """Name a new hidden partial file in the uploads 'directory'"""
+    return directory / f"{UPLOAD_PARTIAL_PREFIX}{uuid.uuid4().hex}"
+
+
+def reserve_upload(partial: pathlib.Path, upload_bytes: int):
+    """Create 'partial' (see 'upload_partial_path'), 'upload_bytes' long
+
+    Blocking:  call from a worker thread.  Creates 'partial's directory if
+    needed.  The file is extended to its full size at once, so that it
+    claims its space before any of the upload is copied into it.
+
+    Raises:
+
+    - 'OSError' if the directory or the file cannot be created, or
+      extended;  no file is left behind.
+    """
+    partial.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0)
+    fd = os.open(partial, flags, 0o666)
+
+    try:
+        os.ftruncate(fd, upload_bytes)
+    except BaseException:
+        os.close(fd)  # before the unlink:  see 'discard_partial_upload'
+        discard_partial_upload(partial)
+        raise
+
+    os.close(fd)
+
+
+def _copy_upload(source, out, reserved_bytes: int | None) -> int:
+    """Copy 'source' into 'out';  return the bytes copied
+
+    Refuse to copy more than 'reserved_bytes', unless it is 'None'.
+    """
+    written = 0
+
+    while chunk := source.read(_UPLOAD_COPY_CHUNK_BYTES):
+        written += len(chunk)
+
+        if reserved_bytes is not None and written > reserved_bytes:
+            raise UploadLargerThanReserved(reserved_bytes)
+
+        out.write(chunk)
+
+    return written
+
+
+def fill_upload(
+    partial: pathlib.Path,
+    source: typing.BinaryIO,
+    target: pathlib.Path,
+    reserved_bytes: int | None = None,
+):
+    """Copy 'source' into 'partial', then rename it onto 'target'
+
+    Blocking:  call from a worker thread.  'partial' was created by
+    'reserve_upload';  'source' is copied in chunks from its start, and
+    'partial' cut to the bytes copied, 'fsync'ed, and renamed onto
+    'target', replacing any file or symlink there.  On failure, 'partial'
+    is discarded and 'target' is left as it was.
+
+    Raises:
+
+    - 'UploadLargerThanReserved' if 'source' holds more than
+      'reserved_bytes' (when not 'None').
+    - 'OSError' if the copy or the rename fails.
+    """
+    try:
+        with partial.open("r+b") as out:
+            source.seek(0)
+            written = _copy_upload(source, out, reserved_bytes)
+            out.truncate(written)
+            out.flush()
+            os.fsync(out.fileno())
+
+        os.replace(partial, target)
+    except BaseException:
+        discard_partial_upload(partial)
+        raise
+
+
+def discard_partial_upload(partial: pathlib.Path):
+    """Remove 'partial', if it is still there
+
+    Blocking:  call from a worker thread, with 'partial' closed:  on NFS,
+    unlinking an open file leaves '.nfs*'.  A failure is logged, naming
+    the file left behind, not raised.
+    """
+    try:
+        partial.unlink(missing_ok=True)
+    except OSError:
+        logger.exception(loggers.UPLOADS_PARTIAL_NOT_REMOVED, partial)
+
+
 def store_upload(source: typing.BinaryIO, target: pathlib.Path):
     """Copy 'source' onto 'target', replacing any file or symlink there
 
@@ -239,25 +346,9 @@ def store_upload(source: typing.BinaryIO, target: pathlib.Path):
 
     - 'OSError' if the directory, the hidden file, or the rename fails.
     """
-    target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.parent / f"{UPLOAD_PARTIAL_PREFIX}{uuid.uuid4().hex}"
-    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0)
-
-    try:
-        with open(os.open(partial, flags, 0o666), "wb") as out:
-            source.seek(0)
-            shutil.copyfileobj(source, out, _UPLOAD_COPY_CHUNK_BYTES)
-            out.flush()
-            os.fsync(out.fileno())
-
-        os.replace(partial, target)
-    except BaseException:
-        # Closed already:  on NFS, unlinking an open file leaves '.nfs*'.
-        try:
-            partial.unlink(missing_ok=True)
-        except OSError:
-            logger.exception(loggers.UPLOADS_PARTIAL_NOT_REMOVED, partial)
-        raise
+    partial = upload_partial_path(target.parent)
+    reserve_upload(partial, 0)
+    fill_upload(partial, source, target)
 
 
 def upload_files(directory: pathlib.Path) -> dict[str, os.stat_result]:

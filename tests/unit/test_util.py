@@ -564,6 +564,52 @@ def test_store_upload_w_cleanup_failure(logger, temp_dir):
     )
 
 
+def test_reserve_upload(temp_dir):
+    partial = util.upload_partial_path(temp_dir / "uploads")
+
+    util.reserve_upload(partial, 1234)
+
+    assert partial.parent.name == "uploads"
+    assert partial.name.startswith(util.UPLOAD_PARTIAL_PREFIX)
+    assert partial.stat().st_size == 1234
+
+
+def test_reserve_upload_w_ftruncate_failure(temp_dir):
+    partial = util.upload_partial_path(temp_dir)
+
+    with (
+        mock.patch("os.ftruncate", side_effect=OSError("ENOSPC")),
+        pytest.raises(OSError, match="ENOSPC"),
+    ):
+        util.reserve_upload(partial, 1234)
+
+    assert list(temp_dir.iterdir()) == []
+
+
+@pytest.mark.parametrize("reserved_bytes", [None, 7, 100])
+def test_fill_upload(temp_dir, reserved_bytes):
+    partial = util.upload_partial_path(temp_dir)
+    util.reserve_upload(partial, reserved_bytes or 0)
+    target = temp_dir / "a.txt"
+
+    util.fill_upload(partial, io.BytesIO(b"content"), target, reserved_bytes)
+
+    assert target.read_bytes() == b"content"  # cut to the bytes copied
+    assert [path.name for path in temp_dir.iterdir()] == ["a.txt"]
+
+
+def test_fill_upload_w_source_larger_than_reserved(temp_dir):
+    partial = util.upload_partial_path(temp_dir)
+    util.reserve_upload(partial, 2)
+    target = temp_dir / "a.txt"
+
+    with pytest.raises(util.UploadLargerThanReserved) as exc_info:
+        util.fill_upload(partial, io.BytesIO(b"content"), target, 2)
+
+    assert exc_info.value.reserved_bytes == 2
+    assert list(temp_dir.iterdir()) == []
+
+
 def test_stored_size_w_regular_file(temp_dir):
     file_path = temp_dir / "a.txt"
     file_path.write_bytes(b"abc")
