@@ -202,17 +202,40 @@ def modified_at(stat_result: os.stat_result) -> datetime.datetime | None:
         return None
 
 
+# Reserved for the hidden files room uploads are written through.
+UPLOAD_RESERVATION_PREFIX = ".soliplex-upload-"
+
+# The Linux NFS client (EFS included) renames a file which is unlinked
+# while still open to '.nfsXXXX', until the last holder closes it.
+NFS_SILLY_RENAME_PREFIX = ".nfs"
+
+
+def is_internal_upload_name(name: str) -> bool:
+    """Is 'name' an internal file in an uploads directory?
+
+    Internal files are never listed, downloaded, or deleted through the
+    API, nor shown to the agent's tools;  they still occupy storage.
+    """
+    return name.startswith(
+        (UPLOAD_RESERVATION_PREFIX, NFS_SILLY_RENAME_PREFIX),
+    )
+
+
 def upload_files(directory: pathlib.Path) -> dict[str, os.stat_result]:
     """Map each file in the uploads 'directory' to its stat.
 
     Symlinks are followed, as the download views follow them: the
     operator may link a shared file in.  A missing 'directory' has no
     files.  One stat decides each entry, so an entry which is not a
-    regular file when stat'd, or cannot be stat'd, is left out.
+    regular file when stat'd, or cannot be stat'd, is left out, as are
+    internal files (see 'is_internal_upload_name').
     """
     files = {}
 
     for file_or_sub in directory.glob("*"):
+        if is_internal_upload_name(file_or_sub.name):
+            continue
+
         try:
             stat_result = file_or_sub.stat()
         except OSError:  # removed, a dangling or looping link, access denied

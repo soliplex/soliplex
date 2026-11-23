@@ -174,7 +174,7 @@ async def get_uploads_room_filename(
 
     file_path = room_dir / filename
 
-    if not file_path.is_file():
+    if views_util.is_internal_upload_name(filename) or not file_path.is_file():
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"No room upload: {filename}",
@@ -341,7 +341,10 @@ async def delete_uploads_room(
     stripped_filename = pathlib.Path(filename).name
     file_path = room_dir / stripped_filename
 
-    if not file_path.is_file():
+    if (
+        views_util.is_internal_upload_name(stripped_filename)
+        or not file_path.is_file()
+    ):
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"No room upload: {filename}",

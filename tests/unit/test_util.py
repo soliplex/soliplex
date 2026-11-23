@@ -476,6 +476,31 @@ def test_upload_files_skips_file_removed_before_stat(temp_dir):
     assert list(found) == ["kept.txt"]
 
 
+def test_upload_files_hides_internal_names(temp_dir):
+    (temp_dir / "kept.txt").write_text("kept")
+    (temp_dir / f"{util.UPLOAD_RESERVATION_PREFIX}abc").write_text("x")
+    (temp_dir / ".nfs0001").write_text("x")
+
+    found = util.upload_files(temp_dir)
+
+    assert list(found) == ["kept.txt"]
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        (f"{util.UPLOAD_RESERVATION_PREFIX}0123abcd", True),
+        (".nfs000000000001", True),
+        ("report.pdf", False),
+        (".env", False),
+        ("a.nfs1", False),
+        ("x.soliplex-upload-1", False),
+    ],
+)
+def test_is_internal_upload_name(name, expected):
+    assert util.is_internal_upload_name(name) is expected
+
+
 @pytest.fixture
 def mock_span():
     with mock.patch.object(

@@ -11,6 +11,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import util
 from soliplex.config import rooms as config_rooms
 from soliplex.views import room_file_uploads as room_views
 
@@ -732,4 +733,69 @@ async def test_delete_uploads_room_file_missing(
             the_audit=the_audit,
         )
 
+    the_audit.room_upload_deleted.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_filename",
+    [f"{util.UPLOAD_RESERVATION_PREFIX}abc", ".nfs0001"],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_filename_w_internal_name(
+    cuir,
+    uploads_path,
+    w_filename,
+):
+    room_dir = uploads_path / "rooms" / TEST_ROOM_ID
+    room_dir.mkdir(parents=True)
+    (room_dir / w_filename).write_bytes(b"internal")
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+
+    with raises_httpexc(code=404, match="No room upload"):
+        await room_views.get_uploads_room_filename(
+            room_id=TEST_ROOM_ID,
+            filename=w_filename,
+            the_installation=the_installation,
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=mock.create_autospec(loggers.LogWrapper),
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_filename",
+    [f"{util.UPLOAD_RESERVATION_PREFIX}abc", ".nfs0001"],
+)
+@mock.patch("soliplex.views.room_file_uploads.has_write_access_to_room")
+async def test_delete_uploads_room_w_internal_name(
+    hwatr,
+    uploads_path,
+    w_filename,
+):
+    hwatr.return_value = True
+    room_dir = uploads_path / "rooms" / TEST_ROOM_ID
+    room_dir.mkdir(parents=True)
+    internal = room_dir / w_filename
+    internal.write_bytes(b"internal")
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.rooms_upload_path = str(uploads_path / "rooms")
+    the_audit = mock.create_autospec(loggers.RoomUploadAuditLog)
+
+    with raises_httpexc(code=404, match="No room upload"):
+        await room_views.delete_uploads_room(
+            room_id=TEST_ROOM_ID,
+            filename=w_filename,
+            the_installation=the_installation,
+            the_admin_users=mock.create_autospec(authz.AdminUserPolicy),
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=mock.create_autospec(loggers.LogWrapper),
+            the_authz_logger=mock.create_autospec(loggers.LogWrapper),
+            the_audit=the_audit,
+        )
+
+    assert internal.exists()
     the_audit.room_upload_deleted.assert_not_called()

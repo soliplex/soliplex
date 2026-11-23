@@ -143,7 +143,10 @@ async def get_uploads_room_id_thread_thread_id_filename(
 
     file_path = thread_dir / filename
 
-    if not file_path.is_file():
+    if (
+        soliplex_views_util.is_internal_upload_name(filename)
+        or not file_path.is_file()
+    ):
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"No thread upload: {filename}",

@@ -401,3 +401,34 @@ async def test_post_uploads_room_id_thread_thread_id(
     the_logger.debug.assert_called_once_with(
         loggers.UPLOADS_POST_ROOM_THREAD,
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_filename", [".soliplex-upload-abc", ".nfs0001"])
+@mock.patch("soliplex.views.agui._check_thread_ownership")
+async def test_get_uploads_room_id_thread_thread_id_filename_w_internal(
+    cto,
+    the_threads,
+    uploads_path,
+    w_filename,
+):
+    thread_uploads_path = uploads_path / "threads"
+    thread_path = thread_uploads_path / TEST_THREAD_ID_STR
+    thread_path.mkdir(parents=True)
+    (thread_path / w_filename).write_text("internal")
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.threads_upload_path = str(thread_uploads_path)
+
+    with pytest.raises(fastapi.HTTPException) as exc_info:
+        await thread_views.get_uploads_room_id_thread_thread_id_filename(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            filename=w_filename,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_room_authz=mock.create_autospec(authz.RoomAuthorizationPolicy),
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=mock.create_autospec(loggers.LogWrapper),
+        )
+
+    assert exc_info.value.status_code == 404
