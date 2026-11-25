@@ -15,6 +15,8 @@ repos:
         args: ["--branch", "main", "--branch", "master"]
       - id: trailing-whitespace
       - id: end-of-file-fixer
+        # An SSE body ends with a blank line, and the tests compare bytes.
+        exclude: ^tests/functional/golden/
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
