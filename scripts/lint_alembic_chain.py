@@ -23,16 +23,14 @@ Usage::
     uv run python scripts/lint_alembic_chain.py [--verbose]
     uv run python scripts/lint_alembic_chain.py --self-test
 
-``--self-test`` migrates to the revision *before* head instead, and requires
-the comparison to fail: the newest revision changes the schema, so a
-comparator that reports no difference there is blind, and would pass this
-check no matter what difference exists.
+``--self-test`` migrates to the revision *before* the newest one which
+changes the schema, and requires the comparison to fail: a comparator that
+reports no difference there is blind, and would pass this check no matter
+what difference exists.
 
-.. note::
-
-  a head revision that changes no schema at all -- a data-only migration --
-  would make the self-test fail; say so in the commit rather than weakening
-  the check.
+A revision which only moves data declares ``SCHEMA_UNCHANGED = True`` at
+module level; the self-test steps back over such revisions, from head, to
+the newest one which does change the schema.
 """
 
 from __future__ import annotations
@@ -54,6 +52,7 @@ METADATA = {
     alembic_migrations.AUTHZ: authz_schema.metadata,
 }
 IGNORED_TABLES = {alembic_migrations.VERSION_TABLE}
+SCHEMA_UNCHANGED = "SCHEMA_UNCHANGED"
 ASPECTS = ("columns", "pk", "unique", "fks", "indexes", "checks")
 
 
@@ -147,11 +146,22 @@ def _build_declared(dburis: dict[str, str]) -> None:
             engine.dispose()
 
 
-def penultimate_revision() -> str | None:
-    """The revision before head, or ``None`` when head is the baseline."""
+def self_test_revision() -> str | None:
+    """The revision before the newest one which changes the schema
+
+    Steps back from head over revisions declaring ``SCHEMA_UNCHANGED``.
+    ``None`` when no revision before that remains.
+    """
     directory = alembic_script.ScriptDirectory(str(alembic_migrations.TREE))
-    head = directory.get_revision(directory.get_current_head())
-    return head.down_revision
+    revision = directory.get_revision(directory.get_current_head())
+
+    while (
+        getattr(revision.module, SCHEMA_UNCHANGED, False)
+        and revision.down_revision is not None
+    ):
+        revision = directory.get_revision(revision.down_revision)
+
+    return revision.down_revision
 
 
 def compare(revision: str, *, verbose: bool = False) -> list[str]:
@@ -182,7 +192,7 @@ def compare(revision: str, *, verbose: bool = False) -> list[str]:
 
 def self_test(verbose: bool = False) -> int:
     """Require the comparison to notice what the newest revision changes."""
-    previous = penultimate_revision()
+    previous = self_test_revision()
     if previous is None:
         print(
             "lint_alembic_chain: self-test needs at least two revisions",
@@ -194,9 +204,11 @@ def self_test(verbose: bool = False) -> int:
     if not found:
         print(
             "lint_alembic_chain: self-test FAILED -- migrating to "
-            f"{previous} (one before head) matched the models, so this "
-            "check cannot see what the newest revision does, and would "
-            "pass whatever difference exists",
+            f"{previous} (before the newest revision changing the schema) "
+            "matched the models, so this check cannot see what that "
+            "revision does, and would pass whatever difference exists.  "
+            f"A revision which changes no schema declares "
+            f"'{SCHEMA_UNCHANGED} = True'",
             file=sys.stderr,
         )
         return 1

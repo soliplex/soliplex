@@ -80,7 +80,9 @@ tree). The configured hooks (see `.pre-commit-config.yaml`) enforce:
   `src/soliplex/{agui,authz}/schema.py` or anything under
   `src/soliplex/alembic_migrations/` changes;
   `scripts/lint_alembic_chain.py` (plus `lint-alembic-chain-self-test`,
-  as above)
+  which runs when that script or a revision changes: it stops before the
+  newest revision changing the schema, stepping back over any declaring
+  `SCHEMA_UNCHANGED = True`, so a data-only revision must declare it)
 - `lint-interpolation` -- reject a property in `src/soliplex/config/`
   which resolves `secret:` / `env:` markers by hand instead of declaring
   the contract on the field for `interpolation.resolve_field`, leaving the

@@ -18,6 +18,9 @@ down_revision: str | typing.Sequence[str] | None = "e5d2f5ef98a3"
 branch_labels: str | typing.Sequence[str] | None = None
 depends_on: str | typing.Sequence[str] | None = None
 
+# Data only:  'scripts/lint_alembic_chain.py --self-test' steps back over it.
+SCHEMA_UNCHANGED = True
+
 
 # The event types ag-ui-protocol 1.0 removed, frozen here:  1.0 no longer
 # defines them, and a revision must not depend on live code anyway.
