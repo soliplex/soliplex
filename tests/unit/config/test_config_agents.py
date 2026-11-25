@@ -1763,6 +1763,26 @@ def test_get_context_window_from_config_unbuildable(monkeypatch):
     )
 
 
+@pytest.mark.parametrize(
+    "provider_type",
+    [config_agents.LLMProviderType.OLLAMA, config_agents.LLMProviderType.VLLM],
+)
+def test_get_model_from_config_keeps_a_configured_framing_announcement(
+    provider_type,
+):
+    agent_config = config_agents.AgentConfig(
+        id=AGENT_ID,
+        model_name=MODEL,
+        provider_type=provider_type,
+        provider_base_url=BASE_URL,
+        model_settings={"framing_announcement": "never"},
+    )
+
+    model = config_agents.get_model_from_config(agent_config=agent_config)
+
+    assert model.settings["framing_announcement"] == "never"
+
+
 @pytest.mark.parametrize("w_context_window", [None, 32768])
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
 @pytest.mark.parametrize(
@@ -1867,8 +1887,10 @@ def test_get_model_from_config(
         expected_kw = {
             "profile": config_agents._VLLM_PROFILE | window_profile,
         }
-        if w_model_settings:
-            expected_kw["settings"] = w_model_settings
+        expected_kw["settings"] = {
+            "framing_announcement": "always",
+            **(w_model_settings or {}),
+        }
         oai_model_klass.assert_called_once_with(
             model_name=exp_model_name,
             provider=vllm_provider_klass.return_value,
@@ -1885,8 +1907,10 @@ def test_get_model_from_config(
     else:
         assert model is oai_model_klass.return_value
         expected_kw = expected_profile_kw(openai_compat=True)
-        if w_model_settings:
-            expected_kw["settings"] = w_model_settings
+        expected_kw["settings"] = {
+            "framing_announcement": "always",
+            **(w_model_settings or {}),
+        }
         oai_model_klass.assert_called_once_with(
             model_name=exp_model_name,
             provider=oll_provider_klass.return_value,

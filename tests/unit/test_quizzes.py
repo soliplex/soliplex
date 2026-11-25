@@ -86,6 +86,7 @@ def a_quiz(
             "provider_base_url": f"{OLLAMA_BASE_URL}/v1",
             "api_key": "dummy",
         },
+        model_settings=None,
         **agent_provider_type,
     )
     quiz = config_quizzes.QuizConfig(
@@ -145,6 +146,7 @@ def test_get_quiz_judge_agent(
         model_klass.assert_called_once_with(
             model_name=a_quiz.judge_agent.llm_model_name,
             provider=vllm_provider_klass.return_value,
+            settings={"framing_announcement": "always"},
         )
         vllm_provider_klass.assert_called_once_with(
             **a_quiz.judge_agent.llm_provider_kw,
@@ -155,12 +157,40 @@ def test_get_quiz_judge_agent(
         model_klass.assert_called_once_with(
             model_name=a_quiz.judge_agent.llm_model_name,
             provider=ollama_provider_klass.return_value,
+            settings={"framing_announcement": "always"},
         )
         openai_provider_klass.assert_not_called()
         ollama_provider_klass.assert_called_once_with(
             **a_quiz.judge_agent.llm_provider_kw,
         )
         vllm_provider_klass.assert_not_called()
+
+
+@mock.patch("pydantic_ai.providers.vllm.VLLMProvider")
+@mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
+@mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
+@mock.patch("pydantic_ai.models.openai.OpenAIChatModel")
+@mock.patch("pydantic_ai.Agent")
+def test_get_quiz_judge_agent_keeps_a_configured_framing_announcement(
+    _agent_klass,
+    model_klass,
+    _ollama_provider_klass,
+    _openai_provider_klass,
+    _vllm_provider_klass,
+    a_quiz,
+):
+    a_quiz.judge_agent.model_settings = {"framing_announcement": "never"}
+
+    quizzes.get_quiz_judge_agent(a_quiz)
+
+    settings = model_klass.call_args.kwargs.get("settings")
+    if (
+        a_quiz.judge_agent.provider_type
+        == config_agents.LLMProviderType.OPENAI
+    ):
+        assert settings is None
+    else:
+        assert settings == {"framing_announcement": "never"}
 
 
 @pytest.mark.anyio

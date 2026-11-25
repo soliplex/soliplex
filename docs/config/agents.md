@@ -117,7 +117,10 @@ agent:
   ```
 
 - `model_settings`: a mapping, whose keys are determined by
-  the `provider_type` above (see below).
+  the `provider_type` above (see below).  For the `ollama` and `vllm`
+  providers it defaults `framing_announcement` to `"always"`: models
+  served through them write malformed tool calls without Pydantic AI's
+  `<system>` framing announcement.  Set the key here to override it.
 
 - `retries` (an integer, default `3`):  number of retries for LLM calls
   on recoverable errors.
