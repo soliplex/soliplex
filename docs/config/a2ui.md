@@ -59,11 +59,12 @@ agent:
   known components with valid properties, unique ids, a `root` component,
   resolvable child references, no cycles. An invalid layout is retried;
   when the retries run out, nothing is shown and the agent is told why.
-- The generating agent runs on the room agent's model and counts towards
-  the run's usage and usage limits.
+- The generating agent runs on the room agent's model, with its model
+  settings, and counts towards the run's usage and usage limits.
 
 `kwargs` accepts `max_retries` (default 3) and `model`, a pydantic-ai model
-name to generate with instead of the room agent's model.
+name to generate with instead of the room agent's model. A configured
+`model` runs without the room agent's model settings.
 
 A generated surface costs at least one extra model request with the
 catalog, and takes noticeably longer than a text answer.

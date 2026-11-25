@@ -3777,7 +3777,7 @@ tui = [
 [[package]]
 name = "soliplex-a2ui"
 version = "0.1.0"
-source = { git = "https://github.com/ggozad/soliplex-a2ui?branch=main#56bf87c8b78cce74fad849d36dbc4656fbba882e" }
+source = { git = "https://github.com/ggozad/soliplex-a2ui?branch=main#57a8378c8bba6e6a6e567ae9672c2013f618e85f" }
 dependencies = [
     { name = "a2ui-core" },
     { name = "ag-ui-protocol" },
