@@ -80,8 +80,9 @@ jobs:
             | tee -a lint-interpolation.log
 
       # Ensure that the alembic migration chain reproduces the models exactly.
-      # The self-test runs # first, stopping one revision short of head,
-      # where the comparison # must report a difference.
+      # The self-test runs first, stopping one revision short of the newest
+      # schema-changing revision, where the comparison must report a
+      # difference.
       - name: Check migration chain matches the models
         run: |
           set -o pipefail

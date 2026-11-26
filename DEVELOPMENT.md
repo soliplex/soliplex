@@ -152,8 +152,11 @@ The configured hooks (see `.pre-commit-config.yaml`) enforce:
   `src/soliplex/{agui,authz}/schema.py` or anything under
   `src/soliplex/alembic_migrations/` changes. See
   `scripts/lint_alembic_chain.py`, with its own
-  **lint-alembic-chain-self-test** hook, which stops one revision short of
-  head and requires the comparison to report a difference.
+  **lint-alembic-chain-self-test** hook (run when that script or a
+  revision changes), which stops one revision short of the newest
+  schema-changing revision and requires the comparison to report a
+  difference. A revision which only moves data must declare
+  `SCHEMA_UNCHANGED = True`, so that the self-test steps back over it.
 - **lint-interpolation** -- reject a property in `src/soliplex/config/`
   that resolves `secret:` / `env:` markers by hand (`get_secret`,
   `interpolate_environment`, ...) instead of declaring the contract on the

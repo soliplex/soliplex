@@ -90,14 +90,13 @@ def test_new_user_texts(messages, expected):
             ["Use the mineral oil."],
         ),
         (
-            # Reasoning, thinking, and tool traffic are never included,
+            # Reasoning and tool traffic are never included,
             # nor are messages without text (e.g., tool-call parents).
             [
                 agui_core.ReasoningStartEvent(message_id="r1"),
                 agui_core.ReasoningMessageContentEvent(
                     message_id="r1", delta="pondering"
                 ),
-                agui_core.ThinkingTextMessageContentEvent(delta="musing"),
                 agui_core.TextMessageStartEvent(message_id="a1"),
                 agui_core.TextMessageEndEvent(message_id="a1"),
                 agui_core.ToolCallStartEvent(

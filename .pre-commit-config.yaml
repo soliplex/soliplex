@@ -15,6 +15,8 @@ repos:
         args: ["--branch", "main", "--branch", "master"]
       - id: trailing-whitespace
       - id: end-of-file-fixer
+        # An SSE body ends with a blank line, and the tests compare bytes.
+        exclude: ^tests/functional/golden/
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
@@ -63,7 +65,8 @@ repos:
         entry: uv run python scripts/lint_alembic_chain.py --self-test
         language: system
         pass_filenames: false
-        files: ^scripts/lint_alembic_chain\.py$
+        # A new revision can leave the self-test with nothing to see.
+        files: ^scripts/lint_alembic_chain\.py$|^src/soliplex/alembic_migrations/versions/
       - id: lint-interpolation
         name: lint ad-hoc interpolation
         entry: uv run python scripts/lint_interpolation.py --verbose
