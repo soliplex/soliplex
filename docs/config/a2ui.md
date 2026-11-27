@@ -8,7 +8,7 @@ written for AG-UI reads them unchanged. The surfaces use A2UI protocol 1.0
 and its basic catalog.
 
 The protocol helpers and the generation capability live in the
-[`soliplex-a2ui`](https://github.com/ggozad/soliplex-a2ui) package.
+[`soliplex-a2ui`](https://github.com/soliplex/soliplex-a2ui) package.
 
 ## Wire format
 
