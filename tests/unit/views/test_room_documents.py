@@ -531,3 +531,218 @@ async def test_get_room_document_boxes_top_left(hr_klass, sizes_from):
     assert result.anchor == TOP_LEFT_BOXES[sizes_from]
     assert result.context == []
     _assert_original_loaded(owner, sizes_from)
+
+
+# ----------------------------------------------------------------------------
+#   GET /v1/rooms/{room_id}/documents/{document_id}/text
+# ----------------------------------------------------------------------------
+
+
+def _prov(page_no, bbox, charspan=(0, 0)):
+    return docling_document.ProvenanceItem(
+        page_no=page_no, bbox=bbox, charspan=charspan
+    )
+
+
+def _ocr_docling():
+    """Return a document with one of each kind of item the route meets"""
+    doc = docling_document.DoclingDocument(name="notes")
+    labels = docling_labels.DocItemLabel
+    doc.add_text(
+        label=labels.PAGE_HEADER,
+        text="Field notes",
+        prov=_prov(1, _bbox(10, 790, 100, 780)),
+        content_layer=docling_document.ContentLayer.FURNITURE,
+    )
+    doc.add_heading(text="Chunking", prov=_prov(1, _bbox(10, 760, 200, 740)))
+    spanning = doc.add_text(
+        label=labels.TEXT,
+        text="first half second half",
+        prov=_prov(1, _bbox(10, 100, 300, 50), (0, 11)),
+    )
+    spanning.prov.append(_prov(2, _bbox(10, 700, 300, 650), (11, 22)))
+    doc.add_text(
+        label=labels.TEXT,
+        text="   ",  # nothing to show
+        prov=_prov(2, _bbox(10, 640, 300, 600)),
+    )
+    doc.add_text(label=labels.TEXT, text="no prov")
+    doc.add_picture(prov=_prov(2, _bbox(10, 590, 300, 400)))
+    doc.add_table(
+        data=docling_document.TableData(
+            num_rows=1,
+            num_cols=1,
+            table_cells=[
+                docling_document.TableCell(
+                    text="cell",
+                    start_row_offset_idx=0,
+                    end_row_offset_idx=1,
+                    start_col_offset_idx=0,
+                    end_col_offset_idx=1,
+                )
+            ],
+        ),
+        prov=_prov(2, _bbox(10, 390, 300, 300)),
+    )
+    doc.add_text(
+        label=labels.TEXT,
+        text="top left",
+        prov=_prov(
+            3,
+            _bbox(10, 100, 300, 150, docling_base.CoordOrigin.TOPLEFT),
+            (0, 8),
+        ),
+    )
+    return doc
+
+
+def _text_rag(owner, names=(DATABASE,)):
+    rag = _rag(
+        names=names,
+        documents={(DATABASE, DOCUMENT_ID): _document("file:///notes.pdf")},
+    )
+    rag.clients_covering.return_value = [owner]
+    return rag
+
+
+async def _get_text(rags, **kwargs):
+    deps = _deps(rags=rags)
+    result = await room_documents_views.get_room_document_text(
+        room_id=ROOM_ID,
+        document_id=DOCUMENT_ID,
+        **({"database": None} | kwargs),
+        **deps,
+    )
+    return result, deps
+
+
+@pytest.mark.anyio
+async def test_get_room_document_text_unknown_room(hr_klass, audit_records):
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await room_documents_views.get_room_document_text(
+            room_id=ROOM_ID, document_id=DOCUMENT_ID, **_deps(w_room=False)
+        )
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {ROOM_ID}"
+    assert _rag_records(audit_records) == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_database", [None, "other"])
+async def test_get_room_document_text_unknown_document(
+    hr_klass, audit_records, w_database
+):
+    # The document is only in DATABASE: unasked when "other" is named.
+    rags = [_rag(), _text_rag(_owner(None), names=("other", DATABASE))]
+    if w_database is None:
+        rags[1] = _rag(names=("other", DATABASE))
+    _use(hr_klass, rags)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await _get_text(rags, database=w_database)
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == (
+        f"{loggers.ROOM_UNKNOWN_DOCUMENT_ID}: {DOCUMENT_ID}"
+    )
+    (record,) = _rag_records(audit_records)
+    assert record.action == loggers.AUDIT_RAG_ACTION_DOC_TEXT
+    assert record.db_path is None
+    assert record.reason == loggers.ROOM_UNKNOWN_DOCUMENT_ID
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_stored", [False, True])
+async def test_get_room_document_text_no_docling(
+    hr_klass, audit_records, w_stored
+):
+    owner = _owner(None)
+
+    if w_stored:
+        stored = mock.Mock()
+        stored.get_docling_document.return_value = None
+        owner.document_repository.get_docling_data.return_value = stored
+
+    rag = _text_rag(owner)
+    _use(hr_klass, [rag])
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await _get_text([rag])
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == (
+        f"{loggers.ROOM_DOCUMENT_TEXT_NOT_AVAILABLE}: {DOCUMENT_ID}"
+    )
+    (record,) = _rag_records(audit_records)
+    assert record.action == loggers.AUDIT_RAG_ACTION_DOC_TEXT
+    assert record.db_path == "/db/0"
+    assert record.reason == loggers.ROOM_DOCUMENT_TEXT_NOT_AVAILABLE
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("sizes_from", ["structure", "original", "none"])
+async def test_get_room_document_text(hr_klass, audit_records, sizes_from):
+    docling_doc = _ocr_docling()
+
+    if sizes_from == "structure":
+        _size_pages(docling_doc, {1: 800, 2: 800, 3: 800})
+
+    original = _pdf(800, 800, 800) if sizes_from == "original" else None
+    owner = _owner(docling_doc, original=original)
+    rag = _text_rag(owner, names=("other", DATABASE))
+    _use(hr_klass, [_rag(names=()), rag])
+
+    result, deps = await _get_text([None, rag], database=DATABASE)
+
+    def block(page, box, text, label="text"):
+        left, top, right, bottom = box
+        return models.TextBlock(
+            page=page,
+            left=left,
+            top=top,
+            right=right,
+            bottom=bottom,
+            text=text,
+            label=label,
+        )
+
+    expected = [
+        block(1, (10, 790, 100, 780), "Field notes", "page_header"),
+        block(1, (10, 760, 200, 740), "Chunking", "section_header"),
+        block(1, (10, 100, 300, 50), "first half "),
+        block(2, (10, 700, 300, 650), "second half"),
+        block(2, (10, 390, 300, 300), "| cell   |\n|--------|", "table"),
+    ]
+
+    if sizes_from != "none":
+        expected.append(block(3, (10, 700, 300, 650), "top left"))
+
+    assert result == models.DocumentText(
+        source=models.RAGSource(source_type="agent", name=None),
+        database=DATABASE,
+        document_id=DOCUMENT_ID,
+        blocks=expected,
+    )
+    rag.clients_covering.assert_awaited_once_with([DATABASE])
+    _assert_original_loaded(owner, sizes_from)
+    (record,) = _rag_records(audit_records)
+    assert record.action == loggers.AUDIT_RAG_ACTION_DOC_TEXT
+    assert record.db_path == "/db/1"
+    assert record.selector == DOCUMENT_ID
+    assert record.result_refs == ["file:///notes.pdf"]
+    deps["the_logger"].debug.assert_called_once_with(
+        loggers.ROOM_GET_DOCUMENT_TEXT
+    )
+
+
+@pytest.mark.anyio
+async def test_get_room_document_text_bottom_left_only(hr_klass):
+    owner = _owner(_docling((1, _bbox(10, 700, 300, 650))))
+    rag = _text_rag(owner)
+    _use(hr_klass, [rag])
+
+    result, _ = await _get_text([rag])
+
+    assert [(b.page, b.text) for b in result.blocks] == [(1, "text")]
+    owner.document_repository.get_original.assert_not_awaited()
