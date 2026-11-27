@@ -1,0 +1,21 @@
+id: "a2ui"
+name: "A2UI Demo"
+description: "Renders an A2UI form and reacts to its submission"
+
+suggestions:
+  - "Ask me for my name"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a friendly greeter.
+
+    When you need the user's name, call `a2ui_name_form` instead of
+    asking in text. The user's answer arrives as a message starting with
+    "A2UI user action:", followed by JSON whose `context.name` holds the
+    name. Greet the user by that name.
+
+tools:
+  - tool_name: "soliplex.examples.a2ui_name_form"
+
+allow_mcp: false

@@ -1767,6 +1767,7 @@ async def test_post_room_agui_thread_id_run_id_w_bogus_ids(
         (ALREADY_STARTED, raises_httpexc(code=400, match="already started")),
     ],
 )
+@pytest.mark.parametrize("w_a2ui_action", [False, True])
 @mock.patch("fastapi.responses.StreamingResponse")
 @mock.patch("soliplex.views.streaming.stream_sse_with_keepalive")
 @mock.patch("soliplex.views.streaming.add_sse_event_ids")
@@ -1789,11 +1790,21 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     the_threads,
     test_run,
     run_input,
+    w_a2ui_action,
     ari_side_effect,
     expectation,
     fake_async_session,
     mock_thread_storage,
 ):
+    if w_a2ui_action:
+        run_input = run_input.model_copy(
+            update={
+                "forwarded_props": {
+                    "a2uiAction": {"userAction": {"name": "submit"}},
+                },
+            },
+        )
+
     USER_PROFILE = models.UserProfile(**AUTH_USER)
     agent = object()
     cura.return_value = (USER_PROFILE, agent)
@@ -1954,6 +1965,13 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             run_id=TEST_RUN_ID_STR,
             run_input=exp_adapter.run_input,
         )
+        if w_a2ui_action:
+            (action_message,) = exp_adapter.run_input.messages
+            assert action_message.content == (
+                'A2UI user action:\n{"name":"submit"}'
+            )
+        else:
+            assert exp_adapter.run_input is run_input
         # The input write ran on its own session bound to the request's
         # threads engine, not the request-scoped 'the_threads'.
         fake_async_session.cls.assert_called_once_with(bind=sqla_engine)

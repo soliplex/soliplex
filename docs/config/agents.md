@@ -150,9 +150,9 @@ agent:
 
 - `capabilities` (a list, default empty):  Pydantic AI capabilities for
   the agent, each named as a string, or as a mapping with `name` and
-  `kwargs`.  Names come from the Pydantic AI capability registry and from
-  any registered via the
-  [`meta.agent_capability_types`](meta.md) stanza.  Capabilities which
+  `kwargs`.  Names come from the Pydantic AI capability registry, from
+  `A2UICapability` (see [A2UI Surfaces](a2ui.md)), and from any registered
+  via the [`meta.agent_capability_types`](meta.md) stanza.  Capabilities which
   need configuration, or which a room should advertise, are configured as
   [skills](rooms.md#skill-configuration) instead.  `kwargs` reach the
   capability's constructor, so a model-facing capability's

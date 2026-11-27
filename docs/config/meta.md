@@ -295,7 +295,8 @@ meta:
 By default, Soliplex registers the capability types published by
 `pydantic_ai.capabilities` — `NativeTool`, `Thinking`, `WebSearch` and
 the rest — so the set available without configuration follows the
-installed `pydantic-ai` version.
+installed `pydantic-ai` version. It also registers `A2UICapability` from
+`soliplex-a2ui` (see [A2UI Surfaces](a2ui.md)).
 
 ## Registering Agent Configuration Classes
 
