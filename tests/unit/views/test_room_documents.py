@@ -1,4 +1,4 @@
-"""Tests for the room routes serving a RAG document's PDF and passage boxes"""
+"""Tests for the routes serving a RAG document of a room"""
 
 import io
 import json
@@ -18,7 +18,7 @@ from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex.config import rooms as config_rooms
-from soliplex.views import rooms as rooms_views
+from soliplex.views import room_documents as room_documents_views
 
 ROOM_ID = "pdf_notes"
 DOCUMENT_ID = "doc-1"
@@ -107,7 +107,7 @@ def _file_rag(original, *, names=(DATABASE,), uri="file:///docs/notes.pdf"):
 
 
 async def _get_file(rags, **kwargs):
-    return await rooms_views.get_room_document_file(
+    return await room_documents_views.get_room_document_file(
         room_id=ROOM_ID,
         document_id=DOCUMENT_ID,
         **({"database": None} | kwargs),
@@ -125,7 +125,7 @@ async def test_get_room_document_file_unknown_room(hr_klass, audit_records):
     deps = _deps(w_room=False)
 
     with pytest.raises(fastapi.HTTPException) as exc:
-        await rooms_views.get_room_document_file(
+        await room_documents_views.get_room_document_file(
             room_id=ROOM_ID, document_id=DOCUMENT_ID, **deps
         )
 
@@ -172,7 +172,7 @@ async def test_get_room_document_file(hr_klass, audit_records, w_federated):
     _use(hr_klass, [rag])
     deps = _deps(rags=[rag])
 
-    response = await rooms_views.get_room_document_file(
+    response = await room_documents_views.get_room_document_file(
         room_id=ROOM_ID,
         document_id=DOCUMENT_ID,
         database=DATABASE,
@@ -364,7 +364,7 @@ def _boxes_rag(chunks, owner, names=(DATABASE,)):
 
 
 async def _get_boxes(rags, **kwargs):
-    return await rooms_views.get_room_document_boxes(
+    return await room_documents_views.get_room_document_boxes(
         room_id=ROOM_ID,
         document_id=DOCUMENT_ID,
         **({"context_refs": None, "database": None} | kwargs),
@@ -399,7 +399,7 @@ async def test_get_room_document_boxes_unknown_room(hr_klass):
     deps = _deps(w_room=False)
 
     with pytest.raises(fastapi.HTTPException) as exc:
-        await rooms_views.get_room_document_boxes(
+        await room_documents_views.get_room_document_boxes(
             room_id=ROOM_ID,
             document_id=DOCUMENT_ID,
             chunk_ids=["c1"],
@@ -478,7 +478,16 @@ async def test_get_room_document_boxes(hr_klass, audit_records):
         [None, rag],
         chunk_ids=["c1", "c2", "c1"],
         context_refs=json.dumps(
-            ["#/texts/0", "#/texts/1", "#/texts/2", "#/texts/3", "#/bogus/9"]
+            [
+                "#/texts/0",
+                "#/texts/1",
+                "#/texts/2",
+                "#/texts/3",
+                "#/bogus/9",
+                "#/texts/99",
+                "#",
+                "not-a-ref",
+            ]
         ),
         database=DATABASE,
     )
