@@ -423,9 +423,15 @@ def _text_parts(docling_doc):
     """Yield (provenance, label, text) for each part of the document's text
 
     Items come in reading order, page furniture (running headers, footers)
-    included, pictures left out.  An item spanning pages yields a part per
-    page, holding the text its character span names there.  A table's text
-    is its Markdown.
+    included, pictures left out.  A table's text is its Markdown.
+
+    A text item spanning pages yields a part per page, holding what its
+    character span names there.  The spans index 'orig', the text as read
+    off the page, not 'text', which docling may have cleaned up (joining a
+    word hyphenated across lines, say), so the parts are taken from 'orig'.
+    A page whose span is empty yields nothing.  An item that cannot be
+    split so (a table, or a text item none of whose spans is set) yields
+    its whole text once, on its first page.
     """
     layers = {
         docling_document.ContentLayer.BODY,
@@ -441,12 +447,20 @@ def _text_parts(docling_doc):
             continue
 
         provs = item.prov or []
-        split = len(provs) > 1 and isinstance(item, docling_document.TextItem)
+        parts = []
 
-        for prov in provs:
-            start, end = prov.charspan
-            part = text[start:end] if split and start < end else text
+        if len(provs) > 1 and isinstance(item, docling_document.TextItem):
+            parts = [
+                (prov, item.orig[start:end])
+                for prov in provs
+                for start, end in [prov.charspan]
+                if start < end
+            ]
 
+        if not parts:
+            parts = [(prov, text) for prov in provs[:1]]
+
+        for prov, part in parts:
             if part.strip():
                 yield prov, item.label.value, part
 

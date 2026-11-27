@@ -555,12 +555,28 @@ def _ocr_docling():
         content_layer=docling_document.ContentLayer.FURNITURE,
     )
     doc.add_heading(text="Chunking", prov=_prov(1, _bbox(10, 760, 200, 740)))
+    # The spans index 'orig', which docling's 'text' has dehyphenated
     spanning = doc.add_text(
         label=labels.TEXT,
         text="first half second half",
+        orig="first half sec-\nond half",
         prov=_prov(1, _bbox(10, 100, 300, 50), (0, 11)),
     )
-    spanning.prov.append(_prov(2, _bbox(10, 700, 300, 650), (11, 22)))
+    spanning.prov.append(_prov(2, _bbox(10, 700, 300, 650), (11, 24)))
+    # No span set: the whole text, once, on its first page
+    unsplit = doc.add_text(
+        label=labels.TEXT,
+        text="whole text",
+        prov=_prov(1, _bbox(10, 40, 300, 20)),
+    )
+    unsplit.prov.append(_prov(2, _bbox(10, 790, 300, 760)))
+    # One span set: its page only
+    partly = doc.add_text(
+        label=labels.TEXT,
+        text="spanned",
+        prov=_prov(1, _bbox(10, 15, 300, 5), (0, 7)),
+    )
+    partly.prov.append(_prov(2, _bbox(10, 750, 300, 745)))
     doc.add_text(
         label=labels.TEXT,
         text="   ",  # nothing to show
@@ -568,7 +584,8 @@ def _ocr_docling():
     )
     doc.add_text(label=labels.TEXT, text="no prov")
     doc.add_picture(prov=_prov(2, _bbox(10, 590, 300, 400)))
-    doc.add_table(
+    # Spanning pages: its Markdown, once, on its first page
+    table = doc.add_table(
         data=docling_document.TableData(
             num_rows=1,
             num_cols=1,
@@ -584,6 +601,7 @@ def _ocr_docling():
         ),
         prov=_prov(2, _bbox(10, 390, 300, 300)),
     )
+    table.prov.append(_prov(3, _bbox(10, 790, 300, 700)))
     doc.add_text(
         label=labels.TEXT,
         text="top left",
@@ -711,7 +729,9 @@ async def test_get_room_document_text(hr_klass, audit_records, sizes_from):
         block(1, (10, 790, 100, 780), "Field notes", "page_header"),
         block(1, (10, 760, 200, 740), "Chunking", "section_header"),
         block(1, (10, 100, 300, 50), "first half "),
-        block(2, (10, 700, 300, 650), "second half"),
+        block(2, (10, 700, 300, 650), "sec-\nond half"),
+        block(1, (10, 40, 300, 20), "whole text"),
+        block(1, (10, 15, 300, 5), "spanned"),
         block(2, (10, 390, 300, 300), "| cell   |\n|--------|", "table"),
     ]
 
