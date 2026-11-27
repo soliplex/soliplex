@@ -26,6 +26,27 @@ depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
 
 
+async def room_config_or_404(
+    room_id: str, the_installation, the_room_authz, the_user_claims, the_logger
+):
+    """Return the room's configuration, or raise a 404 for an unknown room"""
+    try:
+        return await the_installation.get_room_config(
+            room_id=room_id,
+            user=the_user_claims,
+            the_room_authz=the_room_authz,
+            the_logger=the_logger,
+        )
+    except KeyError:
+        # auth error logged in 'get_room_config'
+        # but this could be just a missing room
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
+        ) from None
+
+
 @util.logfire_span("GET /v1/rooms")
 @router.get("/v1/rooms", summary="Get available rooms")
 async def get_rooms(
@@ -80,21 +101,9 @@ async def get_room(
     """Return a single room's configuration"""
     the_logger.debug(loggers.ROOM_GET_ROOM)
 
-    try:
-        room_config = await the_installation.get_room_config(
-            room_id=room_id,
-            user=the_user_claims,
-            the_room_authz=the_room_authz,
-            the_logger=the_logger,
-        )
-    except KeyError:
-        # auth error logged in 'get_room_config'
-        # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
-        ) from None
+    room_config = await room_config_or_404(
+        room_id, the_installation, the_room_authz, the_user_claims, the_logger
+    )
 
     user_has_write = await the_admin_users.is_admin(
         the_user_claims
@@ -124,21 +133,9 @@ async def get_room_bg_image(
     """Return a room's background image"""
     the_logger.debug(loggers.ROOM_GET_ROOM_BG_IMAGE)
 
-    try:
-        room_config = await the_installation.get_room_config(
-            room_id=room_id,
-            user=the_user_claims,
-            the_room_authz=the_room_authz,
-            the_logger=the_logger,
-        )
-    except KeyError:
-        # auth error logged in 'get_room_config'
-        # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
-        ) from None
+    room_config = await room_config_or_404(
+        room_id, the_installation, the_room_authz, the_user_claims, the_logger
+    )
 
     try:
         logo_image = room_config.get_logo_image()
@@ -167,21 +164,9 @@ async def get_room_mcp_token(
     """Return a token for use in an MCP client addressing the room"""
     the_logger.debug(loggers.ROOM_GET_ROOM_MCP_TOKEN)
 
-    try:
-        _room_config = await the_installation.get_room_config(
-            room_id=room_id,
-            user=the_user_claims,
-            the_room_authz=the_room_authz,
-            the_logger=the_logger,
-        )
-    except KeyError:
-        # auth error logged in 'get_room_config'
-        # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
-        ) from None
+    _room_config = await room_config_or_404(
+        room_id, the_installation, the_room_authz, the_user_claims, the_logger
+    )
 
     secret = the_installation.get_secret("URL_SAFE_TOKEN_SECRET")
     mcp_token = token_mint.generate_url_safe_token(
@@ -204,21 +189,9 @@ async def get_room_documents(
     """Return a list of the documents in the room's RAG database"""
     the_logger.debug(loggers.ROOM_GET_ROOM_DOCUMENTS)
 
-    try:
-        room_config = await the_installation.get_room_config(
-            room_id=room_id,
-            user=the_user_claims,
-            the_room_authz=the_room_authz,
-            the_logger=the_logger,
-        )
-    except KeyError:
-        # auth error logged in 'get_room_config'
-        # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
-        ) from None
+    room_config = await room_config_or_404(
+        room_id, the_installation, the_room_authz, the_user_claims, the_logger
+    )
 
     audit = loggers.RAGAccessAuditLog(claims=the_user_claims, room_id=room_id)
     document_set = {}
@@ -253,7 +226,7 @@ async def get_room_documents(
     )
 
 
-async def _find_chunk(rag, chunk_id: str, database: str | None = None):
+async def find_chunk(rag, chunk_id: str, database: str | None = None):
     """Return a chunk and the name of the database holding it
 
     Chunk IDs repeat between copies of a database, so 'database' names the
@@ -305,21 +278,9 @@ async def get_chunk_visualization(
         if isinstance(parsed, list):
             doc_item_refs = [str(r) for r in parsed]
 
-    try:
-        room_config = await the_installation.get_room_config(
-            room_id=room_id,
-            user=the_user_claims,
-            the_room_authz=the_room_authz,
-            the_logger=the_logger,
-        )
-    except KeyError:
-        # auth error logged in 'get_room_config'
-        # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
-        ) from None
+    room_config = await room_config_or_404(
+        room_id, the_installation, the_room_authz, the_user_claims, the_logger
+    )
 
     audit = loggers.RAGAccessAuditLog(claims=the_user_claims, room_id=room_id)
     images = None
@@ -331,7 +292,7 @@ async def get_chunk_visualization(
         db_path = hr_client_kw.pop("audit_db_path")
 
         async with hr_client.HaikuRAG(**hr_client_kw) as rag:
-            chunk, chunk_database = await _find_chunk(rag, chunk_id, database)
+            chunk, chunk_database = await find_chunk(rag, chunk_id, database)
 
             if chunk:
                 images = await rag.visualize_chunk(
@@ -397,21 +358,9 @@ async def get_search(
     """Return a set of page images for a chunk, highlighting the chunk text"""
     the_logger.debug(loggers.ROOM_GET_SEARCH)
 
-    try:
-        room_config = await the_installation.get_room_config(
-            room_id=room_id,
-            user=the_user_claims,
-            the_room_authz=the_room_authz,
-            the_logger=the_logger,
-        )
-    except KeyError:
-        # auth error logged in 'get_room_config'
-        # but this could be just a missing room
-        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id=room_id)
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"{loggers.ROOM_UNKNOWN_ROOM_ID}: {room_id}",
-        ) from None
+    room_config = await room_config_or_404(
+        room_id, the_installation, the_room_authz, the_user_claims, the_logger
+    )
 
     audit = loggers.RAGAccessAuditLog(claims=the_user_claims, room_id=room_id)
     aggregate_hits = []

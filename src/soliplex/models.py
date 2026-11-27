@@ -1169,6 +1169,34 @@ class ChunkVisualization(pydantic.BaseModel):
     images_base_64: list[str]
 
 
+class PassageBox(pydantic.BaseModel):
+    """One docling item's box on a page, in PDF points, bottom-left origin"""
+
+    page: int
+    left: float
+    top: float
+    right: float
+    bottom: float
+
+
+class DocumentBoxes(pydantic.BaseModel):
+    """Where a citation's passage sits in its document's pages
+
+    'anchor' boxes are the cited chunks' own items; 'context' boxes are the
+    rest of the context the model read. Each docling item is a layout
+    cluster (a paragraph or a larger block), so a box is never finer than
+    that. Coordinates are PDF points with the origin at the page's bottom
+    left, as a PDF's own are.
+    """
+
+    source: RAGSource
+    database: str | None = None  # haiku.rag database name, if named
+    document_id: str
+    coord_origin: typing.Literal["BOTTOMLEFT"] = "BOTTOMLEFT"
+    anchor: list[PassageBox]
+    context: list[PassageBox]
+
+
 # ----------------------------------------------------------------------------
 #   Quiz-related models
 # ----------------------------------------------------------------------------
