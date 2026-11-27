@@ -154,10 +154,12 @@ ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available"
 ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id"
 ROOM_GET_DOCUMENT_FILE = "get document file"
 ROOM_GET_DOCUMENT_BOXES = "get document boxes"
+ROOM_GET_DOCUMENT_TEXT = "get document text"
 ROOM_UNKNOWN_DOCUMENT_ID = "unknown document id"
 ROOM_DOCUMENT_ORIGINAL_NOT_STORED = "document original not stored"
 ROOM_DOCUMENT_NOT_PDF = "document original not a PDF"
 ROOM_DOCUMENT_BOXES_NOT_AVAILABLE = "document boxes not available"
+ROOM_DOCUMENT_TEXT_NOT_AVAILABLE = "document text not available"
 ROOM_INVALID_CHUNK_IDS = "invalid chunk ids"
 ROOM_INVALID_CONTEXT_REFS = "invalid context refs"
 
@@ -237,6 +239,7 @@ AUDIT_RAG_ACTION_CHUNK_VIZ = "chunk-viz"
 AUDIT_RAG_ACTION_DOC_LIST = "doc-list"
 AUDIT_RAG_ACTION_DOC_FILE = "doc-file"
 AUDIT_RAG_ACTION_DOC_BOXES = "doc-boxes"
+AUDIT_RAG_ACTION_DOC_TEXT = "doc-text"
 
 # sandbox-exec audit events (data change): the room agent's sandbox skill
 # executes code against the thread's writable working directory, or reads
@@ -748,6 +751,28 @@ class RAGAccessAuditLog(AuditLogWrapper):
         self._failed(
             AUDIT_RAG_ACCESS,
             action=AUDIT_RAG_ACTION_DOC_BOXES,
+            db_path=db_path,
+            selector=selector,
+            reason=reason,
+        )
+
+    def doc_text(
+        self, db_path: str, selector: typing.Any, result_refs: typing.Any
+    ):
+        self._succeeded(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_DOC_TEXT,
+            db_path=db_path,
+            selector=selector,
+            result_refs=result_refs,
+        )
+
+    def doc_text_failed(
+        self, db_path: str | None, selector: typing.Any, reason: str
+    ):
+        self._failed(
+            AUDIT_RAG_ACCESS,
+            action=AUDIT_RAG_ACTION_DOC_TEXT,
             db_path=db_path,
             selector=selector,
             reason=reason,

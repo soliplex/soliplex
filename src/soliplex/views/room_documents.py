@@ -194,30 +194,36 @@ def _item_boxes(
     A box with a top-left origin is converted using its page's height from
     'page_heights', and skipped when that is unknown.
     """
-    boxes = []
+    boxes = (
+        _prov_box(prov, page_heights)
+        for prov in _provenances(docling_doc, refs)
+    )
+    return [models.PassageBox(**box) for box in boxes if box is not None]
 
-    for prov in _provenances(docling_doc, refs):
-        bbox = prov.bbox
 
-        if bbox.coord_origin != docling_base.CoordOrigin.BOTTOMLEFT:
-            height = page_heights.get(prov.page_no)
+def _prov_box(prov, page_heights: dict[int, float]) -> dict | None:
+    """Return the fields of a box for 'prov', bottom-left origin
 
-            if height is None:
-                continue
+    A box with a top-left origin is converted using its page's height from
+    'page_heights'; None when that is unknown.
+    """
+    bbox = prov.bbox
 
-            bbox = bbox.to_bottom_left_origin(height)
+    if bbox.coord_origin != docling_base.CoordOrigin.BOTTOMLEFT:
+        height = page_heights.get(prov.page_no)
 
-        boxes.append(
-            models.PassageBox(
-                page=prov.page_no,
-                left=bbox.l,
-                top=bbox.t,
-                right=bbox.r,
-                bottom=bbox.b,
-            )
-        )
+        if height is None:
+            return None
 
-    return boxes
+        bbox = bbox.to_bottom_left_origin(height)
+
+    return {
+        "page": prov.page_no,
+        "left": bbox.l,
+        "top": bbox.t,
+        "right": bbox.r,
+        "bottom": bbox.b,
+    }
 
 
 async def _page_heights(owner, document_id: str, docling_doc, pages: set[int]):
@@ -410,4 +416,162 @@ async def get_room_document_boxes(
         document_id=document_id,
         anchor=_item_boxes(docling_doc, anchor_refs, page_heights),
         context=_item_boxes(docling_doc, context_refs_only, page_heights),
+    )
+
+
+def _text_parts(docling_doc):
+    """Yield (provenance, label, text) for each part of the document's text
+
+    Items come in reading order, page furniture (running headers, footers)
+    included, pictures left out.  A table's text is its Markdown.
+
+    A text item spanning pages yields a part per page, holding what its
+    character span names there.  The spans index 'orig', the text as read
+    off the page, not 'text', which docling may have cleaned up (joining a
+    word hyphenated across lines, say), so the parts are taken from 'orig'.
+    A page whose span is empty yields nothing.  An item that cannot be
+    split so (a table, or a text item none of whose spans is set) yields
+    its whole text once, on its first page.
+    """
+    layers = {
+        docling_document.ContentLayer.BODY,
+        docling_document.ContentLayer.FURNITURE,
+    }
+
+    for item, _ in docling_doc.iterate_items(included_content_layers=layers):
+        if isinstance(item, docling_document.TextItem):
+            text = item.text
+        elif isinstance(item, docling_document.TableItem):
+            text = item.export_to_markdown(docling_doc)
+        else:
+            continue
+
+        provs = item.prov or []
+        parts = []
+
+        if len(provs) > 1 and isinstance(item, docling_document.TextItem):
+            parts = [
+                (prov, item.orig[start:end])
+                for prov in provs
+                for start, end in [prov.charspan]
+                if start < end
+            ]
+
+        if not parts:
+            parts = [(prov, text) for prov in provs[:1]]
+
+        for prov, part in parts:
+            if part.strip():
+                yield prov, item.label.value, part
+
+
+@util.logfire_span("GET /v1/rooms/{room_id}/documents/{document_id}/text")
+@router.get("/v1/rooms/{room_id}/documents/{document_id}/text")
+async def get_room_document_text(
+    room_id: str,
+    document_id: str,
+    database: str | None = None,
+    the_installation: installation.Installation = depend_the_installation,
+    the_room_authz: authz.RoomAuthorizationPolicy = depend_the_room_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.DocumentText:
+    """Return a document's text as docling read it, block by block.
+
+    For a scanned PDF this is the text OCR recovered at ingestion, which a
+    viewer can offer where the PDF has none.  ``database`` names the
+    haiku.rag database, as a citation reports it.
+
+    Raises:
+
+    - 'fastapi.HTTPException' (404) when the room or document is unknown,
+      or the document has no docling data.
+    """
+    the_logger.debug(loggers.ROOM_GET_DOCUMENT_TEXT)
+
+    room_config = await rooms_views.room_config_or_404(
+        room_id, the_installation, the_room_authz, the_user_claims, the_logger
+    )
+
+    audit = loggers.RAGAccessAuditLog(claims=the_user_claims, room_id=room_id)
+    docling_doc = None
+
+    for hr_client_kw in room_config.list_haiku_rag_client_kw(
+        include_source=True,
+    ):
+        source_tag = hr_client_kw.pop("source")
+        source = models.RAGSource.from_source_tag(source_tag)
+        db_path = hr_client_kw.pop("audit_db_path")
+
+        async with hr_client.HaikuRAG(**hr_client_kw) as rag:
+            document, covered = await _find_document(
+                rag, document_id, database
+            )
+
+            if document:
+                (owner,) = await rag.clients_covering([covered])
+                stored = await owner.document_repository.get_docling_data(
+                    document_id
+                )
+
+                if stored is not None:
+                    docling_doc = stored.get_docling_document()
+
+                if docling_doc is not None:
+                    parts = list(_text_parts(docling_doc))
+                    page_heights = await _page_heights(
+                        owner,
+                        document_id,
+                        docling_doc,
+                        {
+                            prov.page_no
+                            for prov, _, _ in parts
+                            if prov.bbox.coord_origin
+                            != docling_base.CoordOrigin.BOTTOMLEFT
+                        },
+                    )
+
+                break  # first hit wins
+
+    else:
+        the_logger.error(
+            loggers.ROOM_UNKNOWN_DOCUMENT_ID, document_id=document_id
+        )
+        audit.doc_text_failed(
+            None, document_id, loggers.ROOM_UNKNOWN_DOCUMENT_ID
+        )
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=f"{loggers.ROOM_UNKNOWN_DOCUMENT_ID}: {document_id}",
+        )
+
+    if docling_doc is None:
+        the_logger.error(
+            loggers.ROOM_DOCUMENT_TEXT_NOT_AVAILABLE, document_id=document_id
+        )
+        audit.doc_text_failed(
+            db_path, document_id, loggers.ROOM_DOCUMENT_TEXT_NOT_AVAILABLE
+        )
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=(
+                f"{loggers.ROOM_DOCUMENT_TEXT_NOT_AVAILABLE}: {document_id}"
+            ),
+        )
+
+    audit.doc_text(db_path, document_id, [document.uri])
+
+    blocks = []
+
+    for prov, label, text in parts:
+        box = _prov_box(prov, page_heights)
+
+        if box is not None:
+            blocks.append(models.TextBlock(**box, text=text, label=label))
+
+    return models.DocumentText(
+        source=source,
+        database=covered,
+        document_id=document_id,
+        blocks=blocks,
     )

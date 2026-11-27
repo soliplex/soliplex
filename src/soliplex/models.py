@@ -1197,6 +1197,31 @@ class DocumentBoxes(pydantic.BaseModel):
     context: list[PassageBox]
 
 
+class TextBlock(PassageBox):
+    """One docling item's text, where it sits on its page
+
+    An item spanning pages has a block on each, holding the part of its
+    text on that page.
+    """
+
+    text: str
+    label: str  # docling's item label: 'text', 'section_header', 'table'...
+
+
+class DocumentText(pydantic.BaseModel):
+    """A document's text as docling read it, block by block
+
+    For a scanned PDF this is the OCR's text, which the PDF itself lacks.
+    Blocks are in reading order; coordinates as in 'DocumentBoxes'.
+    """
+
+    source: RAGSource
+    database: str | None = None  # haiku.rag database name, if named
+    document_id: str
+    coord_origin: typing.Literal["BOTTOMLEFT"] = "BOTTOMLEFT"
+    blocks: list[TextBlock]
+
+
 # ----------------------------------------------------------------------------
 #   Quiz-related models
 # ----------------------------------------------------------------------------
